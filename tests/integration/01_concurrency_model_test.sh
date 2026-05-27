@@ -3,7 +3,7 @@ set -eu
 
 SSH="tests/vm/ssh.sh"
 
-PREFIX_ENTRY="/_probe=/usr/share/uapi/probe_serialize.uc"
+PREFIX_ENTRY="/_probe=/usr/share/uapi/probe_concurrency.uc"
 
 push_file() {
 	$SSH "cat > $2" < "$1"
@@ -20,7 +20,7 @@ $SSH 'apk add uhttpd-mod-ucode 2>&1 | tail -10'
 
 echo "--- deploy probe ---"
 $SSH 'mkdir -p /usr/share/uapi'
-push_file tests/integration/probes/serialize.uc /usr/share/uapi/probe_serialize.uc
+push_file tests/integration/probes/concurrency.uc /usr/share/uapi/probe_concurrency.uc
 $SSH 'ls -la /usr/share/uapi/'
 
 echo "--- wire uhttpd prefix ---"
@@ -67,18 +67,20 @@ echo "distinct PIDs (count=$pid_count): $pids"
 
 fail=0
 
-if [ "$counts" != "1,2,3,4,5" ]; then
-	echo "ASSERT FAIL: counters not 1,2,3,4,5"
+if echo "$counts" | grep -qE '[^1,]'; then
+	echo "ASSERT FAIL: not every response showed count=1 (got $counts)"
 	fail=1
 fi
 
-if [ "$pid_count" -ne 1 ]; then
-	echo "ASSERT FAIL: expected single PID (persistent handler), got $pid_count distinct"
+if [ "$pid_count" -lt 2 ]; then
+	echo "ASSERT FAIL: expected multiple distinct PIDs (forks), got $pid_count"
 	fail=1
 fi
 
-if ! awk -v e="$elapsed" 'BEGIN { exit !(e >= 4.5 && e <= 6.5) }'; then
-	echo "ASSERT FAIL: wall time ${elapsed}s not between 4.5 and 6.5"
+# uhttpd caps concurrent CGI children at max_requests (default 3), so 5 in-flight
+# requests can take up to two batches of ~1s.
+if ! awk -v e="$elapsed" 'BEGIN { exit !(e >= 0.5 && e <= 4.0) }'; then
+	echo "ASSERT FAIL: wall time ${elapsed}s outside expected range 0.5-4.0"
 	fail=1
 fi
 
@@ -86,10 +88,10 @@ rm -rf /tmp/probe_results
 
 if [ "$fail" -ne 0 ]; then
 	echo
-	echo "Spike A failed. The CLAUDE.md Concurrency claim (persistent handler, in-loop"
-	echo "serialization, no flock) is invalidated by this run."
+	echo "Concurrency model assertion failed. CLAUDE.md \"Concurrency\" claims are"
+	echo "inconsistent with observed behavior. Either CLAUDE.md or this test must change."
 	exit 1
 fi
 
 echo
-echo "Spike A passed: persistent handler, serialized in-process, no flock needed."
+echo "Concurrency model matches CLAUDE.md expectations (fork-per-request CGI)."
