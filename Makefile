@@ -42,7 +42,8 @@ lint-emdash:
 	fi
 
 lint-syntax:
-	@find src cli tests -name '*.uc' -print0 | xargs -0 -I{} $(UCODE) -c -o /dev/null {}
+	@find src cli tests -name '*.uc' -not -path 'tests/integration/probes/*' -print0 | xargs -0 -r -I{} $(UCODE) -c -o /dev/null {}
+	@find tests/integration/probes -name '*.uc' -print0 2>/dev/null | xargs -0 -r -I{} $(UCODE) -c -T -o /dev/null {}
 
 clean:
 	@rm -rf build/sdk build/openapi.json
