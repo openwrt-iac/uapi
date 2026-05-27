@@ -42,8 +42,13 @@ lint-emdash:
 	fi
 
 lint-syntax:
-	@find src cli tests -name '*.uc' -not -path 'tests/integration/probes/*' -print0 | xargs -0 -r -I{} $(UCODE) -c -o /dev/null {}
-	@find tests/integration/probes -name '*.uc' -print0 2>/dev/null | xargs -0 -r -I{} $(UCODE) -c -T -o /dev/null {}
+	@set -e; for f in $$(find src cli tests -name '*.uc'); do \
+		if head -c 2 "$$f" | grep -q '{%'; then \
+			$(UCODE) -c -T -o /dev/null "$$f"; \
+		else \
+			$(UCODE) -c -o /dev/null "$$f"; \
+		fi; \
+	done
 
 clean:
 	@rm -rf build/sdk build/openapi.json
