@@ -31,6 +31,7 @@ t.describe('errors.error', () => {
 			not_found: 404, method_not_allowed: 405,
 			conflict: 409, unmanaged_resource: 409,
 			unsupported_media_type: 415, validation_failed: 422,
+			locked: 423,
 			internal_error: 500, reload_failed_restored: 500,
 			reload_failed_unrecovered: 500, service_unavailable: 503,
 		};
@@ -83,6 +84,22 @@ t.describe('errors.validation_failed', () => {
 
 	t.it('rejects empty error arrays', () => {
 		t.assert_throws(() => errors.validation_failed(ctx, []));
+	});
+});
+
+t.describe('errors.locked', () => {
+	let ctx = { request_id: "01hx0000000000000000000000" };
+
+	t.it('returns 423 with Retry-After header', () => {
+		let r = errors.locked(ctx);
+		t.assert_equal(r.status, 423);
+		t.assert_equal(r.body.code, "locked");
+		t.assert_equal(r.headers["Retry-After"], "1");
+	});
+
+	t.it('accepts a custom retry-after value', () => {
+		let r = errors.locked(ctx, 5);
+		t.assert_equal(r.headers["Retry-After"], "5");
 	});
 });
 

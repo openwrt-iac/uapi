@@ -12,6 +12,7 @@ const STATUS_BY_CODE = {
 	unmanaged_resource: 409,
 	unsupported_media_type: 415,
 	validation_failed: 422,
+	locked: 423,
 	internal_error: 500,
 	reload_failed_restored: 500,
 	reload_failed_unrecovered: 500,
@@ -68,6 +69,13 @@ function validation_failed(ctx, field_errors) {
 	             { errors: field_errors });
 }
 
+function locked(ctx, retry_after) {
+	let r = error(ctx, "locked",
+	              "Another write transaction holds the global lock");
+	r.headers["Retry-After"] = "" + (retry_after ?? 1);
+	return r;
+}
+
 function reload_failed_restored(ctx, reload_error) {
 	return error(ctx, "reload_failed_restored",
 	             "Service reload failed; prior configuration has been restored",
@@ -97,6 +105,7 @@ return {
 	error,
 	field_error,
 	validation_failed,
+	locked,
 	reload_failed_restored,
 	reload_failed_unrecovered,
 	ok,
