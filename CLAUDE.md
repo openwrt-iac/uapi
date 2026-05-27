@@ -30,14 +30,18 @@ Before adopting any library, daemon, persistence layer, or abstraction, check it
 - **Runtime:** `uhttpd` + `uhttpd-mod-ucode`. No daemon of our own; our handler runs inside the existing uhttpd process.
 - **Instance:** Share the default `main` uhttpd instance with LuCI. Both serve configuration use cases; sharing keeps the footprint minimal and inherits the user's TLS config.
 - **Wiring:** A single ucode prefix registration: `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'`. Installed via `/etc/uci-defaults/99-uapi`.
-- **Handler shape:** Persistent ucode handler, loaded once at uhttpd startup, registered as a URL prefix. `main.uc` performs internal method/path dispatch to per-resource modules.
+- **Handler shape:** Template-mode ucode script (entered with `{%`). The script's top level runs once in the uhttpd parent at startup and must define `global.handle_request(env)`. Each request is a forked child that inherits the parent VM via copy-on-write and invokes `handle_request`. `main.uc` performs internal method/path dispatch to per-resource modules.
 
 ## Concurrency
 
-- **Intra-request serialization is free.** `uhttpd-mod-ucode` runs persistent handlers in the uhttpd main event loop. Combined with **synchronous-only** ubus calls (`conn.call()`, never `conn.defer()`), this gives strict serialization at no cost. No flock, no in-handler locks.
-- **Soft design constraint:** Sync ubus only. If we ever go async, we re-introduce interleaving and would need real locks. Document this in any code review touching the ubus call sites.
-- **Cross-client coordination:** Out of scope at the API level. Terraform's own state lock (DynamoDB / GCS / etc. backends) handles same-state-file races. Out-of-band changes (LuCI, SSH, two separate Terraform configs) cause drift, detected on next refresh, standard Terraform UX. **No client-facing API lock.**
-- **Optimistic concurrency (ETags):** Deferred to v1.1+. Add `If-Match` support later if real demand surfaces.
+- **Fork-per-request CGI model.** `uhttpd-mod-ucode` is not a persistent in-process handler. The parent uhttpd compiles the script and runs its top level once at startup, populating the parent VM scope. Every HTTP request is served by a forked child that inherits the parent VM via copy-on-write, invokes `handle_request(env)`, and exits. Module-level state initialized at startup is visible to every request, but mutations are private to the fork and lost on exit.
+- **Empirically validated.** `tests/integration/01_concurrency_model_test.sh` fires 5 concurrent requests against a 1s-sleep probe and observes 5 distinct PIDs, every response showing `count == 1`, with wall time approximately 1 to 2s. Source confirmation at `openwrt/uhttpd/ucode.c`: `ucode_handle_request` calls `ops->create_process(cl, pi, url, ucode_main)`; `ucode_main` ends with `exit(0)`. Keep this test green as a regression sentinel.
+- **Writes acquire a global flock.** The atomic transaction recipe takes `flock(LOCK_EX | LOCK_NB)` on `/var/lock/uapi.lock` as step 0. On `EWOULDBLOCK`, return `423 locked` with `Retry-After: 1` immediately; the client retries. uci's internal file lock only protects single uci operations, not our multi-step recipe (snapshot, validate, stage, commit, reload, possibly restore), so we own the cross-request critical section explicitly.
+- **Reads are lock-free.** GETs read uci state and never enter the transaction recipe, so concurrent GETs run freely.
+- **No in-memory caches across requests.** The token store is re-read from `/etc/config/uapi` on every request (uci read is millisecond-scale and the workload is low-volume; see Auth & ACL). Anything else that looks like a cache must either live in the parent VM at startup (and be treated as read-only by request handlers) or be re-derived per request.
+- **Cross-client coordination remains client-side.** Terraform's own state lock (DynamoDB / GCS / etc. backends) handles same-state-file races between separate `terraform apply` runs. Out-of-band changes (LuCI, SSH, two separate Terraform configs) cause drift detected on the next refresh, standard Terraform UX. The server-side flock only serializes our intra-server transaction; we expose no client-facing API lock.
+- **Soft design constraint: sync ubus only.** `conn.call()`, never `conn.defer()`. With a fork-per-request model async ubus does not buy any concurrency we don't already have from forking, and sync calls keep the handler linear and the failure paths obvious. Flag any review touching ubus call sites.
+- **Optimistic concurrency (ETags):** deferred to v1.1+. Add `If-Match` support later if real demand surfaces.
 
 ## Resource model
 
@@ -120,6 +124,7 @@ GETs include both managed and unmanaged sections. Clients filter via query param
 
 Every write follows this sequence:
 
+0. `flock(LOCK_EX | LOCK_NB)` on `/var/lock/uapi.lock`. On `EWOULDBLOCK`, return `423 locked` with `Retry-After: 1` immediately; no state change. The lock is released in a `finally` after the rest of the recipe.
 1. `uci export <package>` → snapshot
 2. Validate payload against resource schema → `422` on fail, no commit
 3. `uci set` / `uci add` / `uci delete` (staging only, no commit yet)
@@ -139,7 +144,7 @@ Snapshot-and-restore catches the case where `ubus reload` returns an error. It d
 ## Auth & ACL
 
 - **Bearer tokens, local-only creation.** No rpcd sessions. No HTTP login endpoint.
-- **Token store:** sha256+salt hash in `/etc/config/uapi`. Cleartext token shown only once at creation.
+- **Token store:** sha256+salt hash in `/etc/config/uapi`. Cleartext token shown only once at creation. Re-read on every request (no in-memory cache, per "Concurrency"); newly created tokens take effect immediately, no `uhttpd reload` required.
 - **CLI:** `uapi-token create --name <label> --scope <s> [--scope <s>...]`, plus `list` / `show` / `revoke`. Scopes validated against the known tree, `--force` bypasses for forward-compat with unknown future endpoints.
 - **Wire format:** `Authorization: Bearer <token>` header.
 
@@ -219,6 +224,7 @@ Lean custom shape, RFC 7807-inspired but not strictly conformant. `application/j
 | 409  | `unmanaged_resource`             |
 | 415  | `unsupported_media_type`         |
 | 422  | `validation_failed`              |
+| 423  | `locked`                         |
 | 500  | `internal_error`                 |
 | 500  | `reload_failed_restored`         |
 | 500  | `reload_failed_unrecovered`      |
