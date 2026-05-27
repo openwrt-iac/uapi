@@ -9,6 +9,22 @@ let errors = require("errors");
 const VERSION = "1.0.0-dev";
 const INSECURE_MARKER = "/etc/uapi.insecure";
 
+const REASON = {
+	"200": "OK",
+	"204": "No Content",
+	"400": "Bad Request",
+	"401": "Unauthorized",
+	"403": "Forbidden",
+	"404": "Not Found",
+	"405": "Method Not Allowed",
+	"409": "Conflict",
+	"415": "Unsupported Media Type",
+	"422": "Unprocessable Entity",
+	"423": "Locked",
+	"500": "Internal Server Error",
+	"503": "Service Unavailable",
+};
+
 function tls_check_passes(env) {
 	if (env.HTTPS == "on") return true;
 	let addr = env.REMOTE_ADDR ?? "";
@@ -19,7 +35,8 @@ function tls_check_passes(env) {
 }
 
 function send(resp) {
-	uhttpd.send(sprintf("Status: %d\r\n", resp.status));
+	let reason = REASON["" + resp.status] ?? "Status";
+	uhttpd.send(sprintf("Status: %d %s\r\n", resp.status, reason));
 	for (let k in resp.headers)
 		uhttpd.send(sprintf("%s: %s\r\n", k, resp.headers[k]));
 	uhttpd.send("\r\n");
