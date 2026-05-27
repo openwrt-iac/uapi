@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:edge
+    steps:
+      - name: Install ucode and tooling
+        run: apk add --no-cache ucode make grep findutils
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: make test-unit
+
+  lint:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:edge
+    steps:
+      - name: Install ucode and tooling
+        run: apk add --no-cache ucode make grep findutils
+      - uses: actions/checkout@v4
+      - name: Lint (em-dash + ucode syntax)
+        run: make lint
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [unit, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QEMU and SSH client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils openssh-client curl
+
+      - name: Cache OpenWrt image
+        uses: actions/cache@v4
+        with:
+          path: tests/vm/openwrt-25.12.4.img.gz
+          key: openwrt-25.12.4-x86-64-ext4-combined
+
+      - name: Setup VM image
+        run: tests/vm/setup.sh
+
+      - name: Start VM
+        run: tests/vm/start.sh
+
+      - name: Wait for VM SSH
+        run: TIMEOUT=180 tests/vm/wait.sh
+
+      - name: Run integration tests
+        run: tests/integration/run.sh
+
+      - name: Capture serial log on failure
+        if: failure()
+        run: tail -200 tests/vm/qemu.log || true
+
+      - name: Stop VM
+        if: always()
+        run: tests/vm/stop.sh

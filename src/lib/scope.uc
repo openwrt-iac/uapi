@@ -1,0 +1,109 @@
+const KNOWN_PATHS = {
+	"*": true,
+	"network": true,
+	"network:interfaces": true,
+	"network:devices": true,
+	"wireless": true,
+	"wireless:devices": true,
+	"wireless:interfaces": true,
+	"firewall": true,
+	"firewall:zones": true,
+	"firewall:rules": true,
+	"firewall:redirects": true,
+	"dhcp": true,
+	"dhcp:hosts": true,
+	"dhcp:leases": true,
+	"system": true,
+	"raw": true,
+};
+
+const SEGMENT_RE = /^([*]|[a-z][a-z0-9_-]*)$/;
+
+function parse(scope) {
+	if (type(scope) != "string")
+		die(sprintf("scope: %J is not a string", scope));
+
+	let parts = split(scope, ":");
+	if (length(parts) < 2)
+		die(sprintf("scope: %J missing verb", scope));
+
+	let verb = parts[length(parts) - 1];
+	if (verb != "rw" && verb != "ro")
+		die(sprintf("scope: %J has invalid verb %J", scope, verb));
+
+	let segments = slice(parts, 0, -1);
+	for (let seg in segments) {
+		if (!match(seg, SEGMENT_RE))
+			die(sprintf("scope: %J segment %J has invalid chars", scope, seg));
+	}
+
+	let wildcard_count = 0;
+	for (let seg in segments) if (seg == "*") wildcard_count++;
+	if (wildcard_count > 0 && (length(segments) != 1 || segments[0] != "*"))
+		die(sprintf("scope: %J wildcard must appear alone at top level", scope));
+
+	return { segments, verb };
+}
+
+function is_known_path(segments) {
+	if (length(segments) == 2 && segments[0] == "raw")
+		return true;
+	return !!KNOWN_PATHS[join(":", segments)];
+}
+
+function validate_against_known_tree(scope) {
+	let p = parse(scope);
+	if (!is_known_path(p.segments))
+		die(sprintf("scope: %J references unknown path", scope));
+	return p;
+}
+
+function matches(scope_segs, resource_path) {
+	if (length(scope_segs) == 1 && scope_segs[0] == "*")
+		return true;
+	if (length(scope_segs) > length(resource_path))
+		return false;
+	for (let i = 0; i < length(scope_segs); i++)
+		if (scope_segs[i] != resource_path[i]) return false;
+	return true;
+}
+
+function match_depth(scope_segs) {
+	if (length(scope_segs) == 1 && scope_segs[0] == "*")
+		return 0;
+	return length(scope_segs);
+}
+
+function permits(token_scopes, resource_path, verb) {
+	if (verb != "rw" && verb != "ro")
+		die(sprintf("scope.permits: verb must be rw or ro, got %J", verb));
+	if (type(resource_path) != "array" || length(resource_path) == 0)
+		die("scope.permits: resource_path must be a non-empty array");
+
+	let best_depth = -1;
+	let best_verb = null;
+
+	for (let s in token_scopes) {
+		let p = parse(s);
+		if (!matches(p.segments, resource_path)) continue;
+		let depth = match_depth(p.segments);
+		if (depth > best_depth) {
+			best_depth = depth;
+			best_verb = p.verb;
+		} else if (depth == best_depth && p.verb == "rw") {
+			best_verb = "rw";
+		}
+	}
+
+	if (best_verb == null) return false;
+	if (best_verb == "rw") return true;
+	return verb == "ro";
+}
+
+return {
+	parse,
+	permits,
+	is_known_path,
+	validate_against_known_tree,
+	KNOWN_PATHS,
+};
