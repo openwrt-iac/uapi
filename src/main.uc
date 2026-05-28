@@ -12,9 +12,14 @@ let scope = require("scope");
 let handler = require("handler");
 let bus = require("bus");
 
-let firewall_rules_resource = loadfile("/usr/share/uapi/resources/firewall.rules.uc",
-                                       { raw_mode: true })();
-let firewall_rules = handler.make(firewall_rules_resource);
+function load_resource(file) {
+	return loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
+}
+
+const RESOURCES = {
+	"firewall:rules": handler.make(load_resource("firewall.rules.uc")),
+	"dhcp:hosts":     handler.make(load_resource("dhcp.hosts.uc")),
+};
 
 const VERSION = "1.0.0-dev";
 const INSECURE_MARKER = "/etc/uapi.insecure";
@@ -119,34 +124,34 @@ function method_verb(method) {
 	return method == "GET" ? "ro" : "rw";
 }
 
-function dispatch_firewall_rules(conn, ctx, token, method, id, extra, body, query) {
-	if (!scope.permits(token.scopes, ["firewall", "rules"], method_verb(method))) {
+function dispatch_resource(h, scopes, ctx, conn, method, domain, sub, id, extra, body, query) {
+	if (!scope.permits(scopes, [domain, sub], method_verb(method))) {
 		return errors.error(ctx, "insufficient_scope",
-		                    "Token does not permit this operation on firewall:rules");
+		                    sprintf("Token does not permit this operation on %s:%s", domain, sub));
 	}
 
 	if (id == null) {
-		if (method == "GET")  return firewall_rules.list(conn, ctx, query);
-		if (method == "POST") return firewall_rules.create(conn, ctx, body);
+		if (method == "GET")  return h.list(conn, ctx, query);
+		if (method == "POST") return h.create(conn, ctx, body);
 		return errors.error(ctx, "method_not_allowed",
-		                    sprintf("Method %J not allowed on firewall/rules collection", method));
+		                    sprintf("Method %J not allowed on %s/%s collection", method, domain, sub));
 	}
 
 	if (extra == "adopt") {
 		if (method != "POST")
 			return errors.error(ctx, "method_not_allowed", "adopt requires POST");
-		return firewall_rules.adopt(conn, ctx, id);
+		return h.adopt(conn, ctx, id);
 	}
 
 	if (extra != null)
 		return errors.error(ctx, "not_found", "Unknown sub-path");
 
-	if (method == "GET")    return firewall_rules.get_one(conn, ctx, id);
-	if (method == "PUT")    return firewall_rules.replace(conn, ctx, id, body);
-	if (method == "PATCH")  return firewall_rules.patch(conn, ctx, id, body);
-	if (method == "DELETE") return firewall_rules.remove(conn, ctx, id);
+	if (method == "GET")    return h.get_one(conn, ctx, id);
+	if (method == "PUT")    return h.replace(conn, ctx, id, body);
+	if (method == "PATCH")  return h.patch(conn, ctx, id, body);
+	if (method == "DELETE") return h.remove(conn, ctx, id);
 	return errors.error(ctx, "method_not_allowed",
-	                    sprintf("Method %J not allowed on firewall/rules/<id>", method));
+	                    sprintf("Method %J not allowed on %s/%s/<id>", method, domain, sub));
 }
 
 function dispatch(env) {
@@ -207,10 +212,16 @@ function dispatch(env) {
 	let token = auth_result.token;
 
 	let parts = split_path(path);
-	if (length(parts) >= 2 && parts[0] == "firewall" && parts[1] == "rules") {
-		let id = length(parts) >= 3 ? parts[2] : null;
-		let extra = length(parts) >= 4 ? parts[3] : null;
-		return { ctx, token, resp: dispatch_firewall_rules(conn, ctx, token, method, id, extra, body, query) };
+	if (length(parts) >= 2) {
+		let h = RESOURCES[parts[0] + ":" + parts[1]];
+		if (h != null) {
+			let id = length(parts) >= 3 ? parts[2] : null;
+			let extra = length(parts) >= 4 ? parts[3] : null;
+			return { ctx, token,
+			         resp: dispatch_resource(h, token.scopes, ctx, conn,
+			                                 method, parts[0], parts[1],
+			                                 id, extra, body, query) };
+		}
 	}
 
 	return { ctx, token, resp: errors.error(ctx, "not_found", "No handler for this path") };
