@@ -90,7 +90,10 @@ New finding: ucode does not hoist function declarations. Forward references betw
 - `build/openapi.json` is checked in as the canonical contract artifact.
 - `make openapi` regenerates; `make openapi-check` diffs the regeneration against the checked-in copy and fails CI if they drift. Wired into the `lint` job so PRs that change resources without regenerating fail before integration.
 
-Open follow-ups: enrich per-resource property schemas with enums/formats extracted from validate() (currently the generator emits basic types only); install `openapi.json` to `/usr/share/uapi/openapi.json` on the VM (deferred to Phase 9 packaging); optionally serve via `/api/v1/openapi.json`.
+Phase 8 follow-ups landed:
+- Per-resource `schema_properties` overrides expose enum and pattern constraints in OpenAPI. The generator merges these into the auto-derived property map. Enums cover firewall targets/policies/families/protos, network interface protos, network device types, wireless types/bands/modes/encryption; pattern set for dhcp.hosts MAC.
+- `GET /api/v1/openapi.json` serves the spec without auth (TLS check still applies). Per-request file read; the parent VM doesn't cache.
+- `install_uapi.sh` pushes `build/openapi.json` to `/usr/share/uapi/openapi.json` on the test VM. Real APK packaging in Phase 9 will install via the SDK Makefile.
 
 ## Open
 
