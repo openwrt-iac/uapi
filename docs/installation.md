@@ -9,7 +9,7 @@ A router running **OpenWrt 25.12+** (the first apk-based release line). Pulled-i
 Get the package onto the router (any way you like: scp, USB stick, sysupgrade overlay), then:
 
 ```sh
-apk add /path/to/uapi-1.0.0-r1.apk
+apk add /path/to/uapi-1.0.0_rc1-r1.apk
 ```
 
 The post-install hook will:
@@ -22,7 +22,7 @@ Verify:
 
 ```sh
 curl -k https://localhost/api/v1/healthz
-# { "status": "ok", "version": "1.0.0-dev" }
+# { "status": "ok", "version": "1.0.0-rc1" }
 ```
 
 ## Install from a feed

@@ -7,9 +7,9 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
-## [1.0.0] - TBD
+## [1.0.0-rc1] - 2026-05-28
 
-Initial release. Native HTTP REST API for OpenWrt 25.12+ packaged as a single `.apk`.
+First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a single `.apk`. The on-the-wire API contract (`/api/v1/...`) is what 1.0.0 will ship; the package version stays `rc` until real-world deployments shake out the install path on a variety of router configurations.
 
 ### Surface
 
@@ -35,5 +35,5 @@ Initial release. Native HTTP REST API for OpenWrt 25.12+ packaged as a single `.
 - uci-defaults install hook wires `uhttpd.main.ucode_prefix` and self-deletes; pre-remove hook unwires it.
 - Release-tier CI builds the APK and runs a full install/use/remove smoke test in a fresh QEMU VM.
 
-[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/raspbeguy/uapi/releases/tag/v1.0.0
+[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc1...HEAD
+[1.0.0-rc1]: https://github.com/raspbeguy/uapi/releases/tag/v1.0.0-rc1

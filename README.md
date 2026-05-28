@@ -14,7 +14,7 @@ Target platform: **OpenWrt 25.12+** (apk-based releases).
 
 ```sh
 # On the router, after dropping the .apk:
-apk add /tmp/uapi-1.0.0-r1.apk
+apk add /tmp/uapi-1.0.0_rc1-r1.apk
 ```
 
 The package's `uci-defaults` hook adds `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and reloads uhttpd. After that, `/api/v1/healthz` is reachable on the same ports as LuCI.

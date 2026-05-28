@@ -4,7 +4,7 @@
 
 push(REQUIRE_SEARCH_PATH, "./src/lib/*.uc");
 
-const VERSION = "1.0.0-dev";
+const VERSION = "1.0.0-rc1";
 
 const ENDPOINTS = [
 	{ path: "/firewall/rules",     file: "firewall.rules.uc",     kind: "crud", domain: "firewall", subresource: "rules" },

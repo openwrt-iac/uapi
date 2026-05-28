@@ -1,6 +1,6 @@
 # Building the uapi APK
 
-This document walks through producing `uapi-1.0.0-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK.
+This document walks through producing `uapi-1.0.0_rc1-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK.
 
 ## What gets installed
 
@@ -58,13 +58,13 @@ make defconfig
 make package/uapi/compile V=s
 ```
 
-The output `.apk` lands at `bin/packages/all/base/uapi-1.0.0-r1.apk` (or whatever the SDK reports at the end of the build).
+The output `.apk` lands at `bin/packages/all/base/uapi-1.0.0_rc1-r1.apk` (or whatever the SDK reports at the end of the build).
 
 ### 4. Install on a router
 
 ```sh
 scp bin/packages/all/base/uapi-*.apk root@<router>:/tmp/
-ssh root@<router> 'apk add /tmp/uapi-1.0.0-r1.apk'
+ssh root@<router> 'apk add /tmp/uapi-1.0.0_rc1-r1.apk'
 ssh root@<router> 'uapi-token create --name first --scope "*:rw"'
 ```
 
