@@ -25,17 +25,24 @@ curl -k https://localhost/api/v1/healthz
 # { "status": "ok", "version": "<version>" }
 ```
 
-## Install from a feed
+## Install from the project feed
 
-Coming with v1.0.0: a project-owned feed at a stable URL. Until then, build the APK yourself per `docs/packaging.md` or grab one from a GitHub release.
-
-To add a custom feed:
+The project hosts an apk feed at <https://raspbeguy.github.io/uapi/>. Packages are RSA-4096 signed; the public key lives in the repo at `keys/uapi-feed.pub.pem` and is also served from the feed itself.
 
 ```sh
-echo 'https://<feed-host>/uapi/<openwrt-version>' | tee -a /etc/apk/repositories.d/uapi.list
+# Trust the feed's signing key (one-time)
+curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem \
+    | tee /etc/apk/keys/uapi-feed.pub.pem > /dev/null
+
+# Register the feed
+echo 'https://raspbeguy.github.io/uapi/packages/all/uapi' \
+    > /etc/apk/repositories.d/uapi.list
+
 apk update
 apk add uapi
 ```
+
+The feed currently ships pre-release (`-rc`) packages; expect to upgrade as the project hardens. Until v1.0.0 final, `apk add` will pull the latest release candidate.
 
 ## TLS
 
