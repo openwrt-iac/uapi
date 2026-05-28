@@ -5,6 +5,7 @@ push(REQUIRE_SEARCH_PATH, "/usr/share/uapi/lib/*.uc");
 
 let fs = require("fs");
 let log = require("log");
+let digest = require("digest");
 let errors = require("errors");
 let auth = require("auth");
 let scope = require("scope");
@@ -84,17 +85,23 @@ function split_path(path) {
 }
 
 function load_tokens(conn) {
-	let tokens = {};
+	let tokens = [];
 	conn.uci_foreach('uapi', 'token', function(s) {
-		if (!s.bearer) return;
+		if (!s.salt || !s.hash) return;
 		let scopes = type(s.scopes) == "array" ? s.scopes
 		             : (s.scopes != null ? [s.scopes] : []);
-		tokens[s.bearer] = {
+		push(tokens, {
 			name: s['.name'] ?? "anonymous",
+			salt: s.salt,
+			hash: s.hash,
 			scopes: scopes,
-		};
+		});
 	});
 	return tokens;
+}
+
+function hash_bearer(salt, bearer) {
+	return digest.sha256(salt + ":" + bearer);
 }
 
 function audit_line(ctx, severity, code, method, path, status, duration_ms, token_name) {
@@ -180,7 +187,7 @@ function dispatch(env) {
 	}
 
 	let tokens = load_tokens(conn);
-	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION);
+	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION, hash_bearer);
 	if (!auth_result.ok) {
 		return { ctx, resp: errors.error(ctx, auth_result.kind,
 		                                 auth_result.kind == "unauthorized"

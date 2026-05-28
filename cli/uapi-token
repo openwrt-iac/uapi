@@ -1,0 +1,138 @@
+#!/usr/bin/ucode
+
+'use strict';
+
+push(REQUIRE_SEARCH_PATH, "/usr/share/uapi/lib/*.uc");
+
+import * as fs from 'fs';
+let uci_mod = require('uci');
+let digest = require('digest');
+let scope = require('scope');
+
+const PACKAGE = "uapi";
+const TOKEN_TYPE = "token";
+
+function random_hex(n_bytes) {
+	let f = fs.open("/dev/urandom", "r");
+	if (!f) die("uapi-token: cannot open /dev/urandom");
+	let raw = f.read(n_bytes);
+	f.close();
+	let hex = "";
+	for (let i = 0; i < length(raw); i++)
+		hex += sprintf("%02x", ord(raw, i));
+	return hex;
+}
+
+function hash_bearer(salt, bearer) {
+	return digest.sha256(salt + ":" + bearer);
+}
+
+function as_list(v) {
+	if (v == null) return [];
+	if (type(v) == "array") return v;
+	return [v];
+}
+
+function parse_args() {
+	let cmd = ARGV[0];
+	let opts = { name: null, scopes: [], force: false, positional: [] };
+	let i = 1;
+	while (i < length(ARGV)) {
+		let a = ARGV[i];
+		if (a == "--name") opts.name = ARGV[++i];
+		else if (a == "--scope") push(opts.scopes, ARGV[++i]);
+		else if (a == "--force") opts.force = true;
+		else push(opts.positional, a);
+		i++;
+	}
+	return { cmd, opts };
+}
+
+function ensure_package() {
+	let path = "/etc/config/" + PACKAGE;
+	if (fs.stat(path) != null) return;
+	let f = fs.open(path, "w");
+	if (!f) die("uapi-token: cannot create " + path);
+	f.close();
+}
+
+function cmd_create(opts) {
+	if (!opts.name) die("uapi-token create: --name required");
+	if (length(opts.scopes) == 0) die("uapi-token create: at least one --scope required");
+
+	if (!opts.force)
+		for (let s in opts.scopes) scope.validate_against_known_tree(s);
+
+	ensure_package();
+	let cursor = uci_mod.cursor();
+
+	let exists_already = false;
+	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
+		if (s['.name'] == opts.name) { exists_already = true; return false; }
+	});
+	if (exists_already)
+		die(sprintf("uapi-token create: token %J already exists", opts.name));
+
+	let bearer = random_hex(16);
+	let salt = random_hex(8);
+	let hash = hash_bearer(salt, bearer);
+
+	cursor.set(PACKAGE, opts.name, TOKEN_TYPE);
+	cursor.set(PACKAGE, opts.name, "salt", salt);
+	cursor.set(PACKAGE, opts.name, "hash", hash);
+	cursor.set(PACKAGE, opts.name, "scopes", opts.scopes);
+	cursor.commit(PACKAGE);
+
+	printf("%s\n", bearer);
+	fs.stderr.write(sprintf(
+		"Token %J created. The cleartext value above is shown only once; store it now.\n",
+		opts.name));
+}
+
+function cmd_list() {
+	let cursor = uci_mod.cursor();
+	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
+		let scopes = as_list(s.scopes);
+		printf("%s\tscopes=%s\n", s['.name'], join(",", scopes));
+	});
+}
+
+function cmd_show(opts) {
+	let name = opts.positional[0];
+	if (!name) die("uapi-token show: name required");
+	let cursor = uci_mod.cursor();
+	let s = cursor.get_all(PACKAGE, name);
+	if (!s || s['.type'] != TOKEN_TYPE)
+		die(sprintf("uapi-token show: %J not found", name));
+	let scopes = as_list(s.scopes);
+	printf("name: %s\nscopes:\n", name);
+	for (let sc in scopes) printf("  - %s\n", sc);
+}
+
+function cmd_revoke(opts) {
+	let name = opts.positional[0];
+	if (!name) die("uapi-token revoke: name required");
+	let cursor = uci_mod.cursor();
+	let s = cursor.get_all(PACKAGE, name);
+	if (!s || s['.type'] != TOKEN_TYPE)
+		die(sprintf("uapi-token revoke: %J not found", name));
+	cursor.delete(PACKAGE, name);
+	cursor.commit(PACKAGE);
+	fs.stderr.write(sprintf("Revoked token %J\n", name));
+}
+
+function print_help() {
+	fs.stderr.write(
+"Usage:\n" +
+"  uapi-token create --name <name> --scope <scope> [--scope <scope>...] [--force]\n" +
+"  uapi-token list\n" +
+"  uapi-token show <name>\n" +
+"  uapi-token revoke <name>\n");
+}
+
+let parsed = parse_args();
+if (parsed.cmd == "create") cmd_create(parsed.opts);
+else if (parsed.cmd == "list") cmd_list();
+else if (parsed.cmd == "show") cmd_show(parsed.opts);
+else if (parsed.cmd == "revoke") cmd_revoke(parsed.opts);
+else { print_help(); exit(parsed.cmd == null ? 1 : (parsed.cmd == "help" || parsed.cmd == "--help" ? 0 : 1)); }

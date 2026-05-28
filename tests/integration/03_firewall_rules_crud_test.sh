@@ -5,8 +5,8 @@ set -eu
 install_uapi
 
 URL=http://127.0.0.1:8080/api/v1
-ADMIN='Authorization: Bearer rwall'
-RO='Authorization: Bearer roall'
+ADMIN="Authorization: Bearer $ADMIN_TOKEN"
+RO="Authorization: Bearer $RO_TOKEN"
 
 fail() { echo "FAIL: $*"; exit 1; }
 
