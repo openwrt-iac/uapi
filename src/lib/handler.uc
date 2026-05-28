@@ -272,4 +272,38 @@ function make_singleton(resource, opts) {
 	return { get, patch };
 }
 
-return { make, make_singleton, translate_tx };
+function make_collection(resource) {
+	let pkg = resource.package;
+	let sec_type = resource.type;
+
+	function method_not_allowed(ctx, method) {
+		return errors.error(ctx, "method_not_allowed",
+		                    sprintf("%s/%s is read-only (%s not supported)",
+		                            pkg, sec_type, method));
+	}
+
+	function list(conn, ctx, query) {
+		return errors.ok(ctx, resource.list_fn(conn, query));
+	}
+
+	function get_one(conn, ctx, id) {
+		if (resource.id_field == null)
+			return method_not_allowed(ctx, "individual lookup");
+		for (let item in resource.list_fn(conn))
+			if (item[resource.id_field] == id) return errors.ok(ctx, item);
+		return errors.error(ctx, "not_found",
+		                    sprintf("No %s with %s=%J", sec_type, resource.id_field, id));
+	}
+
+	return {
+		list,
+		get_one,
+		create:  function(conn, ctx, body)       { return method_not_allowed(ctx, "POST"); },
+		replace: function(conn, ctx, id, body)   { return method_not_allowed(ctx, "PUT"); },
+		patch:   function(conn, ctx, id, body)   { return method_not_allowed(ctx, "PATCH"); },
+		remove:  function(conn, ctx, id)         { return method_not_allowed(ctx, "DELETE"); },
+		adopt:   function(conn, ctx, id)         { return method_not_allowed(ctx, "adopt"); },
+	};
+}
+
+return { make, make_singleton, make_collection, translate_tx };

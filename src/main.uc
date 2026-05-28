@@ -25,6 +25,7 @@ const RESOURCES = {
 	"wireless:devices":    handler.make(load_resource("wireless.devices.uc")),
 	"wireless:interfaces": handler.make(load_resource("wireless.interfaces.uc")),
 	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),
+	"dhcp:leases":         handler.make_collection(load_resource("dhcp.leases.uc")),
 };
 
 const SINGLETONS = {

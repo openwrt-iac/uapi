@@ -61,7 +61,7 @@ Nine of the ten curated v1 resources are implemented:
 - `firewall/rules` (Phase 4)
 - `firewall/zones`, `firewall/redirects` (new)
 - `network/interfaces`, `network/devices` (new)
-- `wireless/devices`, `wireless/interfaces` (new; wifi `key` is write-only — `fromUci` masks it and reports `has_key: true`)
+- `wireless/devices`, `wireless/interfaces` (new; wifi `key` is write-only, `fromUci` masks it and reports `has_key: true`)
 - `dhcp/hosts` (new)
 - `system` (new; singleton via `handler.make_singleton`)
 
