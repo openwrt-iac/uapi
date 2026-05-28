@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration lint lint-emdash lint-syntax openapi openapi-check vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration lint lint-emdash lint-syntax openapi openapi-check stage vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -12,6 +12,7 @@ help:
 	@echo "  lint-emdash        forbid em-dashes in tracked sources"
 	@echo "  lint-syntax        ucode -c on all .uc files"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
+	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
 	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.4 QEMU VM"
 
 test: lint test-unit
@@ -29,6 +30,24 @@ openapi-check:
 		echo ""; echo "build/openapi.json is out of date; run 'make openapi' and commit"; \
 		exit 1; }
 	@rm -f /tmp/openapi.gen.json
+
+stage:
+	@rm -rf build/openwrt/uapi/files
+	@mkdir -p build/openwrt/uapi/files/usr/share/uapi/lib
+	@mkdir -p build/openwrt/uapi/files/usr/share/uapi/resources
+	@mkdir -p build/openwrt/uapi/files/usr/bin
+	@mkdir -p build/openwrt/uapi/files/etc/config
+	@mkdir -p build/openwrt/uapi/files/etc/uci-defaults
+	@cp src/main.uc src/raw.uc      build/openwrt/uapi/files/usr/share/uapi/
+	@cp src/lib/*.uc                build/openwrt/uapi/files/usr/share/uapi/lib/
+	@cp src/resources/*.uc          build/openwrt/uapi/files/usr/share/uapi/resources/
+	@cp build/openapi.json          build/openwrt/uapi/files/usr/share/uapi/openapi.json
+	@cp cli/uapi-token              build/openwrt/uapi/files/usr/bin/uapi-token
+	@cp files/etc/config/uapi       build/openwrt/uapi/files/etc/config/uapi
+	@cp files/etc/uci-defaults/99-uapi build/openwrt/uapi/files/etc/uci-defaults/99-uapi
+	@chmod +x build/openwrt/uapi/files/usr/bin/uapi-token \
+	          build/openwrt/uapi/files/etc/uci-defaults/99-uapi
+	@echo "staged to build/openwrt/uapi/files/"
 
 vm-setup:
 	@tests/vm/setup.sh

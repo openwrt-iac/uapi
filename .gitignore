@@ -4,5 +4,6 @@ tests/vm/id_ed25519*
 tests/vm/qemu.pid
 tests/vm/qemu.log
 build/sdk/
+build/openwrt/uapi/files/
 .DS_Store
 *.swp
