@@ -74,9 +74,18 @@ Three handler-factory shapes now cover the v1 surface:
 
 Integration tests: each resource has at least one round-trip test against the real VM (CRUD, GET/PATCH for singleton, GET/get-by-id for the read-only collection).
 
+### Phase 7 (generic /raw/ passthrough)
+- `src/raw.uc`: generic `/api/v1/raw/<package>/<id>` handler. GET/POST/PUT/PATCH/DELETE plus collection-level GET/POST.
+- Section payload mirrors uci exactly (uci field names, list options as arrays). Response carries `id`, `.type`, `managed`, plus the section options. Writes also include `reloaded: bool`, `reload_services: [...]`, and a `reload_note` when no reload service was known.
+- Reload services inferred via `lib/ucitrack.uc` (uses `/etc/config/ucitrack` plus the fallback table). Unknown packages get `reloaded: false` plus the explanatory note.
+- Dual-scope composition: every raw request requires `raw:*` AND the inferred domain scope. The mapping (`firewall.rule` to `firewall:rules`, etc.) lives in `raw.uc`. Unknown packages fall back to `[<package>]` for the domain check, so only `*:rw` or `<pkg>:rw` permits them.
+- Integration test seeds an admin POST that creates a rule, a `firewall_ro` token POST that 403s (composition check), and an unknown-package POST that 200s with `reloaded: false`.
+
+New finding: ucode does not hoist function declarations. Forward references between top-level functions fail at runtime with "left-hand side is not a function." Define helpers before callers.
+
 ## Open
 
-### Phase 7+: /raw/ passthrough, OpenAPI emission, APK packaging, docs.
+### Phase 8+: OpenAPI emission, APK packaging, docs.
 
 ## How to resume
 
