@@ -104,9 +104,23 @@ Phase 8 follow-ups landed:
 - `docs/packaging.md`: walk-through for building the APK against the official 25.12.4 SDK.
 - `.github/workflows/release.yml`: release-tier workflow (manual or tag-triggered). Downloads + caches the SDK, stages, builds the APK, runs the smoke test (`release_apk_smoke.sh`) which `apk add`s the freshly-built package into a clean VM, verifies the uci-defaults hook wired the prefix and self-deleted, mints a token via the CLI, hits `/healthz` and `/system`, then `apk del`s and confirms the conffile survives.
 
+### Phase 10 (docs)
+- `README.md`: project pitch, install snippet, first-token bootstrap, healthz curl, docs index.
+- `LICENSE`: MIT.
+- `docs/installation.md`: production install, TLS hardening pointer to acme.sh, multi-instance uhttpd, removal.
+- `docs/tokens.md`: CLI reference, scope tree table, deepest-match-wins examples, raw-tree composition rules.
+- `docs/errors.md`: envelope reference, top-level and field-level code tables, Retry-After semantics.
+- `docs/operations.md`: NTP, persistent syslog, off-box log forwarding, audit line format, capacity notes.
+- `docs/raw.md`: `/raw/<package>/<id>` semantics + stability disclaimer.
+- `docs/resources.md`: per-resource one-paragraph summary pointing at the OpenAPI spec for field details; includes per-endpoint notes on reload behaviour and the `wireless/interfaces.key` write-only secret.
+- `docs/adding-a-resource.md`: full walk-through (uci section -> module -> tests -> register -> openapi regen -> docs).
+- `examples/curl/`: one shell script per resource (firewall_rules, firewall_zones, dhcp_hosts, system, raw) demonstrating CRUD, plus a README.
+
+Remaining for v1.0.0 ship: tag `v1.0.0`, publish signed APK to a project-owned feed (mechanics, not code).
+
 ## Open
 
-### Phase 10+: README, operator docs, curl example suite, release v1.0.0.
+### Post v1.0.0: project feed hosting + signing key, README badges, optional Terraform provider seed work.
 
 ## How to resume
 
