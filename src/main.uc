@@ -112,7 +112,7 @@ function method_verb(method) {
 	return method == "GET" ? "ro" : "rw";
 }
 
-function dispatch_firewall_rules(conn, ctx, token, method, id, body, query) {
+function dispatch_firewall_rules(conn, ctx, token, method, id, extra, body, query) {
 	if (!scope.permits(token.scopes, ["firewall", "rules"], method_verb(method))) {
 		return errors.error(ctx, "insufficient_scope",
 		                    "Token does not permit this operation on firewall:rules");
@@ -124,6 +124,15 @@ function dispatch_firewall_rules(conn, ctx, token, method, id, body, query) {
 		return errors.error(ctx, "method_not_allowed",
 		                    sprintf("Method %J not allowed on firewall/rules collection", method));
 	}
+
+	if (extra == "adopt") {
+		if (method != "POST")
+			return errors.error(ctx, "method_not_allowed", "adopt requires POST");
+		return firewall_rules.adopt(conn, ctx, id);
+	}
+
+	if (extra != null)
+		return errors.error(ctx, "not_found", "Unknown sub-path");
 
 	if (method == "GET")    return firewall_rules.get_one(conn, ctx, id);
 	if (method == "PUT")    return firewall_rules.replace(conn, ctx, id, body);
@@ -183,7 +192,8 @@ function dispatch(env) {
 	let parts = split_path(path);
 	if (length(parts) >= 2 && parts[0] == "firewall" && parts[1] == "rules") {
 		let id = length(parts) >= 3 ? parts[2] : null;
-		return { ctx, token, resp: dispatch_firewall_rules(conn, ctx, token, method, id, body, query) };
+		let extra = length(parts) >= 4 ? parts[3] : null;
+		return { ctx, token, resp: dispatch_firewall_rules(conn, ctx, token, method, id, extra, body, query) };
 	}
 
 	return { ctx, token, resp: errors.error(ctx, "not_found", "No handler for this path") };

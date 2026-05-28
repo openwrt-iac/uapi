@@ -178,7 +178,31 @@ function make(resource, opts) {
 		return translate_tx(ctx, result);
 	}
 
-	return { list, get_one, create, replace, patch, remove };
+	function adopt(conn, ctx, id) {
+		let existing = load_section(conn, pkg, id);
+		if (!existing || existing['.type'] != sec_type)
+			return errors.error(ctx, "not_found",
+			                    sprintf("No %s with id %J", sec_type, id));
+		if (resource.fromUci(existing).managed)
+			return errors.error(ctx, "conflict",
+			                    "Section is already managed");
+
+		let new_id = ids.new_id(substr(sec_type, 0, 1));
+		let result = transaction.transaction(conn, tx_params({
+			fn: function(c, p) {
+				c.uci_rename(p, id, new_id);
+				let view = { ...existing };
+				view['.name'] = new_id;
+				view['.anonymous'] = false;
+				view['.type'] = sec_type;
+				return { ok: true, body: resource.fromUci(view) };
+			},
+		}));
+
+		return translate_tx(ctx, result);
+	}
+
+	return { list, get_one, create, replace, patch, remove, adopt };
 }
 
 return { make, translate_tx };

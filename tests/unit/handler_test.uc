@@ -211,6 +211,44 @@ t.describe('handler.patch', () => {
 	});
 });
 
+t.describe('handler.adopt', () => {
+	function with_anon() {
+		let c = with_zones();
+		c._state.uci.firewall.cfg_anon = {
+			'.type': 'rule', '.anonymous': true,
+			target: 'DROP', src: 'wan', dest_port: ['22'],
+		};
+		c._state.uci.firewall.r_named = {
+			'.type': 'rule', '.anonymous': false,
+			target: 'ACCEPT', src: 'lan',
+		};
+		return c;
+	}
+
+	t.it('returns 404 for unknown id', () => {
+		let c = with_anon();
+		let r = rules.adopt(c, ctx(), 'cfg_nope');
+		t.assert_equal(r.status, 404);
+	});
+
+	t.it('returns 409 conflict if already managed', () => {
+		let c = with_anon();
+		let r = rules.adopt(c, ctx(), 'r_named');
+		t.assert_equal(r.status, 409);
+		t.assert_equal(r.body.code, 'conflict');
+	});
+
+	t.it('renames the anonymous section to a ULID id and flips managed=true', () => {
+		let c = with_anon();
+		let r = rules.adopt(c, ctx(), 'cfg_anon');
+		t.assert_equal(r.status, 200);
+		t.assert_match(r.body.id, /^r_[0-9a-z]{26}$/);
+		t.assert_true(r.body.managed);
+		t.assert_equal(r.body.target, 'DROP');
+		t.assert_equal(c._state.uci.firewall.cfg_anon, null);
+	});
+});
+
 t.describe('handler.remove', () => {
 	function with_existing() {
 		let c = with_zones();
