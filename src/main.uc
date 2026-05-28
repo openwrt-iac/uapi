@@ -17,8 +17,11 @@ function load_resource(file) {
 }
 
 const RESOURCES = {
-	"firewall:rules": handler.make(load_resource("firewall.rules.uc")),
-	"dhcp:hosts":     handler.make(load_resource("dhcp.hosts.uc")),
+	"firewall:rules":     handler.make(load_resource("firewall.rules.uc")),
+	"firewall:zones":     handler.make(load_resource("firewall.zones.uc")),
+	"firewall:redirects": handler.make(load_resource("firewall.redirects.uc")),
+	"network:interfaces": handler.make(load_resource("network.interfaces.uc")),
+	"dhcp:hosts":         handler.make(load_resource("dhcp.hosts.uc")),
 };
 
 const VERSION = "1.0.0-dev";

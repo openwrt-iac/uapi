@@ -1,0 +1,108 @@
+let t = require('harness');
+
+let zones = loadfile('src/resources/firewall.zones.uc')();
+let redirects = loadfile('src/resources/firewall.redirects.uc')();
+let interfaces = loadfile('src/resources/network.interfaces.uc')();
+
+t.describe('firewall.zones', () => {
+	t.it('contract', () => {
+		t.assert_equal(zones.package, "firewall");
+		t.assert_equal(zones.type, "zone");
+		t.assert_deep_equal(zones.reload, ["firewall"]);
+	});
+
+	t.it('fromUci defaults policies to REJECT', () => {
+		let r = zones.fromUci({ '.name': 'z_lan', '.anonymous': false, '.type': 'zone',
+		                        name: 'lan', input: 'ACCEPT' });
+		t.assert_equal(r.input, 'ACCEPT');
+		t.assert_equal(r.output, 'REJECT');
+		t.assert_equal(r.forward, 'REJECT');
+	});
+
+	t.it('toUci preserves network list', () => {
+		let u = zones.toUci({ name: 'lan', input: 'ACCEPT', network: ['lan', 'lan2'] });
+		t.assert_deep_equal(u.network, ['lan', 'lan2']);
+	});
+
+	t.it('validate rejects missing name', () => {
+		let errs = zones.validate({}, null);
+		t.assert_true(length(filter(errs, function(e) { return e.field == "name"; })) >= 1);
+	});
+
+	t.it('validate rejects bad policy', () => {
+		let errs = zones.validate({ name: 'lan', input: 'BOGUS' }, null);
+		let ie = filter(errs, function(e) { return e.field == "input"; });
+		t.assert_equal(ie[0].code, 'not_in_enum');
+	});
+});
+
+t.describe('firewall.redirects', () => {
+	t.it('contract', () => {
+		t.assert_equal(redirects.package, "firewall");
+		t.assert_equal(redirects.type, "redirect");
+	});
+
+	t.it('fromUci defaults target to DNAT', () => {
+		let r = redirects.fromUci({ '.name': 'fwd1', '.anonymous': false, '.type': 'redirect',
+		                            src: 'wan' });
+		t.assert_equal(r.target, 'DNAT');
+		t.assert_equal(r.match.src_zone, 'wan');
+	});
+
+	t.it('validate rejects missing src_zone', () => {
+		let errs = redirects.validate({ target: 'DNAT', match: {} }, null);
+		let sz = filter(errs, function(e) { return e.field == "match.src_zone"; });
+		t.assert_equal(sz[0].code, 'required');
+	});
+
+	t.it('validate rejects bad dest_ip', () => {
+		let errs = redirects.validate({ target: 'DNAT',
+		                                match: { src_zone: 'wan', dest_ip: '999.0.0.1' } }, null);
+		let de = filter(errs, function(e) { return e.field == "match.dest_ip"; });
+		t.assert_equal(de[0].code, 'invalid_format');
+	});
+
+	t.it('validate accepts port ranges', () => {
+		let errs = redirects.validate({ target: 'DNAT',
+		                                match: { src_zone: 'wan', src_dport: '8000-8100' } }, null);
+		t.assert_equal(length(errs), 0);
+	});
+});
+
+t.describe('network.interfaces', () => {
+	t.it('contract', () => {
+		t.assert_equal(interfaces.package, "network");
+		t.assert_equal(interfaces.type, "interface");
+		t.assert_deep_equal(interfaces.reload, ["network"]);
+	});
+
+	t.it('fromUci surfaces proto and addresses', () => {
+		let r = interfaces.fromUci({ '.name': 'lan', '.anonymous': false, '.type': 'interface',
+		                             proto: 'static', ipaddr: '192.168.1.1', netmask: '255.255.255.0' });
+		t.assert_equal(r.proto, 'static');
+		t.assert_equal(r.ipaddr, '192.168.1.1');
+		t.assert_equal(r.netmask, '255.255.255.0');
+	});
+
+	t.it('validate requires ipaddr for static proto', () => {
+		let errs = interfaces.validate({ proto: 'static' }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+		t.assert_equal(ip[0].code, 'required');
+	});
+
+	t.it('validate accepts dhcp without ipaddr', () => {
+		let errs = interfaces.validate({ proto: 'dhcp' }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('validate rejects unknown proto', () => {
+		let errs = interfaces.validate({ proto: 'whatever' }, null);
+		let pe = filter(errs, function(e) { return e.field == "proto"; });
+		t.assert_equal(pe[0].code, 'not_in_enum');
+	});
+
+	t.it('toUci stringifies numeric ip6assign', () => {
+		let u = interfaces.toUci({ proto: 'dhcp', ip6assign: 64 });
+		t.assert_equal(u.ip6assign, '64');
+	});
+});
