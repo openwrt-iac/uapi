@@ -4,7 +4,18 @@
 
 push(REQUIRE_SEARCH_PATH, "./src/lib/*.uc");
 
-const VERSION = "1.0.0-rc1";
+let fs = require('fs');
+
+function read_version() {
+	let f = fs.open("VERSION", "r");
+	if (!f) die("VERSION file not found at repo root");
+	let v = trim(f.read("all") ?? "");
+	f.close();
+	if (v == "") die("VERSION file is empty");
+	return v;
+}
+
+const VERSION = read_version();
 
 const ENDPOINTS = [
 	{ path: "/firewall/rules",     file: "firewall.rules.uc",     kind: "crud", domain: "firewall", subresource: "rules" },
@@ -370,7 +381,6 @@ if (out_path == null) {
 	print(json_text);
 	print("\n");
 } else {
-	let fs = require('fs');
 	let f = fs.open(out_path, "w");
 	f.write(json_text);
 	f.write("\n");

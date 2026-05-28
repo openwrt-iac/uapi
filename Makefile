@@ -42,6 +42,8 @@ stage:
 	@cp src/lib/*.uc                build/openwrt/uapi/files/usr/share/uapi/lib/
 	@cp src/resources/*.uc          build/openwrt/uapi/files/usr/share/uapi/resources/
 	@cp build/openapi.json          build/openwrt/uapi/files/usr/share/uapi/openapi.json
+	@cp VERSION                     build/openwrt/uapi/files/usr/share/uapi/VERSION
+	@cp VERSION                     build/openwrt/uapi/files/VERSION
 	@cp cli/uapi-token              build/openwrt/uapi/files/usr/bin/uapi-token
 	@cp files/etc/config/uapi       build/openwrt/uapi/files/etc/config/uapi
 	@cp files/etc/uci-defaults/99-uapi build/openwrt/uapi/files/etc/uci-defaults/99-uapi

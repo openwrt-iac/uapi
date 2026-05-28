@@ -1,6 +1,8 @@
 # Building the uapi APK
 
-This document walks through producing `uapi-1.0.0_rc1-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK.
+The version comes from a single source: the `VERSION` file at the repo root (semver, e.g. `1.0.0-rc1`). The OpenWrt Makefile translates that to apk-style `PKG_VERSION` (hyphens become underscores), and `make stage` ships a copy to `/usr/share/uapi/VERSION` so `main.uc` and `/healthz` report the same string.
+
+This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK. Substitute the actual version from the `VERSION` file (or the release page) wherever you see `<version>` below.
 
 ## What gets installed
 
@@ -58,13 +60,13 @@ make defconfig
 make package/uapi/compile V=s
 ```
 
-The output `.apk` lands at `bin/packages/all/base/uapi-1.0.0_rc1-r1.apk` (or whatever the SDK reports at the end of the build).
+The output `.apk` lands at `bin/packages/all/base/uapi-<version>-r1.apk` (or whatever the SDK reports at the end of the build).
 
 ### 4. Install on a router
 
 ```sh
 scp bin/packages/all/base/uapi-*.apk root@<router>:/tmp/
-ssh root@<router> 'apk add /tmp/uapi-1.0.0_rc1-r1.apk'
+ssh root@<router> 'apk add /tmp/uapi-<version>-r1.apk'
 ssh root@<router> 'uapi-token create --name first --scope "*:rw"'
 ```
 

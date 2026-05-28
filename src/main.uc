@@ -34,7 +34,15 @@ const SINGLETONS = {
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
 
-const VERSION = "1.0.0-rc1";
+function read_version() {
+	let f = fs.open("/usr/share/uapi/VERSION", "r");
+	if (!f) return "unknown";
+	let v = trim(f.read("all") ?? "");
+	f.close();
+	return v != "" ? v : "unknown";
+}
+
+const VERSION = read_version();
 const INSECURE_MARKER = "/etc/uapi.insecure";
 
 const REASON = {

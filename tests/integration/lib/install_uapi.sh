@@ -12,6 +12,7 @@ install_uapi() {
 	push_file_to_vm src/main.uc /usr/share/uapi/main.uc
 	push_file_to_vm src/raw.uc /usr/share/uapi/raw.uc
 	push_file_to_vm build/openapi.json /usr/share/uapi/openapi.json
+	push_file_to_vm VERSION /usr/share/uapi/VERSION
 	for f in src/lib/*.uc; do
 		push_file_to_vm "$f" "/usr/share/uapi/lib/$(basename "$f")"
 	done

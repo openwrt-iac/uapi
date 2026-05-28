@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=uapi
-PKG_VERSION:=1.0.0_rc1
+PKG_VERSION:=$(shell sed 's/-/_/g' $(CURDIR)/files/VERSION)
 PKG_RELEASE:=1
 
 PKG_LICENSE:=MIT
@@ -49,6 +49,7 @@ define Package/uapi/install
 	$(INSTALL_DATA) ./files/usr/share/uapi/main.uc      $(1)/usr/share/uapi/main.uc
 	$(INSTALL_DATA) ./files/usr/share/uapi/raw.uc       $(1)/usr/share/uapi/raw.uc
 	$(INSTALL_DATA) ./files/usr/share/uapi/openapi.json $(1)/usr/share/uapi/openapi.json
+	$(INSTALL_DATA) ./files/usr/share/uapi/VERSION      $(1)/usr/share/uapi/VERSION
 	$(INSTALL_DATA) ./files/usr/share/uapi/lib/*.uc       $(1)/usr/share/uapi/lib/
 	$(INSTALL_DATA) ./files/usr/share/uapi/resources/*.uc $(1)/usr/share/uapi/resources/
 
