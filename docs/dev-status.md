@@ -55,9 +55,25 @@ Real-OpenWrt findings captured along the way:
 
 Real-OpenWrt findings: ucode-mod-digest exports `digest.sha256(s)` returning the hex digest directly (no separate `sha256_hex`).
 
+### Phase 6 (remaining curated resources)
+Nine of the ten curated v1 resources are implemented:
+
+- `firewall/rules` (Phase 4)
+- `firewall/zones`, `firewall/redirects` (new)
+- `network/interfaces`, `network/devices` (new)
+- `wireless/devices`, `wireless/interfaces` (new; wifi `key` is write-only — `fromUci` masks it and reports `has_key: true`)
+- `dhcp/hosts` (new)
+- `system` (new; singleton via `handler.make_singleton`)
+
+`main.uc` routes via a `RESOURCES` registry (CRUD via `handler.make`) plus a `SINGLETONS` registry (singleton via `handler.make_singleton`). Adding a future resource is one line in the appropriate map plus the resource module.
+
+Integration tests: each new resource has at least one round-trip test against the real VM (CRUD or GET/PATCH for the singleton).
+
+**Deferred**: `dhcp/leases`. It is read-only runtime data (parsed from `/tmp/dhcp.leases` or queried via ubus) and doesn't fit the `uci_foreach`-based CRUD pattern. Will need a small `read_only` extension to the handler module or its own one-off route.
+
 ## Open
 
-### Phase 6+: remaining resources (network/interfaces, firewall/zones, dhcp/hosts, etc.), /raw/ passthrough, OpenAPI emission, APK packaging, docs.
+### Phase 7+: /raw/ passthrough, OpenAPI emission, APK packaging, docs. dhcp/leases.
 
 ## How to resume
 
