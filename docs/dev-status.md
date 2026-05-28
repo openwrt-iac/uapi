@@ -95,9 +95,18 @@ Phase 8 follow-ups landed:
 - `GET /api/v1/openapi.json` serves the spec without auth (TLS check still applies). Per-request file read; the parent VM doesn't cache.
 - `install_uapi.sh` pushes `build/openapi.json` to `/usr/share/uapi/openapi.json` on the test VM. Real APK packaging in Phase 9 will install via the SDK Makefile.
 
+### Phase 9 (APK packaging)
+- `build/openwrt/uapi/Makefile`: OpenWrt SDK Makefile for the package. Pure-`files` install (no compile step), `PKGARCH:=all`. Depends on `uhttpd`, `uhttpd-mod-ucode`, `ucode`, and the `ucode-mod-{ubus,uci,fs,digest,log}` mods.
+- `files/etc/config/uapi`: conffile seed with a commented example token block.
+- `Package/uapi/postinst`: runs the `99-uapi` uci-defaults script immediately on live installs, deletes it, then prints the bootstrap message (CLAUDE.md "Post-install message").
+- `Package/uapi/prerm`: removes the `ucode_prefix` entry before the handler files disappear, commits uhttpd config, reloads uhttpd.
+- `make stage`: populates `build/openwrt/uapi/files/` from `src/`, `cli/`, `files/`, and `build/openapi.json`. Mirrors the install layout 1:1.
+- `docs/packaging.md`: walk-through for building the APK against the official 25.12.4 SDK.
+- `.github/workflows/release.yml`: release-tier workflow (manual or tag-triggered). Downloads + caches the SDK, stages, builds the APK, runs the smoke test (`release_apk_smoke.sh`) which `apk add`s the freshly-built package into a clean VM, verifies the uci-defaults hook wired the prefix and self-deleted, mints a token via the CLI, hits `/healthz` and `/system`, then `apk del`s and confirms the conffile survives.
+
 ## Open
 
-### Phase 9+: APK packaging, docs.
+### Phase 10+: README, operator docs, curl example suite, release v1.0.0.
 
 ## How to resume
 
