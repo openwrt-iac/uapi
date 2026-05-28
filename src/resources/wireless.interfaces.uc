@@ -84,4 +84,8 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		mode: { type: "string", enum: keys(VALID_MODES) },
+		encryption: { type: "string", enum: keys(VALID_ENCRYPTION) },
+	},
 };

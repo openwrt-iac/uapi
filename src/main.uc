@@ -176,6 +176,21 @@ function dispatch(env) {
 		return { ctx, resp: errors.error(ctx, "tls_required",
 		                                 "HTTPS required for non-localhost requests") };
 
+	if (path == "/openapi.json") {
+		if (method != "GET")
+			return { ctx, resp: errors.error(ctx, "method_not_allowed",
+			                                 "openapi.json only supports GET") };
+		let f = fs.open("/usr/share/uapi/openapi.json", "r");
+		if (!f)
+			return { ctx, resp: errors.error(ctx, "not_found", "openapi.json not installed") };
+		let content = f.read("all") ?? "";
+		f.close();
+		return { ctx, resp: { status: 200,
+		                      headers: { "Content-Type": "application/json",
+		                                 "X-Request-Id": ctx.request_id },
+		                      body: content } };
+	}
+
 	if (path == "/healthz") {
 		if (method != "GET")
 			return { ctx, resp: errors.error(ctx, "method_not_allowed",

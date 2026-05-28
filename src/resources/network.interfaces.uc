@@ -105,4 +105,8 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		proto: { type: "string", enum: keys(VALID_PROTOS) },
+		dns: { type: "array", items: { type: "string" } },
+	},
 };

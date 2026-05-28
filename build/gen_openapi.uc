@@ -308,6 +308,9 @@ function build_schemas() {
 			else prop = { "type": "string", "nullable": true };
 			properties[k] = prop;
 		}
+		if (type(mod.schema_properties) == "object") {
+			for (let k in mod.schema_properties) properties[k] = mod.schema_properties[k];
+		}
 
 		schemas[schema_name(ep)] = {
 			"type": "object",

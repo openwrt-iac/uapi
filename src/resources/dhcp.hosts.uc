@@ -88,4 +88,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		mac: { type: "string", pattern: "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$" },
+		ip:  { type: "string", description: "IPv4 or IPv6 address" },
+		leasetime: { type: ["string", "null"],
+		             description: "Duration like '12h', '30m', '1d', or plain seconds" },
+	},
 };

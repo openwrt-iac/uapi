@@ -81,4 +81,11 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		input:   { type: "string", enum: keys(VALID_POLICIES) },
+		output:  { type: "string", enum: keys(VALID_POLICIES) },
+		forward: { type: "string", enum: keys(VALID_POLICIES) },
+		family:  { type: "string", enum: keys(VALID_FAMILIES) },
+		network: { type: "array", items: { type: "string" } },
+	},
 };

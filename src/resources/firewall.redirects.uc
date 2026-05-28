@@ -134,4 +134,21 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		target: { type: "string", enum: keys(VALID_TARGETS) },
+		match: {
+			type: "object",
+			properties: {
+				src_zone:  { type: ["string", "null"] },
+				dest_zone: { type: ["string", "null"] },
+				src_ip:    { type: "array", items: { type: "string" } },
+				src_port:  { type: "array", items: { type: "string" } },
+				src_dport: { type: ["string", "null"] },
+				dest_ip:   { type: ["string", "null"] },
+				dest_port: { type: ["string", "null"] },
+				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
+				family:    { type: "string", enum: keys(VALID_FAMILIES) },
+			},
+		},
+	},
 };

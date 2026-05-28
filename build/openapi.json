@@ -3387,13 +3387,81 @@
 					},
 					"target": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP",
+							"NOTRACK",
+							"MARK"
+						]
 					},
 					"enabled": {
 						"type": "boolean"
 					},
 					"match": {
-						"type": "object"
+						"type": "object",
+						"properties": {
+							"src_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_ip": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"dest_ip": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"src_port": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"dest_port": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"proto": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"enum": [
+										"tcp",
+										"udp",
+										"icmp",
+										"icmpv6",
+										"esp",
+										"ah",
+										"any",
+										"all"
+									]
+								}
+							},
+							"family": {
+								"type": "string",
+								"enum": [
+									"any",
+									"ipv4",
+									"ipv6"
+								]
+							}
+						}
 					},
 					"runtime": {
 						"type": "object"
@@ -3417,15 +3485,27 @@
 					},
 					"input": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
 					},
 					"output": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
 					},
 					"forward": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
 					},
 					"network": {
 						"type": "array",
@@ -3441,7 +3521,11 @@
 					},
 					"family": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"any",
+							"ipv4",
+							"ipv6"
+						]
 					},
 					"runtime": {
 						"type": "object"
@@ -3465,13 +3549,84 @@
 					},
 					"target": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"DNAT",
+							"SNAT"
+						]
 					},
 					"enabled": {
 						"type": "boolean"
 					},
 					"match": {
-						"type": "object"
+						"type": "object",
+						"properties": {
+							"src_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_ip": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"src_port": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"src_dport": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_ip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_port": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"proto": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"enum": [
+										"tcp",
+										"udp",
+										"icmp",
+										"icmpv6",
+										"esp",
+										"ah",
+										"any",
+										"all"
+									]
+								}
+							},
+							"family": {
+								"type": "string",
+								"enum": [
+									"any",
+									"ipv4",
+									"ipv6"
+								]
+							}
+						}
 					},
 					"runtime": {
 						"type": "object"
@@ -3495,7 +3650,15 @@
 					},
 					"proto": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"static",
+							"dhcp",
+							"dhcpv6",
+							"pppoe",
+							"none",
+							"ppp",
+							"wwan"
+						]
 					},
 					"ipaddr": {
 						"type": "string",
@@ -3548,7 +3711,15 @@
 					},
 					"type": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"bridge",
+							"8021q",
+							"8021ad",
+							"macvlan",
+							"veth",
+							"tun",
+							"tap"
+						]
 					},
 					"ports": {
 						"type": "array",
@@ -3593,11 +3764,19 @@
 					},
 					"type": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"mac80211",
+							"broadcom"
+						]
 					},
 					"band": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"2g",
+							"5g",
+							"6g",
+							"60g"
+						]
 					},
 					"channel": {
 						"type": "string",
@@ -3644,7 +3823,14 @@
 					},
 					"mode": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"ap",
+							"sta",
+							"adhoc",
+							"wds",
+							"monitor",
+							"mesh"
+						]
 					},
 					"ssid": {
 						"type": "string",
@@ -3652,7 +3838,19 @@
 					},
 					"encryption": {
 						"type": "string",
-						"nullable": true
+						"enum": [
+							"none",
+							"wep",
+							"psk",
+							"psk2",
+							"psk-mixed",
+							"sae",
+							"sae-mixed",
+							"wpa",
+							"wpa2",
+							"wpa3",
+							"wpa3-mixed"
+						]
 					},
 					"disabled": {
 						"type": "boolean"
@@ -3685,15 +3883,18 @@
 					},
 					"mac": {
 						"type": "string",
-						"nullable": true
+						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$"
 					},
 					"ip": {
 						"type": "string",
-						"nullable": true
+						"description": "IPv4 or IPv6 address"
 					},
 					"leasetime": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Duration like '12h', '30m', '1d', or plain seconds"
 					},
 					"tag": {
 						"type": "string",

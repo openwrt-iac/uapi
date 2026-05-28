@@ -66,4 +66,8 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		type: { type: "string", enum: keys(VALID_TYPES) },
+		band: { type: "string", enum: keys(VALID_BANDS) },
+	},
 };
