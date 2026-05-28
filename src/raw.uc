@@ -51,11 +51,11 @@ function load_section(conn, pkg, id) {
 	return view;
 }
 
-function build_response_body(view, reload_plan) {
+function build_response_body(view, reload_info) {
 	let body = normalize_section(view);
-	body.reloaded = !!reload_plan.known;
-	body.reload_services = reload_plan.services;
-	if (!reload_plan.known)
+	body.reloaded = !!reload_info.known;
+	body.reload_services = reload_info.services;
+	if (!reload_info.known)
 		body.reload_note = "no reload service is known for this package; configuration is on disk but no daemon was notified";
 	return body;
 }
@@ -64,7 +64,7 @@ function build_field_errors(field, code, msg) {
 	return [errors.field_error(field, code, msg)];
 }
 
-function with_reload_plan(conn, pkg) {
+function with_reload_info(conn, pkg) {
 	return ucitrack.reload_services(conn, pkg);
 }
 
@@ -135,7 +135,7 @@ function create(conn, ctx, scopes, pkg, body) {
 	if (new_id == null || new_id == "")
 		new_id = ids.new_id(substr(sec_type, 0, 1));
 
-	let reload = with_reload_plan(conn, pkg);
+	let reload = with_reload_info(conn, pkg);
 	let opts = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -174,7 +174,7 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	if (dotted_err)
 		return errors.validation_failed(ctx, [dotted_err]);
 
-	let reload = with_reload_plan(conn, pkg);
+	let reload = with_reload_info(conn, pkg);
 	let new_opts = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -217,7 +217,7 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	if (dotted_err)
 		return errors.validation_failed(ctx, [dotted_err]);
 
-	let reload = with_reload_plan(conn, pkg);
+	let reload = with_reload_info(conn, pkg);
 	let updates = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -248,7 +248,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit deleting %s.%s via /raw/", pkg, id));
 
-	let reload = with_reload_plan(conn, pkg);
+	let reload = with_reload_info(conn, pkg);
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
