@@ -29,14 +29,23 @@ All shared internals landed with unit-test coverage.
 
 Unit test coverage: 113 tests, all green via `make test`.
 
-## Open
+### Phase 4 (firewall/rules vertical slice)
+- `src/main.uc`: TLS check, request context, JSON body parsing, query parsing, auth (uci token loader), scope check, route to handler, audit log on writes.
+- `src/resources/firewall.rules.uc`: schema, validate, fromUci, toUci, cross-reference checks against existing zones.
+- `src/lib/handler.uc`: generic CRUD over a resource module (list/get/create/replace/patch/remove/adopt).
+- `tests/integration/lib/install_uapi.sh` + test-tokens uci: idempotent VM provisioning.
+- Integration tests landed:
+  - `02_api_skeleton`: healthz, 404 fallback, auth-gated unknown paths, method not allowed.
+  - `03_firewall_rules_crud`: POST→GET→list→PATCH→PUT→DELETE round-trip; validation 422; auth 401/403.
+  - `04_adopt`: anonymous rule injected via uci, surfaced as `managed: false`; PUT/DELETE rejected with `unmanaged_resource`; `POST .../adopt` renames to ULID and flips `managed: true`; double-adopt returns 409.
 
-### Phase 4 (next): firewall/rules vertical slice
-- `src/main.uc` dispatcher (TLS check, auth, route to resource).
-- `src/resources/firewall.rules.uc` implementing the uniform contract.
-- CRUD handlers + adopt flow.
-- Audit log on writes.
-- Integration tests: happy path, validation failure, reload rollback, adoption, auth paths.
+Real-OpenWrt findings captured along the way:
+- `loadfile()` inherits the VM's parse mode; raw-script modules loaded from template-mode handlers need `{raw_mode: true}`.
+- `cursor.get(pkg, sect)` returns the section type string; the full dict requires `cursor.get_all(pkg, sect)`.
+- uhttpd's CGI header parser requires `Status: NNN <reason>` with a reason phrase; `Status: NNN` alone is silently dropped.
+- ucode-mod-uci has no `cursor.export`/`cursor.import`; the bus wrapper reads/writes `/etc/config/<pkg>` directly for snapshot/restore.
+
+## Open
 
 ### Phase 5+: token CLI + real auth, remaining resources, /raw/, OpenAPI, APK, docs.
 
