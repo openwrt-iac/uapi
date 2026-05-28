@@ -1,0 +1,69 @@
+const VALID_TYPES = { "mac80211": true, "broadcom": true };
+const VALID_BANDS = { "2g": true, "5g": true, "6g": true, "60g": true };
+
+function normalize_bool(v, default_val) {
+	if (v == null) return default_val;
+	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
+		return true;
+	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
+		return false;
+	return default_val;
+}
+
+function fromUci(section) {
+	let anonymous = !!section['.anonymous'];
+	return {
+		id: section['.name'],
+		managed: !anonymous,
+		type: section.type ?? null,
+		band: section.band ?? null,
+		channel: section.channel ?? null,
+		htmode: section.htmode ?? null,
+		country: section.country ?? null,
+		txpower: section.txpower ?? null,
+		disabled: normalize_bool(section.disabled, false),
+		runtime: {},
+	};
+}
+
+function toUci(json) {
+	let out = {};
+	if (json.type != null) out.type = json.type;
+	if (json.band != null) out.band = json.band;
+	if (json.channel != null) out.channel = "" + json.channel;
+	if (json.htmode != null) out.htmode = json.htmode;
+	if (json.country != null) out.country = json.country;
+	if (json.txpower != null) out.txpower = "" + json.txpower;
+	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
+	return out;
+}
+
+function validate(json) {
+	let errs = [];
+
+	if (type(json) != "object") {
+		push(errs, { field: "", code: "invalid_type", message: "body must be a JSON object" });
+		return errs;
+	}
+
+	if (json.type == null || json.type == "")
+		push(errs, { field: "type", code: "required", message: "is required" });
+	else if (!VALID_TYPES[json.type])
+		push(errs, { field: "type", code: "not_in_enum",
+		             message: "must be one of mac80211, broadcom" });
+
+	if (json.band != null && !VALID_BANDS[json.band])
+		push(errs, { field: "band", code: "not_in_enum",
+		             message: "must be one of 2g, 5g, 6g, 60g" });
+
+	return errs;
+}
+
+return {
+	package: "wireless",
+	type: "wifi-device",
+	reload: ["network"],
+	fromUci: fromUci,
+	toUci: toUci,
+	validate: validate,
+};

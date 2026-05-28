@@ -17,11 +17,18 @@ function load_resource(file) {
 }
 
 const RESOURCES = {
-	"firewall:rules":     handler.make(load_resource("firewall.rules.uc")),
-	"firewall:zones":     handler.make(load_resource("firewall.zones.uc")),
-	"firewall:redirects": handler.make(load_resource("firewall.redirects.uc")),
-	"network:interfaces": handler.make(load_resource("network.interfaces.uc")),
-	"dhcp:hosts":         handler.make(load_resource("dhcp.hosts.uc")),
+	"firewall:rules":      handler.make(load_resource("firewall.rules.uc")),
+	"firewall:zones":      handler.make(load_resource("firewall.zones.uc")),
+	"firewall:redirects":  handler.make(load_resource("firewall.redirects.uc")),
+	"network:interfaces":  handler.make(load_resource("network.interfaces.uc")),
+	"network:devices":     handler.make(load_resource("network.devices.uc")),
+	"wireless:devices":    handler.make(load_resource("wireless.devices.uc")),
+	"wireless:interfaces": handler.make(load_resource("wireless.interfaces.uc")),
+	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),
+};
+
+const SINGLETONS = {
+	"system": handler.make_singleton(load_resource("system.uc")),
 };
 
 const VERSION = "1.0.0-dev";
@@ -215,6 +222,23 @@ function dispatch(env) {
 	let token = auth_result.token;
 
 	let parts = split_path(path);
+	if (length(parts) == 1) {
+		let h = SINGLETONS[parts[0]];
+		if (h != null) {
+			if (!scope.permits(token.scopes, [parts[0]], method_verb(method))) {
+				return { ctx, token,
+				         resp: errors.error(ctx, "insufficient_scope",
+				                            sprintf("Token does not permit this operation on %s",
+				                                    parts[0])) };
+			}
+			let resp;
+			if (method == "GET") resp = h.get(conn, ctx);
+			else if (method == "PATCH") resp = h.patch(conn, ctx, body);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on %s", method, parts[0]));
+			return { ctx, token, resp };
+		}
+	}
 	if (length(parts) >= 2) {
 		let h = RESOURCES[parts[0] + ":" + parts[1]];
 		if (h != null) {

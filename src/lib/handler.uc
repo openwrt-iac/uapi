@@ -205,4 +205,71 @@ function make(resource, opts) {
 	return { list, get_one, create, replace, patch, remove, adopt };
 }
 
-return { make, translate_tx };
+function make_singleton(resource, opts) {
+	let pkg = resource.package;
+	let sec_type = resource.type;
+	let reload_services = resource.reload ?? [];
+	let tx_overrides = (opts != null && opts.tx != null) ? opts.tx : {};
+
+	function tx_params(extra) {
+		let p = { package: pkg, reload_services: reload_services };
+		for (let k in tx_overrides) p[k] = tx_overrides[k];
+		for (let k in extra) p[k] = extra[k];
+		return p;
+	}
+
+	function find(conn) {
+		let found = null;
+		conn.uci_foreach(pkg, sec_type, function(s) {
+			found = s;
+			return false;
+		});
+		return found;
+	}
+
+	function get(conn, ctx) {
+		let s = find(conn);
+		if (!s)
+			return errors.error(ctx, "not_found",
+			                    sprintf("singleton %s.%s missing", pkg, sec_type));
+		return errors.ok(ctx, resource.fromUci(s));
+	}
+
+	function patch(conn, ctx, body) {
+		let existing = find(conn);
+		if (!existing)
+			return errors.error(ctx, "not_found",
+			                    sprintf("singleton %s.%s missing", pkg, sec_type));
+		let id = existing['.name'];
+
+		let merged = { ...resource.fromUci(existing) };
+		for (let k in body) merged[k] = body[k];
+
+		let errs = resource.validate(merged, conn);
+		if (length(errs) > 0)
+			return errors.validation_failed(ctx, build_field_errors(errs));
+
+		let new_opts = resource.toUci(merged);
+		let result = transaction.transaction(conn, tx_params({
+			fn: function(c, p) {
+				for (let k in existing) {
+					if (substr(k, 0, 1) == ".") continue;
+					if (exists(new_opts, k)) continue;
+					c.uci_delete(p, id, k);
+				}
+				for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+				let view = { ...new_opts };
+				view['.name'] = id;
+				view['.anonymous'] = !!existing['.anonymous'];
+				view['.type'] = sec_type;
+				return { ok: true, body: resource.fromUci(view) };
+			},
+		}));
+
+		return translate_tx(ctx, result);
+	}
+
+	return { get, patch };
+}
+
+return { make, make_singleton, translate_tx };
