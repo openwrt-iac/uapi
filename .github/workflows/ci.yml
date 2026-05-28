@@ -29,6 +29,8 @@ jobs:
         run: make lint
       - name: OpenAPI contract is up to date
         run: make openapi-check
+      - name: Package staging succeeds
+        run: make stage
 
   integration:
     runs-on: ubuntu-latest
