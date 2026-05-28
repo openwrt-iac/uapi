@@ -1,0 +1,86 @@
+name: release-apk
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils openssh-client curl zstd \
+            build-essential libncurses-dev libssl-dev python3 \
+            unzip gawk gettext xsltproc rsync wget
+
+      - name: Cache OpenWrt SDK
+        uses: actions/cache@v4
+        with:
+          path: build/sdk
+          key: openwrt-sdk-25.12.4-x86_64
+
+      - name: Download SDK if cache miss
+        run: |
+          if [ ! -d build/sdk/staging_dir ]; then
+            mkdir -p build/sdk
+            SDK_URL=https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            curl -fsSL "$SDK_URL" | tar --use-compress-program=unzstd -xf - -C build/sdk --strip-components=1
+          fi
+
+      - name: Cache OpenWrt VM image
+        uses: actions/cache@v4
+        with:
+          path: tests/vm/openwrt-25.12.4.img.gz
+          key: openwrt-25.12.4-x86-64-ext4-combined
+
+      - name: Stage package (uses checked-in build/openapi.json)
+        run: make stage
+
+      - name: Build APK
+        run: |
+          cd build/sdk
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          ln -sfn ../../openwrt/uapi package/uapi
+          make defconfig
+          make package/uapi/compile V=s
+
+      - name: Find built APK
+        id: find_apk
+        run: |
+          APK=$(find build/sdk/bin -name 'uapi-*.apk' | head -1)
+          [ -n "$APK" ] || { echo "no .apk built"; exit 1; }
+          echo "apk=$APK" >> $GITHUB_OUTPUT
+          ls -la "$APK"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uapi-apk
+          path: ${{ steps.find_apk.outputs.apk }}
+
+      - name: Setup VM
+        run: tests/vm/setup.sh
+
+      - name: Start VM
+        run: tests/vm/start.sh
+
+      - name: Wait for VM SSH
+        run: TIMEOUT=180 tests/vm/wait.sh
+
+      - name: Install APK in VM and run smoke test
+        run: tests/integration/release_apk_smoke.sh "${{ steps.find_apk.outputs.apk }}"
+
+      - name: Capture serial log on failure
+        if: failure()
+        run: tail -200 tests/vm/qemu.log || true
+
+      - name: Stop VM
+        if: always()
+        run: tests/vm/stop.sh
