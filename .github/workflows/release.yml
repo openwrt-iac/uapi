@@ -85,6 +85,40 @@ jobs:
           fi
           gh release upload "$TAG" "${{ steps.find_apk.outputs.apk }}" --clobber
 
+      - name: Publish to APK feed on gh-pages (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+        run: |
+          set -eu
+          TAG="${GITHUB_REF#refs/tags/}"
+          SIGN_KEY=$(mktemp)
+          printf '%s' "$FEED_SIGNING_KEY" > "$SIGN_KEY"
+          chmod 600 "$SIGN_KEY"
+
+          APK_BIN=$(find build/sdk/staging_dir -type f -executable -name apk | head -1)
+          [ -n "$APK_BIN" ] || { echo "could not find SDK apk binary"; exit 1; }
+          echo "using $APK_BIN"
+          "$APK_BIN" --help 2>&1 | head -20 || true
+
+          git worktree add /tmp/gh-pages gh-pages
+          FEED_DIR=/tmp/gh-pages/packages/all/uapi
+          mkdir -p "$FEED_DIR"
+          cp "${{ steps.find_apk.outputs.apk }}" "$FEED_DIR/"
+
+          cd "$FEED_DIR"
+          "$APK_BIN" mkndx --output packages.adb --sign-key "$SIGN_KEY" *.apk
+
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          cd /tmp/gh-pages
+          rm -f packages/all/uapi/.gitkeep
+          git add -A
+          git commit -m "feed: publish $TAG" || echo "(nothing to commit)"
+          git push origin gh-pages
+
+          shred -u "$SIGN_KEY" 2>/dev/null || rm -f "$SIGN_KEY"
+
       - name: Setup VM
         run: tests/vm/setup.sh
 
