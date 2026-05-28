@@ -83,9 +83,18 @@ Integration tests: each resource has at least one round-trip test against the re
 
 New finding: ucode does not hoist function declarations. Forward references between top-level functions fail at runtime with "left-hand side is not a function." Define helpers before callers.
 
+### Phase 8 (OpenAPI emission)
+- `build/gen_openapi.uc`: generator that walks the curated + collection + singleton endpoint list, introspects each resource module's `fromUci` output to derive a basic JSON Schema, and emits OpenAPI 3.1.
+- 30 paths, 14 schemas. Covers all curated CRUD endpoints, `/system` singleton, `/dhcp/leases` collection, `/raw/{package}/{id}` passthrough, `/healthz`.
+- Bearer security scheme, error envelope and field error schemas, named response references for each standard HTTP error code.
+- `build/openapi.json` is checked in as the canonical contract artifact.
+- `make openapi` regenerates; `make openapi-check` diffs the regeneration against the checked-in copy and fails CI if they drift. Wired into the `lint` job so PRs that change resources without regenerating fail before integration.
+
+Open follow-ups: enrich per-resource property schemas with enums/formats extracted from validate() (currently the generator emits basic types only); install `openapi.json` to `/usr/share/uapi/openapi.json` on the VM (deferred to Phase 9 packaging); optionally serve via `/api/v1/openapi.json`.
+
 ## Open
 
-### Phase 8+: OpenAPI emission, APK packaging, docs.
+### Phase 9+: APK packaging, docs.
 
 ## How to resume
 
