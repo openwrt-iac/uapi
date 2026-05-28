@@ -45,9 +45,19 @@ Real-OpenWrt findings captured along the way:
 - uhttpd's CGI header parser requires `Status: NNN <reason>` with a reason phrase; `Status: NNN` alone is silently dropped.
 - ucode-mod-uci has no `cursor.export`/`cursor.import`; the bus wrapper reads/writes `/etc/config/<pkg>` directly for snapshot/restore.
 
+### Phase 5 (auth, CLI, healthz, install hook)
+- `cli/uapi-token`: `create`, `list`, `show`, `revoke`. Cleartext shown once at create; salted sha256 hash stored. Scope strings validated against the known tree; `--force` bypasses.
+- `lib/auth.uc`: new signature `authorize(tokens_array, header, hash_fn)`. Production passes `digest.sha256(salt + ":" + bearer)`; tests pass a plaintext-compare function so unit tests don't need the digest module.
+- `main.uc`: loads tokens in `{name, salt, hash, scopes}` form, passes the hash function to authorize.
+- `main.uc /healthz`: probes ubus via `system info`; returns 503 `service_unavailable` if unreachable.
+- `files/etc/uci-defaults/99-uapi`: idempotent install hook that adds the `ucode_prefix` to `uhttpd.main` and reloads uhttpd; self-deletes on first-boot success.
+- Integration tests now mint tokens via the CLI on each run; the plaintext test-tokens uci file is gone.
+
+Real-OpenWrt findings: ucode-mod-digest exports `digest.sha256(s)` returning the hex digest directly (no separate `sha256_hex`).
+
 ## Open
 
-### Phase 5+: token CLI + real auth, remaining resources, /raw/, OpenAPI, APK, docs.
+### Phase 6+: remaining resources (network/interfaces, firewall/zones, dhcp/hosts, etc.), /raw/ passthrough, OpenAPI emission, APK packaging, docs.
 
 ## How to resume
 
