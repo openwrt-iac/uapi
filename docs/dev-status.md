@@ -66,9 +66,9 @@ All ten curated v1 resources are implemented:
 - `system` (singleton)
 
 Three handler-factory shapes now cover the v1 surface:
-- `handler.make(resource)` — full CRUD against uci sections
-- `handler.make_singleton(resource)` — GET/PATCH on a single uci section (the `system` config)
-- `handler.make_collection(resource)` — read-only list backed by a custom `list_fn`; write methods all return 405. Future runtime-list resources (wifi clients, ARP, routing table) follow this pattern
+- `handler.make(resource)`: full CRUD against uci sections
+- `handler.make_singleton(resource)`: GET/PATCH on a single uci section (the `system` config)
+- `handler.make_collection(resource)`: read-only list backed by a custom `list_fn`; write methods all return 405. Future runtime-list resources (wifi clients, ARP, routing table) follow this pattern
 
 `main.uc` routes via two registries (`RESOURCES`, `SINGLETONS`). Adding a future resource is one line plus the module.
 

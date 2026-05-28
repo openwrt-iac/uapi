@@ -32,6 +32,8 @@ const SINGLETONS = {
 	"system": handler.make_singleton(load_resource("system.uc")),
 };
 
+let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
+
 const VERSION = "1.0.0-dev";
 const INSECURE_MARKER = "/etc/uapi.insecure";
 
@@ -223,6 +225,25 @@ function dispatch(env) {
 	let token = auth_result.token;
 
 	let parts = split_path(path);
+	if (length(parts) >= 2 && parts[0] == "raw") {
+		let pkg = parts[1];
+		let id = length(parts) >= 3 ? parts[2] : null;
+		let resp;
+		if (id == null) {
+			if (method == "GET")  resp = raw.list(conn, ctx, token.scopes, pkg);
+			else if (method == "POST") resp = raw.create(conn, ctx, token.scopes, pkg, body);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on /raw/%s collection", method, pkg));
+		} else {
+			if (method == "GET")    resp = raw.get_one(conn, ctx, token.scopes, pkg, id);
+			else if (method == "PUT")    resp = raw.replace(conn, ctx, token.scopes, pkg, id, body);
+			else if (method == "PATCH")  resp = raw.patch(conn, ctx, token.scopes, pkg, id, body);
+			else if (method == "DELETE") resp = raw.remove(conn, ctx, token.scopes, pkg, id);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on /raw/%s/<id>", method, pkg));
+		}
+		return { ctx, token, resp };
+	}
 	if (length(parts) == 1) {
 		let h = SINGLETONS[parts[0]];
 		if (h != null) {

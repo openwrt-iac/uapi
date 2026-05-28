@@ -10,6 +10,7 @@ install_uapi() {
 
 	$SSH 'mkdir -p /usr/share/uapi/lib /usr/share/uapi/resources'
 	push_file_to_vm src/main.uc /usr/share/uapi/main.uc
+	push_file_to_vm src/raw.uc /usr/share/uapi/raw.uc
 	for f in src/lib/*.uc; do
 		push_file_to_vm "$f" "/usr/share/uapi/lib/$(basename "$f")"
 	done
