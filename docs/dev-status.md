@@ -56,24 +56,27 @@ Real-OpenWrt findings captured along the way:
 Real-OpenWrt findings: ucode-mod-digest exports `digest.sha256(s)` returning the hex digest directly (no separate `sha256_hex`).
 
 ### Phase 6 (remaining curated resources)
-Nine of the ten curated v1 resources are implemented:
+All ten curated v1 resources are implemented:
 
-- `firewall/rules` (Phase 4)
-- `firewall/zones`, `firewall/redirects` (new)
-- `network/interfaces`, `network/devices` (new)
-- `wireless/devices`, `wireless/interfaces` (new; wifi `key` is write-only, `fromUci` masks it and reports `has_key: true`)
-- `dhcp/hosts` (new)
-- `system` (new; singleton via `handler.make_singleton`)
+- `firewall/rules` (Phase 4), `firewall/zones`, `firewall/redirects`
+- `network/interfaces`, `network/devices`
+- `wireless/devices`, `wireless/interfaces` (wifi `key` is write-only, `fromUci` masks it and reports `has_key: true`)
+- `dhcp/hosts`
+- `dhcp/leases` (read-only runtime; parses `/tmp/dhcp.leases`; supports `?managed=` filter is N/A here, but `/dhcp/leases/<mac>` lookup works)
+- `system` (singleton)
 
-`main.uc` routes via a `RESOURCES` registry (CRUD via `handler.make`) plus a `SINGLETONS` registry (singleton via `handler.make_singleton`). Adding a future resource is one line in the appropriate map plus the resource module.
+Three handler-factory shapes now cover the v1 surface:
+- `handler.make(resource)` — full CRUD against uci sections
+- `handler.make_singleton(resource)` — GET/PATCH on a single uci section (the `system` config)
+- `handler.make_collection(resource)` — read-only list backed by a custom `list_fn`; write methods all return 405. Future runtime-list resources (wifi clients, ARP, routing table) follow this pattern
 
-Integration tests: each new resource has at least one round-trip test against the real VM (CRUD or GET/PATCH for the singleton).
+`main.uc` routes via two registries (`RESOURCES`, `SINGLETONS`). Adding a future resource is one line plus the module.
 
-**Deferred**: `dhcp/leases`. It is read-only runtime data (parsed from `/tmp/dhcp.leases` or queried via ubus) and doesn't fit the `uci_foreach`-based CRUD pattern. Will need a small `read_only` extension to the handler module or its own one-off route.
+Integration tests: each resource has at least one round-trip test against the real VM (CRUD, GET/PATCH for singleton, GET/get-by-id for the read-only collection).
 
 ## Open
 
-### Phase 7+: /raw/ passthrough, OpenAPI emission, APK packaging, docs. dhcp/leases.
+### Phase 7+: /raw/ passthrough, OpenAPI emission, APK packaging, docs.
 
 ## How to resume
 
