@@ -162,6 +162,16 @@ function dispatch(env) {
 		if (method != "GET")
 			return { ctx, resp: errors.error(ctx, "method_not_allowed",
 			                                 "healthz only supports GET") };
+		let probe_err = null;
+		try {
+			let conn = bus.connect();
+			conn.call("system", "info", {});
+		} catch (e) { probe_err = "" + e; }
+		if (probe_err != null) {
+			let r = errors.error(ctx, "service_unavailable", "ubus probe failed");
+			r.body.errors = [probe_err];
+			return { ctx, resp: r };
+		}
 		return { ctx, resp: errors.ok(ctx, { status: "ok", version: VERSION }) };
 	}
 

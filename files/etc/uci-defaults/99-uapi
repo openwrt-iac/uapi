@@ -1,0 +1,13 @@
+#!/bin/sh
+
+PREFIX='/api/v1=/usr/share/uapi/main.uc'
+
+if uci -q show uhttpd.main.ucode_prefix 2>/dev/null | grep -qF "$PREFIX"; then
+	exit 0
+fi
+
+uci add_list uhttpd.main.ucode_prefix="$PREFIX"
+uci commit uhttpd
+/etc/init.d/uhttpd reload
+
+exit 0
