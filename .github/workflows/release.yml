@@ -99,8 +99,13 @@ jobs:
           APK_BIN=$(find build/sdk/staging_dir -type f -executable -name apk | head -1)
           [ -n "$APK_BIN" ] || { echo "could not find SDK apk binary"; exit 1; }
           echo "using $APK_BIN"
-          "$APK_BIN" --help 2>&1 | head -20 || true
+          "$APK_BIN" --version 2>&1 || true
+          echo "--- apk subcommands ---"
+          "$APK_BIN" --help 2>&1 || true
+          echo "--- apk mkndx help ---"
+          "$APK_BIN" mkndx --help 2>&1 || true
 
+          git fetch origin gh-pages:gh-pages
           git worktree add /tmp/gh-pages gh-pages
           FEED_DIR=/tmp/gh-pages/packages/all/uapi
           mkdir -p "$FEED_DIR"
