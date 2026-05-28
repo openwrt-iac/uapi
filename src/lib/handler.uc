@@ -74,8 +74,7 @@ function make(resource, opts) {
 
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let anon = c.uci_add(p, sec_type);
-				c.uci_rename(p, anon, new_id);
+				c.uci_create_section(p, new_id, sec_type);
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
 				let view = { ...new_opts };
 				view['.name'] = new_id;

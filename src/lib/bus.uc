@@ -15,6 +15,7 @@ function deepcopy(v) {
 function connect() {
 	let ubus_mod = require('ubus');
 	let uci_mod = require('uci');
+	let fs_mod = require('fs');
 	let conn = ubus_mod.connect();
 	if (!conn) die("ubus: connect failed");
 	let cursor = uci_mod.cursor();
@@ -24,13 +25,18 @@ function connect() {
 			return conn.call(service, method, args ?? {});
 		},
 		uci_get: function(pkg, section, option) {
-			return cursor.get(pkg, section, option);
+			if (option != null)
+				return cursor.get(pkg, section, option);
+			return cursor.get_all(pkg, section);
 		},
 		uci_set: function(pkg, section, option, value) {
 			return cursor.set(pkg, section, option, value);
 		},
 		uci_add: function(pkg, sec_type) {
 			return cursor.add(pkg, sec_type);
+		},
+		uci_create_section: function(pkg, name, sec_type) {
+			return cursor.set(pkg, name, sec_type);
 		},
 		uci_rename: function(pkg, section, new_name) {
 			return cursor.rename(pkg, section, new_name);
@@ -47,10 +53,20 @@ function connect() {
 			return cursor.revert(pkg);
 		},
 		uci_export: function(pkg) {
-			return cursor.export(pkg);
+			let f = fs_mod.open("/etc/config/" + pkg, "r");
+			if (!f) return "";
+			let content = f.read("all") ?? "";
+			f.close();
+			return content;
 		},
 		uci_import: function(pkg, snapshot) {
-			return cursor.import(snapshot);
+			let f = fs_mod.open("/etc/config/" + pkg, "w");
+			if (!f) die("uci_import: cannot open /etc/config/" + pkg);
+			f.write(snapshot);
+			f.close();
+			cursor.unload(pkg);
+			cursor.load(pkg);
+			return true;
 		},
 		uci_foreach: function(pkg, sec_type, fn) {
 			return cursor.foreach(pkg, sec_type, fn);
@@ -121,6 +137,13 @@ function stub(initial) {
 			st.uci[pkg][name] = { ['.type']: sec_type };
 			record("add", pkg, sec_type, name);
 			return name;
+		},
+
+		uci_create_section: function(pkg, name, sec_type) {
+			if (!st.uci[pkg]) st.uci[pkg] = {};
+			st.uci[pkg][name] = { ['.type']: sec_type };
+			record("create_section", pkg, name, sec_type);
+			return true;
 		},
 
 		uci_rename: function(pkg, section, new_name) {

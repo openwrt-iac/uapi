@@ -1,6 +1,6 @@
 let t = require('harness');
 let tx = require('transaction');
-let ubus = require('ubus');
+let ubus = require('bus');
 
 function harness_locks(initial_available) {
 	let state = {

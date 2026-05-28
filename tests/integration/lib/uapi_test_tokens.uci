@@ -1,0 +1,11 @@
+config token 'test_admin'
+	option bearer 'rwall'
+	list scopes '*:rw'
+
+config token 'test_readonly'
+	option bearer 'roall'
+	list scopes '*:ro'
+
+config token 'test_firewall_ro'
+	option bearer 'fwro'
+	list scopes 'firewall:ro'

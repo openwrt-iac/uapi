@@ -1,5 +1,5 @@
 let t = require('harness');
-let ubus = require('ubus');
+let ubus = require('bus');
 
 t.describe('ubus.stub, ubus call', () => {
 	t.it('records each call with normalized args', () => {

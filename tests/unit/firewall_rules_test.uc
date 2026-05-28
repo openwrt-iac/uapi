@@ -1,5 +1,5 @@
 let t = require('harness');
-let ubus = require('ubus');
+let ubus = require('bus');
 let rules = loadfile('src/resources/firewall.rules.uc')();
 
 t.describe('firewall.rules contract', () => {

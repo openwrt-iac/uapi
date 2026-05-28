@@ -4,7 +4,16 @@
 push(REQUIRE_SEARCH_PATH, "/usr/share/uapi/lib/*.uc");
 
 let fs = require("fs");
+let log = require("log");
 let errors = require("errors");
+let auth = require("auth");
+let scope = require("scope");
+let handler = require("handler");
+let bus = require("bus");
+
+let firewall_rules_resource = loadfile("/usr/share/uapi/resources/firewall.rules.uc",
+                                       { raw_mode: true })();
+let firewall_rules = handler.make(firewall_rules_resource);
 
 const VERSION = "1.0.0-dev";
 const INSECURE_MARKER = "/etc/uapi.insecure";
@@ -24,6 +33,8 @@ const REASON = {
 	"500": "Internal Server Error",
 	"503": "Service Unavailable",
 };
+
+log.openlog("uapi", log.LOG_PID, log.LOG_DAEMON);
 
 function tls_check_passes(env) {
 	if (env.HTTPS == "on") return true;
@@ -47,28 +58,160 @@ function send(resp) {
 		uhttpd.send("" + resp.body);
 }
 
-function healthz(ctx, method) {
-	if (method != "GET")
-		return errors.error(ctx, "method_not_allowed", "healthz only supports GET");
-	return errors.ok(ctx, { status: "ok", version: VERSION });
+function read_body(env) {
+	let n = int(env.CONTENT_LENGTH ?? "0");
+	if (n <= 0) return "";
+	return uhttpd.recv(n) ?? "";
+}
+
+function parse_query(qs) {
+	let out = {};
+	if (!qs) return out;
+	for (let pair in split(qs, "&")) {
+		if (pair == "") continue;
+		let kv = split(pair, "=", 2);
+		let k = uhttpd.urldecode(kv[0]);
+		let v = length(kv) > 1 ? uhttpd.urldecode(kv[1]) : "";
+		out[k] = v;
+	}
+	return out;
+}
+
+function split_path(path) {
+	let parts = [];
+	for (let s in split(path, "/")) if (s != "") push(parts, s);
+	return parts;
+}
+
+function load_tokens(conn) {
+	let tokens = {};
+	conn.uci_foreach('uapi', 'token', function(s) {
+		if (!s.bearer) return;
+		let scopes = type(s.scopes) == "array" ? s.scopes
+		             : (s.scopes != null ? [s.scopes] : []);
+		tokens[s.bearer] = {
+			name: s['.name'] ?? "anonymous",
+			scopes: scopes,
+		};
+	});
+	return tokens;
+}
+
+function audit_line(ctx, severity, code, method, path, status, duration_ms, token_name) {
+	log.syslog(severity,
+		sprintf("%s %s %s %s %s %s %d [%dms]",
+			ctx.request_id,
+			token_name ?? "-",
+			severity == log.LOG_NOTICE ? "AUDIT"
+				: (severity == log.LOG_WARNING ? "WARN" : "ERROR"),
+			code ?? "-",
+			method, path, status, duration_ms));
+}
+
+function method_verb(method) {
+	return method == "GET" ? "ro" : "rw";
+}
+
+function dispatch_firewall_rules(conn, ctx, token, method, id, body, query) {
+	if (!scope.permits(token.scopes, ["firewall", "rules"], method_verb(method))) {
+		return errors.error(ctx, "insufficient_scope",
+		                    "Token does not permit this operation on firewall:rules");
+	}
+
+	if (id == null) {
+		if (method == "GET")  return firewall_rules.list(conn, ctx, query);
+		if (method == "POST") return firewall_rules.create(conn, ctx, body);
+		return errors.error(ctx, "method_not_allowed",
+		                    sprintf("Method %J not allowed on firewall/rules collection", method));
+	}
+
+	if (method == "GET")    return firewall_rules.get_one(conn, ctx, id);
+	if (method == "PUT")    return firewall_rules.replace(conn, ctx, id, body);
+	if (method == "PATCH")  return firewall_rules.patch(conn, ctx, id, body);
+	if (method == "DELETE") return firewall_rules.remove(conn, ctx, id);
+	return errors.error(ctx, "method_not_allowed",
+	                    sprintf("Method %J not allowed on firewall/rules/<id>", method));
 }
 
 function dispatch(env) {
 	let ctx = errors.new_context();
+	let method = env.REQUEST_METHOD ?? "GET";
+	let path = env.PATH_INFO ?? "/";
 
-	if (!tls_check_passes(env)) {
-		return errors.error(ctx, "tls_required",
-		                    "HTTPS required for non-localhost requests");
+	if (!tls_check_passes(env))
+		return { ctx, resp: errors.error(ctx, "tls_required",
+		                                 "HTTPS required for non-localhost requests") };
+
+	if (path == "/healthz") {
+		if (method != "GET")
+			return { ctx, resp: errors.error(ctx, "method_not_allowed",
+			                                 "healthz only supports GET") };
+		return { ctx, resp: errors.ok(ctx, { status: "ok", version: VERSION }) };
 	}
 
-	let path = env.PATH_INFO ?? "/";
-	let method = env.REQUEST_METHOD ?? "GET";
+	let body = null;
+	if (method == "POST" || method == "PUT" || method == "PATCH") {
+		let raw = read_body(env);
+		if (raw != "") {
+			try { body = json(raw); }
+			catch (e) {
+				return { ctx, resp: errors.error(ctx, "bad_request",
+				                                 "Request body is not valid JSON") };
+			}
+		}
+	}
 
-	if (path == "/healthz") return healthz(ctx, method);
+	let query = parse_query(env.QUERY_STRING);
 
-	return errors.error(ctx, "not_found", "No handler for this path");
+	let conn;
+	try { conn = bus.connect(); }
+	catch (e) {
+		return { ctx, resp: errors.error(ctx, "service_unavailable",
+		                                 "ubus unreachable") };
+	}
+
+	let tokens = load_tokens(conn);
+	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION);
+	if (!auth_result.ok) {
+		return { ctx, resp: errors.error(ctx, auth_result.kind,
+		                                 auth_result.kind == "unauthorized"
+		                                 ? "Missing or malformed Authorization header"
+		                                 : "Token not recognized") };
+	}
+	let token = auth_result.token;
+
+	let parts = split_path(path);
+	if (length(parts) >= 2 && parts[0] == "firewall" && parts[1] == "rules") {
+		let id = length(parts) >= 3 ? parts[2] : null;
+		return { ctx, token, resp: dispatch_firewall_rules(conn, ctx, token, method, id, body, query) };
+	}
+
+	return { ctx, token, resp: errors.error(ctx, "not_found", "No handler for this path") };
 }
 
 global.handle_request = function(env) {
-	send(dispatch(env));
+	let start = clock(true);
+	let result = dispatch(env);
+	let resp = result.resp;
+	let ctx = result.ctx;
+	let token = result.token;
+	let method = env.REQUEST_METHOD ?? "GET";
+	let path = env.PATH_INFO ?? "/";
+	let end = clock(true);
+	let duration_ms = int(((end[0] - start[0]) * 1000) + ((end[1] - start[1]) / 1000000));
+
+	let is_write = method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE";
+	let is_audit_path = path != "/healthz";
+	let code = (resp.body != null && type(resp.body) == "object") ? resp.body.code : null;
+
+	if (resp.status >= 200 && resp.status < 300 && is_write && is_audit_path) {
+		audit_line(ctx, log.LOG_NOTICE, null, method, path, resp.status, duration_ms,
+		           token != null ? token.name : null);
+	} else if (resp.status >= 400) {
+		audit_line(ctx, resp.status >= 500 ? log.LOG_ERR : log.LOG_WARNING,
+		           code, method, path, resp.status, duration_ms,
+		           token != null ? token.name : null);
+	}
+
+	send(resp);
 };

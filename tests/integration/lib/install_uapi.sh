@@ -8,14 +8,17 @@ push_file_to_vm() {
 install_uapi() {
 	$SSH 'apk add -q uhttpd-mod-ucode 2>&1' | tail -3
 
-	$SSH 'mkdir -p /usr/share/uapi/lib'
+	$SSH 'mkdir -p /usr/share/uapi/lib /usr/share/uapi/resources'
 
-	for f in src/main.uc; do
-		push_file_to_vm "$f" "/usr/share/uapi/main.uc"
-	done
+	push_file_to_vm src/main.uc /usr/share/uapi/main.uc
 	for f in src/lib/*.uc; do
 		push_file_to_vm "$f" "/usr/share/uapi/lib/$(basename "$f")"
 	done
+	for f in src/resources/*.uc; do
+		push_file_to_vm "$f" "/usr/share/uapi/resources/$(basename "$f")"
+	done
+
+	push_file_to_vm tests/integration/lib/uapi_test_tokens.uci /etc/config/uapi
 
 	$SSH 'touch /etc/uapi.insecure'
 

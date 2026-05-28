@@ -1,6 +1,6 @@
 let t = require('harness');
 let ucitrack = require('ucitrack');
-let ubus = require('ubus');
+let ubus = require('bus');
 
 t.describe('ucitrack.reload_services, ucitrack present', () => {
 	t.it('returns the init service named in /etc/config/ucitrack', () => {

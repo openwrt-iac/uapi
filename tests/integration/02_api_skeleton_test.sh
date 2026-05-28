@@ -5,6 +5,7 @@ set -eu
 install_uapi
 
 URL=http://127.0.0.1:8080/api/v1
+ADMIN='Authorization: Bearer rwall'
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -19,11 +20,15 @@ echo "--- X-Request-Id header present ---"
 hdrs=$(curl -sS -D - -o /dev/null "$URL/healthz")
 echo "$hdrs" | grep -qi '^X-Request-Id:' || fail "missing X-Request-Id header"
 
-echo "--- GET /unknown returns 404 not_found ---"
-notfound=$(curl -sS -w "\n%{http_code}\n" "$URL/unknown")
+echo "--- GET /unknown (authenticated) returns 404 not_found ---"
+notfound=$(curl -sS -H "$ADMIN" -w "\n%{http_code}\n" "$URL/unknown")
 echo "$notfound"
 echo "$notfound" | tail -1 | grep -q '^404$' || fail "unknown path expected 404"
 echo "$notfound" | grep -q '"code": "not_found"' || fail "404 body missing code"
+
+echo "--- GET /unknown without auth returns 401 ---"
+no_auth=$(curl -sS -w "\n%{http_code}\n" "$URL/unknown")
+echo "$no_auth" | tail -1 | grep -q '^401$' || fail "no-auth unknown path expected 401"
 
 echo "--- POST /healthz returns 405 ---"
 bad_method=$(curl -sS -w "\n%{http_code}\n" -X POST "$URL/healthz")

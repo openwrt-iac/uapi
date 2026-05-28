@@ -1,5 +1,5 @@
 let t = require('harness');
-let ubus = require('ubus');
+let ubus = require('bus');
 let handler = require('handler');
 let rules_mod = loadfile('src/resources/firewall.rules.uc')();
 let rules = handler.make(rules_mod, {
