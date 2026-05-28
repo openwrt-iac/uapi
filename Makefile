@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration lint lint-emdash lint-syntax vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration lint lint-emdash lint-syntax openapi openapi-check vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -11,12 +11,24 @@ help:
 	@echo "  lint               em-dash check + ucode syntax check"
 	@echo "  lint-emdash        forbid em-dashes in tracked sources"
 	@echo "  lint-syntax        ucode -c on all .uc files"
+	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.4 QEMU VM"
 
 test: lint test-unit
 
 test-unit:
 	@$(UCODE) $(UNIT_PATHS) tests/run_unit.uc
+
+openapi:
+	@$(UCODE) build/gen_openapi.uc -o build/openapi.json
+	@echo "wrote build/openapi.json ($$(wc -c < build/openapi.json) bytes)"
+
+openapi-check:
+	@$(UCODE) build/gen_openapi.uc -o /tmp/openapi.gen.json
+	@diff -u build/openapi.json /tmp/openapi.gen.json || { \
+		echo ""; echo "build/openapi.json is out of date; run 'make openapi' and commit"; \
+		exit 1; }
+	@rm -f /tmp/openapi.gen.json
 
 vm-setup:
 	@tests/vm/setup.sh

@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lint (em-dash + ucode syntax)
         run: make lint
+      - name: OpenAPI contract is up to date
+        run: make openapi-check
 
   integration:
     runs-on: ubuntu-latest
