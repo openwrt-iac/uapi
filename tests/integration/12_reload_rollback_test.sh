@@ -13,24 +13,30 @@ fail() { echo "FAIL: $*"; exit 1; }
 # triggers exactly the path documented in CLAUDE.md "Atomic transaction recipe"
 # step 6: first reload fails, snapshot-restore reloads succeeds, response is
 # 500 reload_failed_restored, uci is back to the pre-write snapshot.
-echo "--- wrap /usr/sbin/fw4 with a fail-once handler ---"
-$SSH '
+echo "--- locate the fw4 binary ---"
+FW4=$($SSH 'command -v fw4 2>/dev/null || ls /usr/sbin/fw4 /sbin/fw4 /usr/libexec/fw4 2>/dev/null | head -1')
+[ -n "$FW4" ] || { $SSH 'apk add firewall4 2>&1 | tail -5'; FW4=$($SSH 'command -v fw4'); }
+[ -n "$FW4" ] || fail "fw4 not installed and apk add firewall4 failed"
+echo "  fw4 at: $FW4"
+
+echo "--- wrap fw4 with a fail-once handler ---"
+$SSH "
 set -eu
-[ -f /usr/sbin/fw4.uapi-bak ] || cp /usr/sbin/fw4 /usr/sbin/fw4.uapi-bak
-cat > /usr/sbin/fw4 <<EOF
+[ -f ${FW4}.uapi-bak ] || cp $FW4 ${FW4}.uapi-bak
+cat > $FW4 <<'EOF'
 #!/bin/sh
-if [ "\$1" = "reload" ] && [ -f /tmp/fw-fail-once ]; then
+if [ \"\$1\" = \"reload\" ] && [ -f /tmp/fw-fail-once ]; then
     rm /tmp/fw-fail-once
-    echo "fw4: simulated reload failure" >&2
+    echo \"fw4: simulated reload failure\" >&2
     exit 1
 fi
-exec /usr/sbin/fw4.uapi-bak "\$@"
+exec ${FW4}.uapi-bak \"\$@\"
 EOF
-chmod +x /usr/sbin/fw4
-'
+chmod +x $FW4
+"
 
 cleanup() {
-	$SSH 'mv -f /usr/sbin/fw4.uapi-bak /usr/sbin/fw4 2>/dev/null || true; rm -f /tmp/fw-fail-once' || true
+	$SSH "mv -f ${FW4}.uapi-bak $FW4 2>/dev/null || true; rm -f /tmp/fw-fail-once" || true
 }
 trap cleanup EXIT INT TERM
 
