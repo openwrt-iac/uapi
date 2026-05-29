@@ -4,6 +4,8 @@ let scope = require("scope");
 let transaction = require("transaction");
 let ucitrack = require("ucitrack");
 
+const ID_RE = /^[A-Za-z0-9_]+$/;
+
 const TYPE_DOMAIN_MAP = {
 	"firewall.rule":        ["firewall", "rules"],
 	"firewall.zone":        ["firewall", "zones"],
@@ -132,8 +134,17 @@ function create(conn, ctx, scopes, pkg, body) {
 		                    sprintf("Token does not permit creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
 
 	let new_id = body.id;
-	if (new_id == null || new_id == "")
+	if (new_id == null || new_id == "") {
 		new_id = ids.new_id(substr(sec_type, 0, 1));
+	} else {
+		if (type(new_id) != "string" || !match(new_id, ID_RE))
+			return errors.validation_failed(ctx,
+				build_field_errors("id", "invalid_format",
+				                   "id must match /^[A-Za-z0-9_]+$/ (uci section-name charset)"));
+		if (load_section(conn, pkg, new_id) != null)
+			return errors.error(ctx, "conflict",
+			                    sprintf("Section %s.%s already exists", pkg, new_id));
+	}
 
 	let reload = with_reload_info(conn, pkg);
 	let opts = {};

@@ -50,7 +50,9 @@ function run_inner(conn, pkg, services, fn, snapshot) {
 	try {
 		conn.uci_import(pkg, snapshot);
 		conn.uci_commit(pkg);
-		reload_all(conn, services);
+		let restore_reload_err = reload_all(conn, services);
+		if (restore_reload_err != null)
+			restore_err = "reload during restore failed: " + restore_reload_err;
 	} catch (e) {
 		restore_err = "" + e;
 	}

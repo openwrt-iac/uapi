@@ -107,6 +107,38 @@ t.describe('raw.get_one, normalization and per-type scope', () => {
 	});
 });
 
+t.describe('raw.create, client-supplied id', () => {
+	function fw_with(section) {
+		let uci = { firewall: {} };
+		if (section) uci.firewall[section.name] = section.data;
+		return bus.stub({ uci: uci });
+	}
+
+	t.it('rejects ids that violate the uci section-name charset', () => {
+		let r = raw.create(fw_with(null), ctx(), ["*:rw"], "firewall",
+			{ ".type": "rule", id: "bad.name", target: "ACCEPT" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "id");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+
+	t.it('rejects ids whose value is not a string', () => {
+		let r = raw.create(fw_with(null), ctx(), ["*:rw"], "firewall",
+			{ ".type": "rule", id: 42, target: "ACCEPT" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+
+	t.it('returns 409 when the supplied id already exists', () => {
+		let conn = fw_with({ name: "z_lan",
+			data: { '.type': 'zone', '.anonymous': false, name: 'lan' } });
+		let r = raw.create(conn, ctx(), ["*:rw"], "firewall",
+			{ ".type": "rule", id: "z_lan", target: "ACCEPT" });
+		t.assert_equal(r.status, 409);
+		t.assert_equal(r.body.code, "conflict");
+	});
+});
+
 t.describe('raw permission composition for writes', () => {
 	function fw() {
 		return bus.stub({

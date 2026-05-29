@@ -111,12 +111,21 @@ t.describe('transaction, soft failure from fn', () => {
 	});
 });
 
+function flaky_reload(initial_calls_failing) {
+	let n = 0;
+	return function() {
+		n++;
+		if (n <= initial_calls_failing) die("netifd: bad");
+		return null;
+	};
+}
+
 t.describe('transaction, reload failure with successful restore', () => {
-	t.it('returns reload_failed_restored carrying the original error', () => {
+	t.it('returns reload_failed_restored when the re-reload succeeds', () => {
 		let locks = harness_locks(true);
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': { _error: "netifd: bad" } },
+			ubus: { 'firewall reload': flaky_reload(1) },
 		});
 		let r = tx.transaction(conn, build_params({
 			acquire: locks.acquire, release: locks.release,
@@ -130,7 +139,7 @@ t.describe('transaction, reload failure with successful restore', () => {
 	t.it('restores the snapshot before returning', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': { _error: "netifd: bad" } },
+			ubus: { 'firewall reload': flaky_reload(1) },
 		});
 		tx.transaction(conn, build_params({
 			acquire: function() { return {}; },
@@ -141,7 +150,21 @@ t.describe('transaction, reload failure with successful restore', () => {
 });
 
 t.describe('transaction, reload failure with restore failure', () => {
-	t.it('returns reload_failed_unrecovered carrying both errors', () => {
+	t.it('returns reload_failed_unrecovered when the re-reload also fails', () => {
+		let conn = ubus.stub({
+			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
+			ubus: { 'firewall reload': { _error: "netifd: bad" } },
+		});
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; },
+			release: function() {},
+		}));
+		t.assert_equal(r.kind, "reload_failed_unrecovered");
+		t.assert_equal(r.reload_error, "netifd: bad");
+		t.assert_true(match(r.restore_error, /netifd: bad/) != null);
+	});
+
+	t.it('returns reload_failed_unrecovered when uci_import throws', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
 			ubus: { 'firewall reload': { _error: "netifd: bad" } },
