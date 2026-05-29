@@ -1,31 +1,9 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+let is_valid_ip = values.is_valid_ip;
+
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
-const IPV4_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
-const IPV6_RE = /^[0-9A-Fa-f:]+$/;
 const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
-
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
-
-function is_valid_ipv4(s) {
-	if (!match(s, IPV4_RE)) return false;
-	for (let part in split(s, ".")) {
-		let n = int(part);
-		if (n < 0 || n > 255) return false;
-	}
-	return true;
-}
-
-function is_valid_ip(s) {
-	if (type(s) != "string" || s == "") return false;
-	if (index(s, ":") != -1) return !!match(s, IPV6_RE);
-	return is_valid_ipv4(s);
-}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

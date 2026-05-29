@@ -240,9 +240,9 @@ function dispatch(env) {
 
 	let body = null;
 	if (method == "POST" || method == "PUT" || method == "PATCH") {
-		let raw = read_body(env);
-		if (raw != "") {
-			try { body = json(raw); }
+		let body_text = read_body(env);
+		if (body_text != "") {
+			try { body = json(body_text); }
 			catch (e) {
 				return { ctx, resp: errors.error(ctx, "bad_request",
 				                                 "Request body is not valid JSON") };

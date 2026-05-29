@@ -47,6 +47,17 @@ t.describe('transaction, lock acquisition', () => {
 		t.assert_equal(locks.released, 0);
 	});
 
+	t.it('returns kind=lock_unavailable when the lock path cannot be opened', () => {
+		let conn = ubus.stub();
+		let r = tx.transaction(conn, build_params({
+			acquire: function(p) { return { unavailable: p }; },
+			release: function() {},
+		}));
+		t.assert_false(r.ok);
+		t.assert_equal(r.kind, "lock_unavailable");
+		t.assert_true(r.error != null && r.error != "");
+	});
+
 	t.it('uses the configured lock_path when acquiring', () => {
 		let seen_path = null;
 		let conn = ubus.stub();

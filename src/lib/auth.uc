@@ -18,12 +18,4 @@ function authorize(tokens, authorization_header, hash_fn) {
 	return { ok: false, kind: "invalid_token" };
 }
 
-function stub_enabled() {
-	return getenv("UAPI_AUTH_STUB") == "1";
-}
-
-function stub_token() {
-	return { name: "stub", scopes: ["*:rw"] };
-}
-
-return { authorize, stub_enabled, stub_token };
+return { authorize };

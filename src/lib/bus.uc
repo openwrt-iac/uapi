@@ -36,9 +36,6 @@ function connect(opts) {
 		uci_set: function(pkg, section, option, value) {
 			return cursor.set(pkg, section, option, value);
 		},
-		uci_add: function(pkg, sec_type) {
-			return cursor.add(pkg, sec_type);
-		},
 		uci_create_section: function(pkg, name, sec_type) {
 			return cursor.set(pkg, name, sec_type);
 		},
@@ -85,7 +82,6 @@ function stub(initial) {
 		ubus_responses: { ...(init.ubus ?? {}) },
 		ubus_calls: [],
 		uci_ops: [],
-		anon_seq: 0,
 	};
 
 	function record(...args) {
@@ -129,18 +125,6 @@ function stub(initial) {
 			sec[option] = value;
 			record("set", pkg, section, option, value);
 			return true;
-		},
-
-		uci_add: function(pkg, sec_type) {
-			if (!st.uci[pkg]) st.uci[pkg] = {};
-			let name;
-			while (true) {
-				name = sprintf("cfg%06x", st.anon_seq++);
-				if (!st.uci[pkg][name]) break;
-			}
-			st.uci[pkg][name] = { ['.type']: sec_type };
-			record("add", pkg, sec_type, name);
-			return name;
 		},
 
 		uci_create_section: function(pkg, name, sec_type) {

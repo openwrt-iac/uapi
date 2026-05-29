@@ -1,3 +1,7 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+let as_list = values.as_list;
+
 const VALID_TARGETS = {
 	"ACCEPT": true, "REJECT": true, "DROP": true,
 	"NOTRACK": true, "MARK": true,
@@ -7,21 +11,6 @@ const VALID_PROTOS = {
 	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
 	"esp": true, "ah": true, "any": true, "all": true,
 };
-
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
-
-function as_list(v) {
-	if (v == null) return [];
-	if (type(v) == "array") return v;
-	return [v];
-}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

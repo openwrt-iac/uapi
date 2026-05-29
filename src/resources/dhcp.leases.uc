@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+let fs = require('fs');
 
 const LEASES_PATH = "/tmp/dhcp.leases";
 

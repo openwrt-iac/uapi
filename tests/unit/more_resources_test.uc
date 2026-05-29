@@ -58,14 +58,28 @@ t.describe('firewall.redirects', () => {
 	t.it('validate rejects bad dest_ip', () => {
 		let errs = redirects.validate({ target: 'DNAT',
 		                                match: { src_zone: 'wan', dest_ip: '999.0.0.1' } }, null);
-		let de = filter(errs, function(e) { return e.field == "match.dest_ip"; });
+		let de = filter(errs, function(e) { return match(e.field, /^match\.dest_ip/); });
 		t.assert_equal(de[0].code, 'invalid_format');
 	});
 
-	t.it('validate accepts port ranges', () => {
+	t.it('validate accepts port ranges given as scalars', () => {
 		let errs = redirects.validate({ target: 'DNAT',
 		                                match: { src_zone: 'wan', src_dport: '8000-8100' } }, null);
 		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('validate accepts port ranges given as arrays', () => {
+		let errs = redirects.validate({ target: 'DNAT',
+		                                match: { src_zone: 'wan', src_dport: ['8000-8100', '9000'] } }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('fromUci lifts scalar port options to arrays (matching firewall.rules)', () => {
+		let r = redirects.fromUci({ '.name': 'fwd1', '.anonymous': false, '.type': 'redirect',
+		                            src: 'wan', src_dport: '8443', dest_port: '443', dest_ip: '192.168.1.10' });
+		t.assert_deep_equal(r.match.src_dport, ['8443']);
+		t.assert_deep_equal(r.match.dest_port, ['443']);
+		t.assert_deep_equal(r.match.dest_ip, ['192.168.1.10']);
 	});
 });
 
@@ -99,6 +113,24 @@ t.describe('network.interfaces', () => {
 		let errs = interfaces.validate({ proto: 'whatever' }, null);
 		let pe = filter(errs, function(e) { return e.field == "proto"; });
 		t.assert_equal(pe[0].code, 'not_in_enum');
+	});
+
+	t.it('validate rejects octets > 255 in ipaddr CIDR', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddr: '999.0.0.1/24' }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+		t.assert_equal(ip[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects prefix > 32 in ipaddr CIDR', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddr: '192.168.1.0/99' }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+		t.assert_equal(ip[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects octets > 255 in netmask', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddr: '192.168.1.1', netmask: '999.0.0.0' }, null);
+		let nm = filter(errs, function(e) { return e.field == "netmask"; });
+		t.assert_equal(nm[0].code, 'invalid_format');
 	});
 
 	t.it('toUci stringifies numeric ip6assign', () => {

@@ -1,14 +1,8 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+
 const VALID_TYPES = { "mac80211": true, "broadcom": true };
 const VALID_BANDS = { "2g": true, "5g": true, "6g": true, "60g": true };
-
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

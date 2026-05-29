@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+let fs = require('fs');
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 const TIME_LEN = 10;

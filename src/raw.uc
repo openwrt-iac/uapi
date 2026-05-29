@@ -3,8 +3,10 @@ let errors = require("errors");
 let scope = require("scope");
 let transaction = require("transaction");
 let ucitrack = require("ucitrack");
+let handler = require("handler");
 
 const ID_RE = /^[A-Za-z0-9_]+$/;
+let load_section = handler.load_section;
 
 const TYPE_DOMAIN_MAP = {
 	"firewall.rule":        ["firewall", "rules"],
@@ -45,14 +47,6 @@ function normalize_section(s) {
 	return out;
 }
 
-function load_section(conn, pkg, id) {
-	let s = conn.uci_get(pkg, id);
-	if (!s || type(s) != "object") return null;
-	let view = { ...s };
-	view['.name'] = id;
-	return view;
-}
-
 function build_response_body(view, reload_info) {
 	let body = normalize_section(view);
 	body.reloaded = !!reload_info.known;
@@ -62,17 +56,12 @@ function build_response_body(view, reload_info) {
 	return body;
 }
 
-function build_field_errors(field, code, msg) {
-	return [errors.field_error(field, code, msg)];
-}
-
-function with_reload_info(conn, pkg) {
-	return ucitrack.reload_services(conn, pkg);
-}
-
 function translate_raw_tx(ctx, result) {
 	if (result.ok) return errors.ok(ctx, result.body);
 	if (result.kind == "locked") return errors.locked(ctx);
+	if (result.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+		                    sprintf("transaction lock file not available: %s", result.error));
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")
@@ -123,7 +112,7 @@ function create(conn, ctx, scopes, pkg, body) {
 	let sec_type = body[".type"];
 	if (type(sec_type) != "string" || sec_type == "")
 		return errors.validation_failed(ctx,
-			build_field_errors(".type", "required", "is required on raw create"));
+			[errors.field_error(".type", "required", "is required on raw create")]);
 
 	let dotted_err = reject_dotted_options(body);
 	if (dotted_err)
@@ -139,14 +128,14 @@ function create(conn, ctx, scopes, pkg, body) {
 	} else {
 		if (type(new_id) != "string" || !match(new_id, ID_RE))
 			return errors.validation_failed(ctx,
-				build_field_errors("id", "invalid_format",
-				                   "id must match /^[A-Za-z0-9_]+$/ (uci section-name charset)"));
+				[errors.field_error("id", "invalid_format",
+				                    "id must match /^[A-Za-z0-9_]+$/ (uci section-name charset)")]);
 		if (load_section(conn, pkg, new_id) != null)
 			return errors.error(ctx, "conflict",
 			                    sprintf("Section %s.%s already exists", pkg, new_id));
 	}
 
-	let reload = with_reload_info(conn, pkg);
+	let reload = ucitrack.reload_services(conn, pkg);
 	let opts = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -185,7 +174,7 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	if (dotted_err)
 		return errors.validation_failed(ctx, [dotted_err]);
 
-	let reload = with_reload_info(conn, pkg);
+	let reload = ucitrack.reload_services(conn, pkg);
 	let new_opts = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -228,7 +217,7 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	if (dotted_err)
 		return errors.validation_failed(ctx, [dotted_err]);
 
-	let reload = with_reload_info(conn, pkg);
+	let reload = ucitrack.reload_services(conn, pkg);
 	let updates = {};
 	for (let k in body) {
 		if (k == ".type" || k == "id") continue;
@@ -259,7 +248,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit deleting %s.%s via /raw/", pkg, id));
 
-	let reload = with_reload_info(conn, pkg);
+	let reload = ucitrack.reload_services(conn, pkg);
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,

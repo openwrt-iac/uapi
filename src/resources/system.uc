@@ -1,13 +1,7 @@
-const HOSTNAME_RE = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
+let values = require('values');
+let normalize_bool = values.normalize_bool;
 
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
+const HOSTNAME_RE = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
 
 function fromUci(section) {
 	return {

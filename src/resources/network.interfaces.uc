@@ -1,34 +1,13 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+let as_list = values.as_list;
+let is_valid_ipv4 = values.is_valid_ipv4;
+let is_valid_cidr = values.is_valid_cidr;
+
 const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
 	"none": true, "ppp": true, "wwan": true,
 };
-const IPV4_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
-const CIDR_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}\/[0-9]{1,2}$/;
-const NETMASK_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
-
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
-
-function as_list(v) {
-	if (v == null) return [];
-	if (type(v) == "array") return v;
-	return [v];
-}
-
-function is_valid_ipv4(s) {
-	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
-	for (let part in split(s, ".")) {
-		let n = int(part);
-		if (n < 0 || n > 255) return false;
-	}
-	return true;
-}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -80,12 +59,12 @@ function validate(json) {
 		if (json.ipaddr == null || json.ipaddr == "")
 			push(errs, { field: "ipaddr", code: "required",
 			             message: "is required when proto is static" });
-		else if (!is_valid_ipv4(json.ipaddr) && !match(json.ipaddr, CIDR_RE))
+		else if (!is_valid_ipv4(json.ipaddr) && !is_valid_cidr(json.ipaddr))
 			push(errs, { field: "ipaddr", code: "invalid_format",
 			             message: "must be a valid IPv4 address or CIDR" });
-		if (json.netmask != null && json.netmask != "" && !match(json.netmask, NETMASK_RE))
+		if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
 			push(errs, { field: "netmask", code: "invalid_format",
-			             message: "must be a valid netmask" });
+			             message: "must be a valid IPv4 netmask" });
 	}
 
 	let dns = as_list(json.dns);

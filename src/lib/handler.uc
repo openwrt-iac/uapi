@@ -12,6 +12,9 @@ function build_field_errors(raw_errs) {
 function translate_tx(ctx, result) {
 	if (result.ok) return errors.ok(ctx, result.body);
 	if (result.kind == "locked") return errors.locked(ctx);
+	if (result.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+		                    sprintf("transaction lock file not available: %s", result.error));
 	if (result.kind == "validation")
 		return errors.validation_failed(ctx, build_field_errors(result.errors));
 	if (result.kind == "reload_failed_restored")
@@ -316,4 +319,4 @@ function make_collection(resource) {
 	};
 }
 
-return { make, make_singleton, make_collection, translate_tx };
+return { make, make_singleton, make_collection, translate_tx, load_section };

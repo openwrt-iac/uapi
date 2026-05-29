@@ -3585,22 +3585,22 @@
 								}
 							},
 							"src_dport": {
-								"type": [
-									"string",
-									"null"
-								]
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
 							},
 							"dest_ip": {
-								"type": [
-									"string",
-									"null"
-								]
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
 							},
 							"dest_port": {
-								"type": [
-									"string",
-									"null"
-								]
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
 							},
 							"proto": {
 								"type": "array",

@@ -1,26 +1,15 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+let as_list = values.as_list;
+let is_valid_ipv4 = values.is_valid_ipv4;
+
 const VALID_TARGETS = { "DNAT": true, "SNAT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_PROTOS = {
 	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
 	"esp": true, "ah": true, "any": true, "all": true,
 };
-const IPV4_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
 const PORT_RE = /^[0-9]+(-[0-9]+)?$/;
-
-function normalize_bool(v, default_val) {
-	if (v == null) return default_val;
-	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
-		return true;
-	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
-		return false;
-	return default_val;
-}
-
-function as_list(v) {
-	if (v == null) return [];
-	if (type(v) == "array") return v;
-	return [v];
-}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -35,9 +24,9 @@ function fromUci(section) {
 			dest_zone: section.dest ?? null,
 			src_ip: as_list(section.src_ip),
 			src_port: as_list(section.src_port),
-			src_dport: section.src_dport ?? null,
-			dest_ip: section.dest_ip ?? null,
-			dest_port: section.dest_port ?? null,
+			src_dport: as_list(section.src_dport),
+			dest_ip: as_list(section.dest_ip),
+			dest_port: as_list(section.dest_port),
 			proto: as_list(section.proto),
 			family: section.family ?? "any",
 		},
@@ -55,21 +44,12 @@ function toUci(json) {
 	if (m.dest_zone != null) out.dest = m.dest_zone;
 	if (type(m.src_ip) == "array" && length(m.src_ip) > 0) out.src_ip = m.src_ip;
 	if (type(m.src_port) == "array" && length(m.src_port) > 0) out.src_port = m.src_port;
-	if (m.src_dport != null) out.src_dport = m.src_dport;
-	if (m.dest_ip != null) out.dest_ip = m.dest_ip;
-	if (m.dest_port != null) out.dest_port = m.dest_port;
+	if (type(m.src_dport) == "array" && length(m.src_dport) > 0) out.src_dport = m.src_dport;
+	if (type(m.dest_ip) == "array" && length(m.dest_ip) > 0) out.dest_ip = m.dest_ip;
+	if (type(m.dest_port) == "array" && length(m.dest_port) > 0) out.dest_port = m.dest_port;
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
 	return out;
-}
-
-function is_valid_ipv4(s) {
-	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
-	for (let part in split(s, ".")) {
-		let n = int(part);
-		if (n < 0 || n > 255) return false;
-	}
-	return true;
 }
 
 function validate(json, conn) {
@@ -93,17 +73,26 @@ function validate(json, conn) {
 	if (m.src_zone == null || m.src_zone == "")
 		push(errs, { field: "match.src_zone", code: "required", message: "is required" });
 
-	if (m.src_dport != null && !match(m.src_dport, PORT_RE))
-		push(errs, { field: "match.src_dport", code: "invalid_format",
-		             message: "must be a port or port range" });
+	let src_dports = as_list(m.src_dport);
+	for (let i = 0; i < length(src_dports); i++) {
+		if (!match(src_dports[i], PORT_RE))
+			push(errs, { field: sprintf("match.src_dport[%d]", i), code: "invalid_format",
+			             message: "must be a port or port range" });
+	}
 
-	if (m.dest_port != null && !match(m.dest_port, PORT_RE))
-		push(errs, { field: "match.dest_port", code: "invalid_format",
-		             message: "must be a port or port range" });
+	let dest_ports = as_list(m.dest_port);
+	for (let i = 0; i < length(dest_ports); i++) {
+		if (!match(dest_ports[i], PORT_RE))
+			push(errs, { field: sprintf("match.dest_port[%d]", i), code: "invalid_format",
+			             message: "must be a port or port range" });
+	}
 
-	if (m.dest_ip != null && m.dest_ip != "" && !is_valid_ipv4(m.dest_ip))
-		push(errs, { field: "match.dest_ip", code: "invalid_format",
-		             message: "must be a valid IPv4 address" });
+	let dest_ips = as_list(m.dest_ip);
+	for (let i = 0; i < length(dest_ips); i++) {
+		if (dest_ips[i] != "" && !is_valid_ipv4(dest_ips[i]))
+			push(errs, { field: sprintf("match.dest_ip[%d]", i), code: "invalid_format",
+			             message: "must be a valid IPv4 address" });
+	}
 
 	if (m.family != null && !VALID_FAMILIES[m.family])
 		push(errs, { field: "match.family", code: "not_in_enum",
@@ -143,9 +132,9 @@ return {
 				dest_zone: { type: ["string", "null"] },
 				src_ip:    { type: "array", items: { type: "string" } },
 				src_port:  { type: "array", items: { type: "string" } },
-				src_dport: { type: ["string", "null"] },
-				dest_ip:   { type: ["string", "null"] },
-				dest_port: { type: ["string", "null"] },
+				src_dport: { type: "array", items: { type: "string" } },
+				dest_ip:   { type: "array", items: { type: "string" } },
+				dest_port: { type: "array", items: { type: "string" } },
 				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
 				family:    { type: "string", enum: keys(VALID_FAMILIES) },
 			},

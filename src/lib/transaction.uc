@@ -1,10 +1,10 @@
-import * as fs from 'fs';
+let fs = require('fs');
 
 const LOCK_PATH = "/var/lock/uapi.lock";
 
 function default_acquire(path) {
 	let fd = fs.open(path, "w+");
-	if (!fd) return null;
+	if (!fd) return { unavailable: "" + path };
 	let r = fd.lock("xn");
 	if (r !== true) {
 		fd.close();
@@ -82,7 +82,9 @@ function transaction(conn, params) {
 	let release = params.release ?? default_release;
 
 	let lock = acquire(path);
-	if (!lock) return { ok: false, kind: "locked" };
+	if (lock == null) return { ok: false, kind: "locked" };
+	if (type(lock) == "object" && lock.unavailable != null)
+		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
 
 	let result = null;
 	let caught = null;

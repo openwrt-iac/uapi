@@ -80,10 +80,3 @@ t.describe('auth.authorize, token lookup via hash', () => {
 	});
 });
 
-t.describe('auth.stub_token', () => {
-	t.it('returns a *:rw admin-shaped token', () => {
-		let tok = auth.stub_token();
-		t.assert_equal(tok.name, "stub");
-		t.assert_deep_equal(tok.scopes, ["*:rw"]);
-	});
-});

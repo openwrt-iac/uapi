@@ -75,15 +75,6 @@ t.describe('ubus.stub, uci mutations', () => {
 		                    ['set', 'network', 'lan', 'proto', 'static']);
 	});
 
-	t.it('uci_add generates non-colliding anonymous names', () => {
-		let c = ubus.stub();
-		let a = c.uci_add('firewall', 'rule');
-		let b = c.uci_add('firewall', 'rule');
-		t.assert_true(a != b);
-		t.assert_match(a, /^cfg[0-9a-f]{6}$/);
-		t.assert_equal(c._state.uci.firewall[a]['.type'], 'rule');
-	});
-
 	t.it('uci_rename moves a section and records the op', () => {
 		let c = ubus.stub({
 			uci: { firewall: { cfg00 : { '.type': 'rule', target: 'ACCEPT' } } }
