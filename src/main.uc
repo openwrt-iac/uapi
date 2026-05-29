@@ -224,7 +224,7 @@ function dispatch(env) {
 			                                 "healthz only supports GET") };
 		let probe_err = null;
 		try {
-			let conn = bus.connect();
+			let conn = bus.connect({ debug: LOGGING.debug });
 			conn.call("system", "info", {});
 		} catch (e) { probe_err = "" + e; }
 		if (probe_err != null) {
