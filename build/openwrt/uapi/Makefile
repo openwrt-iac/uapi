@@ -70,6 +70,11 @@ uapi installed. Bootstrap:
   2. Verify reachable:  curl -H "Authorization: Bearer <token>" https://<router>/api/v1/system
   3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v1/openapi.json)
 
+Future upgrades from the project feed:
+  curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem > /etc/apk/keys/uapi-feed.pub.pem
+  echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' > /etc/apk/repositories.d/uapi.list
+  apk update && apk upgrade uapi
+
 EOF
 exit 0
 endef

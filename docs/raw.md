@@ -29,7 +29,7 @@ If you want a stable, semver-bound contract, use the curated endpoint for that r
 
 `GET /api/v1/raw/<package>/<id>` returns one section in the same shape.
 
-`POST /api/v1/raw/<package>` creates a section. The request body must include `.type`. If `id` is supplied, uapi creates the section under that name; otherwise it generates a ULID-style id with a type-derived single-char prefix.
+`POST /api/v1/raw/<package>` creates a section. The request body must include `.type`. If `id` is supplied, it must match `/^[A-Za-z0-9_]+$/` (uci's section-name charset) and must not collide with an existing section; otherwise uapi returns `422 validation_failed` with field `id` and code `invalid_format`, or `409 conflict` respectively. If `id` is omitted, uapi generates a ULID-style id with a type-derived single-char prefix.
 
 ```json
 {

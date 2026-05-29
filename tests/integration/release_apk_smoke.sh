@@ -45,6 +45,17 @@ echo "--- openapi.json reachable ---"
 oa=$(curl -sS -o /dev/null -w "%{http_code}" "$URL/openapi.json")
 [ "$oa" = "200" ] || fail "openapi.json expected 200, got $oa"
 
+echo "--- conffile preserved across reinstall (apk add same package over itself) ---"
+$SSH 'cp /etc/config/uapi /tmp/uapi.conf.before'
+$SSH 'apk add --allow-untrusted --force-reinstall /tmp/uapi.apk 2>&1 | tail -5 || apk add --allow-untrusted /tmp/uapi.apk 2>&1 | tail -5'
+$SSH 'test -f /etc/config/uapi' || fail "/etc/config/uapi vanished on reinstall"
+$SSH 'cmp /etc/config/uapi /tmp/uapi.conf.before' \
+	|| fail "/etc/config/uapi changed on reinstall (conffile mark not honored)"
+reinstall_check=$(curl -sS -H "Authorization: Bearer $ADMIN_TOKEN" -w "\n%{http_code}" "$URL/system")
+echo "$reinstall_check" | tail -1 | grep -q '^200$' \
+	|| fail "token from before reinstall no longer works"
+$SSH 'rm -f /tmp/uapi.conf.before'
+
 echo "--- apk remove cleans up the uhttpd prefix ---"
 $SSH 'apk del uapi 2>&1 | tail -5'
 $SSH 'uci show uhttpd.main.ucode_prefix' 2>/dev/null | grep '/api/v1=' && fail "ucode_prefix still wired after removal" || true

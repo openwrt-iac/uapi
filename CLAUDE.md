@@ -476,7 +476,8 @@ The emitted `openapi.json` carries the same version as the API it describes (`in
 - Mutual TLS
 - Per-token rate limiting
 - HTTP token creation endpoint (e.g., for a future LuCI plugin managing uapi tokens)
-- Mid-tree scope wildcards
+- Closing the existing-section TOCTOU window in `handler.uc`: `load_section` runs before the write transaction's flock acquires. If a competing writer commits between A's load and A's lock, A's view is stale. Window is narrow but non-zero; fix is to move the lookup inside the `fn` callback that runs under the lock.
+- Reload-failure-rollback integration test against real ubus (currently deferred; unit test covers the recipe).
 - Promotion of high-demand `/raw/` resources to curated endpoints based on usage
 - Submission to OpenWrt's official `packages` feed
 - Localization of error `message` strings

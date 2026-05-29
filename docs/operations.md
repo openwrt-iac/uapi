@@ -55,6 +55,31 @@ uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<d
 
 `/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
 
+## Sample syslog output
+
+```
+# AUDIT: a successful POST that created a firewall rule
+uapi[1234]: 01HX1234567890ABCDEFGHJKMN tf-prod AUDIT - POST /api/v1/firewall/rules 200 [42ms]
+
+# ERROR (5xx)
+uapi[1234]: 01HX234567890ABCDEFGHJKMNN tf-prod ERROR reload_failed_restored PUT /api/v1/network/interfaces/wan 500 [3120ms]
+
+# WARN (auth failure)
+uapi[1234]: 01HX34567890ABCDEFGHJKMNNN - WARN unauthorized GET /api/v1/system 401 [1ms]
+
+# ACCESS (only when option access '1' is set)
+uapi[1234]: 01HX4567890ABCDEFGHJKMNNNN tf-readonly ACCESS - GET /api/v1/firewall/rules 200 [8ms]
+
+# DEBUG (only when option debug '1' is set; per ubus.call)
+uapi[1234]: uapi-bus call system.info args={}
+
+# Internal error from the top-level exception handler
+uapi[1234]: uapi-internal 01HX567890ABCDEFGHJKMNNNNN: Type error: ...
+
+# Insecure-bypass marker triggered
+uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /api/v1/system status=200 remote=10.0.2.2
+```
+
 By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged. Optional knobs in `/etc/config/uapi`:
 
 ```
