@@ -301,7 +301,19 @@ function dispatch(env) {
 
 global.handle_request = function(env) {
 	let start = clock(true);
-	let result = dispatch(env);
+	let result;
+	try {
+		result = dispatch(env);
+	} catch (e) {
+		let ctx = errors.new_context();
+		log.syslog(log.LOG_ERR,
+			sprintf("uapi-internal %s: %s", ctx.request_id, "" + e));
+		result = {
+			ctx,
+			token: null,
+			resp: errors.error(ctx, "internal_error", "An internal error occurred"),
+		};
+	}
 	let resp = result.resp;
 	let ctx = result.ctx;
 	let token = result.token;
