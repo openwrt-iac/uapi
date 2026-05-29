@@ -99,4 +99,4 @@ function transaction(conn, params) {
 	return result;
 }
 
-return { transaction, LOCK_PATH };
+return { transaction };

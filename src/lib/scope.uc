@@ -105,5 +105,4 @@ return {
 	permits,
 	is_known_path,
 	validate_against_known_tree,
-	KNOWN_PATHS,
 };

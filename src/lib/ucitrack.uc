@@ -59,4 +59,4 @@ function reload_services(conn, pkg, opts) {
 	return { services: out, known };
 }
 
-return { reload_services, FALLBACK };
+return { reload_services };

@@ -45,7 +45,6 @@ function is_valid_cidr(s) {
 }
 
 return {
-	IPV4_RE, IPV6_RE, CIDR_RE,
 	normalize_bool, as_list,
-	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr,
+	is_valid_ipv4, is_valid_ip, is_valid_cidr,
 };

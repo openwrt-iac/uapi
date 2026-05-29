@@ -64,6 +64,4 @@ return {
 	new_id,
 	new_ulid,
 	is_valid_id,
-	ALPHABET,
-	ULID_LEN,
 };

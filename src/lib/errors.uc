@@ -110,6 +110,4 @@ return {
 	reload_failed_unrecovered,
 	ok,
 	no_content,
-	STATUS_BY_CODE,
-	FIELD_CODES,
 };
