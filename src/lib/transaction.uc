@@ -1,9 +1,12 @@
 let fs = require('fs');
 
 const LOCK_PATH = "/var/lock/uapi.lock";
+const SERVICE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 function default_reload(services) {
 	for (let svc in services) {
+		if (type(svc) != "string" || !match(svc, SERVICE_NAME_RE))
+			return sprintf("refusing to reload service with unsafe name %J", svc);
 		let cmd = sprintf("/etc/init.d/%s reload 2>&1", svc);
 		let p = fs.popen(cmd, "r");
 		if (p == null)

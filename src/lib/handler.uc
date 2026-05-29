@@ -85,15 +85,13 @@ function make(resource, opts) {
 	}
 
 	function create(conn, ctx, body) {
-		let errs = resource.validate(body, conn);
-		if (length(errs) > 0)
-			return errors.validation_failed(ctx, build_field_errors(errs));
-
-		let new_id = ids.new_id(substr(sec_type, 0, 1));
-		let new_opts = resource.toUci(body);
-
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let errs = resource.validate(body, c);
+				if (length(errs) > 0)
+					return { ok: false, kind: "validation", errors: errs };
+				let new_id = ids.new_id(substr(sec_type, 0, 1));
+				let new_opts = resource.toUci(body);
 				c.uci_create_section(p, new_id, sec_type);
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
 				let view = { ...new_opts };
@@ -108,13 +106,11 @@ function make(resource, opts) {
 	}
 
 	function replace(conn, ctx, id, body) {
-		let errs = resource.validate(body, conn);
-		if (length(errs) > 0)
-			return errors.validation_failed(ctx, build_field_errors(errs));
-
-		let new_opts = resource.toUci(body);
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let errs = resource.validate(body, c);
+				if (length(errs) > 0)
+					return { ok: false, kind: "validation", errors: errs };
 				let existing = load_section(c, p, id);
 				if (!existing || existing['.type'] != sec_type)
 					return { ok: false, kind: "not_found",
@@ -122,6 +118,7 @@ function make(resource, opts) {
 				if (!resource.fromUci(existing).managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
+				let new_opts = resource.toUci(body);
 				for (let k in existing) {
 					if (substr(k, 0, 1) == ".") continue;
 					if (exists(new_opts, k)) continue;
@@ -196,7 +193,6 @@ function make(resource, opts) {
 	}
 
 	function adopt(conn, ctx, id) {
-		let new_id = ids.new_id(substr(sec_type, 0, 1));
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
@@ -206,6 +202,7 @@ function make(resource, opts) {
 				if (resource.fromUci(existing).managed)
 					return { ok: false, kind: "conflict",
 					         message: "Section is already managed" };
+				let new_id = ids.new_id(substr(sec_type, 0, 1));
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };
 				view['.name'] = new_id;

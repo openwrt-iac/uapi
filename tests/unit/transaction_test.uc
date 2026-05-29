@@ -207,6 +207,25 @@ t.describe('transaction, reload failure with restore failure', () => {
 	});
 });
 
+t.describe('transaction, default_reload service-name safety', () => {
+	t.it('refuses service names with shell metacharacters', () => {
+		// We exercise default_reload indirectly: pass it as the reload fn and confirm
+		// that an unsafe name causes a reload_failed_unrecovered (both reloads refuse).
+		let conn = ubus.stub({
+			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
+		});
+		let r = tx.transaction(conn, build_params({
+			reload_services: ["firewall; rm -rf /"],
+			acquire: function() { return {}; },
+			release: function() {},
+			// Use the real default_reload via params.reload omission.
+			reload: null,
+		}));
+		t.assert_equal(r.kind, "reload_failed_unrecovered");
+		t.assert_true(match(r.reload_error, /unsafe name/) != null);
+	});
+});
+
 t.describe('transaction, lock release', () => {
 	t.it('releases the lock when fn throws', () => {
 		let locks = harness_locks(true);

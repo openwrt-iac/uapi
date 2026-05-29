@@ -126,7 +126,7 @@ function create(conn, ctx, scopes, pkg, body) {
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
 
-	let client_supplied_id = !(body.id == null || body.id == "");
+	let client_supplied_id = body.id != null && body.id != "";
 	let new_id;
 	if (client_supplied_id) {
 		new_id = body.id;
