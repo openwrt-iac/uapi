@@ -15,19 +15,29 @@ call() {
 }
 
 echo "--- POST /firewall/rules (admin token) ---"
-created=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
+created=$(curl -sS -H "$ADMIN" -i -X POST -H 'Content-Type: application/json' \
+	-w "\n%{http_code}" "$URL/firewall/rules" -d '{
 	"target": "ACCEPT",
 	"match": { "src_zone": "lan", "dest_port": ["22"], "proto": ["tcp"] }
 }')
 echo "$created"
 status=$(echo "$created" | tail -1)
-body=$(echo "$created" | sed '$d')
+request_id=$(echo "$created" | grep -i '^X-Request-Id:' | tail -1 | sed 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//; s/[[:space:]]*$//; s/\r$//')
+body=$(echo "$created" | sed -n '/^{/,/^}/p')
 [ "$status" = "200" ] || fail "POST expected 200, got $status"
+[ -n "$request_id" ] || fail "POST response missing X-Request-Id header"
 echo "$body" | grep -q '"managed": true' || fail "created rule missing managed:true"
 echo "$body" | grep -q '"target": "ACCEPT"' || fail "created rule missing target"
 id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ -n "$id" ] || fail "created rule missing id"
-echo "  new id: $id"
+echo "  new id: $id  request_id: $request_id"
+
+echo "--- successful POST emits an AUDIT line in logread carrying that request_id ---"
+sleep 1
+$SSH "logread | tail -200" > /tmp/uapi_logread.txt || true
+grep -F "$request_id" /tmp/uapi_logread.txt | grep -q 'AUDIT' \
+	|| { cat /tmp/uapi_logread.txt; fail "no AUDIT line for request_id=$request_id"; }
+rm -f /tmp/uapi_logread.txt
 
 echo "--- GET /firewall/rules/$id ---"
 got=$(call "$URL/firewall/rules/$id")
