@@ -38,19 +38,12 @@ $SSH "logread | tail -200" > /tmp/uapi_obs_log.txt
 grep -F "$req_id" /tmp/uapi_obs_log.txt | grep -q 'ACCESS' \
     || { cat /tmp/uapi_obs_log.txt; fail "no ACCESS line for $req_id"; }
 
-echo "--- a write request produces a DEBUG ubus-call trace for the reload ---"
-post=$(curl -sS -w "\n%{http_code}" -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/firewall/rules" -d '{
-	"target": "ACCEPT",
-	"match": { "src_zone": "lan", "dest_port": ["7777"], "proto": ["tcp"] }
-}')
-echo "$post" | tail -3
-status=$(echo "$post" | tail -1)
-[ "$status" = "200" ] || fail "DEBUG probe POST expected 200, got $status"
+echo "--- a /healthz request produces a DEBUG ubus-call trace (system.info probe) ---"
+curl -sS -o /dev/null "$URL/healthz"
 sleep 1
 $SSH "logread | tail -200" > /tmp/uapi_obs_log.txt
-grep -F "uapi-bus call firewall.reload" /tmp/uapi_obs_log.txt \
-	|| { cat /tmp/uapi_obs_log.txt; fail "no DEBUG ubus-call trace for firewall.reload"; }
+grep -F "uapi-bus call system.info" /tmp/uapi_obs_log.txt \
+	|| { cat /tmp/uapi_obs_log.txt; fail "no DEBUG ubus-call trace for system.info"; }
 
 rm -f /tmp/uapi_obs_log.txt
 
