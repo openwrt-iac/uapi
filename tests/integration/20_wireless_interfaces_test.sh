@@ -9,6 +9,12 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
+# See 19_wireless_devices_test.sh for the no-radio-in-QEMU rationale.
+if ! $SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .'; then
+	echo "wireless.interfaces: no radio detected in VM, skipping CRUD test (unit tests cover the module)"
+	exit 0
+fi
+
 echo "--- POST /wireless/interfaces (open network) ---"
 created=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" -d '{
 	"device": "radio0",

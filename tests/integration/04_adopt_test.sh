@@ -99,8 +99,15 @@ adopt_for firewall.zone     firewall zone        firewall/zones
 adopt_for firewall.redirect firewall redirect    firewall/redirects
 adopt_for network.interface network  interface   network/interfaces
 adopt_for network.device    network  device      network/devices
-adopt_for wireless.device   wireless wifi-device wireless/devices
-adopt_for wireless.iface    wireless wifi-iface  wireless/interfaces
 adopt_for dhcp.host         dhcp     host        dhcp/hosts
+
+# Wireless adoption needs a real radio (or mac80211_hwsim) so /etc/config/wireless
+# is not wiped by the post-write network reload. See 19_wireless_devices_test.sh.
+if $SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .'; then
+	adopt_for wireless.device wireless wifi-device wireless/devices
+	adopt_for wireless.iface  wireless wifi-iface  wireless/interfaces
+else
+	echo "  wireless.device, wireless.iface: skipped (no radio in VM)"
+fi
 
 echo "adoption flow ok"
