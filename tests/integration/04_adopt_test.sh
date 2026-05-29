@@ -73,4 +73,34 @@ echo "$unmanaged_list" | grep -q "\"id\": \"$new_id\"" && fail "managed=false sh
 
 call -X DELETE "$URL/firewall/rules/$new_id" >/dev/null
 
+# Adoption is identical code (handler.make().adopt) for every CRUD resource. We
+# verify the contract holds for each type so a regression in one resource module
+# can't pass undetected.
+adopt_for() {
+	label="$1"; pkg="$2"; sec_type="$3"; url_path="$4"
+	anon=$($SSH "name=\$(uci add $pkg $sec_type) && uci commit $pkg && echo \$name")
+	[ -n "$anon" ] || fail "$label: uci add produced no name"
+	got=$(call "$URL/$url_path/$anon")
+	echo "$got" | grep -q '"managed": false' \
+		|| { echo "$got"; fail "$label: GET anon expected managed:false"; }
+	adopted=$(call -X POST "$URL/$url_path/$anon/adopt")
+	echo "$adopted" | tail -1 | grep -q '^200$' \
+		|| { echo "$adopted"; fail "$label: adopt expected 200"; }
+	new=$(echo "$adopted" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+	[ -n "$new" ] || fail "$label: adopted body missing new id"
+	echo "$adopted" | grep -q '"managed": true' || fail "$label: adopted missing managed:true"
+	[ "$new" != "$anon" ] || fail "$label: new id should differ from anon"
+	call -X DELETE "$URL/$url_path/$new" >/dev/null
+	echo "  $label: anon=$anon -> $new (adopted, then deleted)"
+}
+
+echo "--- adoption works for every CRUD-capable curated resource ---"
+adopt_for firewall.zone     firewall zone        firewall/zones
+adopt_for firewall.redirect firewall redirect    firewall/redirects
+adopt_for network.interface network  interface   network/interfaces
+adopt_for network.device    network  device      network/devices
+adopt_for wireless.device   wireless wifi-device wireless/devices
+adopt_for wireless.iface    wireless wifi-iface  wireless/interfaces
+adopt_for dhcp.host         dhcp     host        dhcp/hosts
+
 echo "adoption flow ok"
