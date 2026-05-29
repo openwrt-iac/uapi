@@ -57,5 +57,25 @@ UCID
 sudo chmod 755 "$MNT/etc/uci-defaults/99-uapi-vm-network"
 sudo chown 0:0 "$MNT/etc/uci-defaults/99-uapi-vm-network"
 
+# Replace /etc/config/firewall with a permissive baseline so fw4 reloads during
+# integration tests don't lock SSH/HTTP out of the VM. The tests are exercising
+# uapi's transaction recipe, not OpenWrt's stock firewall policy.
+sudo tee "$MNT/etc/config/firewall" >/dev/null <<'FWCFG'
+config defaults
+	option syn_flood '0'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+
+config zone
+	option name 'lan'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+	list network 'lan'
+FWCFG
+sudo chmod 644 "$MNT/etc/config/firewall"
+sudo chown 0:0 "$MNT/etc/config/firewall"
+
 touch .injected
 echo "Image ready"
