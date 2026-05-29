@@ -19,6 +19,29 @@ function harness_locks(initial_available) {
 	return state;
 }
 
+function track_reload() {
+	let calls = [];
+	return {
+		calls: calls,
+		fn: function(services) { push(calls, services); return null; },
+	};
+}
+
+function reload_failing(error) {
+	return function(services) { return error; };
+}
+
+function reload_flaky(initial_calls_failing) {
+	let n = 0;
+	return function(services) {
+		n++;
+		if (n <= initial_calls_failing) return "netifd: bad";
+		return null;
+	};
+}
+
+function noop_reload(services) { return null; }
+
 function build_params(overrides) {
 	let p = {
 		package: "fw",
@@ -27,6 +50,7 @@ function build_params(overrides) {
 			conn.uci_set(pkg, "r1", "target", "ACCEPT");
 			return { ok: true, body: { id: "r1", target: "ACCEPT" } };
 		},
+		reload: noop_reload,
 	};
 	if (overrides) {
 		for (let k in overrides) p[k] = overrides[k];
@@ -75,21 +99,22 @@ t.describe('transaction, happy path', () => {
 		let locks = harness_locks(true);
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'DROP' } } },
-			ubus: { 'firewall reload': null },
 		});
+		let tracker = track_reload();
 		let r = tx.transaction(conn, build_params({
 			acquire: locks.acquire, release: locks.release,
+			reload: tracker.fn,
 		}));
 		t.assert_true(r.ok);
 		t.assert_deep_equal(r.body, { id: "r1", target: "ACCEPT" });
 		t.assert_equal(conn._state.uci.fw.r1.target, "ACCEPT");
-		t.assert_deep_equal(conn._state.ubus_calls, [["firewall", "reload", {}]]);
+		t.assert_deep_equal(tracker.calls, [["firewall"]]);
 		t.assert_equal(locks.acquired, 1);
 		t.assert_equal(locks.released, 1);
 	});
 
 	t.it('records commit in the uci op log', () => {
-		let conn = ubus.stub({ ubus: { 'firewall reload': null } });
+		let conn = ubus.stub();
 		tx.transaction(conn, build_params({
 			acquire: function() { return {}; },
 			release: function() {},
@@ -122,24 +147,15 @@ t.describe('transaction, soft failure from fn', () => {
 	});
 });
 
-function flaky_reload(initial_calls_failing) {
-	let n = 0;
-	return function() {
-		n++;
-		if (n <= initial_calls_failing) die("netifd: bad");
-		return null;
-	};
-}
-
 t.describe('transaction, reload failure with successful restore', () => {
 	t.it('returns reload_failed_restored when the re-reload succeeds', () => {
 		let locks = harness_locks(true);
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': flaky_reload(1) },
 		});
 		let r = tx.transaction(conn, build_params({
 			acquire: locks.acquire, release: locks.release,
+			reload: reload_flaky(1),
 		}));
 		t.assert_false(r.ok);
 		t.assert_equal(r.kind, "reload_failed_restored");
@@ -150,11 +166,11 @@ t.describe('transaction, reload failure with successful restore', () => {
 	t.it('restores the snapshot before returning', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': flaky_reload(1) },
 		});
 		tx.transaction(conn, build_params({
 			acquire: function() { return {}; },
 			release: function() {},
+			reload: reload_flaky(1),
 		}));
 		t.assert_equal(conn._state.uci.fw.r1.target, "ACCEPT");
 	});
@@ -164,11 +180,11 @@ t.describe('transaction, reload failure with restore failure', () => {
 	t.it('returns reload_failed_unrecovered when the re-reload also fails', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': { _error: "netifd: bad" } },
 		});
 		let r = tx.transaction(conn, build_params({
 			acquire: function() { return {}; },
 			release: function() {},
+			reload: reload_failing("netifd: bad"),
 		}));
 		t.assert_equal(r.kind, "reload_failed_unrecovered");
 		t.assert_equal(r.reload_error, "netifd: bad");
@@ -178,12 +194,12 @@ t.describe('transaction, reload failure with restore failure', () => {
 	t.it('returns reload_failed_unrecovered when uci_import throws', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
-			ubus: { 'firewall reload': { _error: "netifd: bad" } },
 		});
 		conn.uci_import = function(pkg, snap) { die("restore EIO"); };
 		let r = tx.transaction(conn, build_params({
 			acquire: function() { return {}; },
 			release: function() {},
+			reload: reload_failing("netifd: bad"),
 		}));
 		t.assert_equal(r.kind, "reload_failed_unrecovered");
 		t.assert_equal(r.reload_error, "netifd: bad");

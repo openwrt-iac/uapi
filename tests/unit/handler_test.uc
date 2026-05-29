@@ -2,10 +2,13 @@ let t = require('harness');
 let ubus = require('bus');
 let handler = require('handler');
 let rules_mod = loadfile('src/resources/firewall.rules.uc')();
+let reload_calls = [];
+function record_reload(services) { push(reload_calls, services); return null; }
 let rules = handler.make(rules_mod, {
 	tx: {
 		acquire: function() { return {}; },
 		release: function() {},
+		reload: record_reload,
 	},
 });
 
@@ -19,7 +22,6 @@ function with_zones() {
 				z_wan: { '.type': 'zone', name: 'wan' },
 			}
 		},
-		ubus: { 'firewall reload': null },
 	});
 }
 
@@ -111,14 +113,13 @@ t.describe('handler.create', () => {
 
 	t.it('records the new section in uci and reloads firewall', () => {
 		let c = with_zones();
+		let before = length(reload_calls);
 		rules.create(c, ctx(), { target: 'ACCEPT', match: { src_zone: 'wan' } });
 		let added = keys(c._state.uci.firewall);
 		let new_ids = filter(added, function(k) { return substr(k, 0, 2) == "r_"; });
 		t.assert_equal(length(new_ids), 1);
-		let calls = filter(c._state.ubus_calls, function(call) {
-			return call[0] == "firewall" && call[1] == "reload";
-		});
-		t.assert_equal(length(calls), 1);
+		t.assert_equal(length(reload_calls), before + 1);
+		t.assert_deep_equal(reload_calls[length(reload_calls) - 1], ["firewall"]);
 	});
 
 	t.it('reports conflict when src_zone does not exist', () => {

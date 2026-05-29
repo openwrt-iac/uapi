@@ -3,7 +3,8 @@ let bus = require('bus');
 let handler = require('handler');
 let system_resource = loadfile('src/resources/system.uc')();
 let system_h = handler.make_singleton(system_resource, {
-	tx: { acquire: function() { return {}; }, release: function() {} },
+	tx: { acquire: function() { return {}; }, release: function() {},
+	      reload: function() { return null; } },
 });
 
 function ctx() { return { request_id: "01hx0000000000000000000000" }; }
