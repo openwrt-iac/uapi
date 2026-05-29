@@ -28,7 +28,7 @@ Reload: `firewall`.
 
 Wraps `config interface` in `/etc/config/network`. `proto` (static/dhcp/dhcpv6/pppoe/none/ppp/wwan), `ipaddr`/`netmask`/`gateway`/`dns` for static, plus `device`, `mtu`, `auto`, `ip6assign`.
 
-**Be careful editing the interface that backs your management connection.** `ubus call network reload` returns success even when an interface fails to come up; you can lose the box. Use `/raw/network/<id>` if you need finer control over the timing, or front the API with a session that survives the reload.
+**Be careful editing the interface that backs your management connection.** `/etc/init.d/network reload` returns exit 0 even when an interface fails to come up at runtime; you can lose the box. uapi only sees the init script's exit code, not the daemon's runtime convergence. Use `/raw/network/<id>` if you need finer control over the timing, or front the API with a session that survives the reload.
 
 Reload: `network` (netifd).
 

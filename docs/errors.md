@@ -44,14 +44,14 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 
-The reload-failure-restored response carries the original ubus error as an extension field:
+The reload-failure-restored response carries the init script's exit summary as an extension field:
 
 ```json
 {
   "code": "reload_failed_restored",
   "message": "Service reload failed; prior configuration has been restored",
   "request_id": "01HX...",
-  "reload_error": "ubus call network reload: netifd: interface 'wan' has invalid proto"
+  "reload_error": "network exited with code 1: netifd: interface 'wan' has invalid proto"
 }
 ```
 

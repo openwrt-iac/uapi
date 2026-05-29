@@ -129,17 +129,17 @@ Every write follows this sequence:
 2. Validate payload against resource schema → `422` on fail, no commit
 3. `uci set` / `uci add` / `uci delete` (staging only, no commit yet)
 4. `uci commit <package>`
-5. `ubus call <service> reload`
-6. **On reload error:** `uci import` snapshot, re-reload to restore prior daemon state, return `500 reload_failed_restored` with the original ubus error in `reload_error`. If the restore itself fails, return `500 reload_failed_unrecovered` (loud; this is the worst case).
+5. `/etc/init.d/<service> reload` via `fs.popen`, exit code checked. Done directly (not through ubus) because every ubus-mediated reload path on OpenWrt (`ubus call <svc> reload`, `ubus call rc init`, `uci apply`) is fire-and-forget: rpcd's deferred-request callback completes with `UBUS_STATUS_OK` regardless of the init script's actual exit code. Only the kernel-level wait4 on a spawned child gives us back a real success/failure bit.
+6. **On reload error (non-zero exit from the init script):** `uci import` snapshot, re-reload to restore prior daemon state, return `500 reload_failed_restored` with the captured stderr/exit-code summary in `reload_error`. If the restore itself fails, return `500 reload_failed_unrecovered` (loud; this is the worst case).
 7. **On success:** return `200` with the refreshed resource (uci-configured state).
 
 ### What "reloaded" means
 
-Return as soon as `ubus reload` returns. Do **not** poll for async convergence (interface bring-up, DHCP, wifi association can take 10+ seconds). GETs read uci-configured state, which matches Terraform's mental model: desired-config vs. actual-config diff. Runtime fields (under `runtime: {...}`) reflect ubus runtime data and are marked `computed` so Terraform ignores them for drift.
+Return as soon as the init script's reload action returns. Do **not** poll for async convergence (interface bring-up, DHCP, wifi association can take 10+ seconds). GETs read uci-configured state, which matches Terraform's mental model: desired-config vs. actual-config diff. Runtime fields (under `runtime: {...}`) reflect ubus runtime data and are marked `computed` so Terraform ignores them for drift.
 
 ### Honest limitation of "atomic"
 
-Snapshot-and-restore catches the case where `ubus reload` returns an error. It does **not** catch the more common silent failure where reload returns OK but the config is broken (interface fails to come up, etc.); the ubus call has no way to know. The response code is precise about which path executed; clients should not assume `200 OK` means runtime convergence. A future feature could add a `commit-confirmed` mode (apply, wait, auto-revert unless client acks within N seconds). Not in v1.
+Snapshot-and-restore catches the case where the init script's reload action exits non-zero. It does **not** catch the more common silent failure where the init script exits 0 but the daemon's runtime convergence is broken (interface fails to come up, fw4 accepts a config that netifd later rejects, etc.); the init script itself has no way to know. The response code is precise about which path executed; clients should not assume `200 OK` means runtime convergence. A future feature could add a `commit-confirmed` mode (apply, wait, auto-revert unless client acks within N seconds). Not in v1.
 
 ## Auth & ACL
 
@@ -154,7 +154,7 @@ Snapshot-and-restore catches the case where `ubus reload` returns an error. It d
 Hierarchical, deepest-match wins. Syntax: `<segment>[:<segment>...]:(rw|ro)`.
 
 - Two-segment depth max for v1: `<domain>:<subresource>:<verb>` for curated, `raw:<package>:<verb>` for raw.
-- `*:rw` and `*:ro` are top-level wildcards. Mid-tree wildcards (`firewall:*:ro`) not supported in v1.
+- `*:rw` and `*:ro` are top-level wildcards. Mid-tree wildcards are also supported: `firewall:*:ro` permits ro on every firewall subresource but NOT the bare domain; `*:rules:ro` permits ro on the `rules` subresource of every domain. At the same depth, an exact segment beats a wildcard segment (`firewall:rules:rw` wins over `firewall:*:ro` for path `[firewall, rules]`).
 - A `rw` scope implies `ro`; granting `firewall:rw` does not also require granting `firewall:ro`.
 - Same-depth conflict (`firewall:rules:rw` + `firewall:rules:ro`): `rw` wins.
 - No matching scope → deny.

@@ -40,7 +40,13 @@ Failures:
 <segment>[:<segment>...]:(rw|ro)
 ```
 
-Two-segment depth max in v1. `rw` implies `ro`.
+Two-segment depth max in v1. `rw` implies `ro`. `*` is allowed as any segment for wildcards:
+
+- `*:rw` / `*:ro`: top-level wildcard, matches everything.
+- `firewall:*:ro`: mid-tree wildcard, matches every firewall subresource (rules, zones, redirects) but NOT the bare domain.
+- `*:rules:ro`: also valid; matches the `rules` subresource of every domain that has one.
+
+At equal depth, an exact segment beats a wildcard segment (`firewall:rules:rw` wins over `firewall:*:ro` for `/firewall/rules`).
 
 ## The v1 scope tree
 
