@@ -13,31 +13,12 @@ fail() { echo "FAIL: $*"; exit 1; }
 # triggers exactly the path documented in CLAUDE.md "Atomic transaction recipe"
 # step 6: first reload fails, snapshot-restore reloads succeeds, response is
 # 500 reload_failed_restored, uci is back to the pre-write snapshot.
-echo "--- locate the fw4 binary ---"
-FW4=$($SSH 'command -v fw4 2>/dev/null || ls /usr/sbin/fw4 /sbin/fw4 /usr/libexec/fw4 2>/dev/null | head -1')
-[ -n "$FW4" ] || { $SSH 'apk add firewall4 2>&1 | tail -5'; FW4=$($SSH 'command -v fw4'); }
-[ -n "$FW4" ] || fail "fw4 not installed and apk add firewall4 failed"
-echo "  fw4 at: $FW4"
-
-echo "--- wrap fw4 with a fail-once handler ---"
-$SSH "
-set -eu
-[ -f ${FW4}.uapi-bak ] || cp $FW4 ${FW4}.uapi-bak
-cat > $FW4 <<'EOF'
-#!/bin/sh
-if [ \"\$1\" = \"reload\" ] && [ -f /tmp/fw-fail-once ]; then
-    rm /tmp/fw-fail-once
-    echo \"fw4: simulated reload failure\" >&2
-    exit 1
-fi
-exec ${FW4}.uapi-bak \"\$@\"
-EOF
-chmod +x $FW4
-"
-
-cleanup() {
-	$SSH "mv -f ${FW4}.uapi-bak $FW4 2>/dev/null || true; rm -f /tmp/fw-fail-once" || true
-}
+# The VM ships a stub /etc/init.d/firewall (from tests/vm/setup.sh) that honors
+# /tmp/fw-fail-once: when present, reload_service consumes the marker and
+# returns 1 on this single reload, then returns 0 on subsequent calls. That's
+# exactly what the snapshot-restore recipe needs to exercise: first reload
+# fails, restore re-reload succeeds, response is 500 reload_failed_restored.
+cleanup() { $SSH 'rm -f /tmp/fw-fail-once' || true; }
 trap cleanup EXIT INT TERM
 
 echo "--- snapshot uci firewall state before the failing write ---"

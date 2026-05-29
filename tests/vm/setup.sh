@@ -57,25 +57,30 @@ UCID
 sudo chmod 755 "$MNT/etc/uci-defaults/99-uapi-vm-network"
 sudo chown 0:0 "$MNT/etc/uci-defaults/99-uapi-vm-network"
 
-# Replace /etc/config/firewall with a permissive baseline so fw4 reloads during
-# integration tests don't lock SSH/HTTP out of the VM. The tests are exercising
-# uapi's transaction recipe, not OpenWrt's stock firewall policy.
-sudo tee "$MNT/etc/config/firewall" >/dev/null <<'FWCFG'
-config defaults
-	option syn_flood '0'
-	option input 'ACCEPT'
-	option output 'ACCEPT'
-	option forward 'ACCEPT'
-
-config zone
-	option name 'lan'
-	option input 'ACCEPT'
-	option output 'ACCEPT'
-	option forward 'ACCEPT'
-	list network 'lan'
-FWCFG
-sudo chmod 644 "$MNT/etc/config/firewall"
-sudo chown 0:0 "$MNT/etc/config/firewall"
+# Replace /etc/init.d/firewall with a no-op stub so uapi's transaction recipe
+# can call `firewall reload` end-to-end without fw4 reapplying the stock
+# ruleset (which would block QEMU's port-forwarded SSH/HTTP). The reload-
+# failure rollback test (12_*) uses /tmp/fw-fail-once to inject a one-shot
+# failure into reload_service. nftables is never touched in CI; that's fine
+# because the tests are exercising uapi's transaction handling, not fw4 itself.
+sudo tee "$MNT/etc/init.d/firewall" >/dev/null <<'FWINIT'
+#!/bin/sh /etc/rc.common
+START=19
+STOP=89
+USE_PROCD=1
+start_service() { :; }
+stop_service()  { :; }
+reload_service() {
+	if [ -f /tmp/fw-fail-once ]; then
+		rm /tmp/fw-fail-once
+		echo "firewall: simulated reload failure" >&2
+		return 1
+	fi
+	return 0
+}
+FWINIT
+sudo chmod 755 "$MNT/etc/init.d/firewall"
+sudo chown 0:0 "$MNT/etc/init.d/firewall"
 
 touch .injected
 echo "Image ready"
