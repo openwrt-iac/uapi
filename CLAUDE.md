@@ -467,17 +467,13 @@ The emitted `openapi.json` carries the same version as the API it describes (`in
 
 ---
 
-## Deferred / future work
+## v1.1+ roadmap
 
-- ETags / `If-Match` optimistic concurrency (v1.1+)
-- `commit-confirmed`-style timed rollback (apply, wait, auto-revert unless client acks)
-- `/metrics` endpoint (Prometheus-style)
-- Mid-tree scope wildcards (`firewall:*:ro`)
-- Mutual TLS
-- Per-token rate limiting
-- HTTP token creation endpoint (e.g., for a future LuCI plugin managing uapi tokens)
-- Closing the existing-section TOCTOU window in `handler.uc`: `load_section` runs before the write transaction's flock acquires. If a competing writer commits between A's load and A's lock, A's view is stale. Window is narrow but non-zero; fix is to move the lookup inside the `fn` callback that runs under the lock.
-- Reload-failure-rollback integration test against real ubus (currently deferred; unit test covers the recipe).
-- Promotion of high-demand `/raw/` resources to curated endpoints based on usage
-- Submission to OpenWrt's official `packages` feed
-- Localization of error `message` strings
+These are explicitly out-of-scope for v1.0 and require either substantive new code or an architectural change that conflicts with one of the three non-negotiable principles. Listed so v1 ships honestly about what it does not do.
+
+- **ETags / `If-Match` optimistic concurrency.** A future revision can compute a stable hash of the canonical resource shape and surface it as `ETag`, with `If-Match` rejecting stale writes. Substantive feature, fits the architecture cleanly, just not in v1.
+- **`commit-confirmed`-style timed rollback** (apply, wait, auto-revert unless the client acks within N seconds). Conflicts with the fork-per-request model (no place for a background timer); would require a small procd-managed sidecar.
+- **`/metrics` endpoint** (Prometheus-style). Counters and histograms need cross-fork shared state; a uci-backed counter or a tiny procd-managed registry is the realistic path.
+- **Per-token rate limiting.** Same shared-state problem as `/metrics`. Operators today should front the API with a reverse proxy if they need this.
+- **HTTP token creation endpoint** (for a future LuCI plugin managing uapi tokens). Deliberately CLI-only in v1; an HTTP path needs an admin-scope design that avoids handing remote attackers a token-mint endpoint on compromise.
+- **Localization of error `message` strings.** English-only in v1; codes are stable and translatable client-side.

@@ -51,6 +51,19 @@ uapi inherits TLS from the `main` uhttpd instance. By default OpenWrt ships a se
 - **`acme.sh` + `luci-app-acme`**: ACME (Let's Encrypt) on the router itself. Requires the router to be reachable from the internet on port 80 (or DNS-01 challenge support).
 - **Front the API with a reverse proxy** holding a real certificate (nginx, Caddy, traefik) on a different machine. Useful when the router lives behind double-NAT.
 
+### Mutual TLS (client certificate auth)
+
+`uhttpd` supports verifying client certificates if you set `option tls_client_cert_file` (path to a CA cert in PEM form) and `option tls_require_client_cert '1'` on the listener:
+
+```sh
+uci set uhttpd.main.tls_client_cert_file='/etc/uapi/clients-ca.pem'
+uci set uhttpd.main.tls_require_client_cert='1'
+uci commit uhttpd
+/etc/init.d/uhttpd restart
+```
+
+After that, every request must present a certificate signed by the CA at `/etc/uapi/clients-ca.pem`. Combine this with a bearer-token scoped to read-only and you have two-factor service-account auth: the cert proves the caller is approved infrastructure; the token proves what scope it is allowed to exercise. uapi does not look at the client certificate fields itself; uhttpd terminates and validates them.
+
 uapi enforces TLS by default for any request whose `REMOTE_ADDR` is not loopback:
 
 ```

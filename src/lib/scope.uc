@@ -37,18 +37,28 @@ function parse(scope) {
 			die(sprintf("scope: %J segment %J has invalid chars", scope, seg));
 	}
 
-	let wildcard_count = 0;
-	for (let seg in segments) if (seg == "*") wildcard_count++;
-	if (wildcard_count > 0 && (length(segments) != 1 || segments[0] != "*"))
-		die(sprintf("scope: %J wildcard must appear alone at top level", scope));
-
 	return { segments, verb };
 }
 
 function is_known_path(segments) {
 	if (length(segments) == 2 && segments[0] == "raw")
 		return true;
-	return !!KNOWN_PATHS[join(":", segments)];
+	if (!!KNOWN_PATHS[join(":", segments)])
+		return true;
+	let has_wildcard = false;
+	for (let s in segments) if (s == "*") { has_wildcard = true; break; }
+	if (!has_wildcard) return false;
+	for (let known in KNOWN_PATHS) {
+		let parts = split(known, ":");
+		if (length(parts) != length(segments)) continue;
+		let m = true;
+		for (let j = 0; j < length(segments); j++) {
+			if (segments[j] == "*") continue;
+			if (segments[j] != parts[j]) { m = false; break; }
+		}
+		if (m) return true;
+	}
+	return false;
 }
 
 function validate_against_known_tree(scope) {
@@ -63,8 +73,10 @@ function matches(scope_segs, resource_path) {
 		return true;
 	if (length(scope_segs) > length(resource_path))
 		return false;
-	for (let i = 0; i < length(scope_segs); i++)
+	for (let i = 0; i < length(scope_segs); i++) {
+		if (scope_segs[i] == "*") continue;
 		if (scope_segs[i] != resource_path[i]) return false;
+	}
 	return true;
 }
 
@@ -74,6 +86,13 @@ function match_depth(scope_segs) {
 	return length(scope_segs);
 }
 
+function exact_count(scope_segs) {
+	if (length(scope_segs) == 1 && scope_segs[0] == "*") return 0;
+	let n = 0;
+	for (let s in scope_segs) if (s != "*") n++;
+	return n;
+}
+
 function permits(token_scopes, resource_path, verb) {
 	if (verb != "rw" && verb != "ro")
 		die(sprintf("scope.permits: verb must be rw or ro, got %J", verb));
@@ -81,16 +100,20 @@ function permits(token_scopes, resource_path, verb) {
 		die("scope.permits: resource_path must be a non-empty array");
 
 	let best_depth = -1;
+	let best_exact = -1;
 	let best_verb = null;
 
 	for (let s in token_scopes) {
 		let p = parse(s);
 		if (!matches(p.segments, resource_path)) continue;
 		let depth = match_depth(p.segments);
-		if (depth > best_depth) {
+		let exact = exact_count(p.segments);
+		if (depth > best_depth ||
+		    (depth == best_depth && exact > best_exact)) {
 			best_depth = depth;
+			best_exact = exact;
 			best_verb = p.verb;
-		} else if (depth == best_depth && p.verb == "rw") {
+		} else if (depth == best_depth && exact == best_exact && p.verb == "rw") {
 			best_verb = "rw";
 		}
 	}

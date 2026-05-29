@@ -17,6 +17,12 @@ function translate_tx(ctx, result) {
 		                    sprintf("transaction lock file not available: %s", result.error));
 	if (result.kind == "validation")
 		return errors.validation_failed(ctx, build_field_errors(result.errors));
+	if (result.kind == "not_found")
+		return errors.error(ctx, "not_found", result.message);
+	if (result.kind == "unmanaged_resource")
+		return errors.error(ctx, "unmanaged_resource", result.message);
+	if (result.kind == "conflict")
+		return errors.error(ctx, "conflict", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")
@@ -102,14 +108,6 @@ function make(resource, opts) {
 	}
 
 	function replace(conn, ctx, id, body) {
-		let existing = load_section(conn, pkg, id);
-		if (!existing || existing['.type'] != sec_type)
-			return errors.error(ctx, "not_found",
-			                    sprintf("No %s with id %J", sec_type, id));
-		if (!resource.fromUci(existing).managed)
-			return errors.error(ctx, "unmanaged_resource",
-			                    "Section is not uapi-managed; adopt it first");
-
 		let errs = resource.validate(body, conn);
 		if (length(errs) > 0)
 			return errors.validation_failed(ctx, build_field_errors(errs));
@@ -117,6 +115,13 @@ function make(resource, opts) {
 		let new_opts = resource.toUci(body);
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let existing = load_section(c, p, id);
+				if (!existing || existing['.type'] != sec_type)
+					return { ok: false, kind: "not_found",
+					         message: sprintf("No %s with id %J", sec_type, id) };
+				if (!resource.fromUci(existing).managed)
+					return { ok: false, kind: "unmanaged_resource",
+					         message: "Section is not uapi-managed; adopt it first" };
 				for (let k in existing) {
 					if (substr(k, 0, 1) == ".") continue;
 					if (exists(new_opts, k)) continue;
@@ -135,25 +140,25 @@ function make(resource, opts) {
 	}
 
 	function patch(conn, ctx, id, body) {
-		let existing = load_section(conn, pkg, id);
-		if (!existing || existing['.type'] != sec_type)
-			return errors.error(ctx, "not_found",
-			                    sprintf("No %s with id %J", sec_type, id));
-		if (!resource.fromUci(existing).managed)
-			return errors.error(ctx, "unmanaged_resource",
-			                    "Section is not uapi-managed; adopt it first");
-
-		let existing_json = resource.fromUci(existing);
-		let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
-		let merged_json = merge_fn(existing, existing_json, body);
-
-		let errs = resource.validate(merged_json, conn);
-		if (length(errs) > 0)
-			return errors.validation_failed(ctx, build_field_errors(errs));
-
-		let new_opts = resource.toUci(merged_json);
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let existing = load_section(c, p, id);
+				if (!existing || existing['.type'] != sec_type)
+					return { ok: false, kind: "not_found",
+					         message: sprintf("No %s with id %J", sec_type, id) };
+				if (!resource.fromUci(existing).managed)
+					return { ok: false, kind: "unmanaged_resource",
+					         message: "Section is not uapi-managed; adopt it first" };
+
+				let existing_json = resource.fromUci(existing);
+				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
+				let merged_json = merge_fn(existing, existing_json, body);
+
+				let errs = resource.validate(merged_json, c);
+				if (length(errs) > 0)
+					return { ok: false, kind: "validation", errors: errs };
+
+				let new_opts = resource.toUci(merged_json);
 				for (let k in existing) {
 					if (substr(k, 0, 1) == ".") continue;
 					if (exists(new_opts, k)) continue;
@@ -172,16 +177,15 @@ function make(resource, opts) {
 	}
 
 	function remove(conn, ctx, id) {
-		let existing = load_section(conn, pkg, id);
-		if (!existing || existing['.type'] != sec_type)
-			return errors.error(ctx, "not_found",
-			                    sprintf("No %s with id %J", sec_type, id));
-		if (!resource.fromUci(existing).managed)
-			return errors.error(ctx, "unmanaged_resource",
-			                    "Section is not uapi-managed");
-
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let existing = load_section(c, p, id);
+				if (!existing || existing['.type'] != sec_type)
+					return { ok: false, kind: "not_found",
+					         message: sprintf("No %s with id %J", sec_type, id) };
+				if (!resource.fromUci(existing).managed)
+					return { ok: false, kind: "unmanaged_resource",
+					         message: "Section is not uapi-managed" };
 				c.uci_delete(p, id);
 				return { ok: true, body: null };
 			},
@@ -192,17 +196,16 @@ function make(resource, opts) {
 	}
 
 	function adopt(conn, ctx, id) {
-		let existing = load_section(conn, pkg, id);
-		if (!existing || existing['.type'] != sec_type)
-			return errors.error(ctx, "not_found",
-			                    sprintf("No %s with id %J", sec_type, id));
-		if (resource.fromUci(existing).managed)
-			return errors.error(ctx, "conflict",
-			                    "Section is already managed");
-
 		let new_id = ids.new_id(substr(sec_type, 0, 1));
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let existing = load_section(c, p, id);
+				if (!existing || existing['.type'] != sec_type)
+					return { ok: false, kind: "not_found",
+					         message: sprintf("No %s with id %J", sec_type, id) };
+				if (resource.fromUci(existing).managed)
+					return { ok: false, kind: "conflict",
+					         message: "Section is already managed" };
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };
 				view['.name'] = new_id;
@@ -249,22 +252,22 @@ function make_singleton(resource, opts) {
 	}
 
 	function patch(conn, ctx, body) {
-		let existing = find(conn);
-		if (!existing)
-			return errors.error(ctx, "not_found",
-			                    sprintf("singleton %s.%s missing", pkg, sec_type));
-		let id = existing['.name'];
-
-		let merged = { ...resource.fromUci(existing) };
-		for (let k in body) merged[k] = body[k];
-
-		let errs = resource.validate(merged, conn);
-		if (length(errs) > 0)
-			return errors.validation_failed(ctx, build_field_errors(errs));
-
-		let new_opts = resource.toUci(merged);
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let existing = find(c);
+				if (!existing)
+					return { ok: false, kind: "not_found",
+					         message: sprintf("singleton %s.%s missing", pkg, sec_type) };
+				let id = existing['.name'];
+
+				let merged = { ...resource.fromUci(existing) };
+				for (let k in body) merged[k] = body[k];
+
+				let errs = resource.validate(merged, c);
+				if (length(errs) > 0)
+					return { ok: false, kind: "validation", errors: errs };
+
+				let new_opts = resource.toUci(merged);
 				for (let k in existing) {
 					if (substr(k, 0, 1) == ".") continue;
 					if (exists(new_opts, k)) continue;

@@ -9,15 +9,7 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-# OpenWrt regenerates /etc/config/wireless from detected hardware. In QEMU with
-# no radio (and no mac80211_hwsim loaded), every network reload wipes the file,
-# so we cannot exercise CRUD end-to-end. Unit tests at tests/unit/network_wireless_test.uc
-# cover the resource module (fromUci/toUci/validate). When a real radio (or
-# mac80211_hwsim) is available, this test runs the full flow.
-if ! $SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .'; then
-	echo "wireless.devices: no radio detected in VM, skipping CRUD test (unit tests cover the module)"
-	exit 0
-fi
+ensure_wireless_radio || fail "could not bring up a simulated radio via mac80211_hwsim"
 
 echo "--- POST /wireless/devices creates a radio entry ---"
 created=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/devices" -d '{

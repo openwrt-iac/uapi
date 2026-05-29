@@ -62,6 +62,10 @@ function translate_raw_tx(ctx, result) {
 	if (result.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 		                    sprintf("transaction lock file not available: %s", result.error));
+	if (result.kind == "not_found")
+		return errors.error(ctx, "not_found", result.message);
+	if (result.kind == "conflict")
+		return errors.error(ctx, "conflict", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")
@@ -122,10 +126,10 @@ function create(conn, ctx, scopes, pkg, body) {
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
 
-	let new_id = body.id;
-	if (new_id == null || new_id == "") {
-		new_id = ids.new_id(substr(sec_type, 0, 1));
-	} else {
+	let client_supplied_id = !(body.id == null || body.id == "");
+	let new_id;
+	if (client_supplied_id) {
+		new_id = body.id;
 		if (type(new_id) != "string" || !match(new_id, ID_RE))
 			return errors.validation_failed(ctx,
 				[errors.field_error("id", "invalid_format",
@@ -133,6 +137,8 @@ function create(conn, ctx, scopes, pkg, body) {
 		if (load_section(conn, pkg, new_id) != null)
 			return errors.error(ctx, "conflict",
 			                    sprintf("Section %s.%s already exists", pkg, new_id));
+	} else {
+		new_id = ids.new_id(substr(sec_type, 0, 1));
 	}
 
 	let reload = ucitrack.reload_services(conn, pkg);
@@ -146,6 +152,9 @@ function create(conn, ctx, scopes, pkg, body) {
 		package: pkg,
 		reload_services: reload.services,
 		fn: function(c, p) {
+			if (client_supplied_id && load_section(c, p, new_id) != null)
+				return { ok: false, kind: "conflict",
+				         message: sprintf("Section %s.%s already exists", pkg, new_id) };
 			c.uci_create_section(p, new_id, sec_type);
 			for (let k in opts) c.uci_set(p, new_id, k, opts[k]);
 			let view = { ...opts };
@@ -162,10 +171,10 @@ function create(conn, ctx, scopes, pkg, body) {
 function replace(conn, ctx, scopes, pkg, id, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
-	let existing = load_section(conn, pkg, id);
-	if (!existing)
+	let preview = load_section(conn, pkg, id);
+	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
-	let sec_type = existing['.type'];
+	let sec_type = preview['.type'];
 	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
@@ -185,6 +194,10 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 		package: pkg,
 		reload_services: reload.services,
 		fn: function(c, p) {
+			let existing = load_section(c, p, id);
+			if (!existing)
+				return { ok: false, kind: "not_found",
+				         message: sprintf("No section %s.%s", pkg, id) };
 			for (let k in existing) {
 				if (substr(k, 0, 1) == ".") continue;
 				if (exists(new_opts, k)) continue;
@@ -194,7 +207,7 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 			let view = { ...new_opts };
 			view['.name'] = id;
 			view['.anonymous'] = !!existing['.anonymous'];
-			view['.type'] = sec_type;
+			view['.type'] = existing['.type'];
 			return { ok: true, body: build_response_body(view, reload) };
 		},
 	});
@@ -205,10 +218,10 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 function patch(conn, ctx, scopes, pkg, id, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
-	let existing = load_section(conn, pkg, id);
-	if (!existing)
+	let preview = load_section(conn, pkg, id);
+	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
-	let sec_type = existing['.type'];
+	let sec_type = preview['.type'];
 	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit writing %s.%s via /raw/", pkg, id));
@@ -228,10 +241,14 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 		package: pkg,
 		reload_services: reload.services,
 		fn: function(c, p) {
+			let existing = load_section(c, p, id);
+			if (!existing)
+				return { ok: false, kind: "not_found",
+				         message: sprintf("No section %s.%s", pkg, id) };
 			for (let k in updates) c.uci_set(p, id, k, updates[k]);
 			let view = { ...existing, ...updates };
 			view['.name'] = id;
-			view['.type'] = sec_type;
+			view['.type'] = existing['.type'];
 			return { ok: true, body: build_response_body(view, reload) };
 		},
 	});
@@ -240,10 +257,10 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 }
 
 function remove(conn, ctx, scopes, pkg, id) {
-	let existing = load_section(conn, pkg, id);
-	if (!existing)
+	let preview = load_section(conn, pkg, id);
+	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
-	let sec_type = existing['.type'];
+	let sec_type = preview['.type'];
 	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
 		return errors.error(ctx, "insufficient_scope",
 		                    sprintf("Token does not permit deleting %s.%s via /raw/", pkg, id));
@@ -253,6 +270,10 @@ function remove(conn, ctx, scopes, pkg, id) {
 		package: pkg,
 		reload_services: reload.services,
 		fn: function(c, p) {
+			let existing = load_section(c, p, id);
+			if (!existing)
+				return { ok: false, kind: "not_found",
+				         message: sprintf("No section %s.%s", pkg, id) };
 			c.uci_delete(p, id);
 			return { ok: true, body: null };
 		},

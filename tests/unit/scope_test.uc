@@ -27,8 +27,11 @@ t.describe('scope.parse', () => {
 		t.assert_throws(() => scope.parse("firewall:RW"));
 	});
 
-	t.it('rejects mid-tree wildcards', () => {
-		t.assert_throws(() => scope.parse("firewall:*:rw"));
+	t.it('accepts mid-tree wildcards', () => {
+		t.assert_deep_equal(scope.parse("firewall:*:rw"),
+			{ segments: ["firewall", "*"], verb: "rw" });
+		t.assert_deep_equal(scope.parse("*:rules:ro"),
+			{ segments: ["*", "rules"], verb: "ro" });
 	});
 
 	t.it('rejects empty segments', () => {
@@ -125,6 +128,31 @@ t.describe('scope.permits, wildcards', () => {
 	t.it('*:ro permits all reads, no writes', () => {
 		t.assert_true(scope.permits(["*:ro"], ["firewall", "rules"], "ro"));
 		t.assert_false(scope.permits(["*:ro"], ["firewall", "rules"], "rw"));
+	});
+});
+
+t.describe('scope.permits, mid-tree wildcards', () => {
+	t.it('firewall:*:ro permits ro on any firewall subresource', () => {
+		t.assert_true(scope.permits(["firewall:*:ro"], ["firewall", "rules"], "ro"));
+		t.assert_true(scope.permits(["firewall:*:ro"], ["firewall", "zones"], "ro"));
+		t.assert_false(scope.permits(["firewall:*:ro"], ["firewall", "rules"], "rw"));
+	});
+
+	t.it('firewall:*:ro does not match the bare domain (path too short)', () => {
+		t.assert_false(scope.permits(["firewall:*:ro"], ["firewall"], "ro"));
+	});
+
+	t.it('exact subresource wins over mid-tree wildcard at same depth', () => {
+		let s = ["firewall:*:ro", "firewall:rules:rw"];
+		t.assert_true(scope.permits(s, ["firewall", "rules"], "rw"));
+		t.assert_true(scope.permits(s, ["firewall", "zones"], "ro"));
+		t.assert_false(scope.permits(s, ["firewall", "zones"], "rw"));
+	});
+
+	t.it('mid-tree wildcard beats shallower domain scope', () => {
+		let s = ["firewall:rw", "firewall:*:ro"];
+		t.assert_false(scope.permits(s, ["firewall", "rules"], "rw"));
+		t.assert_true(scope.permits(s, ["firewall", "rules"], "ro"));
 	});
 });
 

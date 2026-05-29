@@ -5,6 +5,19 @@ push_file_to_vm() {
 	$SSH "cat > $2" < "$1"
 }
 
+ensure_wireless_radio() {
+	if $SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .'; then return 0; fi
+	$SSH 'apk add kmod-mac80211-hwsim 2>&1 | tail -3' >/dev/null 2>&1 || return 1
+	$SSH 'modprobe mac80211_hwsim radios=1' || return 1
+	for i in 1 2 3 4 5; do
+		$SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .' && break
+		sleep 1
+	done
+	$SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .' || return 1
+	$SSH 'wifi config 2>&1 | tail -3' >/dev/null 2>&1 || true
+	return 0
+}
+
 install_uapi() {
 	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest 2>&1' | tail -3
 
