@@ -35,7 +35,7 @@ curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem \
     | tee /etc/apk/keys/uapi-feed.pub.pem > /dev/null
 
 # Register the feed
-echo 'https://raspbeguy.github.io/uapi/packages/all/uapi' \
+echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' \
     > /etc/apk/repositories.d/uapi.list
 
 apk update
