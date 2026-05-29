@@ -26,7 +26,11 @@ function connect(opts) {
 			if (debug)
 				debug.syslog(debug.LOG_DEBUG,
 					sprintf("uapi-bus call %s.%s args=%J", service, method, args ?? {}));
-			return conn.call(service, method, args ?? {});
+			let r = conn.call(service, method, args ?? {});
+			let err = ubus_mod.error();
+			if (err != null)
+				die(sprintf("ubus call %s.%s: %s", service, method, err));
+			return r;
 		},
 		uci_get: function(pkg, section, option) {
 			if (option != null)

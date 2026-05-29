@@ -20,6 +20,9 @@ ensure_wireless_radio() {
 
 install_uapi() {
 	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest 2>&1' | tail -3
+	# Some package selections leave firewall4 unstarted at boot. Make sure its
+	# ubus service is registered so writes that reload firewall don't 500.
+	$SSH '/etc/init.d/firewall enable 2>/dev/null; /etc/init.d/firewall start 2>/dev/null; sleep 1' || true
 
 	$SSH 'mkdir -p /usr/share/uapi/lib /usr/share/uapi/resources'
 	push_file_to_vm src/main.uc /usr/share/uapi/main.uc
