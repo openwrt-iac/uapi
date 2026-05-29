@@ -12,16 +12,20 @@ function deepcopy(v) {
 	return v;
 }
 
-function connect() {
+function connect(opts) {
 	let ubus_mod = require('ubus');
 	let uci_mod = require('uci');
 	let fs_mod = require('fs');
 	let conn = ubus_mod.connect();
 	if (!conn) die("ubus: connect failed");
 	let cursor = uci_mod.cursor();
+	let debug = (opts != null && opts.debug) ? require('log') : null;
 
 	return {
 		call: function(service, method, args) {
+			if (debug)
+				debug.syslog(debug.LOG_DEBUG,
+					sprintf("uapi-bus call %s.%s args=%J", service, method, args ?? {}));
 			return conn.call(service, method, args ?? {});
 		},
 		uci_get: function(pkg, section, option) {

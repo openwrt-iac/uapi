@@ -88,4 +88,21 @@ t.describe('wireless.interfaces', () => {
 		let errs = wiface.validate({ device: 'radio0', ssid: 'open', encryption: 'none' }, null);
 		t.assert_equal(length(errs), 0);
 	});
+
+	t.it('merge_for_patch carries forward the existing key when the body omits it', () => {
+		let existing_section = { '.name': 'w1', '.anonymous': false, '.type': 'wifi-iface',
+		                         device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'secretpw' };
+		let existing_json = wiface.fromUci(existing_section);
+		let merged = wiface.merge_for_patch(existing_section, existing_json, { ssid: 'newssid' });
+		t.assert_equal(merged.ssid, 'newssid');
+		t.assert_equal(merged.key, 'secretpw');
+	});
+
+	t.it('merge_for_patch lets the body override the key explicitly', () => {
+		let existing_section = { '.name': 'w1', '.anonymous': false, '.type': 'wifi-iface',
+		                         device: 'radio0', encryption: 'psk2', key: 'old' };
+		let existing_json = wiface.fromUci(existing_section);
+		let merged = wiface.merge_for_patch(existing_section, existing_json, { key: 'new' });
+		t.assert_equal(merged.key, 'new');
+	});
 });

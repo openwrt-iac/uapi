@@ -297,30 +297,37 @@ function build_schemas() {
 
 	for (let ep in ENDPOINTS) {
 		let mod = load_resource(ep.file);
-		let example_in;
-		try {
-			if (mod.fromUci != null) {
-				example_in = mod.fromUci({ '.name': 'cfg00', '.anonymous': false, '.type': mod.type });
-			} else {
+		let properties = {};
+
+		if (ep.kind == "collection") {
+			if (type(mod.schema_properties) == "object") {
+				for (let k in mod.schema_properties) properties[k] = mod.schema_properties[k];
+			}
+		} else {
+			let example_in;
+			try {
+				if (mod.fromUci != null) {
+					example_in = mod.fromUci({ '.name': 'cfg00', '.anonymous': false, '.type': mod.type });
+				} else {
+					example_in = { id: "example", managed: false };
+				}
+			} catch (e) {
 				example_in = { id: "example", managed: false };
 			}
-		} catch (e) {
-			example_in = { id: "example", managed: false };
-		}
 
-		let properties = {};
-		for (let k in example_in) {
-			let v = example_in[k];
-			let prop;
-			if (type(v) == "bool") prop = { "type": "boolean" };
-			else if (type(v) == "int" || type(v) == "double") prop = { "type": "number" };
-			else if (type(v) == "array") prop = { "type": "array", "items": { "type": "string" } };
-			else if (type(v) == "object") prop = { "type": "object" };
-			else prop = { "type": "string", "nullable": true };
-			properties[k] = prop;
-		}
-		if (type(mod.schema_properties) == "object") {
-			for (let k in mod.schema_properties) properties[k] = mod.schema_properties[k];
+			for (let k in example_in) {
+				let v = example_in[k];
+				let prop;
+				if (type(v) == "bool") prop = { "type": "boolean" };
+				else if (type(v) == "int" || type(v) == "double") prop = { "type": "number" };
+				else if (type(v) == "array") prop = { "type": "array", "items": { "type": "string" } };
+				else if (type(v) == "object") prop = { "type": "object" };
+				else prop = { "type": "string", "nullable": true };
+				properties[k] = prop;
+			}
+			if (type(mod.schema_properties) == "object") {
+				for (let k in mod.schema_properties) properties[k] = mod.schema_properties[k];
+			}
 		}
 
 		schemas[schema_name(ep)] = {

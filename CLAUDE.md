@@ -147,6 +147,7 @@ Snapshot-and-restore catches the case where `ubus reload` returns an error. It d
 - **Token store:** sha256+salt hash in `/etc/config/uapi`. Cleartext token shown only once at creation. Re-read on every request (no in-memory cache, per "Concurrency"); newly created tokens take effect immediately, no `uhttpd reload` required.
 - **CLI:** `uapi-token create --name <label> --scope <s> [--scope <s>...]`, plus `list` / `show` / `revoke`. Scopes validated against the known tree, `--force` bypasses for forward-compat with unknown future endpoints.
 - **Wire format:** `Authorization: Bearer <token>` header.
+- **Public endpoints (no auth):** `/healthz` (liveness) and `/openapi.json` (spec discovery). Both still pass the TLS check; only the bearer requirement is waived.
 
 ### Scope model
 
@@ -182,6 +183,7 @@ A user who set `firewall:rules:ro` is protected even if they have `raw:rw`; the 
 
 - **TLS enforced for non-localhost.** Check uhttpd's `HTTPS=on` env var; if the request is not over TLS and the client is not on `127.0.0.1`/`::1`, return `403 tls_required`. This runs **before** auth.
 - TLS config inherited from uhttpd. Document that the default self-signed cert is not adequate for production; point operators at `acme.sh` / `luci-app-acme`.
+- **Insecure-test bypass.** If the marker file `/etc/uapi.insecure` exists, plain HTTP is accepted from any client. Intended for closed-network testing only; documented as a security hole. Every request that bypasses TLS via the marker emits a syslog `NOTICE` line (`uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>`) so operators can detect drift.
 - **Rate limiting:** not in v1. Operators add a reverse proxy if they need it.
 
 ### Audit log
@@ -262,8 +264,10 @@ Dotted notation with bracket indexing: `match.src_zone`, `dns[0]`, `rules[2].tar
 |----------|--------------|---------|-----------------------------------------------------------|
 | AUDIT    | NOTICE       | on      | Successful writes (POST/PUT/DELETE 2xx)                   |
 | ERROR    | WARN / ERR   | on      | Auth failures (401/403), all 5xx                          |
-| ACCESS   | INFO         | off     | Every request                                             |
-| DEBUG    | DEBUG        | off     | Per-ubus-call tracing, transaction steps                  |
+| ACCESS   | INFO         | off     | Every request (non-`/healthz`)                            |
+| DEBUG    | DEBUG        | off     | Per-ubus-call tracing                                     |
+
+The `/healthz` path is excluded from all categories so monitoring traffic does not drown out the audit trail.
 
 Opt-in knobs in `/etc/config/uapi`:
 

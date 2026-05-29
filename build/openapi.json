@@ -3863,6 +3863,16 @@
 					},
 					"runtime": {
 						"type": "object"
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Encryption passphrase; accepted on write, masked on read"
+					},
+					"has_key": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "True if a key is configured (cleartext never returned)"
 					}
 				}
 			},
@@ -3912,12 +3922,25 @@
 				"type": "object",
 				"description": "uapi resource backed by uci dhcp.lease",
 				"properties": {
-					"id": {
+					"expires_at": {
+						"type": "integer",
+						"description": "Unix epoch seconds when the lease expires"
+					},
+					"mac": {
+						"type": "string",
+						"description": "Client MAC address"
+					},
+					"ip": {
+						"type": "string",
+						"description": "Assigned IP address"
+					},
+					"hostname": {
 						"type": "string",
 						"nullable": true
 					},
-					"managed": {
-						"type": "boolean"
+					"duid": {
+						"type": "string",
+						"nullable": true
 					}
 				}
 			},
@@ -3925,6 +3948,13 @@
 				"type": "object",
 				"description": "uapi resource backed by uci system.system",
 				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
 					"hostname": {
 						"type": "string",
 						"nullable": true
@@ -3958,12 +3988,10 @@
 						"nullable": true
 					},
 					"log_remote": {
-						"type": "string",
-						"nullable": true
+						"type": "boolean"
 					},
 					"urandom_seed": {
-						"type": "string",
-						"nullable": true
+						"type": "boolean"
 					},
 					"runtime": {
 						"type": "object"

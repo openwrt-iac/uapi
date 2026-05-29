@@ -1,7 +1,18 @@
 const HOSTNAME_RE = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
 
+function normalize_bool(v, default_val) {
+	if (v == null) return default_val;
+	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes")
+		return true;
+	if (v === false || v === "0" || v === "off" || v === "false" || v === "no")
+		return false;
+	return default_val;
+}
+
 function fromUci(section) {
 	return {
+		id: section['.name'],
+		managed: true,
 		hostname: section.hostname ?? null,
 		description: section.description ?? null,
 		notes: section.notes ?? null,
@@ -10,8 +21,8 @@ function fromUci(section) {
 		log_size: section.log_size ?? null,
 		log_ip: section.log_ip ?? null,
 		log_proto: section.log_proto ?? null,
-		log_remote: section.log_remote ?? null,
-		urandom_seed: section.urandom_seed ?? null,
+		log_remote: normalize_bool(section.log_remote, false),
+		urandom_seed: normalize_bool(section.urandom_seed, false),
 		runtime: {},
 	};
 }
@@ -26,8 +37,8 @@ function toUci(json) {
 	if (json.log_size != null) out.log_size = "" + json.log_size;
 	if (json.log_ip != null) out.log_ip = json.log_ip;
 	if (json.log_proto != null) out.log_proto = json.log_proto;
-	if (json.log_remote != null) out.log_remote = json.log_remote;
-	if (json.urandom_seed != null) out.urandom_seed = json.urandom_seed;
+	if (json.log_remote != null) out.log_remote = json.log_remote ? "1" : "0";
+	if (json.urandom_seed != null) out.urandom_seed = json.urandom_seed ? "1" : "0";
 	return out;
 }
 
@@ -56,8 +67,12 @@ function validate(json) {
 return {
 	package: "system",
 	type: "system",
-	reload: [],
+	reload: ["system", "log"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	schema_properties: {
+		log_remote: { type: "boolean" },
+		urandom_seed: { type: "boolean" },
+	},
 };

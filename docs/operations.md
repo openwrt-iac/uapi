@@ -50,8 +50,10 @@ uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<d
 
 - `request_id`: ULID; also returned in the `X-Request-Id` response header. The link between server-side log and client-visible response.
 - `token_name`: never the token value. `-` for unauthenticated failures (e.g. missing `Authorization`).
-- `severity`: `AUDIT` (writes), `WARN` (4xx auth failures), `ERROR` (5xx).
+- `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN` (401/403 auth failures), `ERROR` (5xx).
 - `code`: error code on failures, `-` on successful writes.
+
+`/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
 
 By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged. Optional knobs in `/etc/config/uapi`:
 
@@ -71,11 +73,21 @@ Not in v1. Operators wanting router-level metrics use `node_exporter` (available
 
 ```sh
 curl -k https://<router>/api/v1/healthz
-# 200 OK on the happy path
-# 503 service_unavailable if ubus is unreachable
+# 200 { "status": "ok", "version": "<version>" }
+# 503 { "status": "degraded", "errors": ["<ubus error>"] } when ubus is unreachable
 ```
 
 No auth required; TLS-for-non-localhost still applies. Monitors should poll healthz, not a real endpoint, to avoid burning audit-log noise.
+
+## Insecure-test bypass
+
+For closed-network testing only, creating `/etc/uapi.insecure` lets plain HTTP through from any client (the loopback bypass is always available; this opens it for remote hosts too). Every request that takes the bypass emits a syslog `NOTICE` line:
+
+```
+uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
+```
+
+so it shows up in `logread` and any remote-syslog collector. Delete the marker for production use.
 
 ## Capacity
 

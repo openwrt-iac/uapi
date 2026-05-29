@@ -87,5 +87,21 @@ return {
 	schema_properties: {
 		mode: { type: "string", enum: keys(VALID_MODES) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION) },
+		key: { type: "string", writeOnly: true,
+		       description: "Encryption passphrase; accepted on write, masked on read" },
+		has_key: { type: "boolean", readOnly: true,
+		           description: "True if a key is configured (cleartext never returned)" },
+	},
+	merge_for_patch: function(existing_section, existing_json, body) {
+		let merged = { ...existing_json };
+		for (let k in body) {
+			if (type(merged[k]) == "object" && type(body[k]) == "object")
+				merged[k] = { ...merged[k], ...body[k] };
+			else
+				merged[k] = body[k];
+		}
+		if (body.key == null && existing_section.key != null)
+			merged.key = existing_section.key;
+		return merged;
 	},
 };

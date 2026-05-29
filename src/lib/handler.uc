@@ -22,6 +22,17 @@ function translate_tx(ctx, result) {
 	                    sprintf("transaction returned unknown kind %J", result.kind));
 }
 
+function default_merge_for_patch(existing_section, existing_json, body) {
+	let merged = { ...existing_json };
+	for (let k in body) {
+		if (type(merged[k]) == "object" && type(body[k]) == "object")
+			merged[k] = { ...merged[k], ...body[k] };
+		else
+			merged[k] = body[k];
+	}
+	return merged;
+}
+
 function load_section(conn, pkg, id) {
 	let s = conn.uci_get(pkg, id);
 	if (!s) return null;
@@ -129,10 +140,9 @@ function make(resource, opts) {
 			return errors.error(ctx, "unmanaged_resource",
 			                    "Section is not uapi-managed; adopt it first");
 
-		let merged_json = { ...resource.fromUci(existing), ...body };
-		if (body.match != null) {
-			merged_json.match = { ...resource.fromUci(existing).match, ...body.match };
-		}
+		let existing_json = resource.fromUci(existing);
+		let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
+		let merged_json = merge_fn(existing, existing_json, body);
 
 		let errs = resource.validate(merged_json, conn);
 		if (length(errs) > 0)

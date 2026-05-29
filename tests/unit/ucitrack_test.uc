@@ -86,7 +86,9 @@ t.describe('ucitrack.reload_services, fallback table', () => {
 t.describe('ucitrack.reload_services, unknown package', () => {
 	t.it('returns known=false with empty service list', () => {
 		let c = ubus.stub();
-		let r = ucitrack.reload_services(c, 'totally_unknown_pkg');
+		let r = ucitrack.reload_services(c, 'totally_unknown_pkg', {
+			init_exists: function(pkg) { return false; },
+		});
 		t.assert_false(r.known);
 		t.assert_deep_equal(r.services, []);
 	});
@@ -99,5 +101,24 @@ t.describe('ucitrack.reload_services, unknown package', () => {
 		});
 		let r = ucitrack.reload_services(c, 'network');
 		t.assert_deep_equal(r.services, ['custom_netd']);
+	});
+});
+
+t.describe('ucitrack.reload_services, init.d fallback', () => {
+	t.it('falls back to /etc/init.d/<package> when ucitrack and FALLBACK are silent', () => {
+		let c = ubus.stub();
+		let r = ucitrack.reload_services(c, 'dropbear', {
+			init_exists: function(pkg) { return pkg == 'dropbear'; },
+		});
+		t.assert_true(r.known);
+		t.assert_deep_equal(r.services, ['dropbear']);
+	});
+
+	t.it('FALLBACK table wins over the init.d fallback', () => {
+		let c = ubus.stub();
+		let r = ucitrack.reload_services(c, 'dhcp', {
+			init_exists: function(pkg) { return true; },
+		});
+		t.assert_deep_equal(r.services, ['dnsmasq']);
 	});
 });

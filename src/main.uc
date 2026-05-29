@@ -63,14 +63,28 @@ const REASON = {
 
 log.openlog("uapi", log.LOG_PID, log.LOG_DAEMON);
 
-function tls_check_passes(env) {
-	if (env.HTTPS == "on") return true;
+function tls_check(env) {
+	if (env.HTTPS == "on") return { ok: true, via_marker: false };
 	let addr = env.REMOTE_ADDR ?? "";
 	if (addr == "127.0.0.1" || addr == "::1" || addr == "::ffff:127.0.0.1")
-		return true;
-	if (fs.stat(INSECURE_MARKER) != null) return true;
-	return false;
+		return { ok: true, via_marker: false };
+	if (fs.stat(INSECURE_MARKER) != null) return { ok: true, via_marker: true };
+	return { ok: false, via_marker: false };
 }
+
+function load_logging_config() {
+	let cfg = { access: false, debug: false };
+	let conn;
+	try { conn = bus.connect(); } catch (e) { return cfg; }
+	conn.uci_foreach('uapi', 'logging', function(s) {
+		if (s.access == "1" || s.access == "true") cfg.access = true;
+		if (s.debug == "1" || s.debug == "true") cfg.debug = true;
+		return false;
+	});
+	return cfg;
+}
+
+const LOGGING = load_logging_config();
 
 function send(resp) {
 	let reason = REASON["" + resp.status] ?? "Status";
@@ -131,12 +145,15 @@ function hash_bearer(salt, bearer) {
 }
 
 function audit_line(ctx, severity, code, method, path, status, duration_ms, token_name) {
+	let label = severity == log.LOG_NOTICE  ? "AUDIT"
+	          : severity == log.LOG_INFO    ? "ACCESS"
+	          : severity == log.LOG_WARNING ? "WARN"
+	          :                                "ERROR";
 	log.syslog(severity,
 		sprintf("%s %s %s %s %s %s %d [%dms]",
 			ctx.request_id,
 			token_name ?? "-",
-			severity == log.LOG_NOTICE ? "AUDIT"
-				: (severity == log.LOG_WARNING ? "WARN" : "ERROR"),
+			label,
 			code ?? "-",
 			method, path, status, duration_ms));
 }
@@ -180,9 +197,11 @@ function dispatch(env) {
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
 
-	if (!tls_check_passes(env))
+	let tls = tls_check(env);
+	if (!tls.ok)
 		return { ctx, resp: errors.error(ctx, "tls_required",
 		                                 "HTTPS required for non-localhost requests") };
+	ctx.via_insecure_marker = tls.via_marker;
 
 	if (path == "/openapi.json") {
 		if (method != "GET")
@@ -209,9 +228,12 @@ function dispatch(env) {
 			conn.call("system", "info", {});
 		} catch (e) { probe_err = "" + e; }
 		if (probe_err != null) {
-			let r = errors.error(ctx, "service_unavailable", "ubus probe failed");
-			r.body.errors = [probe_err];
-			return { ctx, resp: r };
+			return { ctx, resp: {
+				status: 503,
+				headers: { "Content-Type": "application/json",
+				           "X-Request-Id": ctx.request_id },
+				body: { status: "degraded", errors: [probe_err] },
+			} };
 		}
 		return { ctx, resp: errors.ok(ctx, { status: "ok", version: VERSION }) };
 	}
@@ -231,7 +253,7 @@ function dispatch(env) {
 	let query = parse_query(env.QUERY_STRING);
 
 	let conn;
-	try { conn = bus.connect(); }
+	try { conn = bus.connect({ debug: LOGGING.debug }); }
 	catch (e) {
 		return { ctx, resp: errors.error(ctx, "service_unavailable",
 		                                 "ubus unreachable") };
@@ -325,14 +347,28 @@ global.handle_request = function(env) {
 	let is_write = method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE";
 	let is_audit_path = path != "/healthz";
 	let code = (resp.body != null && type(resp.body) == "object") ? resp.body.code : null;
+	let token_name = token != null ? token.name : null;
+	let is_auth_failure = resp.status == 401 || resp.status == 403;
+	let is_server_err = resp.status >= 500;
 
 	if (resp.status >= 200 && resp.status < 300 && is_write && is_audit_path) {
 		audit_line(ctx, log.LOG_NOTICE, null, method, path, resp.status, duration_ms,
-		           token != null ? token.name : null);
-	} else if (resp.status >= 400) {
-		audit_line(ctx, resp.status >= 500 ? log.LOG_ERR : log.LOG_WARNING,
-		           code, method, path, resp.status, duration_ms,
-		           token != null ? token.name : null);
+		           token_name);
+	} else if ((is_auth_failure || is_server_err) && is_audit_path) {
+		audit_line(ctx, is_server_err ? log.LOG_ERR : log.LOG_WARNING,
+		           code, method, path, resp.status, duration_ms, token_name);
+	}
+
+	if (LOGGING.access && is_audit_path) {
+		audit_line(ctx, log.LOG_INFO, code, method, path, resp.status, duration_ms,
+		           token_name);
+	}
+
+	if (ctx != null && ctx.via_insecure_marker && is_audit_path) {
+		log.syslog(log.LOG_NOTICE,
+			sprintf("uapi-insecure-bypass %s %s %s status=%d remote=%s",
+				ctx.request_id, method, path, resp.status,
+				env.REMOTE_ADDR ?? "-"));
 	}
 
 	send(resp);

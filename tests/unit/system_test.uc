@@ -23,6 +23,42 @@ t.describe('system resource', () => {
 		t.assert_equal(r.timezone, 'UTC');
 	});
 
+	t.it('fromUci stamps id and managed at the top level', () => {
+		let r = system_resource.fromUci({
+			'.name': 'cfg01', '.anonymous': true, '.type': 'system', hostname: 'OpenWrt',
+		});
+		t.assert_equal(r.id, 'cfg01');
+		t.assert_true(r.managed);
+	});
+
+	t.it('fromUci normalizes log_remote and urandom_seed to JSON booleans', () => {
+		let on = system_resource.fromUci({
+			'.name': 'cfg01', '.type': 'system',
+			log_remote: '1', urandom_seed: 'on',
+		});
+		t.assert_true(on.log_remote);
+		t.assert_true(on.urandom_seed);
+		let off = system_resource.fromUci({
+			'.name': 'cfg01', '.type': 'system',
+			log_remote: '0', urandom_seed: 'off',
+		});
+		t.assert_false(off.log_remote);
+		t.assert_false(off.urandom_seed);
+	});
+
+	t.it('toUci writes log_remote and urandom_seed as uci 1/0 strings', () => {
+		let on = system_resource.toUci({ log_remote: true, urandom_seed: true });
+		t.assert_equal(on.log_remote, '1');
+		t.assert_equal(on.urandom_seed, '1');
+		let off = system_resource.toUci({ log_remote: false, urandom_seed: false });
+		t.assert_equal(off.log_remote, '0');
+		t.assert_equal(off.urandom_seed, '0');
+	});
+
+	t.it('declares system and log reload services', () => {
+		t.assert_deep_equal(system_resource.reload, ['system', 'log']);
+	});
+
 	t.it('validate accepts simple hostnames', () => {
 		t.assert_equal(length(system_resource.validate({ hostname: 'router-1' }, null)), 0);
 		t.assert_equal(length(system_resource.validate({ hostname: 'router.lan' }, null)), 0);

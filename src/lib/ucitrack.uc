@@ -1,9 +1,17 @@
+let fs = require('fs');
+
 const FALLBACK = {
 	network: ["network"],
 	wireless: ["network"],
 	firewall: ["firewall"],
 	dhcp: ["dnsmasq"],
 };
+
+function default_init_exists(pkg) {
+	let st = null;
+	try { st = fs.stat("/etc/init.d/" + pkg); } catch (e) {}
+	return st != null;
+}
 
 function lookup_init(conn, pkg) {
 	let init = null;
@@ -18,7 +26,9 @@ function lookup_init(conn, pkg) {
 	return { init, affects };
 }
 
-function reload_services(conn, pkg) {
+function reload_services(conn, pkg, opts) {
+	let init_exists = (opts != null && opts.init_exists != null)
+	                  ? opts.init_exists : default_init_exists;
 	let entry = lookup_init(conn, pkg);
 	let services = [];
 	let known = false;
@@ -33,6 +43,9 @@ function reload_services(conn, pkg) {
 	} else if (FALLBACK[pkg]) {
 		known = true;
 		for (let s in FALLBACK[pkg]) push(services, s);
+	} else if (init_exists(pkg)) {
+		known = true;
+		push(services, pkg);
 	}
 
 	let seen = {};
