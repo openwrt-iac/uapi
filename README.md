@@ -8,6 +8,19 @@ Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates stan
 - 10 curated resources plus a generic `/raw/<package>/<id>` passthrough for the long tail.
 - OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v1/openapi.json`.
 
+## Why this approach
+
+Prior REST-for-OpenWrt attempts fell into three buckets, each with a structural reason it stalled. Thin wrappers over rpcd or luci-rpc exposed uci's anonymous-section IDs verbatim, so Terraform could never track a resource across applies, and rpcd sessions are awkward for service accounts. Out-of-process daemons in Python or Go drifted the moment LuCI or sysupgrade touched `/etc/config/`, and blew the footprint budget. Centralized config-push platforms (OpenWISP and friends) own the truth from a server and don't slot into a Terraform pull workflow.
+
+uapi sidesteps all three:
+
+- **Lives inside OpenWrt's runtime.** uhttpd-mod-ucode plus direct ubus calls means uci stays the single source of truth: no shadow state, no drift, no extra daemon to babysit.
+- **Stable IDs by construction.** uapi-created sections are ULID-named; pre-existing anonymous sections surface as `managed: false` with an explicit `adopt` flow.
+- **Atomic transactions with honest failure codes.** Snapshot, validate, commit, reload, restore-on-fail under a global flock. Every outcome is a distinct status (`200`, `422`, `423`, `500 reload_failed_restored`, `500 reload_failed_unrecovered`).
+- **Bearer tokens with hierarchical scopes.** No login dance, no session timeout. Exactly the primitive a CI pipeline wants.
+
+This works now because the substrate finally caught up: `ucode-mod-ubus`, `uhttpd-mod-ucode`, and apk-based packaging all shipped in the last cycle. Older attempts had to pick between lua, Python, and C; uapi picked the right moment to be small.
+
 Target platform: **OpenWrt 25.12+** (apk-based releases).
 
 ## Install
