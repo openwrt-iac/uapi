@@ -69,6 +69,10 @@ define Package/uapi/postinst
 # code until something else restarted uhttpd. Force a restart so new code is
 # in effect immediately after `apk add` / `apk upgrade uapi`.
 /etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+# Only show the bootstrap message when no token exists yet. The token store
+# survives upgrades and remove/reinstall (conffile), so on second-and-later
+# installs the operator already knows the drill.
+if ! uci -q show uapi 2>/dev/null | grep -q '=token$$'; then
 cat <<EOF
 
 uapi installed. Bootstrap:
@@ -82,6 +86,7 @@ Future upgrades from the project feed:
   apk update && apk upgrade uapi
 
 EOF
+fi
 exit 0
 endef
 
