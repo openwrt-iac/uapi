@@ -18,9 +18,10 @@ function read_version() {
 const VERSION = read_version();
 
 const ENDPOINTS = [
-	{ path: "/firewall/rules",     file: "firewall.rules.uc",     kind: "crud", domain: "firewall", subresource: "rules" },
-	{ path: "/firewall/zones",     file: "firewall.zones.uc",     kind: "crud", domain: "firewall", subresource: "zones" },
-	{ path: "/firewall/redirects", file: "firewall.redirects.uc", kind: "crud", domain: "firewall", subresource: "redirects" },
+	{ path: "/firewall/rules",        file: "firewall.rules.uc",        kind: "crud", domain: "firewall", subresource: "rules" },
+	{ path: "/firewall/zones",        file: "firewall.zones.uc",        kind: "crud", domain: "firewall", subresource: "zones" },
+	{ path: "/firewall/redirects",    file: "firewall.redirects.uc",    kind: "crud", domain: "firewall", subresource: "redirects" },
+	{ path: "/firewall/forwardings",  file: "firewall.forwardings.uc",  kind: "crud", domain: "firewall", subresource: "forwardings" },
 	{ path: "/network/interfaces", file: "network.interfaces.uc", kind: "crud", domain: "network",  subresource: "interfaces" },
 	{ path: "/network/devices",    file: "network.devices.uc",    kind: "crud", domain: "network",  subresource: "devices" },
 	{ path: "/wireless/devices",   file: "wireless.devices.uc",   kind: "crud", domain: "wireless", subresource: "devices" },

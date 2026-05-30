@@ -17,9 +17,10 @@ function load_resource(file) {
 }
 
 const RESOURCES = {
-	"firewall:rules":      handler.make(load_resource("firewall.rules.uc")),
-	"firewall:zones":      handler.make(load_resource("firewall.zones.uc")),
-	"firewall:redirects":  handler.make(load_resource("firewall.redirects.uc")),
+	"firewall:rules":        handler.make(load_resource("firewall.rules.uc")),
+	"firewall:zones":        handler.make(load_resource("firewall.zones.uc")),
+	"firewall:redirects":    handler.make(load_resource("firewall.redirects.uc")),
+	"firewall:forwardings":  handler.make(load_resource("firewall.forwardings.uc")),
 	"network:interfaces":  handler.make(load_resource("network.interfaces.uc")),
 	"network:devices":     handler.make(load_resource("network.devices.uc")),
 	"wireless:devices":    handler.make(load_resource("wireless.devices.uc")),
