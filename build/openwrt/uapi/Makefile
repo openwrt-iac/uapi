@@ -63,6 +63,12 @@ define Package/uapi/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 [ -x /etc/uci-defaults/99-uapi ] && /etc/uci-defaults/99-uapi && rm -f /etc/uci-defaults/99-uapi
+# uhttpd-mod-ucode compiles main.uc at parent startup and caches the VM. A
+# plain "reload" does not re-read the script, so upgrades that overwrite
+# /usr/share/uapi/*.uc would otherwise keep serving the previous version's
+# code until something else restarted uhttpd. Force a restart so new code is
+# in effect immediately after `apk add` / `apk upgrade uapi`.
+/etc/init.d/uhttpd restart >/dev/null 2>&1 || true
 cat <<EOF
 
 uapi installed. Bootstrap:
