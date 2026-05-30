@@ -133,6 +133,59 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(nm[0].code, 'invalid_format');
 	});
 
+	t.it('proto=wireguard requires private_key + addresses', () => {
+		let errs = interfaces.validate({ proto: 'wireguard' }, null);
+		let pk = filter(errs, function(e) { return e.field == "private_key"; });
+		let ad = filter(errs, function(e) { return e.field == "addresses"; });
+		t.assert_equal(pk[0].code, 'required');
+		t.assert_equal(ad[0].code, 'required');
+	});
+
+	t.it('proto=wireguard rejects bad private_key shape', () => {
+		let errs = interfaces.validate({
+			proto: 'wireguard', private_key: 'tooshort',
+			addresses: ['10.42.0.1/16'],
+		}, null);
+		let pk = filter(errs, function(e) { return e.field == "private_key"; });
+		t.assert_equal(pk[0].code, 'invalid_format');
+	});
+
+	t.it('proto=wireguard accepts a real-shape key + CIDRs', () => {
+		let errs = interfaces.validate({
+			proto: 'wireguard',
+			private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
+			addresses: ['10.42.0.1/16'],
+			listen_port: 51820,
+		}, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('fromUci on wireguard surfaces has_private_key but masks the key', () => {
+		let r = interfaces.fromUci({
+			'.name': 'wg1', '.anonymous': false, '.type': 'interface',
+			proto: 'wireguard', listen_port: '51820',
+			private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
+			addresses: ['10.42.0.1/16'],
+		});
+		t.assert_true(r.has_private_key);
+		t.assert_equal(r.private_key, null);
+		t.assert_deep_equal(r.addresses, ['10.42.0.1/16']);
+	});
+
+	t.it('merge_for_patch carries forward the existing private_key', () => {
+		let existing = {
+			'.name': 'wg1', '.anonymous': false, '.type': 'interface',
+			proto: 'wireguard',
+			private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
+			addresses: ['10.42.0.1/16'],
+		};
+		let merged = interfaces.merge_for_patch(existing,
+			interfaces.fromUci(existing), { listen_port: 51999 });
+		t.assert_equal(merged.private_key,
+			'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
+		t.assert_equal(merged.listen_port, 51999);
+	});
+
 	t.it('toUci stringifies numeric ip6assign', () => {
 		let u = interfaces.toUci({ proto: 'dhcp', ip6assign: 64 });
 		t.assert_equal(u.ip6assign, '64');

@@ -5582,7 +5582,8 @@
 							"pppoe",
 							"none",
 							"ppp",
-							"wwan"
+							"wwan",
+							"wireguard"
 						]
 					},
 					"ipaddr": {
@@ -5616,6 +5617,26 @@
 					},
 					"runtime": {
 						"type": "object"
+					},
+					"addresses": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"private_key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "WireGuard private key; accepted on write, masked on read"
+					},
+					"has_private_key": {
+						"type": "boolean",
+						"readOnly": true
+					},
+					"listen_port": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 65535
 					}
 				}
 			},
