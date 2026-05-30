@@ -1,0 +1,83 @@
+let values = require('values');
+let as_list = values.as_list;
+
+const PORT_RE = /^[A-Za-z0-9._-]+(:[tu*]+)?$/;
+
+function fromUci(section) {
+	let anonymous = !!section['.anonymous'];
+	return {
+		id: section['.name'],
+		managed: !anonymous,
+		device: section.device ?? null,
+		vlan: section.vlan ?? null,
+		ports: as_list(section.ports),
+		runtime: {},
+	};
+}
+
+function toUci(json) {
+	let out = {};
+	if (json.device != null) out.device = json.device;
+	if (json.vlan != null)   out.vlan = "" + json.vlan;
+	if (type(json.ports) == "array" && length(json.ports) > 0)
+		out.ports = json.ports;
+	return out;
+}
+
+function bridge_exists(conn, name) {
+	let found = false;
+	conn.uci_foreach('network', 'device', function(s) {
+		if (s.name == name && s.type == "bridge") { found = true; return false; }
+	});
+	return found;
+}
+
+function validate(json, conn) {
+	let errs = [];
+
+	if (type(json) != "object") {
+		push(errs, { field: "", code: "invalid_type",
+		             message: "body must be a JSON object" });
+		return errs;
+	}
+
+	if (json.device == null || json.device == "")
+		push(errs, { field: "device", code: "required", message: "is required" });
+
+	if (json.vlan == null)
+		push(errs, { field: "vlan", code: "required", message: "is required" });
+	else {
+		let v = int(json.vlan);
+		if (v < 1 || v > 4094)
+			push(errs, { field: "vlan", code: "out_of_range",
+			             message: "must be 1-4094" });
+	}
+
+	let ports = as_list(json.ports);
+	for (let i = 0; i < length(ports); i++) {
+		if (!match(ports[i], PORT_RE))
+			push(errs, { field: sprintf("ports[%d]", i), code: "invalid_format",
+			             message: "must match <name>[:t|:u|:*] (e.g. eth0:t)" });
+	}
+
+	if (conn != null && json.device != null && json.device != "") {
+		if (!bridge_exists(conn, json.device))
+			push(errs, { field: "device", code: "conflict",
+			             message: sprintf("bridge %J does not exist", json.device) });
+	}
+
+	return errs;
+}
+
+return {
+	package: "network",
+	type: "bridge-vlan",
+	reload: ["network"],
+	fromUci: fromUci,
+	toUci: toUci,
+	validate: validate,
+	schema_properties: {
+		vlan: { type: "integer", minimum: 1, maximum: 4094 },
+		ports: { type: "array", items: { type: "string" } },
+	},
+};
