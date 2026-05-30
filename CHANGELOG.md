@@ -7,6 +7,15 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [1.0.1] - 2026-05-30
+
+Packaging fixes for the upgrade path. No API surface change; existing clients see no difference.
+
+### Fixed
+
+- **`apk upgrade uapi` now picks up the new code immediately.** uhttpd-mod-ucode compiles `main.uc` at parent startup and caches the VM; a plain reload does not re-read the script. 1.0.0's postinst only ran the uci-defaults wiring (which self-deletes after first install) and never told uhttpd to restart on upgrade, so operators upgrading from 1.0.0 would keep serving the previous compiled code until they manually `/etc/init.d/uhttpd restart`. 1.0.1's postinst restarts uhttpd unconditionally after the uci-defaults dance.
+- **Bootstrap message no longer shown on upgrades.** The "Create a token / Verify reachable / OpenAPI spec at" banner only prints on first install (no tokens defined yet). Upgrades and remove/reinstall (where the conffile-preserved token store survives) suppress it.
+
 ## [1.0.0] - 2026-05-29
 
 First stable release. Identical surface and behavior to 1.0.0-rc2; the version bump promotes the release candidate after CI and end-to-end testing confirmed the post-rc1 architectural changes (real-exit-code reload via `fs.popen`, TOCTOU fix, mid-tree scope wildcards, observability knobs, full integration coverage for every curated resource) hold up under real ubus/uci/netifd.
@@ -98,7 +107,8 @@ First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a s
 - uci-defaults install hook wires `uhttpd.main.ucode_prefix` and self-deletes; pre-remove hook unwires it.
 - Release-tier CI builds the APK and runs a full install/use/remove smoke test in a fresh QEMU VM.
 
-[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/raspbeguy/uapi/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc2...v1.0.0
 [1.0.0-rc2]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc1...v1.0.0-rc2
 [1.0.0-rc1]: https://github.com/raspbeguy/uapi/releases/tag/v1.0.0-rc1
