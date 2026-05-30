@@ -429,8 +429,13 @@ No default token shipped; would be a security hole.
 
 ### Versioning
 
-- Package version: semver, independent of API version.
-- `1.0.0` is the v1 launch.
+Package version follows semver, with the major version aligned to the API major:
+
+- **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. `/api/v(x+1)/` mounts alongside `/api/v<x>/` and both run for at least one OpenWrt release cycle (see "API versioning policy" below). Clients have a deprecation window to migrate.
+- **MINOR (`x.(y+1).0`)**: backwards-compatible additions only (the list of allowed changes is in "API versioning policy" below).
+- **PATCH (`x.y.(z+1)`)**: bug fixes only. No surface change.
+
+A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >= y`. `1.0.0` is the v1 launch.
 
 ### Distribution
 

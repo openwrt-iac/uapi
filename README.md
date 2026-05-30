@@ -76,6 +76,16 @@ The response carries the rule's stable `id` (a ULID with a one-character type pr
 - `CLAUDE.md`: the v1 design contract (everything above the implementation).
 - `build/openapi.json` (also `/api/v1/openapi.json` on a live router): the API contract.
 
+## Versioning
+
+uapi follows [semver](https://semver.org/), with the major version aligned to the API major:
+
+- **MAJOR**: breaking change. A new major (e.g. `2.0.0`) means `/api/v2/` mounts alongside `/api/v1/` and both run for at least one OpenWrt release cycle; the on-the-wire contract has changed and clients must migrate.
+- **MINOR**: backwards-compatible additions. New endpoints, new optional request/response fields, new error codes, new scopes.
+- **PATCH**: bug fixes only. No surface change.
+
+Concretely: a client tested against `1.2.0` keeps working against any future `1.y.z`. Pin a minimum minor if you depend on something introduced in it (`apk add 'uapi>=1.2.0'`). See `CLAUDE.md` "API versioning policy" for the precise list of what counts as a breaking vs additive change.
+
 ## License
 
 MIT.
