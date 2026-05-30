@@ -57,6 +57,11 @@ function make(resource, opts) {
 	let reload_services = resource.reload ?? [];
 	let tx_overrides = (opts != null && opts.tx != null) ? opts.tx : {};
 
+	// Dynamic-type hooks (default to static behavior).
+	let type_predicate = resource.type_predicate ?? function(t) { return t == sec_type; };
+	let create_type = resource.create_type ?? function(body) { return sec_type; };
+	let id_prefix = resource.id_prefix ?? substr(sec_type, 0, 1);
+
 	function tx_params(extra) {
 		let p = { package: pkg, reload_services: reload_services };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
@@ -67,7 +72,8 @@ function make(resource, opts) {
 	function list(conn, ctx, query) {
 		let want_managed = query.managed;
 		let out = [];
-		conn.uci_foreach(pkg, sec_type, function(s) {
+		conn.uci_foreach(pkg, null, function(s) {
+			if (!type_predicate(s['.type'])) return;
 			let r = resource.fromUci(s);
 			if (want_managed == "true" && !r.managed) return;
 			if (want_managed == "false" && r.managed) return;
@@ -78,7 +84,7 @@ function make(resource, opts) {
 
 	function get_one(conn, ctx, id) {
 		let s = load_section(conn, pkg, id);
-		if (!s || s['.type'] != sec_type)
+		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
 		return errors.ok(ctx, resource.fromUci(s));
@@ -90,14 +96,15 @@ function make(resource, opts) {
 				let errs = resource.validate(body, c);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				let new_id = ids.new_id(substr(sec_type, 0, 1));
+				let new_id = ids.new_id(id_prefix);
 				let new_opts = resource.toUci(body);
-				c.uci_create_section(p, new_id, sec_type);
+				let resolved_type = create_type(body);
+				c.uci_create_section(p, new_id, resolved_type);
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
 				let view = { ...new_opts };
 				view['.name'] = new_id;
 				view['.anonymous'] = false;
-				view['.type'] = sec_type;
+				view['.type'] = resolved_type;
 				return { ok: true, body: resource.fromUci(view) };
 			},
 		}));
@@ -112,7 +119,7 @@ function make(resource, opts) {
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				let existing = load_section(c, p, id);
-				if (!existing || existing['.type'] != sec_type)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				if (!resource.fromUci(existing).managed)
@@ -140,7 +147,7 @@ function make(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
-				if (!existing || existing['.type'] != sec_type)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				if (!resource.fromUci(existing).managed)
@@ -177,7 +184,7 @@ function make(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
-				if (!existing || existing['.type'] != sec_type)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				if (!resource.fromUci(existing).managed)
@@ -196,18 +203,17 @@ function make(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
-				if (!existing || existing['.type'] != sec_type)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				if (resource.fromUci(existing).managed)
 					return { ok: false, kind: "conflict",
 					         message: "Section is already managed" };
-				let new_id = ids.new_id(substr(sec_type, 0, 1));
+				let new_id = ids.new_id(id_prefix);
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };
 				view['.name'] = new_id;
 				view['.anonymous'] = false;
-				view['.type'] = sec_type;
 				return { ok: true, body: resource.fromUci(view) };
 			},
 		}));

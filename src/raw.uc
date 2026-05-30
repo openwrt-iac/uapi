@@ -30,7 +30,11 @@ const TYPE_DOMAIN_MAP = {
 
 function inferred_domain_path(pkg, sec_type) {
 	let key = pkg + "." + sec_type;
-	return TYPE_DOMAIN_MAP[key] ?? [pkg];
+	if (TYPE_DOMAIN_MAP[key]) return TYPE_DOMAIN_MAP[key];
+	// Dynamic section types: wireguard_<iface> peer sections map to network/wireguard_peers
+	if (pkg == "network" && type(sec_type) == "string" && substr(sec_type, 0, 10) == "wireguard_")
+		return ["network", "wireguard_peers"];
+	return [pkg];
 }
 
 function permits_raw(scopes, pkg, verb) {
