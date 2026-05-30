@@ -27,6 +27,8 @@ const RESOURCES = {
 	"network:rules":         handler.make(load_resource("network.rules.uc")),
 	"network:bridge_vlans":  handler.make(load_resource("network.bridge_vlans.uc")),
 	"network:wireguard_peers": handler.make(load_resource("network.wireguard_peers.uc")),
+	"system:timeservers":  handler.make(load_resource("system.timeservers.uc")),
+	"dropbear:instances":  handler.make(load_resource("dropbear.instances.uc")),
 	"wireless:devices":    handler.make(load_resource("wireless.devices.uc")),
 	"wireless:interfaces": handler.make(load_resource("wireless.interfaces.uc")),
 	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),

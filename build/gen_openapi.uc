@@ -37,6 +37,8 @@ const ENDPOINTS = [
 	{ path: "/dhcp/dnsmasq",       file: "dhcp.dnsmasq.uc",       kind: "singleton",  domain: "dhcp", subresource: "dnsmasq" },
 	{ path: "/dhcp/odhcpd",        file: "dhcp.odhcpd.uc",        kind: "singleton",  domain: "dhcp", subresource: "odhcpd" },
 	{ path: "/system",             file: "system.uc",             kind: "singleton", domain: "system" },
+	{ path: "/system/timeservers", file: "system.timeservers.uc", kind: "crud",      domain: "system",   subresource: "timeservers" },
+	{ path: "/dropbear/instances", file: "dropbear.instances.uc", kind: "crud",      domain: "dropbear", subresource: "instances" },
 ];
 
 function load_resource(file) {

@@ -17,10 +17,17 @@ t.describe('raw.inferred_domain_path', () => {
 	});
 
 	t.it('falls back to [package] for unknown section types', () => {
-		t.assert_deep_equal(raw.inferred_domain_path("dropbear", "dropbear"),
-		                    ["dropbear"]);
 		t.assert_deep_equal(raw.inferred_domain_path("openvpn", "openvpn"),
 		                    ["openvpn"]);
+		t.assert_deep_equal(raw.inferred_domain_path("ipsec", "tunnel"),
+		                    ["ipsec"]);
+	});
+
+	t.it('maps dynamic wireguard_<iface> peer types to network/wireguard_peers', () => {
+		t.assert_deep_equal(raw.inferred_domain_path("network", "wireguard_wg1"),
+		                    ["network", "wireguard_peers"]);
+		t.assert_deep_equal(raw.inferred_domain_path("network", "wireguard_VPNMLV"),
+		                    ["network", "wireguard_peers"]);
 	});
 });
 

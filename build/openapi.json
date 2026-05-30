@@ -5265,6 +5265,690 @@
 				}
 			}
 		},
+		"/system/timeservers": {
+			"get": {
+				"summary": "List timeservers",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SystemTimeservers"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a timeservers",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SystemTimeservers"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeservers"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/system/timeservers/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one timeservers",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeservers"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a timeservers",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SystemTimeservers"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeservers"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a timeservers",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeservers"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a timeservers",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/system/timeservers/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous timeservers",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeservers"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/dropbear/instances": {
+			"get": {
+				"summary": "List instances",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DropbearInstances"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a instances",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DropbearInstances"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/dropbear/instances/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one instances",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a instances",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DropbearInstances"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a instances",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a instances",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/dropbear/instances/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous instances",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -6831,6 +7515,85 @@
 						"type": "boolean"
 					},
 					"urandom_seed": {
+						"type": "boolean"
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SystemTimeservers": {
+				"type": "object",
+				"description": "uapi resource backed by uci system.timeserver",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"enable_server": {
+						"type": "boolean"
+					},
+					"interface": {
+						"type": "string",
+						"nullable": true
+					},
+					"server": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"use_dhcp": {
+						"type": "boolean"
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"DropbearInstances": {
+				"type": "object",
+				"description": "uapi resource backed by uci dropbear.dropbear",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enable": {
+						"type": "boolean"
+					},
+					"Port": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"PasswordAuth": {
+						"type": "boolean"
+					},
+					"RootPasswordAuth": {
+						"type": "boolean"
+					},
+					"RootLogin": {
+						"type": "boolean"
+					},
+					"BannerFile": {
+						"type": "string",
+						"nullable": true
+					},
+					"Interface": {
+						"type": "string",
+						"nullable": true
+					},
+					"GatewayPorts": {
 						"type": "boolean"
 					},
 					"runtime": {

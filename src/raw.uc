@@ -27,6 +27,8 @@ const TYPE_DOMAIN_MAP = {
 	"dhcp.dnsmasq":         ["dhcp", "dnsmasq"],
 	"dhcp.odhcpd":          ["dhcp", "odhcpd"],
 	"system.system":        ["system"],
+	"system.timeserver":    ["system", "timeservers"],
+	"dropbear.dropbear":    ["dropbear", "instances"],
 };
 
 function inferred_domain_path(pkg, sec_type) {

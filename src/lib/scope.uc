@@ -23,6 +23,9 @@ const KNOWN_PATHS = {
 	"dhcp:dnsmasq": true,
 	"dhcp:odhcpd": true,
 	"system": true,
+	"system:timeservers": true,
+	"dropbear": true,
+	"dropbear:instances": true,
 	"raw": true,
 };
 
