@@ -31,6 +31,17 @@ const TYPE_DOMAIN_MAP = {
 	"dropbear.dropbear":    ["dropbear", "instances"],
 	"uhttpd.uhttpd":        ["uhttpd", "instances"],
 	"uhttpd.cert":          ["uhttpd", "certs"],
+	"unbound.unbound":      ["unbound", "server"],
+	"sqm.queue":            ["sqm", "queues"],
+	"snmpd.agent":          ["snmpd", "agents"],
+	"snmpd.com2sec":        ["snmpd", "com2secs"],
+	"snmpd.group":          ["snmpd", "groups"],
+	"snmpd.access":         ["snmpd", "accesses"],
+	"snmpd.system":         ["snmpd", "system"],
+	"lldpd.lldpd":          ["lldpd", "config"],
+	"prometheus-node-exporter-lua.prometheus-node-exporter-lua": ["prometheus_node_exporter_lua", "config"],
+	"vnstat.vnstat":        ["vnstat", "config"],
+	"vnstat.interface":     ["vnstat", "interfaces"],
 };
 
 function inferred_domain_path(pkg, sec_type) {

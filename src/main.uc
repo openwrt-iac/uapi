@@ -36,13 +36,24 @@ const RESOURCES = {
 	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),
 	"dhcp:leases":         handler.make_collection(load_resource("dhcp.leases.uc")),
 	"dhcp:servers":        handler.make(load_resource("dhcp.servers.uc")),
+	"sqm:queues":          handler.make(load_resource("sqm.queues.uc")),
+	"snmpd:agents":        handler.make(load_resource("snmpd.agents.uc")),
+	"snmpd:com2secs":      handler.make(load_resource("snmpd.com2secs.uc")),
+	"snmpd:groups":        handler.make(load_resource("snmpd.groups.uc")),
+	"snmpd:accesses":      handler.make(load_resource("snmpd.accesses.uc")),
+	"vnstat:interfaces":   handler.make(load_resource("vnstat.interfaces.uc")),
 };
 
 const SINGLETONS = {
-	"system":            handler.make_singleton(load_resource("system.uc")),
-	"dhcp:dnsmasq":      handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
-	"dhcp:odhcpd":       handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
-	"firewall:defaults": handler.make_singleton(load_resource("firewall.defaults.uc")),
+	"system":             handler.make_singleton(load_resource("system.uc")),
+	"dhcp:dnsmasq":       handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
+	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
+	"firewall:defaults":  handler.make_singleton(load_resource("firewall.defaults.uc")),
+	"unbound:server":     handler.make_singleton(load_resource("unbound.server.uc")),
+	"snmpd:system":       handler.make_singleton(load_resource("snmpd.system.uc")),
+	"lldpd:config":       handler.make_singleton(load_resource("lldpd.config.uc")),
+	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua.config.uc")),
+	"vnstat:config":      handler.make_singleton(load_resource("vnstat.config.uc")),
 };
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();

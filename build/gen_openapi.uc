@@ -41,6 +41,17 @@ const ENDPOINTS = [
 	{ path: "/dropbear/instances", file: "dropbear.instances.uc", kind: "crud",      domain: "dropbear", subresource: "instances" },
 	{ path: "/uhttpd/instances",   file: "uhttpd.instances.uc",   kind: "crud",      domain: "uhttpd",   subresource: "instances" },
 	{ path: "/uhttpd/certs",       file: "uhttpd.certs.uc",       kind: "crud",      domain: "uhttpd",   subresource: "certs" },
+	{ path: "/unbound/server",     file: "unbound.server.uc",     kind: "singleton", domain: "unbound",  subresource: "server" },
+	{ path: "/sqm/queues",         file: "sqm.queues.uc",         kind: "crud",      domain: "sqm",      subresource: "queues" },
+	{ path: "/snmpd/agents",       file: "snmpd.agents.uc",       kind: "crud",      domain: "snmpd",    subresource: "agents" },
+	{ path: "/snmpd/com2secs",     file: "snmpd.com2secs.uc",     kind: "crud",      domain: "snmpd",    subresource: "com2secs" },
+	{ path: "/snmpd/groups",       file: "snmpd.groups.uc",       kind: "crud",      domain: "snmpd",    subresource: "groups" },
+	{ path: "/snmpd/accesses",     file: "snmpd.accesses.uc",     kind: "crud",      domain: "snmpd",    subresource: "accesses" },
+	{ path: "/snmpd/system",       file: "snmpd.system.uc",       kind: "singleton", domain: "snmpd",    subresource: "system" },
+	{ path: "/lldpd/config",       file: "lldpd.config.uc",       kind: "singleton", domain: "lldpd",    subresource: "config" },
+	{ path: "/prometheus_node_exporter_lua/config", file: "prometheus_node_exporter_lua.config.uc", kind: "singleton", domain: "prometheus_node_exporter_lua", subresource: "config" },
+	{ path: "/vnstat/config",      file: "vnstat.config.uc",      kind: "singleton", domain: "vnstat",   subresource: "config" },
+	{ path: "/vnstat/interfaces",  file: "vnstat.interfaces.uc",  kind: "crud",      domain: "vnstat",   subresource: "interfaces" },
 ];
 
 function load_resource(file) {

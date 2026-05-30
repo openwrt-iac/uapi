@@ -1,0 +1,63 @@
+let values = require('values');
+let normalize_bool = values.normalize_bool;
+let as_list = values.as_list;
+
+function fromUci(section) {
+	return {
+		id: section['.name'],
+		managed: true,
+		enable_cdp: normalize_bool(section.enable_cdp, false),
+		enable_fdp: normalize_bool(section.enable_fdp, false),
+		enable_sonmp: normalize_bool(section.enable_sonmp, false),
+		enable_edp: normalize_bool(section.enable_edp, false),
+		enable_lldpmed: normalize_bool(section.enable_lldpmed, false),
+		lldp_class: section.lldp_class ?? null,
+		lldp_description: normalize_bool(section.lldp_description, true),
+		lldp_capabilities: normalize_bool(section.lldp_capabilities, true),
+		lldp_mgmt_ip: section.lldp_mgmt_ip ?? null,
+		interface: as_list(section.interface),
+		runtime: {},
+	};
+}
+
+function toUci(json) {
+	let out = {};
+	let bool_fields = ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp",
+	                   "enable_lldpmed", "lldp_description", "lldp_capabilities"];
+	for (let f in bool_fields) {
+		if (json[f] != null) out[f] = json[f] ? "1" : "0";
+	}
+	if (json.lldp_class != null)   out.lldp_class = "" + json.lldp_class;
+	if (json.lldp_mgmt_ip != null) out.lldp_mgmt_ip = json.lldp_mgmt_ip;
+	if (type(json.interface) == "array" && length(json.interface) > 0)
+		out.interface = json.interface;
+	return out;
+}
+
+function validate(json) {
+	let errs = [];
+	if (type(json) != "object") {
+		push(errs, { field: "", code: "invalid_type",
+		             message: "body must be a JSON object" });
+		return errs;
+	}
+	if (json.lldp_class != null) {
+		let c = int(json.lldp_class);
+		if (c < 1 || c > 4)
+			push(errs, { field: "lldp_class", code: "out_of_range",
+			             message: "must be 1-4" });
+	}
+	return errs;
+}
+
+return {
+	package: "lldpd",
+	type: "lldpd",
+	reload: ["lldpd"],
+	fromUci: fromUci,
+	toUci: toUci,
+	validate: validate,
+	schema_properties: {
+		interface: { type: "array", items: { type: "string" } },
+	},
+};

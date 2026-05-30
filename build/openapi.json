@@ -6633,6 +6633,2508 @@
 				}
 			}
 		},
+		"/unbound/server": {
+			"get": {
+				"summary": "Get the unbound singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UnboundServer"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the unbound singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UnboundServer"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/sqm/queues": {
+			"get": {
+				"summary": "List queues",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SqmQueues"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a queues",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SqmQueues"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueues"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/sqm/queues/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one queues",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueues"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a queues",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SqmQueues"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueues"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a queues",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueues"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a queues",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/sqm/queues/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous queues",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueues"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/agents": {
+			"get": {
+				"summary": "List agents",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SnmpdAgents"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a agents",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdAgents"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgents"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/agents/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one agents",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgents"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a agents",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdAgents"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgents"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a agents",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgents"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a agents",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/agents/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous agents",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgents"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/com2secs": {
+			"get": {
+				"summary": "List com2secs",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SnmpdCom2secs"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a com2secs",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdCom2secs"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secs"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/com2secs/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one com2secs",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secs"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a com2secs",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdCom2secs"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secs"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a com2secs",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secs"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a com2secs",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/com2secs/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous com2secs",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secs"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/groups": {
+			"get": {
+				"summary": "List groups",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SnmpdGroups"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a groups",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdGroups"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroups"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/groups/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one groups",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroups"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a groups",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdGroups"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroups"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a groups",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroups"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a groups",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/groups/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous groups",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroups"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/accesses": {
+			"get": {
+				"summary": "List accesses",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/SnmpdAccesses"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a accesses",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdAccesses"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccesses"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/accesses/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one accesses",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccesses"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a accesses",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SnmpdAccesses"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccesses"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a accesses",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccesses"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a accesses",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/accesses/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous accesses",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccesses"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/snmpd/system": {
+			"get": {
+				"summary": "Get the snmpd singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdSystem"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the snmpd singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdSystem"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/lldpd/config": {
+			"get": {
+				"summary": "Get the lldpd singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LldpdConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the lldpd singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LldpdConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/prometheus_node_exporter_lua/config": {
+			"get": {
+				"summary": "Get the prometheus_node_exporter_lua singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the prometheus_node_exporter_lua singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/vnstat/config": {
+			"get": {
+				"summary": "Get the vnstat singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the vnstat singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/vnstat/interfaces": {
+			"get": {
+				"summary": "List interfaces",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/VnstatInterfaces"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"summary": "Create a interfaces",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VnstatInterfaces"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatInterfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/vnstat/interfaces/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one interfaces",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatInterfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"put": {
+				"summary": "Replace a interfaces",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VnstatInterfaces"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatInterfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Partially update a interfaces",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatInterfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"summary": "Delete a interfaces",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/vnstat/interfaces/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous interfaces",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VnstatInterfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -8422,6 +10924,505 @@
 					"country": {
 						"type": "string",
 						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"UnboundServer": {
+				"type": "object",
+				"description": "uapi resource backed by uci unbound.unbound",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"listen_port": {
+						"type": "string",
+						"nullable": true
+					},
+					"dhcp_link": {
+						"type": "string",
+						"enum": [
+							"none",
+							"odhcpd",
+							"dnsmasq"
+						]
+					},
+					"add_local_fqdn": {
+						"type": "string",
+						"nullable": true
+					},
+					"add_wan_fqdn": {
+						"type": "string",
+						"nullable": true
+					},
+					"dnssec_enabled": {
+						"type": "boolean"
+					},
+					"recursion": {
+						"type": "string",
+						"enum": [
+							"default",
+							"passive",
+							"aggressive"
+						]
+					},
+					"resource": {
+						"type": "string",
+						"enum": [
+							"tiny",
+							"small",
+							"medium",
+							"large",
+							"big",
+							"huge"
+						]
+					},
+					"protocol": {
+						"type": "string",
+						"enum": [
+							"auto",
+							"ip4_only",
+							"ip6_only",
+							"mixed"
+						]
+					},
+					"query_minimize": {
+						"type": "boolean"
+					},
+					"prefetch": {
+						"type": "boolean"
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SqmQueues": {
+				"type": "object",
+				"description": "uapi resource backed by uci sqm.queue",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"interface": {
+						"type": "string",
+						"nullable": true
+					},
+					"download": {
+						"type": "string",
+						"nullable": true
+					},
+					"upload": {
+						"type": "string",
+						"nullable": true
+					},
+					"qdisc": {
+						"type": "string",
+						"enum": [
+							"cake",
+							"fq_codel",
+							"pie",
+							"htb"
+						]
+					},
+					"script": {
+						"type": "string",
+						"enum": [
+							"piece_of_cake.qos",
+							"simple.qos",
+							"simplest.qos",
+							"layer_cake.qos"
+						]
+					},
+					"linklayer": {
+						"type": "string",
+						"enum": [
+							"none",
+							"ethernet",
+							"atm"
+						]
+					},
+					"overhead": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SnmpdAgents": {
+				"type": "object",
+				"description": "uapi resource backed by uci snmpd.agent",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"agentaddress": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SnmpdCom2secs": {
+				"type": "object",
+				"description": "uapi resource backed by uci snmpd.com2sec",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"secname": {
+						"type": "string",
+						"nullable": true
+					},
+					"source": {
+						"type": "string",
+						"nullable": true
+					},
+					"community": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SnmpdGroups": {
+				"type": "object",
+				"description": "uapi resource backed by uci snmpd.group",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"group": {
+						"type": "string",
+						"nullable": true
+					},
+					"version": {
+						"type": "string",
+						"enum": [
+							"v1",
+							"v2c",
+							"usm"
+						]
+					},
+					"secname": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SnmpdAccesses": {
+				"type": "object",
+				"description": "uapi resource backed by uci snmpd.access",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"group": {
+						"type": "string",
+						"nullable": true
+					},
+					"context": {
+						"type": "string",
+						"nullable": true
+					},
+					"version": {
+						"type": "string",
+						"enum": [
+							"any",
+							"v1",
+							"v2c",
+							"usm"
+						]
+					},
+					"level": {
+						"type": "string",
+						"enum": [
+							"noauth",
+							"auth",
+							"priv"
+						]
+					},
+					"prefix": {
+						"type": "string",
+						"enum": [
+							"exact",
+							"prefix"
+						]
+					},
+					"read": {
+						"type": "string",
+						"nullable": true
+					},
+					"write": {
+						"type": "string",
+						"nullable": true
+					},
+					"notify": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"SnmpdSystem": {
+				"type": "object",
+				"description": "uapi resource backed by uci snmpd.system",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"sysLocation": {
+						"type": "string",
+						"nullable": true
+					},
+					"sysContact": {
+						"type": "string",
+						"nullable": true
+					},
+					"sysName": {
+						"type": "string",
+						"nullable": true
+					},
+					"sysServices": {
+						"type": "string",
+						"nullable": true
+					},
+					"sysDescr": {
+						"type": "string",
+						"nullable": true
+					},
+					"sysObjectID": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"LldpdConfig": {
+				"type": "object",
+				"description": "uapi resource backed by uci lldpd.lldpd",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enable_cdp": {
+						"type": "boolean"
+					},
+					"enable_fdp": {
+						"type": "boolean"
+					},
+					"enable_sonmp": {
+						"type": "boolean"
+					},
+					"enable_edp": {
+						"type": "boolean"
+					},
+					"enable_lldpmed": {
+						"type": "boolean"
+					},
+					"lldp_class": {
+						"type": "string",
+						"nullable": true
+					},
+					"lldp_description": {
+						"type": "boolean"
+					},
+					"lldp_capabilities": {
+						"type": "boolean"
+					},
+					"lldp_mgmt_ip": {
+						"type": "string",
+						"nullable": true
+					},
+					"interface": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"PrometheusNodeExporterLuaConfig": {
+				"type": "object",
+				"description": "uapi resource backed by uci prometheus-node-exporter-lua.prometheus-node-exporter-lua",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"listen_ipv6": {
+						"type": "boolean"
+					},
+					"listen_interface": {
+						"type": "string",
+						"nullable": true
+					},
+					"listen_port": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					},
+					"cpu": {
+						"type": "boolean"
+					},
+					"meminfo": {
+						"type": "boolean"
+					},
+					"netdev": {
+						"type": "boolean"
+					},
+					"loadavg": {
+						"type": "boolean"
+					},
+					"filesystem": {
+						"type": "boolean"
+					},
+					"diskstats": {
+						"type": "boolean"
+					},
+					"uname": {
+						"type": "boolean"
+					},
+					"netstat": {
+						"type": "boolean"
+					},
+					"stat": {
+						"type": "boolean"
+					},
+					"vmstat": {
+						"type": "boolean"
+					},
+					"boottime": {
+						"type": "boolean"
+					},
+					"entropy": {
+						"type": "boolean"
+					},
+					"time": {
+						"type": "boolean"
+					},
+					"hwmon": {
+						"type": "boolean"
+					},
+					"textfile": {
+						"type": "boolean"
+					},
+					"thermal_zone": {
+						"type": "boolean"
+					},
+					"edac": {
+						"type": "boolean"
+					}
+				}
+			},
+			"VnstatConfig": {
+				"type": "object",
+				"description": "uapi resource backed by uci vnstat.vnstat",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"DatabaseDir": {
+						"type": "string",
+						"nullable": true
+					},
+					"Interface5MinHours": {
+						"type": "string",
+						"nullable": true
+					},
+					"MonthRotate": {
+						"type": "string",
+						"nullable": true
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"VnstatInterfaces": {
+				"type": "object",
+				"description": "uapi resource backed by uci vnstat.interface",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"interface": {
+						"type": "string",
+						"nullable": true
+					},
+					"enabled": {
+						"type": "boolean"
 					},
 					"runtime": {
 						"type": "object"
