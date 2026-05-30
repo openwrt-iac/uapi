@@ -35,9 +35,10 @@ const RESOURCES = {
 };
 
 const SINGLETONS = {
-	"system":       handler.make_singleton(load_resource("system.uc")),
-	"dhcp:dnsmasq": handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
-	"dhcp:odhcpd":  handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
+	"system":            handler.make_singleton(load_resource("system.uc")),
+	"dhcp:dnsmasq":      handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
+	"dhcp:odhcpd":       handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
+	"firewall:defaults": handler.make_singleton(load_resource("firewall.defaults.uc")),
 };
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();

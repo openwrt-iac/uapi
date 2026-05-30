@@ -13,6 +13,7 @@ const TYPE_DOMAIN_MAP = {
 	"firewall.zone":        ["firewall", "zones"],
 	"firewall.redirect":    ["firewall", "redirects"],
 	"firewall.forwarding":  ["firewall", "forwardings"],
+	"firewall.defaults":    ["firewall", "defaults"],
 	"network.interface":    ["network", "interfaces"],
 	"network.device":       ["network", "devices"],
 	"network.route":        ["network", "routes"],

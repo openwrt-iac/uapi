@@ -15,6 +15,7 @@ const KNOWN_PATHS = {
 	"firewall:rules": true,
 	"firewall:redirects": true,
 	"firewall:forwardings": true,
+	"firewall:defaults": true,
 	"dhcp": true,
 	"dhcp:hosts": true,
 	"dhcp:leases": true,

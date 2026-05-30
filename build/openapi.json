@@ -1390,6 +1390,96 @@
 				}
 			}
 		},
+		"/firewall/defaults": {
+			"get": {
+				"summary": "Get the firewall singleton",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallDefaults"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"summary": "Update the firewall singleton",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallDefaults"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
 		"/network/interfaces": {
 			"get": {
 				"summary": "List interfaces",
@@ -5893,6 +5983,69 @@
 						]
 					},
 					"enabled": {
+						"type": "boolean"
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"FirewallDefaults": {
+				"type": "object",
+				"description": "uapi resource backed by uci firewall.defaults",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"input": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
+					},
+					"output": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
+					},
+					"forward": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						]
+					},
+					"syn_flood": {
+						"type": "boolean"
+					},
+					"drop_invalid": {
+						"type": "boolean"
+					},
+					"synflood_burst": {
+						"type": "string",
+						"nullable": true
+					},
+					"synflood_rate": {
+						"type": "string",
+						"nullable": true
+					},
+					"tcp_syncookies": {
+						"type": "boolean"
+					},
+					"flow_offloading": {
+						"type": "boolean"
+					},
+					"flow_offloading_hw": {
 						"type": "boolean"
 					},
 					"runtime": {
