@@ -39,6 +39,8 @@ const ENDPOINTS = [
 	{ path: "/system",             file: "system.uc",             kind: "singleton", domain: "system" },
 	{ path: "/system/timeservers", file: "system.timeservers.uc", kind: "crud",      domain: "system",   subresource: "timeservers" },
 	{ path: "/dropbear/instances", file: "dropbear.instances.uc", kind: "crud",      domain: "dropbear", subresource: "instances" },
+	{ path: "/uhttpd/instances",   file: "uhttpd.instances.uc",   kind: "crud",      domain: "uhttpd",   subresource: "instances" },
+	{ path: "/uhttpd/certs",       file: "uhttpd.certs.uc",       kind: "crud",      domain: "uhttpd",   subresource: "certs" },
 ];
 
 function load_resource(file) {

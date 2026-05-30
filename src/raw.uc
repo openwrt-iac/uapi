@@ -29,6 +29,8 @@ const TYPE_DOMAIN_MAP = {
 	"system.system":        ["system"],
 	"system.timeserver":    ["system", "timeservers"],
 	"dropbear.dropbear":    ["dropbear", "instances"],
+	"uhttpd.uhttpd":        ["uhttpd", "instances"],
+	"uhttpd.cert":          ["uhttpd", "certs"],
 };
 
 function inferred_domain_path(pkg, sec_type) {

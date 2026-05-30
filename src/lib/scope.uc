@@ -26,6 +26,9 @@ const KNOWN_PATHS = {
 	"system:timeservers": true,
 	"dropbear": true,
 	"dropbear:instances": true,
+	"uhttpd": true,
+	"uhttpd:instances": true,
+	"uhttpd:certs": true,
 	"raw": true,
 };
 
