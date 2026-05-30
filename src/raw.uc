@@ -22,6 +22,9 @@ const TYPE_DOMAIN_MAP = {
 	"wireless.wifi-iface":  ["wireless", "interfaces"],
 	"dhcp.host":            ["dhcp", "hosts"],
 	"dhcp.lease":           ["dhcp", "leases"],
+	"dhcp.dhcp":            ["dhcp", "servers"],
+	"dhcp.dnsmasq":         ["dhcp", "dnsmasq"],
+	"dhcp.odhcpd":          ["dhcp", "odhcpd"],
 	"system.system":        ["system"],
 };
 

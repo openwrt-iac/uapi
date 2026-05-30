@@ -31,6 +31,9 @@ const ENDPOINTS = [
 	{ path: "/wireless/interfaces",file: "wireless.interfaces.uc",kind: "crud", domain: "wireless", subresource: "interfaces" },
 	{ path: "/dhcp/hosts",         file: "dhcp.hosts.uc",         kind: "crud", domain: "dhcp",     subresource: "hosts" },
 	{ path: "/dhcp/leases",        file: "dhcp.leases.uc",        kind: "collection", domain: "dhcp", subresource: "leases" },
+	{ path: "/dhcp/servers",       file: "dhcp.servers.uc",       kind: "crud",       domain: "dhcp", subresource: "servers" },
+	{ path: "/dhcp/dnsmasq",       file: "dhcp.dnsmasq.uc",       kind: "singleton",  domain: "dhcp", subresource: "dnsmasq" },
+	{ path: "/dhcp/odhcpd",        file: "dhcp.odhcpd.uc",        kind: "singleton",  domain: "dhcp", subresource: "odhcpd" },
 	{ path: "/system",             file: "system.uc",             kind: "singleton", domain: "system" },
 ];
 

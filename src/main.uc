@@ -30,10 +30,13 @@ const RESOURCES = {
 	"wireless:interfaces": handler.make(load_resource("wireless.interfaces.uc")),
 	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),
 	"dhcp:leases":         handler.make_collection(load_resource("dhcp.leases.uc")),
+	"dhcp:servers":        handler.make(load_resource("dhcp.servers.uc")),
 };
 
 const SINGLETONS = {
-	"system": handler.make_singleton(load_resource("system.uc")),
+	"system":       handler.make_singleton(load_resource("system.uc")),
+	"dhcp:dnsmasq": handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
+	"dhcp:odhcpd":  handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
 };
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
@@ -293,20 +296,30 @@ function dispatch(env) {
 		}
 		return { ctx, token, resp };
 	}
+	let singleton_key = null;
+	let singleton_scope_path = null;
 	if (length(parts) == 1) {
-		let h = SINGLETONS[parts[0]];
+		singleton_key = parts[0];
+		singleton_scope_path = [parts[0]];
+	} else if (length(parts) == 2) {
+		singleton_key = parts[0] + ":" + parts[1];
+		singleton_scope_path = [parts[0], parts[1]];
+	}
+	if (singleton_key != null) {
+		let h = SINGLETONS[singleton_key];
 		if (h != null) {
-			if (!scope.permits(token.scopes, [parts[0]], method_verb(method))) {
+			if (!scope.permits(token.scopes, singleton_scope_path, method_verb(method))) {
 				return { ctx, token,
 				         resp: errors.error(ctx, "insufficient_scope",
 				                            sprintf("Token does not permit this operation on %s",
-				                                    parts[0])) };
+				                                    join("/", singleton_scope_path))) };
 			}
 			let resp;
 			if (method == "GET") resp = h.get(conn, ctx);
 			else if (method == "PATCH") resp = h.patch(conn, ctx, body);
 			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on %s", method, parts[0]));
+			                         sprintf("Method %J not allowed on %s", method,
+			                                 join("/", singleton_scope_path)));
 			return { ctx, token, resp };
 		}
 	}
