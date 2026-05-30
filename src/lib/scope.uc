@@ -46,6 +46,9 @@ const KNOWN_PATHS = {
 	"vnstat": true,
 	"vnstat:config": true,
 	"vnstat:interfaces": true,
+	"packages": true,
+	"packages:installed": true,
+	"packages:feeds": true,
 	"raw": true,
 };
 

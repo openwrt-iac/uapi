@@ -11,6 +11,7 @@ let auth = require("auth");
 let scope = require("scope");
 let handler = require("handler");
 let bus = require("bus");
+let packages = require("packages");
 
 function load_resource(file) {
 	return loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
@@ -340,6 +341,40 @@ function dispatch(env) {
 			return { ctx, token, resp };
 		}
 	}
+	if (parts[0] == "packages" && length(parts) >= 2) {
+		let sub = parts[1];
+		let id  = length(parts) >= 3 ? parts[2] : null;
+		let scope_path = ["packages", sub];
+		let verb = method_verb(method);
+		if (!scope.permits(token.scopes, scope_path, verb)) {
+			return { ctx, token,
+			         resp: errors.error(ctx, "insufficient_scope",
+			                            sprintf("Token does not permit this operation on packages/%s", sub)) };
+		}
+		let resp;
+		if (sub == "installed") {
+			if (method == "GET" && id == null)        resp = packages.list_installed(ctx);
+			else if (method == "GET")                  resp = packages.get_installed(ctx, id);
+			else if (method == "POST" && id == null)   resp = packages.install(ctx, body);
+			else if (method == "DELETE" && id != null) resp = packages.remove_installed(ctx, id);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on packages/installed%s",
+			                                 method, id != null ? "/<name>" : ""));
+		} else if (sub == "feeds") {
+			if (method == "GET" && id == null)        resp = packages.list_feeds(ctx);
+			else if (method == "GET")                  resp = packages.get_feed(ctx, id);
+			else if (method == "POST" && id == null)   resp = packages.create_feed(ctx, body);
+			else if (method == "DELETE" && id != null) resp = packages.remove_feed(ctx, id);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on packages/feeds%s",
+			                                 method, id != null ? "/<id>" : ""));
+		} else {
+			resp = errors.error(ctx, "not_found",
+			                    sprintf("Unknown packages subresource %J", sub));
+		}
+		return { ctx, token, resp };
+	}
+
 	if (length(parts) >= 2) {
 		let h = RESOURCES[parts[0] + ":" + parts[1]];
 		if (h != null) {

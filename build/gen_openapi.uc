@@ -248,6 +248,57 @@ function build_paths() {
 		            "responses": { "204": { "description": "Deleted" }, ...error_responses() } },
 	};
 
+	paths["/packages/installed"] = {
+		"get": {
+			"summary": "List installed apk packages",
+			"responses": { "200": {
+				"description": "OK",
+				"content": { "application/json": { "schema": {
+					"type": "array",
+					"items": { "$ref": "#/components/schemas/InstalledPackage" } } } },
+			}, ...error_responses() }
+		},
+		"post": {
+			"summary": "Install a package (apk add)",
+			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageInstallRequest" } } } },
+			"responses": { "200": make_response(200, "Installed", "InstalledPackage"), ...error_responses() }
+		},
+	};
+	paths["/packages/installed/{name}"] = {
+		"parameters": [
+			{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+		],
+		"get":    { "summary": "Get info on an installed package",
+		            "responses": { "200": make_response(200, "OK", "InstalledPackage"), ...error_responses() } },
+		"delete": { "summary": "Remove a package (apk del)",
+		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+	};
+	paths["/packages/feeds"] = {
+		"get": {
+			"summary": "List apk feeds under /etc/apk/repositories.d",
+			"responses": { "200": {
+				"description": "OK",
+				"content": { "application/json": { "schema": {
+					"type": "array",
+					"items": { "$ref": "#/components/schemas/PackageFeed" } } } },
+			}, ...error_responses() }
+		},
+		"post": {
+			"summary": "Create a new apk feed file and run apk update",
+			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageFeedCreateRequest" } } } },
+			"responses": { "200": make_response(200, "Created", "PackageFeed"), ...error_responses() }
+		},
+	};
+	paths["/packages/feeds/{id}"] = {
+		"parameters": [
+			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+		],
+		"get":    { "summary": "Get one apk feed by id",
+		            "responses": { "200": make_response(200, "OK", "PackageFeed"), ...error_responses() } },
+		"delete": { "summary": "Delete an apk feed and re-run apk update",
+		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+	};
+
 	paths["/healthz"] = {
 		"get": {
 			"summary": "Liveness check (no auth required)",
@@ -316,6 +367,49 @@ function build_schemas() {
 					"reload_note": { "type": "string" },
 				} },
 			],
+		},
+		"InstalledPackage": {
+			"type": "object",
+			"required": ["id", "name", "installed"],
+			"properties": {
+				"id": { "type": "string", "description": "Package name (same as name)" },
+				"managed": { "type": "boolean" },
+				"name": { "type": "string" },
+				"version": { "type": "string", "nullable": true },
+				"installed": { "type": "boolean" },
+				"runtime": { "type": "object" },
+			},
+		},
+		"PackageInstallRequest": {
+			"type": "object",
+			"required": ["name"],
+			"properties": {
+				"name": { "type": "string",
+				          "description": "apk package name (^[A-Za-z0-9_+.-]+$)" },
+			},
+		},
+		"PackageFeed": {
+			"type": "object",
+			"required": ["id", "url"],
+			"properties": {
+				"id": { "type": "string" },
+				"managed": { "type": "boolean" },
+				"name": { "type": "string" },
+				"filename": { "type": "string" },
+				"url": { "type": "string" },
+				"enabled": { "type": "boolean" },
+				"update_status": { "type": "string" },
+				"runtime": { "type": "object" },
+			},
+		},
+		"PackageFeedCreateRequest": {
+			"type": "object",
+			"required": ["name", "url"],
+			"properties": {
+				"name": { "type": "string",
+				          "description": "Feed name (^[A-Za-z0-9_.-]+$); becomes <name>.list" },
+				"url":  { "type": "string", "description": "HTTP(S) URL of the package repository" },
+			},
 		},
 	};
 
