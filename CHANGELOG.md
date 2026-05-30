@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [1.0.0] - 2026-05-29
+
+First stable release. Identical surface and behavior to 1.0.0-rc2; the version bump promotes the release candidate after CI and end-to-end testing confirmed the post-rc1 architectural changes (real-exit-code reload via `fs.popen`, TOCTOU fix, mid-tree scope wildcards, observability knobs, full integration coverage for every curated resource) hold up under real ubus/uci/netifd.
+
+See the [1.0.0-rc1] and [1.0.0-rc2] entries below for the cumulative content shipping in v1.
+
 ## [1.0.0-rc2] - 2026-05-29
 
 Major release-candidate iteration driven by an exhaustive code review of rc1 and a follow-on round of architectural hardening. The on-the-wire API contract is unchanged from rc1; the response semantics are now actually honest about what they claim.
@@ -92,6 +98,7 @@ First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a s
 - uci-defaults install hook wires `uhttpd.main.ucode_prefix` and self-deletes; pre-remove hook unwires it.
 - Release-tier CI builds the APK and runs a full install/use/remove smoke test in a fresh QEMU VM.
 
-[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc2...HEAD
+[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc2...v1.0.0
 [1.0.0-rc2]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc1...v1.0.0-rc2
 [1.0.0-rc1]: https://github.com/raspbeguy/uapi/releases/tag/v1.0.0-rc1
