@@ -44,6 +44,20 @@ t.describe('packages.install validation', () => {
 		t.assert_equal(r.status, 422);
 		t.assert_equal(r.body.errors[0].code, "invalid_format");
 	});
+
+	t.it('rejects names starting with - (would be parsed as apk flag)', () => {
+		let r = pkg.install(ctx(), { name: "--allow-untrusted" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "name");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+
+	t.it('rejects names starting with . (path traversal)', () => {
+		let r = pkg.install(ctx(), { name: ".bashrc" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "name");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
 });
 
 t.describe('packages.remove_installed validation', () => {
@@ -84,6 +98,20 @@ t.describe('packages.create_feed validation', () => {
 		let r = pkg.create_feed(ctx(), { name: "../etc/foo", url: "https://example.com/x" });
 		t.assert_equal(r.status, 422);
 		t.assert_equal(r.body.errors[0].field, "name");
+	});
+
+	t.it('rejects feed name starting with . (directory escape)', () => {
+		let r = pkg.create_feed(ctx(), { name: ".hidden", url: "https://example.com/x" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "name");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+
+	t.it('rejects feed name starting with - (would be parsed as apk flag)', () => {
+		let r = pkg.create_feed(ctx(), { name: "-rf", url: "https://example.com/x" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "name");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
 	});
 });
 

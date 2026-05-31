@@ -343,6 +343,16 @@ function dispatch(env) {
 	}
 	if (parts[0] == "packages" && length(parts) >= 2) {
 		let sub = parts[1];
+		if (sub != "installed" && sub != "feeds") {
+			return { ctx, token,
+			         resp: errors.error(ctx, "not_found",
+			                            sprintf("Unknown packages subresource %J", sub)) };
+		}
+		if (length(parts) > 3) {
+			return { ctx, token,
+			         resp: errors.error(ctx, "not_found",
+			                            sprintf("Unknown sub-path under packages/%s", sub)) };
+		}
 		let id  = length(parts) >= 3 ? parts[2] : null;
 		let scope_path = ["packages", sub];
 		let verb = method_verb(method);
@@ -360,7 +370,7 @@ function dispatch(env) {
 			else resp = errors.error(ctx, "method_not_allowed",
 			                         sprintf("Method %J not allowed on packages/installed%s",
 			                                 method, id != null ? "/<name>" : ""));
-		} else if (sub == "feeds") {
+		} else {
 			if (method == "GET" && id == null)        resp = packages.list_feeds(ctx);
 			else if (method == "GET")                  resp = packages.get_feed(ctx, id);
 			else if (method == "POST" && id == null)   resp = packages.create_feed(ctx, body);
@@ -368,9 +378,6 @@ function dispatch(env) {
 			else resp = errors.error(ctx, "method_not_allowed",
 			                         sprintf("Method %J not allowed on packages/feeds%s",
 			                                 method, id != null ? "/<id>" : ""));
-		} else {
-			resp = errors.error(ctx, "not_found",
-			                    sprintf("Unknown packages subresource %J", sub));
 		}
 		return { ctx, token, resp };
 	}

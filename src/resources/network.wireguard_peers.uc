@@ -19,7 +19,6 @@ function fromUci(section) {
 		interface: parent,
 		description: section.description ?? null,
 		public_key: section.public_key ?? null,
-		preshared_key: (section.preshared_key != null && section.preshared_key != "") ? "(set)" : null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
 		allowed_ips: as_list(section.allowed_ips),
 		endpoint_host: section.endpoint_host ?? null,
@@ -35,8 +34,7 @@ function toUci(json) {
 	let out = {};
 	if (json.description != null)    out.description = json.description;
 	if (json.public_key != null)     out.public_key = json.public_key;
-	// Only write preshared_key if explicitly provided AND not the "(set)" mask
-	if (json.preshared_key != null && json.preshared_key != "(set)")
+	if (json.preshared_key != null)
 		out.preshared_key = json.preshared_key;
 	if (type(json.allowed_ips) == "array" && length(json.allowed_ips) > 0)
 		out.allowed_ips = json.allowed_ips;
@@ -76,7 +74,7 @@ function validate(json, conn) {
 		push(errs, { field: "public_key", code: "invalid_format",
 		             message: "must be a 44-char base64 WireGuard public key" });
 
-	if (json.preshared_key != null && json.preshared_key != "" && json.preshared_key != "(set)"
+	if (json.preshared_key != null && json.preshared_key != ""
 	    && !match(json.preshared_key, WG_KEY_RE))
 		push(errs, { field: "preshared_key", code: "invalid_format",
 		             message: "must be a 44-char base64 WireGuard preshared key" });
@@ -126,6 +124,7 @@ function merge_for_patch(existing_section, existing_json, body) {
 	// Carry forward the preshared_key when PATCH omits it (it's masked in read).
 	if (body.preshared_key == null && existing_section.preshared_key != null)
 		merged.preshared_key = existing_section.preshared_key;
+	delete merged.has_preshared_key;
 	return merged;
 }
 

@@ -1,22 +1,26 @@
 let fs = require('fs');
 let errors = require('errors');
+let transaction = require('transaction');
 
-const PKG_NAME_RE = /^[A-Za-z0-9_+.-]+$/;
+const PKG_NAME_RE  = /^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$/;
+const FEED_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const FEEDS_DIR = "/etc/apk/repositories.d";
-const FEED_NAME_RE = /^[A-Za-z0-9_.-]+$/;
-
-function shell_quote_safe(s) {
-	// Strict allowlist used after the regex above; this is belt-and-suspenders.
-	return s;
-}
 
 function apk_exec(args) {
 	let cmd = "apk " + args + " 2>&1";
 	let p = fs.popen(cmd, "r");
-	if (p == null) return { ok: false, error: sprintf("could not exec apk %s", args) };
+	if (p == null) return { ok: false, exit_code: -1,
+	                        output: sprintf("could not exec apk %s", args) };
 	let output = p.read("all") ?? "";
 	let exit_code = p.close();
 	return { ok: exit_code == 0, exit_code: exit_code, output: trim(output) };
+}
+
+function audit_apk_failure(ctx, action, name, r) {
+	let log = require('log');
+	log.syslog(log.LOG_WARNING,
+		sprintf("uapi-pkg-failure %s action=%s name=%J exit=%d output=%J",
+			ctx.request_id, action, name, r.exit_code, r.output));
 }
 
 function list_installed() {
@@ -34,18 +38,21 @@ function list_installed() {
 }
 
 function info_one(name) {
-	let p = fs.popen(sprintf("apk info -e %s 2>&1", name), "r");
-	if (p == null) return null;
-	let raw = trim(p.read("all") ?? "");
-	let exit_code = p.close();
-	if (exit_code != 0 || raw == "") return null;
-	// Fetch version too
-	let pv = fs.popen(sprintf("apk info %s 2>&1 | head -1", name), "r");
-	let version_line = pv ? trim(pv.read("all") ?? "") : "";
-	if (pv) pv.close();
+	if (!match(name, PKG_NAME_RE)) return null;
+	let exists = apk_exec(sprintf("info -e -- %s", name));
+	if (!exists.ok || exists.output == "") return null;
+	let info = apk_exec(sprintf("info -- %s", name));
 	let version = null;
-	let m = match(version_line, /^[A-Za-z0-9_+.-]+-([^[:space:]]+)/);
-	if (m) version = m[1];
+	if (info.ok) {
+		let first_line = "";
+		for (let line in split(info.output, "\n")) {
+			let t = trim(line);
+			if (t != "") { first_line = t; break; }
+		}
+		let m = match(first_line, /^[A-Za-z0-9_+.-]+-([^[:space:]-][^[:space:]]*)\s/);
+		if (!m) m = match(first_line, /^[A-Za-z0-9_+.-]+-([0-9][^[:space:]]*)/);
+		if (m) version = m[1];
+	}
 	return { id: name, managed: true, name: name,
 	         installed: true, version: version, runtime: {} };
 }
@@ -78,13 +85,26 @@ function install_handler(ctx, body) {
 	if (!match(name, PKG_NAME_RE))
 		return errors.validation_failed(ctx,
 			[errors.field_error("name", "invalid_format",
-			                    "must match ^[A-Za-z0-9_+.-]+$")]);
-	let r = apk_exec("add " + name);
-	if (!r.ok)
+			                    "must match ^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$")]);
+
+	let r = transaction.with_lock({ fn: function() {
+		let exec = apk_exec(sprintf("add -- %s", name));
+		return { ok: exec.ok, exec: exec };
+	}});
+	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
-			sprintf("apk add %s failed (exit %d): %s", name, r.exit_code, r.output));
-	let info = info_one(name) ?? { id: name, name: name, managed: true,
-	                                installed: true, version: null, runtime: {} };
+			sprintf("transaction lock file not available: %s", r.error));
+	if (!r.exec.ok) {
+		audit_apk_failure(ctx, "install", name, r.exec);
+		return errors.error(ctx, "internal_error",
+			sprintf("apk add failed (exit %d); see syslog %s for details",
+				r.exec.exit_code, ctx.request_id));
+	}
+	let info = info_one(name);
+	if (!info)
+		return errors.error(ctx, "internal_error",
+			sprintf("apk add reported success but %J is not visible to apk info", name));
 	return errors.ok(ctx, info);
 }
 
@@ -93,10 +113,21 @@ function remove_handler(ctx, name) {
 		return errors.error(ctx, "bad_request", sprintf("invalid package name %J", name));
 	if (!info_one(name))
 		return errors.error(ctx, "not_found", sprintf("package %J is not installed", name));
-	let r = apk_exec("del " + name);
-	if (!r.ok)
+
+	let r = transaction.with_lock({ fn: function() {
+		let exec = apk_exec(sprintf("del -- %s", name));
+		return { ok: exec.ok, exec: exec };
+	}});
+	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
-			sprintf("apk del %s failed (exit %d): %s", name, r.exit_code, r.output));
+			sprintf("transaction lock file not available: %s", r.error));
+	if (!r.exec.ok) {
+		audit_apk_failure(ctx, "remove", name, r.exec);
+		return errors.error(ctx, "internal_error",
+			sprintf("apk del failed (exit %d); see syslog %s for details",
+				r.exec.exit_code, ctx.request_id));
+	}
 	return errors.no_content(ctx);
 }
 
@@ -127,7 +158,7 @@ function get_feed_handler(ctx, id) {
 	let path = feed_path(id);
 	let fp = fs.open(path, "r");
 	if (!fp) return errors.error(ctx, "not_found",
-		sprintf("feed %J not found at %s", id, path));
+		sprintf("feed %J not found", id));
 	let url = trim(fp.read("line") ?? "");
 	fp.close();
 	return errors.ok(ctx, {
@@ -146,7 +177,7 @@ function create_feed_handler(ctx, body) {
 		push(errs, errors.field_error("name", "required", "is required"));
 	else if (!match(name, FEED_NAME_RE))
 		push(errs, errors.field_error("name", "invalid_format",
-		                              "must match ^[A-Za-z0-9_.-]+$"));
+		                              "must match ^[A-Za-z0-9_][A-Za-z0-9_.-]*$"));
 	if (type(url) != "string" || url == "")
 		push(errs, errors.field_error("url", "required", "is required"));
 	else if (!match(url, /^https?:\/\//))
@@ -154,21 +185,40 @@ function create_feed_handler(ctx, body) {
 		                              "must start with http:// or https://"));
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
-	let path = feed_path(name);
-	if (fs.stat(path) != null)
+
+	let r = transaction.with_lock({ fn: function() {
+		let path = feed_path(name);
+		if (fs.stat(path) != null) return { ok: false, kind: "conflict" };
+		let fp = fs.open(path, "wx");
+		if (!fp) fp = fs.open(path, "w");
+		if (!fp) return { ok: false, kind: "io_error" };
+		fp.write(url + "\n");
+		fp.close();
+		let upd = apk_exec("update");
+		return { ok: true, update_ok: upd.ok, update_output: upd.output,
+		         update_exit: upd.exit_code };
+	}});
+	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+			sprintf("transaction lock file not available: %s", r.error));
+	if (r.kind == "conflict")
 		return errors.error(ctx, "conflict",
-			sprintf("feed %J already exists at %s", name, path));
-	let fp = fs.open(path, "w");
-	if (!fp) return errors.error(ctx, "internal_error",
-		sprintf("could not create %s", path));
-	fp.write(url + "\n");
-	fp.close();
-	let r = apk_exec("update");
-	let body_out = { id: name, managed: true, name: name,
-	                 filename: name + ".list", url: url, enabled: true,
-	                 update_status: r.ok ? "ok" : sprintf("apk update failed: %s", r.output),
-	                 runtime: {} };
-	return errors.ok(ctx, body_out);
+			sprintf("feed %J already exists", name));
+	if (r.kind == "io_error")
+		return errors.error(ctx, "internal_error",
+			sprintf("could not create feed %J", name));
+
+	let update_status = "ok";
+	if (!r.update_ok) {
+		audit_apk_failure(ctx, "feed_create_update", name,
+			{ exit_code: r.update_exit, output: r.update_output });
+		update_status = sprintf("apk update failed (exit %d); see syslog %s",
+			r.update_exit, ctx.request_id);
+	}
+	return errors.ok(ctx, { id: name, managed: true, name: name,
+	                        filename: name + ".list", url: url, enabled: true,
+	                        update_status: update_status, runtime: {} });
 }
 
 function remove_feed_handler(ctx, id) {
@@ -177,21 +227,31 @@ function remove_feed_handler(ctx, id) {
 	let path = feed_path(id);
 	if (fs.stat(path) == null)
 		return errors.error(ctx, "not_found",
-			sprintf("feed %J not found at %s", id, path));
-	let r = fs.unlink(path);
-	if (!r) return errors.error(ctx, "internal_error",
-		sprintf("could not remove %s", path));
-	apk_exec("update");
+			sprintf("feed %J not found", id));
+
+	let r = transaction.with_lock({ fn: function() {
+		if (fs.stat(path) == null) return { ok: false, kind: "gone" };
+		if (!fs.unlink(path)) return { ok: false, kind: "io_error" };
+		apk_exec("update");
+		return { ok: true };
+	}});
+	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+			sprintf("transaction lock file not available: %s", r.error));
+	if (r.kind == "gone")
+		return errors.error(ctx, "not_found", sprintf("feed %J vanished", id));
+	if (r.kind == "io_error")
+		return errors.error(ctx, "internal_error",
+			sprintf("could not remove feed %J", id));
 	return errors.no_content(ctx);
 }
 
 return {
-	// /packages/installed handlers
 	list_installed: list_handler,
 	get_installed: get_one_handler,
 	install: install_handler,
 	remove_installed: remove_handler,
-	// /packages/feeds handlers
 	list_feeds: list_feeds_handler,
 	get_feed: get_feed_handler,
 	create_feed: create_feed_handler,

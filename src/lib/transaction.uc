@@ -106,4 +106,24 @@ function transaction(conn, params) {
 	return result;
 }
 
-return { transaction };
+function with_lock(params) {
+	let path = params.lock_path ?? LOCK_PATH;
+	let acquire = params.acquire ?? default_acquire;
+	let release = params.release ?? default_release;
+	let fn = params.fn;
+
+	let lock = acquire(path);
+	if (lock == null) return { ok: false, kind: "locked" };
+	if (type(lock) == "object" && lock.unavailable != null)
+		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
+
+	let result = null;
+	let caught = null;
+	try { result = fn(); }
+	catch (e) { caught = e; }
+	release(lock);
+	if (caught != null) die(caught);
+	return result ?? { ok: true };
+}
+
+return { transaction, with_lock };

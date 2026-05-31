@@ -35,15 +35,15 @@ t.describe('network.wireguard_peers.fromUci', () => {
 		t.assert_deep_equal(r.allowed_ips, ['10.42.0.2/32']);
 		t.assert_false(r.has_preshared_key);
 	});
-	t.it('masks preshared_key', () => {
+	t.it('masks preshared_key (omitted on read, only has_preshared_key surfaces)', () => {
 		let r = wgp.fromUci({
 			'.name': 'g_01hx', '.type': 'wireguard_wg1',
 			public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			preshared_key: 'sssssssssssssssssssssssssssssssssssssssssss=',
 			allowed_ips: ['10.42.0.2/32'],
 		});
-		t.assert_equal(r.preshared_key, '(set)');
 		t.assert_true(r.has_preshared_key);
+		t.assert_equal(r.preshared_key, null);
 	});
 });
 
@@ -94,5 +94,58 @@ t.describe('network.wireguard_peers.validate', () => {
 			persistent_keepalive: 25,
 		}, conn);
 		t.assert_equal(length(errs), 0);
+	});
+});
+
+let handler = require('handler');
+
+t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', () => {
+	function make_handler() {
+		return handler.make(wgp, {
+			tx: {
+				acquire: function() { return {}; },
+				release: function() {},
+				reload: function() { return null; },
+			},
+		});
+	}
+
+	function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+
+	function with_wg() {
+		return ubus.stub({
+			uci: {
+				network: {
+					wg1: { '.type': 'interface', '.anonymous': false,
+					       proto: 'wireguard',
+					       private_key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' },
+					g_existing: {
+						'.type': 'wireguard_wg1', '.anonymous': false,
+						public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+						allowed_ips: ['10.42.0.2/32'],
+					},
+				},
+			},
+		});
+	}
+
+	t.it('PUT response preserves the parent interface from the real uci type', () => {
+		let h = make_handler();
+		let c = with_wg();
+		let r = h.replace(c, ctx(), 'g_existing', {
+			interface: 'wg1',
+			public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			allowed_ips: ['10.42.0.5/32'],
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.interface, 'wg1');
+	});
+
+	t.it('PATCH response preserves the parent interface from the real uci type', () => {
+		let h = make_handler();
+		let c = with_wg();
+		let r = h.patch(c, ctx(), 'g_existing', { allowed_ips: ['10.42.0.6/32'] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.interface, 'wg1');
 	});
 });

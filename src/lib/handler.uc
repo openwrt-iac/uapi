@@ -135,7 +135,7 @@ function make(resource, opts) {
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
-				view['.type'] = sec_type;
+				view['.type'] = existing['.type'];
 				return { ok: true, body: resource.fromUci(view) };
 			},
 		}));
@@ -172,7 +172,7 @@ function make(resource, opts) {
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
-				view['.type'] = sec_type;
+				view['.type'] = existing['.type'];
 				return { ok: true, body: resource.fromUci(view) };
 			},
 		}));
