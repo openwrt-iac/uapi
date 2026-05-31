@@ -236,3 +236,164 @@ t.describe('uhttpd.instances self-lockout protection', () => {
 		t.assert_true(found);
 	});
 });
+
+t.describe('network.interfaces proto=dhcp client fields', () => {
+	t.it('fromUci surfaces peerdns/defaultroute/metric/hostname/clientid', () => {
+		let r = interfaces.fromUci({
+			'.name': 'wan', '.anonymous': false,
+			proto: 'dhcp', device: 'eth1',
+			peerdns: '0', defaultroute: '1', metric: '100',
+			hostname: 'router', clientid: 'aa:bb',
+		});
+		t.assert_equal(r.proto, 'dhcp');
+		t.assert_false(r.peerdns);
+		t.assert_true(r.defaultroute);
+		t.assert_equal(r.metric, '100');
+		t.assert_equal(r.hostname, 'router');
+		t.assert_equal(r.clientid, 'aa:bb');
+	});
+	t.it('toUci serializes the dhcp fields under proto=dhcp', () => {
+		let u = interfaces.toUci({
+			proto: 'dhcp', peerdns: false, defaultroute: true,
+			metric: 50, hostname: 'r', clientid: 'x',
+		});
+		t.assert_equal(u.peerdns, '0');
+		t.assert_equal(u.defaultroute, '1');
+		t.assert_equal(u.metric, '50');
+		t.assert_equal(u.hostname, 'r');
+		t.assert_equal(u.clientid, 'x');
+	});
+	t.it('validate rejects negative metric on dhcp', () => {
+		let errs = interfaces.validate({ proto: 'dhcp', device: 'eth1', metric: -3 });
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'metric' && e.code == 'out_of_range') { found = true; break; }
+		t.assert_true(found);
+	});
+});
+
+t.describe('network.interfaces proto=dhcpv6 client fields', () => {
+	t.it('fromUci surfaces reqprefix/reqaddress/ip6hint/ip6ifaceid/delegate/peerdns', () => {
+		let r = interfaces.fromUci({
+			'.name': 'wan6', '.anonymous': false,
+			proto: 'dhcpv6', device: 'eth1',
+			reqprefix: 'auto', reqaddress: 'try',
+			ip6hint: '2001:db8::/56', ip6ifaceid: '::1',
+			delegate: '0', peerdns: '0',
+		});
+		t.assert_equal(r.proto, 'dhcpv6');
+		t.assert_equal(r.reqprefix, 'auto');
+		t.assert_equal(r.reqaddress, 'try');
+		t.assert_equal(r.ip6hint, '2001:db8::/56');
+		t.assert_equal(r.ip6ifaceid, '::1');
+		t.assert_false(r.delegate);
+		t.assert_false(r.peerdns);
+	});
+	t.it('toUci serializes dhcpv6 fields', () => {
+		let u = interfaces.toUci({
+			proto: 'dhcpv6', reqprefix: 56, reqaddress: 'force',
+			ip6hint: '2001:db8::/56', delegate: true,
+		});
+		t.assert_equal(u.reqprefix, '56');
+		t.assert_equal(u.reqaddress, 'force');
+		t.assert_equal(u.delegate, '1');
+	});
+	t.it('validate rejects bad reqaddress enum', () => {
+		let errs = interfaces.validate({ proto: 'dhcpv6', reqaddress: 'always' });
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'reqaddress' && e.code == 'not_in_enum') { found = true; break; }
+		t.assert_true(found);
+	});
+	t.it('validate rejects malformed ip6hint', () => {
+		let errs = interfaces.validate({ proto: 'dhcpv6', ip6hint: 'not-an-ipv6' });
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'ip6hint' && e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+});
+
+let redirects = loadfile('src/resources/firewall.redirects.uc')();
+
+t.describe('firewall.redirects reflection', () => {
+	t.it('fromUci surfaces reflection (default true) + reflection_src (default internal)', () => {
+		let r = redirects.fromUci({
+			'.name': 'r1', '.anonymous': false,
+			target: 'DNAT', src: 'wan', dest_port: '443',
+		});
+		t.assert_true(r.reflection);
+		t.assert_equal(r.reflection_src, 'internal');
+	});
+	t.it('fromUci respects explicit reflection=0 and reflection_src=external', () => {
+		let r = redirects.fromUci({
+			'.name': 'r2', '.anonymous': false,
+			target: 'DNAT', src: 'wan',
+			reflection: '0', reflection_src: 'external',
+		});
+		t.assert_false(r.reflection);
+		t.assert_equal(r.reflection_src, 'external');
+	});
+	t.it('toUci passes through reflection bits', () => {
+		let u = redirects.toUci({
+			match: { src_zone: 'wan' }, target: 'DNAT',
+			reflection: false, reflection_src: 'external',
+		});
+		t.assert_equal(u.reflection, '0');
+		t.assert_equal(u.reflection_src, 'external');
+	});
+	t.it('validate rejects bad reflection_src', () => {
+		let errs = redirects.validate({
+			match: { src_zone: 'wan' }, target: 'DNAT',
+			reflection_src: 'wat',
+		});
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'reflection_src' && e.code == 'not_in_enum') { found = true; break; }
+		t.assert_true(found);
+	});
+});
+
+let unbound = loadfile('src/resources/unbound.server.uc')();
+
+t.describe('unbound.server parity additions', () => {
+	t.it('fromUci surfaces manual_conf, extended_stats, interface_auto defaults', () => {
+		let r = unbound.fromUci({ '.name': 'ub_main' });
+		t.assert_false(r.manual_conf);
+		t.assert_false(r.extended_stats);
+		t.assert_true(r.interface_auto);
+		t.assert_true(r.localservice);
+		t.assert_true(r.hide_binddata);
+	});
+	t.it('toUci serializes new fields', () => {
+		let u = unbound.toUci({
+			manual_conf: true, extended_stats: true,
+			interface_auto: false, num_threads: 4,
+			rebind_protection: 2, domain_type: 'static',
+			ttl_min: 60, domain: 'lan',
+		});
+		t.assert_equal(u.manual_conf, '1');
+		t.assert_equal(u.extended_stats, '1');
+		t.assert_equal(u.interface_auto, '0');
+		t.assert_equal(u.num_threads, '4');
+		t.assert_equal(u.rebind_protection, '2');
+		t.assert_equal(u.domain_type, 'static');
+		t.assert_equal(u.ttl_min, '60');
+		t.assert_equal(u.domain, 'lan');
+	});
+	t.it('validate rejects bad rebind_protection', () => {
+		let errs = unbound.validate({ rebind_protection: 9 });
+		t.assert_equal(errs[0].field, 'rebind_protection');
+		t.assert_equal(errs[0].code, 'not_in_enum');
+	});
+	t.it('validate rejects bad domain_type enum', () => {
+		let errs = unbound.validate({ domain_type: 'bogus' });
+		t.assert_equal(errs[0].field, 'domain_type');
+		t.assert_equal(errs[0].code, 'not_in_enum');
+	});
+	t.it('validate bounds num_threads', () => {
+		let errs = unbound.validate({ num_threads: 200 });
+		t.assert_equal(errs[0].field, 'num_threads');
+		t.assert_equal(errs[0].code, 'out_of_range');
+	});
+});

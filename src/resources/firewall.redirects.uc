@@ -9,6 +9,7 @@ const VALID_PROTOS = {
 	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
 	"esp": true, "ah": true, "any": true, "all": true,
 };
+const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 const PORT_RE = /^[0-9]+(-[0-9]+)?$/;
 
 function fromUci(section) {
@@ -30,6 +31,8 @@ function fromUci(section) {
 			proto: as_list(section.proto),
 			family: section.family ?? "any",
 		},
+		reflection: normalize_bool(section.reflection, true),
+		reflection_src: section.reflection_src ?? "internal",
 		runtime: {},
 	};
 }
@@ -49,6 +52,8 @@ function toUci(json) {
 	if (type(m.dest_port) == "array" && length(m.dest_port) > 0) out.dest_port = m.dest_port;
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
+	if (json.reflection != null)     out.reflection = json.reflection ? "1" : "0";
+	if (json.reflection_src != null) out.reflection_src = json.reflection_src;
 	return out;
 }
 
@@ -98,6 +103,10 @@ function validate(json, conn) {
 		push(errs, { field: "match.family", code: "not_in_enum",
 		             message: "must be one of any, ipv4, ipv6" });
 
+	if (json.reflection_src != null && !VALID_REFLECTION_SRC[json.reflection_src])
+		push(errs, { field: "reflection_src", code: "not_in_enum",
+		             message: "must be internal or external" });
+
 	let protos = as_list(m.proto);
 	for (let i = 0; i < length(protos); i++) {
 		if (!VALID_PROTOS[protos[i]])
@@ -139,5 +148,9 @@ return {
 				family:    { type: "string", enum: keys(VALID_FAMILIES) },
 			},
 		},
+		reflection: { type: "boolean",
+		              description: "Enable NAT loopback / hairpinning for this redirect (fw4 default true)" },
+		reflection_src: { type: "string", enum: keys(VALID_REFLECTION_SRC),
+		                  description: "Source address used for hairpinned packets: internal LAN or external WAN" },
 	},
 };

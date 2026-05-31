@@ -10264,6 +10264,18 @@
 							}
 						}
 					},
+					"reflection": {
+						"type": "boolean",
+						"description": "Enable NAT loopback / hairpinning for this redirect (fw4 default true)"
+					},
+					"reflection_src": {
+						"type": "string",
+						"enum": [
+							"internal",
+							"external"
+						],
+						"description": "Source address used for hairpinned packets: internal LAN or external WAN"
+					},
 					"runtime": {
 						"type": "object"
 					}
@@ -10446,6 +10458,53 @@
 						"type": "integer",
 						"minimum": 0,
 						"maximum": 65535
+					},
+					"peerdns": {
+						"type": "boolean",
+						"description": "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)"
+					},
+					"defaultroute": {
+						"type": "boolean",
+						"description": "Install the default route from DHCP (dhcp)"
+					},
+					"metric": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "Default-route metric (dhcp)"
+					},
+					"hostname": {
+						"type": "string",
+						"description": "Client hostname sent in DHCPDISCOVER (dhcp)"
+					},
+					"clientid": {
+						"type": "string",
+						"description": "DHCP client identifier (dhcp)"
+					},
+					"reqprefix": {
+						"type": "string",
+						"pattern": "^(auto|no|[0-9]+)$",
+						"description": "DHCPv6 prefix-delegation request: auto, no, or numeric size"
+					},
+					"reqaddress": {
+						"type": "string",
+						"enum": [
+							"try",
+							"force",
+							"none"
+						],
+						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
+					},
+					"ip6hint": {
+						"type": "string",
+						"description": "Preferred IPv6 prefix hint for PD (dhcpv6)"
+					},
+					"ip6ifaceid": {
+						"type": "string",
+						"description": "Static IPv6 interface id for IA_NA (dhcpv6)"
+					},
+					"delegate": {
+						"type": "boolean",
+						"description": "Accept prefix delegation downstream (dhcpv6)"
 					}
 				}
 			},
@@ -10863,8 +10922,33 @@
 						"nullable": true
 					},
 					"mac": {
-						"type": "string",
-						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$"
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$",
+						"description": "Primary MAC address for IPv4 reservation"
+					},
+					"mac_aliases": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Additional MACs for the same reservation (uci list mac)"
+					},
+					"duid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Client DUID for DHCPv6 reservation"
+					},
+					"hostid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Static IPv6 host id hint (suffix)"
 					},
 					"ip": {
 						"type": "string",
@@ -10883,6 +10967,17 @@
 					},
 					"dns": {
 						"type": "boolean"
+					},
+					"broadcast": {
+						"type": "boolean",
+						"description": "Force broadcast replies for clients that need it"
+					},
+					"instance": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Pin this reservation to a specific dhcp/servers instance"
 					},
 					"runtime": {
 						"type": "object"
@@ -11451,6 +11546,62 @@
 					},
 					"prefetch": {
 						"type": "boolean"
+					},
+					"manual_conf": {
+						"type": "boolean",
+						"description": "Skip uci and use /etc/unbound/unbound.conf hand-written"
+					},
+					"extended_stats": {
+						"type": "boolean",
+						"description": "Emit extended statistics (stats-extended: yes)"
+					},
+					"interface_auto": {
+						"type": "boolean",
+						"description": "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf."
+					},
+					"localservice": {
+						"type": "boolean"
+					},
+					"hide_binddata": {
+						"type": "boolean"
+					},
+					"rebind_protection": {
+						"type": "string",
+						"enum": [
+							"0",
+							"1",
+							"2"
+						],
+						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked"
+					},
+					"num_threads": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 64
+					},
+					"ttl_min": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 86400
+					},
+					"domain": {
+						"type": "string",
+						"nullable": true
+					},
+					"domain_type": {
+						"type": "string",
+						"enum": [
+							"deny",
+							"refuse",
+							"static",
+							"transparent",
+							"redirect",
+							"nodefault",
+							"typetransparent",
+							"inform",
+							"inform_deny"
+						],
+						"description": "Local-zone type for the configured domain"
 					},
 					"runtime": {
 						"type": "object"

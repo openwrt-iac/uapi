@@ -9,6 +9,10 @@ const VALID_PROTOS = {
 	"none": true, "ppp": true, "wwan": true, "wireguard": true,
 };
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
+const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
+const REQPREFIX_RE = /^(auto|no|[0-9]+)$/;
+const IPV6_PREFIX_RE = /^[0-9A-Fa-f:]+\/[0-9]+$/;
+const IPV6_IFACEID_RE = /^[0-9A-Fa-f:]+$/;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -35,6 +39,21 @@ function fromUci(section) {
 		view.ip6table = section.ip6table ?? null;
 		view.has_private_key = (section.private_key != null && section.private_key != "");
 	}
+	if (proto == "dhcp") {
+		view.peerdns = normalize_bool(section.peerdns, true);
+		view.defaultroute = normalize_bool(section.defaultroute, true);
+		view.metric = section.metric ?? null;
+		view.hostname = section.hostname ?? null;
+		view.clientid = section.clientid ?? null;
+	}
+	if (proto == "dhcpv6") {
+		view.peerdns = normalize_bool(section.peerdns, true);
+		view.reqprefix = section.reqprefix ?? null;
+		view.reqaddress = section.reqaddress ?? null;
+		view.ip6hint = section.ip6hint ?? null;
+		view.ip6ifaceid = section.ip6ifaceid ?? null;
+		view.delegate = normalize_bool(section.delegate, true);
+	}
 	return view;
 }
 
@@ -57,6 +76,21 @@ function toUci(json) {
 		if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
 		if (json.ip4table != null) out.ip4table = "" + json.ip4table;
 		if (json.ip6table != null) out.ip6table = "" + json.ip6table;
+	}
+	if (json.proto == "dhcp") {
+		if (json.peerdns != null)      out.peerdns = json.peerdns ? "1" : "0";
+		if (json.defaultroute != null) out.defaultroute = json.defaultroute ? "1" : "0";
+		if (json.metric != null)       out.metric = "" + json.metric;
+		if (json.hostname != null)     out.hostname = json.hostname;
+		if (json.clientid != null)     out.clientid = json.clientid;
+	}
+	if (json.proto == "dhcpv6") {
+		if (json.peerdns != null)    out.peerdns = json.peerdns ? "1" : "0";
+		if (json.reqprefix != null)  out.reqprefix = "" + json.reqprefix;
+		if (json.reqaddress != null) out.reqaddress = json.reqaddress;
+		if (json.ip6hint != null)    out.ip6hint = json.ip6hint;
+		if (json.ip6ifaceid != null) out.ip6ifaceid = json.ip6ifaceid;
+		if (json.delegate != null)   out.delegate = json.delegate ? "1" : "0";
 	}
 	return out;
 }
@@ -118,6 +152,33 @@ function validate(json) {
 			             message: "must be an IP address" });
 	}
 
+	if (json.proto == "dhcp") {
+		if (json.metric != null) {
+			let m = int(json.metric);
+			if (m < 0)
+				push(errs, { field: "metric", code: "out_of_range",
+				             message: "must be non-negative" });
+		}
+	}
+
+	if (json.proto == "dhcpv6") {
+		if (json.reqprefix != null && json.reqprefix != ""
+		    && !match("" + json.reqprefix, REQPREFIX_RE))
+			push(errs, { field: "reqprefix", code: "invalid_format",
+			             message: "must be 'auto', 'no', or a numeric prefix size" });
+		if (json.reqaddress != null && !VALID_REQADDRESS[json.reqaddress])
+			push(errs, { field: "reqaddress", code: "not_in_enum",
+			             message: "must be try, force, or none" });
+		if (json.ip6hint != null && json.ip6hint != ""
+		    && !match(json.ip6hint, IPV6_PREFIX_RE))
+			push(errs, { field: "ip6hint", code: "invalid_format",
+			             message: "must be an IPv6 prefix like 2001:db8::/56" });
+		if (json.ip6ifaceid != null && json.ip6ifaceid != ""
+		    && !match(json.ip6ifaceid, IPV6_IFACEID_RE))
+			push(errs, { field: "ip6ifaceid", code: "invalid_format",
+			             message: "must be an IPv6 host id like ::1 or eui64-form" });
+	}
+
 	return errs;
 }
 
@@ -151,5 +212,25 @@ return {
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },
 		listen_port: { type: "integer", minimum: 0, maximum: 65535 },
+		peerdns:      { type: "boolean",
+		                description: "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)" },
+		defaultroute: { type: "boolean",
+		                description: "Install the default route from DHCP (dhcp)" },
+		metric:       { type: "integer", minimum: 0,
+		                description: "Default-route metric (dhcp)" },
+		hostname:     { type: "string",
+		                description: "Client hostname sent in DHCPDISCOVER (dhcp)" },
+		clientid:     { type: "string",
+		                description: "DHCP client identifier (dhcp)" },
+		reqprefix:    { type: "string", pattern: "^(auto|no|[0-9]+)$",
+		                description: "DHCPv6 prefix-delegation request: auto, no, or numeric size" },
+		reqaddress:   { type: "string", enum: keys(VALID_REQADDRESS),
+		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
+		ip6hint:      { type: "string",
+		                description: "Preferred IPv6 prefix hint for PD (dhcpv6)" },
+		ip6ifaceid:   { type: "string",
+		                description: "Static IPv6 interface id for IA_NA (dhcpv6)" },
+		delegate:     { type: "boolean",
+		                description: "Accept prefix delegation downstream (dhcpv6)" },
 	},
 };

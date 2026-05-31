@@ -6,6 +6,12 @@ const VALID_RECURSION = { "default": true, "passive": true, "aggressive": true }
 const VALID_RESOURCE  = { "tiny": true, "small": true, "medium": true,
                           "large": true, "big": true, "huge": true };
 const VALID_PROTOCOL  = { "auto": true, "ip4_only": true, "ip6_only": true, "mixed": true };
+const VALID_REBIND    = { "0": true, "1": true, "2": true };
+const VALID_DOMAIN_TYPE = {
+	"deny": true, "refuse": true, "static": true, "transparent": true,
+	"redirect": true, "nodefault": true, "typetransparent": true,
+	"inform": true, "inform_deny": true,
+};
 
 function fromUci(section) {
 	return {
@@ -22,23 +28,43 @@ function fromUci(section) {
 		protocol: section.protocol ?? null,
 		query_minimize: normalize_bool(section.query_minimize, false),
 		prefetch: normalize_bool(section.prefetch, false),
+		manual_conf: normalize_bool(section.manual_conf, false),
+		extended_stats: normalize_bool(section.extended_stats, false),
+		interface_auto: normalize_bool(section.interface_auto, true),
+		localservice: normalize_bool(section.localservice, true),
+		hide_binddata: normalize_bool(section.hide_binddata, true),
+		rebind_protection: section.rebind_protection ?? null,
+		num_threads: section.num_threads ?? null,
+		ttl_min: section.ttl_min ?? null,
+		domain: section.domain ?? null,
+		domain_type: section.domain_type ?? null,
 		runtime: {},
 	};
 }
 
 function toUci(json) {
 	let out = {};
-	if (json.enabled != null)         out.enabled = json.enabled ? "1" : "0";
-	if (json.listen_port != null)     out.listen_port = "" + json.listen_port;
-	if (json.dhcp_link != null)       out.dhcp_link = json.dhcp_link;
-	if (json.add_local_fqdn != null)  out.add_local_fqdn = "" + json.add_local_fqdn;
-	if (json.add_wan_fqdn != null)    out.add_wan_fqdn = "" + json.add_wan_fqdn;
-	if (json.dnssec_enabled != null)  out.dnssec_enabled = json.dnssec_enabled ? "1" : "0";
-	if (json.recursion != null)       out.recursion = json.recursion;
-	if (json.resource != null)        out.resource = json.resource;
-	if (json.protocol != null)        out.protocol = json.protocol;
-	if (json.query_minimize != null)  out.query_minimize = json.query_minimize ? "1" : "0";
-	if (json.prefetch != null)        out.prefetch = json.prefetch ? "1" : "0";
+	if (json.enabled != null)           out.enabled = json.enabled ? "1" : "0";
+	if (json.listen_port != null)       out.listen_port = "" + json.listen_port;
+	if (json.dhcp_link != null)         out.dhcp_link = json.dhcp_link;
+	if (json.add_local_fqdn != null)    out.add_local_fqdn = "" + json.add_local_fqdn;
+	if (json.add_wan_fqdn != null)      out.add_wan_fqdn = "" + json.add_wan_fqdn;
+	if (json.dnssec_enabled != null)    out.dnssec_enabled = json.dnssec_enabled ? "1" : "0";
+	if (json.recursion != null)         out.recursion = json.recursion;
+	if (json.resource != null)          out.resource = json.resource;
+	if (json.protocol != null)          out.protocol = json.protocol;
+	if (json.query_minimize != null)    out.query_minimize = json.query_minimize ? "1" : "0";
+	if (json.prefetch != null)          out.prefetch = json.prefetch ? "1" : "0";
+	if (json.manual_conf != null)       out.manual_conf = json.manual_conf ? "1" : "0";
+	if (json.extended_stats != null)    out.extended_stats = json.extended_stats ? "1" : "0";
+	if (json.interface_auto != null)    out.interface_auto = json.interface_auto ? "1" : "0";
+	if (json.localservice != null)      out.localservice = json.localservice ? "1" : "0";
+	if (json.hide_binddata != null)     out.hide_binddata = json.hide_binddata ? "1" : "0";
+	if (json.rebind_protection != null) out.rebind_protection = "" + json.rebind_protection;
+	if (json.num_threads != null)       out.num_threads = "" + json.num_threads;
+	if (json.ttl_min != null)           out.ttl_min = "" + json.ttl_min;
+	if (json.domain != null)            out.domain = json.domain;
+	if (json.domain_type != null)       out.domain_type = json.domain_type;
 	return out;
 }
 
@@ -67,6 +93,24 @@ function validate(json) {
 	if (json.protocol != null && !VALID_PROTOCOL[json.protocol])
 		push(errs, { field: "protocol", code: "not_in_enum",
 		             message: "must be auto, ip4_only, ip6_only, or mixed" });
+	if (json.rebind_protection != null && !VALID_REBIND["" + json.rebind_protection])
+		push(errs, { field: "rebind_protection", code: "not_in_enum",
+		             message: "must be 0 (off), 1 (private nets), or 2 (all)" });
+	if (json.domain_type != null && !VALID_DOMAIN_TYPE[json.domain_type])
+		push(errs, { field: "domain_type", code: "not_in_enum",
+		             message: "must be one of " + join(", ", keys(VALID_DOMAIN_TYPE)) });
+	if (json.num_threads != null) {
+		let n = int(json.num_threads);
+		if (n < 1 || n > 64)
+			push(errs, { field: "num_threads", code: "out_of_range",
+			             message: "must be 1-64" });
+	}
+	if (json.ttl_min != null) {
+		let t = int(json.ttl_min);
+		if (t < 0 || t > 86400)
+			push(errs, { field: "ttl_min", code: "out_of_range",
+			             message: "must be 0-86400 seconds" });
+	}
 	return errs;
 }
 
@@ -78,9 +122,21 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		dhcp_link: { type: "string", enum: keys(VALID_DHCP_LINK) },
-		recursion: { type: "string", enum: keys(VALID_RECURSION) },
-		resource:  { type: "string", enum: keys(VALID_RESOURCE) },
-		protocol:  { type: "string", enum: keys(VALID_PROTOCOL) },
+		dhcp_link:         { type: "string", enum: keys(VALID_DHCP_LINK) },
+		recursion:         { type: "string", enum: keys(VALID_RECURSION) },
+		resource:          { type: "string", enum: keys(VALID_RESOURCE) },
+		protocol:          { type: "string", enum: keys(VALID_PROTOCOL) },
+		rebind_protection: { type: "string", enum: keys(VALID_REBIND),
+		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
+		domain_type:       { type: "string", enum: keys(VALID_DOMAIN_TYPE),
+		                     description: "Local-zone type for the configured domain" },
+		manual_conf:       { type: "boolean",
+		                     description: "Skip uci and use /etc/unbound/unbound.conf hand-written" },
+		extended_stats:    { type: "boolean",
+		                     description: "Emit extended statistics (stats-extended: yes)" },
+		interface_auto:    { type: "boolean",
+		                     description: "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf." },
+		num_threads:       { type: "integer", minimum: 1, maximum: 64 },
+		ttl_min:           { type: "integer", minimum: 0, maximum: 86400 },
 	},
 };

@@ -99,3 +99,87 @@ t.describe('dhcp.hosts.validate', () => {
 		t.assert_equal(length(hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', leasetime: '3600' }, null)), 0);
 	});
 });
+
+let ubus = require('bus');
+
+t.describe('dhcp.hosts v1.2 parity additions', () => {
+	t.it('fromUci returns mac_aliases empty when uci has option mac (single)', () => {
+		let r = hosts.fromUci({ '.name': 'h1', '.anonymous': false,
+		                        mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.5' });
+		t.assert_equal(r.mac, 'aa:bb:cc:dd:ee:ff');
+		t.assert_deep_equal(r.mac_aliases, []);
+	});
+	t.it('fromUci splits a list mac into mac + mac_aliases', () => {
+		let r = hosts.fromUci({ '.name': 'h2', '.anonymous': false,
+		                        mac: ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66'],
+		                        ip: '10.0.0.6' });
+		t.assert_equal(r.mac, 'aa:bb:cc:dd:ee:ff');
+		t.assert_deep_equal(r.mac_aliases, ['11:22:33:44:55:66']);
+	});
+	t.it('toUci writes a string when only mac is set, a list when aliases are present', () => {
+		let single = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1' });
+		t.assert_equal(single.mac, 'aa:bb:cc:dd:ee:ff');
+		let multi = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff',
+		                          mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' });
+		t.assert_deep_equal(multi.mac, ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66']);
+	});
+	t.it('validate accepts duid-only entries (DHCPv6 reservation)', () => {
+		let errs = hosts.validate({
+			duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff',
+			ip: '2001:db8::42',
+		}, null);
+		for (let e in errs)
+			t.assert_not_equal(e.field + ':' + e.code, 'mac:required');
+	});
+	t.it('validate requires either mac or duid', () => {
+		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
+		t.assert_equal(errs[0].field, 'mac');
+		t.assert_equal(errs[0].code, 'required');
+	});
+	t.it('validate rejects bad mac_aliases entries', () => {
+		let errs = hosts.validate({
+			mac: 'aa:bb:cc:dd:ee:ff',
+			mac_aliases: ['not-a-mac'],
+			ip: '10.0.0.1',
+		}, null);
+		let found = false;
+		for (let e in errs)
+			if (substr(e.field, 0, 11) == 'mac_aliases'
+			    && e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+	t.it('validate rejects bad duid hex', () => {
+		let errs = hosts.validate({ duid: 'not-hex', ip: '10.0.0.1' }, null);
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'duid' && e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+	t.it('validate rejects bad hostid', () => {
+		let errs = hosts.validate({
+			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
+			hostid: 'zz::nope',
+		}, null);
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'hostid' && e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+	t.it('validate cross-refs instance against dhcp/servers sections', () => {
+		let conn = ubus.stub({ uci: { dhcp: {
+			lan_server: { '.type': 'dhcp', interface: 'lan' },
+		}}});
+		let ok = hosts.validate({
+			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'lan_server',
+		}, conn);
+		for (let e in ok)
+			t.assert_not_equal(e.field + ':' + e.code, 'instance:conflict');
+		let bad = hosts.validate({
+			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'nope',
+		}, conn);
+		let found = false;
+		for (let e in bad)
+			if (e.field == 'instance' && e.code == 'conflict') { found = true; break; }
+		t.assert_true(found);
+	});
+});
