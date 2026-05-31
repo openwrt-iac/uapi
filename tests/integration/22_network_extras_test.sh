@@ -45,10 +45,15 @@ echo "$bad_rule" | tail -1 | grep -q '^422$' || fail "no-selector rule expected 
 echo "--- network/rules: DELETE ---"
 call -X DELETE "$URL/network/rules/$plid" | tail -1 | grep -q '^204$' || fail "DELETE rules expected 204"
 
-echo "--- network/bridge_vlans: POST referencing the default br-lan bridge ---"
-$SSH "uci show network | grep -q \"type='bridge'\" || (uci set network.lanbr=device; uci set network.lanbr.name='br-lan'; uci set network.lanbr.type='bridge'; uci add_list network.lanbr.ports='eth0'; uci commit network)"
+echo "--- network/bridge_vlans: set up a throwaway bridge that is NOT in the management path ---"
+# br-lan carries the connection back to curl. Flipping vlan_filtering on it cuts
+# the response path and the POST appears to hang. Create an isolated bridge with
+# a fake port so the bridge-vlan reload has no effect on traffic.
+$SSH "uci set network.uapitestbr=device; uci set network.uapitestbr.type=bridge; uci set network.uapitestbr.name=br-uapitest; uci -q delete network.uapitestbr.ports; uci add_list network.uapitestbr.ports=lan99; uci commit network"
+
+echo "--- network/bridge_vlans: POST against the isolated bridge ---"
 bv=$(call -X POST -H 'Content-Type: application/json' "$URL/network/bridge_vlans" -d '{
-	"device": "br-lan", "vlan": 99, "ports": ["eth0:t"]
+	"device": "br-uapitest", "vlan": 99, "ports": ["lan99:t"]
 }')
 echo "$bv"
 status=$(echo "$bv" | tail -1)
@@ -57,11 +62,20 @@ vid=$(echo "$bv" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$/
 
 echo "--- network/bridge_vlans: vlan out of range rejected ---"
 bad_bv=$(call -X POST -H 'Content-Type: application/json' "$URL/network/bridge_vlans" -d '{
-	"device": "br-lan", "vlan": 5000
+	"device": "br-uapitest", "vlan": 5000
 }')
 echo "$bad_bv" | tail -1 | grep -q '^422$' || fail "bad vlan expected 422"
 
+echo "--- network/bridge_vlans: missing bridge cross-ref rejected with conflict ---"
+no_bridge=$(call -X POST -H 'Content-Type: application/json' "$URL/network/bridge_vlans" -d '{
+	"device": "br-does-not-exist", "vlan": 7
+}')
+echo "$no_bridge" | tail -1 | grep -q '^422$' || fail "missing bridge expected 422"
+
 echo "--- network/bridge_vlans: DELETE ---"
 call -X DELETE "$URL/network/bridge_vlans/$vid" | tail -1 | grep -q '^204$' || fail "DELETE bridge_vlans expected 204"
+
+echo "--- network/bridge_vlans: cleanup throwaway bridge ---"
+$SSH "uci delete network.uapitestbr; uci commit network; /etc/init.d/network reload" >/dev/null
 
 echo "network/routes + rules + bridge_vlans CRUD ok."
