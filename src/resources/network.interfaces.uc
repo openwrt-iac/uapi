@@ -14,7 +14,27 @@ const REQPREFIX_RE = /^(auto|no|[0-9]+)$/;
 const IPV6_PREFIX_RE = /^[0-9A-Fa-f:]+\/[0-9]+$/;
 const IPV6_IFACEID_RE = /^[0-9A-Fa-f:]+$/;
 
-function fromUci(section) {
+function fetch_runtime(conn, name) {
+	if (conn == null || type(name) != "string" || name == "")
+		return {};
+	let status = null;
+	try { status = conn.call("network.interface." + name, "status"); }
+	catch (e) { return {}; }
+	if (status == null) return {};
+	return {
+		up: !!status.up,
+		pending: !!status.pending,
+		available: !!status.available,
+		l3_device: status.l3_device ?? null,
+		uptime: status.uptime ?? null,
+		"ipv4-address": status["ipv4-address"] ?? [],
+		"ipv6-address": status["ipv6-address"] ?? [],
+		"ipv6-prefix": status["ipv6-prefix"] ?? [],
+		route: status.route ?? [],
+	};
+}
+
+function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
 	let proto = section.proto ?? "none";
 	let view = {
@@ -29,7 +49,7 @@ function fromUci(section) {
 		ip6assign: section.ip6assign ?? null,
 		mtu: section.mtu ?? null,
 		auto: normalize_bool(section.auto, true),
-		runtime: {},
+		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (proto == "wireguard") {
 		view.listen_port = section.listen_port ?? null;

@@ -74,7 +74,7 @@ function make(resource, opts) {
 		let out = [];
 		conn.uci_foreach(pkg, null, function(s) {
 			if (!type_predicate(s['.type'])) return;
-			let r = resource.fromUci(s);
+			let r = resource.fromUci(s, conn);
 			if (want_managed == "true" && !r.managed) return;
 			if (want_managed == "false" && r.managed) return;
 			push(out, r);
@@ -87,7 +87,7 @@ function make(resource, opts) {
 		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
-		return errors.ok(ctx, resource.fromUci(s));
+		return errors.ok(ctx, resource.fromUci(s, conn));
 	}
 
 	function create(conn, ctx, body) {
@@ -105,7 +105,7 @@ function make(resource, opts) {
 				view['.name'] = new_id;
 				view['.anonymous'] = false;
 				view['.type'] = resolved_type;
-				return { ok: true, body: resource.fromUci(view) };
+				return { ok: true, body: resource.fromUci(view, conn) };
 			},
 		}));
 
@@ -122,7 +122,7 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing).managed)
+				if (!resource.fromUci(existing, conn).managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
 				let new_opts = resource.toUci(body);
@@ -136,7 +136,7 @@ function make(resource, opts) {
 				view['.name'] = id;
 				view['.anonymous'] = false;
 				view['.type'] = existing['.type'];
-				return { ok: true, body: resource.fromUci(view) };
+				return { ok: true, body: resource.fromUci(view, conn) };
 			},
 		}));
 
@@ -150,11 +150,11 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing).managed)
+				if (!resource.fromUci(existing, conn).managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
 
-				let existing_json = resource.fromUci(existing);
+				let existing_json = resource.fromUci(existing, conn);
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
 				let merged_json = merge_fn(existing, existing_json, body);
 
@@ -173,7 +173,7 @@ function make(resource, opts) {
 				view['.name'] = id;
 				view['.anonymous'] = false;
 				view['.type'] = existing['.type'];
-				return { ok: true, body: resource.fromUci(view) };
+				return { ok: true, body: resource.fromUci(view, conn) };
 			},
 		}));
 
@@ -187,7 +187,7 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing).managed)
+				if (!resource.fromUci(existing, conn).managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed" };
 				c.uci_delete(p, id);
@@ -206,7 +206,7 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (resource.fromUci(existing).managed)
+				if (resource.fromUci(existing, conn).managed)
 					return { ok: false, kind: "conflict",
 					         message: "Section is already managed" };
 				let new_id = ids.new_id(id_prefix);
@@ -214,7 +214,7 @@ function make(resource, opts) {
 				let view = { ...existing };
 				view['.name'] = new_id;
 				view['.anonymous'] = false;
-				return { ok: true, body: resource.fromUci(view) };
+				return { ok: true, body: resource.fromUci(view, conn) };
 			},
 		}));
 
@@ -251,7 +251,7 @@ function make_singleton(resource, opts) {
 		if (!s)
 			return errors.error(ctx, "not_found",
 			                    sprintf("singleton %s.%s missing", pkg, sec_type));
-		return errors.ok(ctx, resource.fromUci(s));
+		return errors.ok(ctx, resource.fromUci(s, conn));
 	}
 
 	function patch(conn, ctx, body) {
@@ -263,7 +263,7 @@ function make_singleton(resource, opts) {
 					         message: sprintf("singleton %s.%s missing", pkg, sec_type) };
 				let id = existing['.name'];
 
-				let merged = { ...resource.fromUci(existing) };
+				let merged = { ...resource.fromUci(existing, conn) };
 				for (let k in body) merged[k] = body[k];
 
 				let errs = resource.validate(merged, c, id);
@@ -281,7 +281,7 @@ function make_singleton(resource, opts) {
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];
 				view['.type'] = sec_type;
-				return { ok: true, body: resource.fromUci(view) };
+				return { ok: true, body: resource.fromUci(view, conn) };
 			},
 		}));
 

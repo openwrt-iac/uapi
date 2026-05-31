@@ -4653,6 +4653,101 @@
 				}
 			}
 		},
+		"/dhcp/leases6": {
+			"get": {
+				"summary": "List leases6 (read-only)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DhcpLeases6"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/dhcp/leases6/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"summary": "Get one leases6 by id",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpLeases6"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
 		"/dhcp/servers": {
 			"get": {
 				"summary": "List servers",
@@ -11007,6 +11102,49 @@
 					"duid": {
 						"type": "string",
 						"nullable": true
+					}
+				}
+			},
+			"DhcpLeases6": {
+				"type": "object",
+				"description": "uapi resource backed by uci dhcp.lease6",
+				"properties": {
+					"duid": {
+						"type": "string",
+						"description": "Client DUID (hex)"
+					},
+					"iaid": {
+						"type": "string",
+						"description": "Identity Association ID (hex)"
+					},
+					"hostname": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"interface": {
+						"type": "string",
+						"description": "Server-side interface that issued the lease"
+					},
+					"ia_type": {
+						"type": "string",
+						"description": "Identity Association type (IA_NA, IA_PD)"
+					},
+					"ip": {
+						"type": "string",
+						"description": "Assigned IPv6 address or prefix"
+					},
+					"prefix_length": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Prefix length for IA_PD; null for IA_NA"
+					},
+					"expires_at": {
+						"type": "integer",
+						"description": "Unix epoch seconds when the lease expires"
 					}
 				}
 			},

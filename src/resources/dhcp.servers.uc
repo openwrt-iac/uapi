@@ -1,18 +1,73 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let fs = require('fs');
 
 const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
+const LEASES4_PATH = "/tmp/dhcp.leases";
+const LEASES6_PATHS = ["/tmp/hosts/odhcpd", "/tmp/odhcpd.leases"];
+
+function read_file_or_empty(path) {
+	let f = fs.open(path, "r");
+	if (!f) return "";
+	let c = f.read("all") ?? "";
+	f.close();
+	return c;
+}
+
+// Lightweight counters; deliberately not reusing dhcp.leases*.uc modules to
+// avoid an inter-module loadfile dependency that breaks unit-test isolation.
+// We don't surface the lease bodies here, just the counts.
+function count_v4_leases() {
+	let n = 0;
+	for (let line in split(read_file_or_empty(LEASES4_PATH), "\n")) {
+		let t = trim(line);
+		if (t == "") continue;
+		n++;
+	}
+	return n;
+}
+
+function count_v6_leases_for(iface) {
+	let content = "";
+	for (let p in LEASES6_PATHS) {
+		content = read_file_or_empty(p);
+		if (content != "") break;
+	}
+	let n = 0;
+	for (let line in split(content, "\n")) {
+		let t = trim(line);
+		if (t == "" || substr(t, 0, 1) == "#") continue;
+		let parts = split(t, " ");
+		if (length(parts) < 7) continue;
+		if (parts[4] != iface) continue;
+		// One v6 lease line can carry multiple addresses (slots 6..end).
+		for (let i = 6; i < length(parts); i++)
+			if (parts[i] != "" && parts[i] != "-") n++;
+	}
+	return n;
+}
+
+function lease_counts_for_interface(iface) {
+	return { active_leases_v4: count_v4_leases(),
+	         active_leases_v6: count_v6_leases_for(iface) };
+}
 const VALID_RA = {
 	"disabled": true, "server": true, "relay": true, "hybrid": true,
 };
 
-function fromUci(section) {
+function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
+	let iface = section.interface ?? null;
+	let runtime = {};
+	if (iface != null && iface != "") {
+		try { runtime = lease_counts_for_interface(iface); }
+		catch (e) { runtime = {}; }
+	}
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		interface: section.interface ?? null,
+		interface: iface,
 		start: section.start ?? null,
 		limit: section.limit ?? null,
 		leasetime: section.leasetime ?? null,
@@ -24,7 +79,7 @@ function fromUci(section) {
 		ra_default: section.ra_default ?? null,
 		domain: section.domain ?? null,
 		dhcp_option: as_list(section.dhcp_option),
-		runtime: {},
+		runtime: runtime,
 	};
 }
 

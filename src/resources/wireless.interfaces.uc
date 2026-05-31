@@ -11,7 +11,48 @@ const VALID_ENCRYPTION = {
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
 };
 
-function fromUci(section) {
+function lookup_ifname(conn, section_name, ssid) {
+	let status = null;
+	try { status = conn.call("network.wireless", "status"); }
+	catch (e) { return null; }
+	if (type(status) != "object") return null;
+	for (let radio_name in status) {
+		let radio = status[radio_name];
+		let ifaces = (type(radio) == "object") ? radio.interfaces : null;
+		if (type(ifaces) != "array") continue;
+		for (let i in ifaces) {
+			if (i.section == section_name) return i.ifname ?? null;
+			let cfg = i.config ?? {};
+			if (ssid != null && cfg.ssid == ssid) return i.ifname ?? null;
+		}
+	}
+	return null;
+}
+
+function fetch_runtime(conn, section_name, ssid) {
+	if (conn == null) return {};
+	let ifname = lookup_ifname(conn, section_name, ssid);
+	if (ifname == null) return {};
+	let info = null, assoc = null;
+	try { info = conn.call("iwinfo", "info", { device: ifname }); }
+	catch (e) {}
+	try { assoc = conn.call("iwinfo", "assoclist", { device: ifname }); }
+	catch (e) {}
+	let out = { ifname: ifname };
+	if (type(info) == "object") {
+		out.bssid          = info.bssid ?? null;
+		out.channel        = info.channel ?? null;
+		out.frequency      = info.frequency ?? null;
+		out.signal         = info.signal ?? null;
+		out.noise          = info.noise ?? null;
+		out.txpower_actual = info.txpower ?? null;
+	}
+	if (type(assoc) == "object" && type(assoc.results) == "array")
+		out.assoclist_count = length(assoc.results);
+	return out;
+}
+
+function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
 	let view = {
 		id: section['.name'],
@@ -24,7 +65,7 @@ function fromUci(section) {
 		disabled: normalize_bool(section.disabled, false),
 		hidden: normalize_bool(section.hidden, false),
 		isolate: normalize_bool(section.isolate, false),
-		runtime: {},
+		runtime: fetch_runtime(conn, section['.name'], section.ssid),
 	};
 	if (section.key != null) view.has_key = true;
 	return view;

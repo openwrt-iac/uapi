@@ -19,6 +19,7 @@ const KNOWN_PATHS = {
 	"dhcp": true,
 	"dhcp:hosts": true,
 	"dhcp:leases": true,
+	"dhcp:leases6": true,
 	"dhcp:servers": true,
 	"dhcp:dnsmasq": true,
 	"dhcp:odhcpd": true,
