@@ -2,6 +2,58 @@ let ids = require("ids");
 let errors = require("errors");
 let transaction = require("transaction");
 
+// ETag computation. Uses sha256 from ucode-mod-digest when available (real
+// router); falls back to a non-crypto stable string hash for unit-test
+// environments where digest may not be installed. ETags exist for cache
+// invalidation, not authentication, so the fallback is acceptable.
+let _digest = null;
+try { _digest = require("digest"); } catch (e) {}
+
+function _fallback_hash(s) {
+	let h = 5381;
+	for (let i = 0; i < length(s); i++) {
+		let c = ord(substr(s, i, 1));
+		h = ((h * 33) + c) % 4294967296;
+	}
+	return sprintf("%08x", h);
+}
+
+function compute_etag(body) {
+	if (body == null) return null;
+	let canonical = sprintf("%J", body);
+	let hex = (_digest != null) ? _digest.sha256(canonical) : _fallback_hash(canonical);
+	return substr(hex, 0, 12);
+}
+
+function set_etag_header(resp, body) {
+	let etag = compute_etag(body);
+	if (etag == null) return resp;
+	if (resp.headers == null) resp.headers = {};
+	resp.headers["ETag"] = "\"" + etag + "\"";
+	return resp;
+}
+
+function parse_if_match(header_value) {
+	if (type(header_value) != "string" || header_value == "") return null;
+	let v = trim(header_value);
+	if (v == "*") return "*";
+	// Strip surrounding quotes and optional W/ weak indicator.
+	if (substr(v, 0, 2) == "W/") v = trim(substr(v, 2));
+	if (substr(v, 0, 1) == "\"" && substr(v, length(v) - 1) == "\"")
+		v = substr(v, 1, length(v) - 2);
+	return v;
+}
+
+function precondition_check(ctx, existing_body) {
+	let want = parse_if_match(ctx.if_match);
+	if (want == null) return null;          // no If-Match -> no check
+	if (want == "*" && existing_body != null) return null;  // wildcard ok for any existing
+	let have = compute_etag(existing_body);
+	if (have == want) return null;
+	return errors.error(ctx, "precondition_failed",
+		sprintf("If-Match did not match current ETag (current=\"%s\")", have));
+}
+
 function build_field_errors(raw_errs) {
 	let out = [];
 	for (let e in raw_errs)
@@ -10,7 +62,10 @@ function build_field_errors(raw_errs) {
 }
 
 function translate_tx(ctx, result) {
-	if (result.ok) return errors.ok(ctx, result.body);
+	if (result.ok) {
+		let resp = errors.ok(ctx, result.body);
+		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
+	}
 	if (result.kind == "locked") return errors.locked(ctx);
 	if (result.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
@@ -23,6 +78,8 @@ function translate_tx(ctx, result) {
 		return errors.error(ctx, "unmanaged_resource", result.message);
 	if (result.kind == "conflict")
 		return errors.error(ctx, "conflict", result.message);
+	if (result.kind == "precondition_failed")
+		return errors.error(ctx, "precondition_failed", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")
@@ -87,7 +144,8 @@ function make(resource, opts) {
 		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
-		return errors.ok(ctx, resource.fromUci(s, conn));
+		let body = resource.fromUci(s, conn);
+		return set_etag_header(errors.ok(ctx, body), body);
 	}
 
 	function create(conn, ctx, body) {
@@ -122,9 +180,14 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing, conn).managed)
+				let existing_view = resource.fromUci(existing, conn);
+				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
+				let pc = precondition_check(ctx, existing_view);
+				if (pc != null)
+					return { ok: false, kind: "precondition_failed",
+					         message: pc.body.message };
 				let new_opts = resource.toUci(body);
 				for (let k in existing) {
 					if (substr(k, 0, 1) == ".") continue;
@@ -150,11 +213,16 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing, conn).managed)
+				let existing_view = resource.fromUci(existing, conn);
+				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
+				let pc = precondition_check(ctx, existing_view);
+				if (pc != null)
+					return { ok: false, kind: "precondition_failed",
+					         message: pc.body.message };
 
-				let existing_json = resource.fromUci(existing, conn);
+				let existing_json = existing_view;
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
 				let merged_json = merge_fn(existing, existing_json, body);
 
@@ -251,7 +319,8 @@ function make_singleton(resource, opts) {
 		if (!s)
 			return errors.error(ctx, "not_found",
 			                    sprintf("singleton %s.%s missing", pkg, sec_type));
-		return errors.ok(ctx, resource.fromUci(s, conn));
+		let body = resource.fromUci(s, conn);
+		return set_etag_header(errors.ok(ctx, body), body);
 	}
 
 	function patch(conn, ctx, body) {
@@ -263,7 +332,13 @@ function make_singleton(resource, opts) {
 					         message: sprintf("singleton %s.%s missing", pkg, sec_type) };
 				let id = existing['.name'];
 
-				let merged = { ...resource.fromUci(existing, conn) };
+				let existing_view = resource.fromUci(existing, conn);
+				let pc = precondition_check(ctx, existing_view);
+				if (pc != null)
+					return { ok: false, kind: "precondition_failed",
+					         message: pc.body.message };
+
+				let merged = { ...existing_view };
 				for (let k in body) merged[k] = body[k];
 
 				let errs = resource.validate(merged, c, id);

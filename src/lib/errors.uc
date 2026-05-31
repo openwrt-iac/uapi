@@ -13,6 +13,7 @@ const STATUS_BY_CODE = {
 	unsupported_media_type: 415,
 	validation_failed: 422,
 	locked: 423,
+	precondition_failed: 412,
 	internal_error: 500,
 	reload_failed_restored: 500,
 	reload_failed_unrecovered: 500,

@@ -41,7 +41,7 @@ Before adopting any library, daemon, persistence layer, or abstraction, check it
 - **No in-memory caches across requests.** The token store is re-read from `/etc/config/uapi` on every request (uci read is millisecond-scale and the workload is low-volume; see Auth & ACL). Anything else that looks like a cache must either live in the parent VM at startup (and be treated as read-only by request handlers) or be re-derived per request.
 - **Cross-client coordination remains client-side.** Terraform's own state lock (DynamoDB / GCS / etc. backends) handles same-state-file races between separate `terraform apply` runs. Out-of-band changes (LuCI, SSH, two separate Terraform configs) cause drift detected on the next refresh, standard Terraform UX. The server-side flock only serializes our intra-server transaction; we expose no client-facing API lock.
 - **Soft design constraint: sync ubus only.** `conn.call()`, never `conn.defer()`. With a fork-per-request model async ubus does not buy any concurrency we don't already have from forking, and sync calls keep the handler linear and the failure paths obvious. Flag any review touching ubus call sites.
-- **Optimistic concurrency (ETags):** deferred to v1.1+. Add `If-Match` support later if real demand surfaces.
+- **Optimistic concurrency (ETags / `If-Match`):** shipped in v1.2. Every CRUD `GET` and singleton `GET` returns an `ETag` header computed as a stable hash of the canonical resource body. `PUT`, `PATCH`, and singleton `PATCH` honour `If-Match`: a stale value returns `412 precondition_failed` and aborts the transaction before any uci writes. `If-Match: *` succeeds against any existing resource. Absent `If-Match` preserves last-write-wins behaviour (opt-in concurrency). Multi-resource collections do not currently carry an ETag. **uhttpd carve-out:** uhttpd's CGI env has a hard-coded allowlist of HTTP headers it forwards to the mod-ucode handler (Authorization, Accept-*, Cookie, Host, etc.) and `If-Match` is not in it. To get optimistic concurrency through uhttpd, send the ETag as a `?if_match=<etag>` query parameter instead of (or in addition to) the header; uapi accepts either. Reverse proxies in front of uhttpd that pass the header through still work via the header path.
 
 ## Resource model
 
@@ -275,6 +275,7 @@ Lean custom shape, RFC 7807-inspired but not strictly conformant. `application/j
 | 409  | `conflict`                       |
 | 409  | `unmanaged_resource`             |
 | 415  | `unsupported_media_type`         |
+| 412  | `precondition_failed`            |
 | 422  | `validation_failed`              |
 | 423  | `locked`                         |
 | 500  | `internal_error`                 |
@@ -521,7 +522,7 @@ The emitted `openapi.json` carries the same version as the API it describes (`in
 
 These are explicitly out-of-scope for v1.0 and require either substantive new code or an architectural change that conflicts with one of the three non-negotiable principles. Listed so v1 ships honestly about what it does not do.
 
-- **ETags / `If-Match` optimistic concurrency.** A future revision can compute a stable hash of the canonical resource shape and surface it as `ETag`, with `If-Match` rejecting stale writes. Substantive feature, fits the architecture cleanly, just not in v1.
+- **ETags / `If-Match` optimistic concurrency** — shipped in v1.2.
 - **`commit-confirmed`-style timed rollback** (apply, wait, auto-revert unless the client acks within N seconds). Conflicts with the fork-per-request model (no place for a background timer); would require a small procd-managed sidecar.
 - **`/metrics` endpoint** (Prometheus-style). Counters and histograms need cross-fork shared state; a uci-backed counter or a tiny procd-managed registry is the realistic path.
 - **Per-token rate limiting.** Same shared-state problem as `/metrics`. Operators today should front the API with a reverse proxy if they need this.

@@ -323,3 +323,91 @@ t.describe('handler.translate_tx', () => {
 		t.assert_equal(r.body.code, "internal_error");
 	});
 });
+
+t.describe('handler ETags / If-Match', () => {
+	function with_rules() {
+		return ubus.stub({
+			uci: {
+				firewall: {
+					z_lan: { '.type': 'zone', name: 'lan' },
+					z_wan: { '.type': 'zone', name: 'wan' },
+					r_existing: { '.type': 'rule', '.anonymous': false,
+					              target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+				},
+			},
+		});
+	}
+
+	t.it('GET attaches an ETag header on the resource response', () => {
+		let c = with_rules();
+		let r = rules.get_one(c, ctx(), 'r_existing');
+		t.assert_equal(r.status, 200);
+		t.assert_true(r.headers.ETag != null);
+		t.assert_true(length(r.headers.ETag) > 0);
+	});
+
+	t.it('two reads of the same state produce the same ETag', () => {
+		let c = with_rules();
+		let a = rules.get_one(c, ctx(), 'r_existing');
+		let b = rules.get_one(c, ctx(), 'r_existing');
+		t.assert_equal(a.headers.ETag, b.headers.ETag);
+	});
+
+	t.it('PUT without If-Match works (opt-in concurrency)', () => {
+		let c = with_rules();
+		let r = rules.replace(c, ctx(), 'r_existing', {
+			target: 'DROP',
+			match: { src_zone: 'wan', proto: ['tcp'] },
+		});
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('PUT with current If-Match succeeds and returns the new ETag', () => {
+		let c = with_rules();
+		let getr = rules.get_one(c, ctx(), 'r_existing');
+		let etag = getr.headers.ETag;
+		let ctx_with = { request_id: "01hx000000000000000000ifma", if_match: etag };
+		let r = rules.replace(c, ctx_with, 'r_existing', {
+			target: 'DROP',
+			match: { src_zone: 'wan', proto: ['tcp'] },
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_true(r.headers.ETag != null);
+		t.assert_true(r.headers.ETag != etag);
+	});
+
+	t.it('PUT with stale If-Match returns 412 precondition_failed', () => {
+		let c = with_rules();
+		let ctx_stale = { request_id: "01hx000000000000000000ifst", if_match: "\"deadbeef0000\"" };
+		let r = rules.replace(c, ctx_stale, 'r_existing', {
+			target: 'DROP',
+			match: { src_zone: 'wan', proto: ['tcp'] },
+		});
+		t.assert_equal(r.status, 412);
+		t.assert_equal(r.body.code, "precondition_failed");
+	});
+
+	t.it('PATCH with stale If-Match returns 412', () => {
+		let c = with_rules();
+		let ctx_stale = { request_id: "01hx000000000000000000ifsp", if_match: "\"00000000abcd\"" };
+		let r = rules.patch(c, ctx_stale, 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 412);
+		t.assert_equal(r.body.code, "precondition_failed");
+	});
+
+	t.it('PATCH with current If-Match (W/ weak prefix tolerated) succeeds', () => {
+		let c = with_rules();
+		let getr = rules.get_one(c, ctx(), 'r_existing');
+		let weak = "W/" + getr.headers.ETag;
+		let ctx_weak = { request_id: "01hx000000000000000000ifwk", if_match: weak };
+		let r = rules.patch(c, ctx_weak, 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('If-Match: * succeeds against any existing resource', () => {
+		let c = with_rules();
+		let ctx_star = { request_id: "01hx000000000000000000ifst", if_match: "*" };
+		let r = rules.patch(c, ctx_star, 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+	});
+});

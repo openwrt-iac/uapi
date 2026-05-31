@@ -229,6 +229,12 @@ function dispatch(env) {
 		return { ctx, resp: errors.error(ctx, "tls_required",
 		                                 "HTTPS required for non-localhost requests") };
 	ctx.via_insecure_marker = tls.via_marker;
+	// uhttpd's CGI env has a hard-coded allowlist of HTTP_* headers (see
+	// uhttpd's env_strings[]); If-Match is not in it, so we cannot rely on
+	// env.HTTP_IF_MATCH. Fall back to a ?if_match=<etag> query parameter,
+	// which is uhttpd-agnostic. Both are recognised on incoming requests.
+	let qs = parse_query(env.QUERY_STRING);
+	ctx.if_match = env.HTTP_IF_MATCH ?? qs.if_match ?? null;
 
 	if (path == "/openapi.json") {
 		if (method != "GET")
