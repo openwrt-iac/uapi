@@ -191,3 +191,48 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(u.ip6assign, '64');
 	});
 });
+
+let uhttpd_inst = loadfile('src/resources/uhttpd.instances.uc')();
+
+t.describe('uhttpd.instances self-lockout protection', () => {
+	t.it("validate(id='main') rejects a body that omits uapi's ucode_prefix", () => {
+		let errs = uhttpd_inst.validate({
+			listen_http: ['0.0.0.0:80'],
+			listen_https: ['0.0.0.0:443'],
+			ucode_prefix: ['/foo=/etc/foo.uc'],
+		}, null, 'main');
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'ucode_prefix' && e.code == 'conflict') { found = true; break; }
+		t.assert_true(found);
+	});
+
+	t.it("validate(id='main') accepts a body that keeps uapi's ucode_prefix", () => {
+		let errs = uhttpd_inst.validate({
+			listen_http: ['0.0.0.0:80'],
+			ucode_prefix: ['/api/v1=/usr/share/uapi/main.uc', '/foo=/etc/foo.uc'],
+		}, null, 'main');
+		for (let e in errs)
+			t.assert_not_equal(e.field + ':' + e.code, 'ucode_prefix:conflict');
+	});
+
+	t.it("validate(id='other') does NOT enforce the lockout check", () => {
+		let errs = uhttpd_inst.validate({
+			listen_http: ['0.0.0.0:81'],
+			ucode_prefix: ['/foo=/etc/foo.uc'],
+		}, null, 'other');
+		for (let e in errs)
+			t.assert_not_equal(e.field + ':' + e.code, 'ucode_prefix:conflict');
+	});
+
+	t.it("validate rejects bogus listen entries with invalid_format", () => {
+		let errs = uhttpd_inst.validate({
+			listen_http: ['no-port-here'],
+			ucode_prefix: ['/api/v1=/usr/share/uapi/main.uc'],
+		}, null, 'main');
+		let found = false;
+		for (let e in errs)
+			if (e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+});

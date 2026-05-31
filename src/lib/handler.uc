@@ -93,7 +93,7 @@ function make(resource, opts) {
 	function create(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let errs = resource.validate(body, c);
+				let errs = resource.validate(body, c, null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				let new_id = ids.new_id(id_prefix);
@@ -115,7 +115,7 @@ function make(resource, opts) {
 	function replace(conn, ctx, id, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let errs = resource.validate(body, c);
+				let errs = resource.validate(body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				let existing = load_section(c, p, id);
@@ -158,7 +158,7 @@ function make(resource, opts) {
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
 				let merged_json = merge_fn(existing, existing_json, body);
 
-				let errs = resource.validate(merged_json, c);
+				let errs = resource.validate(merged_json, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -266,7 +266,7 @@ function make_singleton(resource, opts) {
 				let merged = { ...resource.fromUci(existing) };
 				for (let k in body) merged[k] = body[k];
 
-				let errs = resource.validate(merged, c);
+				let errs = resource.validate(merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

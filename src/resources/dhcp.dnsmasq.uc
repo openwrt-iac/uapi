@@ -62,15 +62,15 @@ function validate(json) {
 
 	if (json.cachesize != null) {
 		let c = int(json.cachesize);
-		if (c < 0)
+		if (c < 0 || c > 1000000)
 			push(errs, { field: "cachesize", code: "out_of_range",
-			             message: "must be non-negative" });
+			             message: "must be 0-1000000" });
 	}
 	if (json.port != null) {
 		let p = int(json.port);
-		if (p < 0 || p > 65535)
+		if (p < 1 || p > 65535)
 			push(errs, { field: "port", code: "out_of_range",
-			             message: "must be 0-65535" });
+			             message: "must be 1-65535 (use a separate option to disable DNS)" });
 	}
 
 	return errs;

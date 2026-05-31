@@ -8,7 +8,7 @@ t.describe('dhcp.servers contract', () => {
 	t.it('declares package, type, reload', () => {
 		t.assert_equal(servers.package, "dhcp");
 		t.assert_equal(servers.type, "dhcp");
-		t.assert_deep_equal(servers.reload, ["dnsmasq", "odhcpd"]);
+		t.assert_deep_equal(servers.reload, ["dnsmasq"]);
 	});
 });
 

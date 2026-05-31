@@ -51,6 +51,14 @@ function validate(json) {
 			             message: "must be one of ACCEPT, REJECT, DROP" });
 	}
 
+	for (let field in ["synflood_burst", "synflood_rate"]) {
+		if (json[field] == null) continue;
+		let n = int(json[field]);
+		if (n < 1 || n > 1000000)
+			push(errs, { field: field, code: "out_of_range",
+			             message: "must be a positive integer (typical range 1-1000000)" });
+	}
+
 	return errs;
 }
 

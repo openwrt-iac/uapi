@@ -32,7 +32,15 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function group_exists(conn, name) {
+	let found = false;
+	conn.uci_foreach('snmpd', 'group', function(s) {
+		if (s.group == name) { found = true; return false; }
+	});
+	return found;
+}
+
+function validate(json, conn) {
 	let errs = [];
 	if (type(json) != "object") {
 		push(errs, { field: "", code: "invalid_type",
@@ -50,6 +58,11 @@ function validate(json) {
 	if (json.prefix != null && !VALID_PREFIXES[json.prefix])
 		push(errs, { field: "prefix", code: "not_in_enum",
 		             message: "must be exact or prefix" });
+	if (conn != null && json.group != null && json.group != "") {
+		if (!group_exists(conn, json.group))
+			push(errs, { field: "group", code: "conflict",
+			             message: sprintf("no snmpd group named %J exists", json.group) });
+	}
 	return errs;
 }
 

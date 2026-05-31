@@ -19,7 +19,15 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function interface_exists(conn, name) {
+	let found = false;
+	conn.uci_foreach('network', 'interface', function(s) {
+		if (s['.name'] == name) { found = true; return false; }
+	});
+	return found;
+}
+
+function validate(json, conn) {
 	let errs = [];
 	if (type(json) != "object") {
 		push(errs, { field: "", code: "invalid_type",
@@ -28,6 +36,12 @@ function validate(json) {
 	}
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required", message: "is required" });
+	if (conn != null && json.interface != null && json.interface != "") {
+		if (!interface_exists(conn, json.interface))
+			push(errs, { field: "interface", code: "conflict",
+			             message: sprintf("network interface %J does not exist",
+			                              json.interface) });
+	}
 	return errs;
 }
 

@@ -33,11 +33,20 @@ function validate(json) {
 		             message: "body must be a JSON object" });
 		return errs;
 	}
+	if (json.commonname == null || json.commonname == "")
+		push(errs, { field: "commonname", code: "required",
+		             message: "is required (cert CN)" });
 	if (json.bits != null) {
 		let b = int(json.bits);
 		if (b < 1024)
 			push(errs, { field: "bits", code: "out_of_range",
 			             message: "must be >= 1024" });
+	}
+	if (json.days != null) {
+		let d = int(json.days);
+		if (d < 1 || d > 36500)
+			push(errs, { field: "days", code: "out_of_range",
+			             message: "must be 1-36500" });
 	}
 	if (json.country != null && length(json.country) != 2)
 		push(errs, { field: "country", code: "invalid_format",

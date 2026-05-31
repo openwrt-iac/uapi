@@ -80,6 +80,9 @@ function validate(json) {
 	if (action == "lookup" && (json.lookup == null || json.lookup == ""))
 		push(errs, { field: "lookup", code: "required",
 		             message: "is required when action is lookup" });
+	if (action == "goto" && (json['goto'] == null || json['goto'] == ""))
+		push(errs, { field: "goto", code: "required",
+		             message: "is required when action is goto" });
 
 	return errs;
 }

@@ -68,15 +68,15 @@ function validate(json, conn) {
 
 	if (json.start != null) {
 		let s = int(json.start);
-		if (s < 0)
+		if (s < 0 || s > 254)
 			push(errs, { field: "start", code: "out_of_range",
-			             message: "must be non-negative" });
+			             message: "must be 0-254 (dnsmasq pool offset within /24)" });
 	}
 	if (json.limit != null) {
 		let l = int(json.limit);
-		if (l < 0)
+		if (l < 0 || l > 254)
 			push(errs, { field: "limit", code: "out_of_range",
-			             message: "must be non-negative" });
+			             message: "must be 0-254 (dnsmasq pool size within /24)" });
 	}
 	if (json.leasetime != null && json.leasetime != "" && !match(json.leasetime, LEASETIME_RE))
 		push(errs, { field: "leasetime", code: "invalid_format",
@@ -101,7 +101,9 @@ function validate(json, conn) {
 return {
 	package: "dhcp",
 	type: "dhcp",
-	reload: ["dnsmasq", "odhcpd"],
+	// reload via ucitrack on the dhcp package, which fans out to both dnsmasq
+	// and odhcpd. Listing them here would double-reload.
+	reload: ["dnsmasq"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

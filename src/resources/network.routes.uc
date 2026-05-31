@@ -71,6 +71,11 @@ function validate(json, conn) {
 		push(errs, { field: "netmask", code: "invalid_format",
 		             message: "must be a valid IPv4 netmask" });
 
+	if (json.source != null && json.source != ""
+	    && !is_valid_ipv4(json.source) && !is_valid_cidr(json.source))
+		push(errs, { field: "source", code: "invalid_format",
+		             message: "must be a valid IPv4 address or CIDR" });
+
 	if (json.metric != null) {
 		let m = int(json.metric);
 		if (m < 0)

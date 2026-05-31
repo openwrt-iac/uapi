@@ -27,6 +27,9 @@ function validate(json) {
 	}
 	if (json.secname == null || json.secname == "")
 		push(errs, { field: "secname", code: "required", message: "is required" });
+	if (json.source == null || json.source == "")
+		push(errs, { field: "source", code: "required",
+		             message: "is required (the source network range or 'default')" });
 	if (json.community == null || json.community == "")
 		push(errs, { field: "community", code: "required", message: "is required" });
 	return errs;

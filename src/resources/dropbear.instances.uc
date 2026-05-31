@@ -22,12 +22,12 @@ function toUci(json) {
 	let out = {};
 	if (json.enable != null)            out.enable = json.enable ? "1" : "0";
 	if (json.Port != null)              out.Port = "" + json.Port;
-	if (json.PasswordAuth != null)      out.PasswordAuth = json.PasswordAuth ? "on" : "off";
-	if (json.RootPasswordAuth != null)  out.RootPasswordAuth = json.RootPasswordAuth ? "on" : "off";
+	if (json.PasswordAuth != null)      out.PasswordAuth = json.PasswordAuth ? "1" : "0";
+	if (json.RootPasswordAuth != null)  out.RootPasswordAuth = json.RootPasswordAuth ? "1" : "0";
 	if (json.RootLogin != null)         out.RootLogin = json.RootLogin ? "1" : "0";
 	if (json.BannerFile != null)        out.BannerFile = json.BannerFile;
 	if (json.Interface != null)         out.Interface = json.Interface;
-	if (json.GatewayPorts != null)      out.GatewayPorts = json.GatewayPorts ? "on" : "off";
+	if (json.GatewayPorts != null)      out.GatewayPorts = json.GatewayPorts ? "1" : "0";
 	return out;
 }
 

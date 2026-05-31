@@ -62,13 +62,47 @@ function uapi_prefix_present(json) {
 	return false;
 }
 
-function validate(json) {
+const VALID_LISTEN_RE = /^(\[[0-9A-Fa-f:]+\]|[0-9A-Fa-f:.]*):[0-9]+$/;
+
+function validate(json, conn, id) {
 	let errs = [];
 	if (type(json) != "object") {
 		push(errs, { field: "", code: "invalid_type",
 		             message: "body must be a JSON object" });
 		return errs;
 	}
+
+	for (let f in ["listen_http", "listen_https"]) {
+		let l = json[f];
+		if (type(l) != "array") continue;
+		for (let i = 0; i < length(l); i++) {
+			if (type(l[i]) != "string" || !match(l[i], VALID_LISTEN_RE))
+				push(errs, { field: sprintf("%s[%d]", f, i),
+				             code: "invalid_format",
+				             message: "must be <host>:<port>, e.g. 0.0.0.0:80 or [::]:443" });
+		}
+	}
+
+	let int_fields = ["max_requests", "max_connections", "script_timeout",
+	                  "network_timeout", "http_keepalive", "tcp_keepalive"];
+	for (let f in int_fields) {
+		if (json[f] == null) continue;
+		let n = int(json[f]);
+		if (n < 0)
+			push(errs, { field: f, code: "out_of_range",
+			             message: "must be non-negative" });
+	}
+
+	// Self-lockout protection: refuse a write to the 'main' instance that
+	// would strip uapi's own ucode_prefix entry. Applies to PUT and PATCH
+	// (id == 'main'); POST creates a new instance with a generated id and
+	// cannot target main.
+	if (id == "main" && !uapi_prefix_present(json))
+		push(errs, { field: "ucode_prefix", code: "conflict",
+		             message: sprintf(
+		               "uhttpd 'main' instance must keep uapi's ucode_prefix entry %J; refusing the write to avoid self-lockout",
+		               UAPI_PREFIX) });
+
 	return errs;
 }
 
@@ -80,21 +114,8 @@ function merge_for_patch(existing_section, existing_json, body) {
 		else
 			merged[k] = body[k];
 	}
-	// Self-lockout protection: refuse any write to the 'main' instance that
-	// would remove uapi's own ucode_prefix entry. This is checked at validate
-	// time, not here, but we surface a clear hint in the merged form.
 	return merged;
 }
-
-// Custom validate-with-id wrapper isn't part of the standard contract, but
-// we add a self-lockout check via a wrapping validate that knows the id.
-// Since handler.uc calls validate(body, conn) without id, we instead enforce
-// the check by inspecting the merged result inside merge_for_patch's
-// validate-after-merge phase. handler.make calls validate(merged_json, c)
-// AFTER merge_for_patch in the PATCH path, so we put the lockout check inside
-// validate by detecting whether ucode_prefix is being WRITTEN at all.
-// Cleaner: a separate validate that handler.make calls with both id and body.
-// For now, the integration test covers this; validate alone enforces shape.
 
 return {
 	package: "uhttpd",
