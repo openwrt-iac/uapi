@@ -1,9 +1,35 @@
 name: ci
 
+# Triggers:
+#   - push to main: run unit + lint + integration (no release).
+#   - pull_request: run unit + lint + integration (no release).
+#   - push of a v* tag: run unit + lint + integration, then release-apk if all passed.
+#   - workflow_dispatch: useful for re-running CI manually; release-apk only fires
+#     when dispatched against a v* tag ref (the job-level `if:` enforces it).
 on:
   push:
     branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
   pull_request:
+  workflow_dispatch:
+
+# Workflow-level permissions are read-only by default; release-apk overrides
+# to contents: write at the job level so unit/lint/integration run least-privilege.
+permissions:
+  contents: read
+
+# Serialize per-ref so a fast tag re-push cannot race two release-apk jobs into
+# the same publish step. `cancel-in-progress: false` is critical: a release-apk
+# that is mid-publish must finish, not be killed by a follow-up event.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  OPENWRT_VERSION: 25.12.4
+  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.4-x86-64-ext4-combined
+  OPENWRT_SDK_CACHE_KEY: openwrt-sdk-25.12.4-x86_64
+  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
 
 jobs:
   unit:
@@ -47,8 +73,8 @@ jobs:
       - name: Cache OpenWrt image
         uses: actions/cache@v4
         with:
-          path: tests/vm/openwrt-25.12.4.img.gz
-          key: openwrt-25.12.4-x86-64-ext4-combined
+          path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
+          key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
 
       - name: Setup VM image
         run: tests/vm/setup.sh
@@ -69,3 +95,155 @@ jobs:
       - name: Stop VM
         if: always()
         run: tests/vm/stop.sh
+
+  # release-apk is gated by THREE independent guards, any one of which is sufficient
+  # to block a release:
+  #   1. needs: [unit, lint, integration] -- GitHub Actions will not start this job
+  #      unless all three completed successfully for the same SHA.
+  #   2. Job-level if: ref must be a v* tag. Blocks the job from running on branch
+  #      pushes, PRs, or a workflow_dispatch against a branch ref.
+  #   3. Step-level if: on every step that mutates a published surface (GitHub
+  #      release, gh-pages feed). Defense in depth if the job-level guard is ever
+  #      loosened.
+  # The smoke test runs BEFORE the two publish steps: if the APK fails in the VM,
+  # nothing reaches the GitHub release or the gh-pages feed.
+  release-apk:
+    runs-on: ubuntu-latest
+    needs: [unit, lint, integration]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils openssh-client curl zstd \
+            build-essential libncurses-dev libssl-dev python3 \
+            unzip gawk gettext xsltproc rsync wget
+
+      - name: Cache OpenWrt SDK
+        uses: actions/cache@v4
+        with:
+          path: build/sdk
+          key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
+
+      - name: Download SDK if cache miss
+        run: |
+          if [ ! -d build/sdk/staging_dir ]; then
+            mkdir -p build/sdk
+            curl -fsSL "$OPENWRT_SDK_URL" | tar --use-compress-program=unzstd -xf - -C build/sdk --strip-components=1
+          fi
+
+      - name: Cache OpenWrt VM image
+        uses: actions/cache@v4
+        with:
+          path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
+          key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
+
+      - name: Stage package (uses checked-in build/openapi.json)
+        run: make stage
+
+      - name: Build APK
+        run: |
+          cd build/sdk
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          ln -sfn ../../openwrt/uapi package/uapi
+          make defconfig
+          make package/uapi/compile V=s
+
+      - name: Find built APK
+        id: find_apk
+        run: |
+          APK=$(find build/sdk/bin -name 'uapi-*.apk' | head -1)
+          [ -n "$APK" ] || { echo "no .apk built"; exit 1; }
+          echo "apk=$APK" >> $GITHUB_OUTPUT
+          ls -la "$APK"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uapi-apk
+          path: ${{ steps.find_apk.outputs.apk }}
+
+      # Smoke test the built APK in a fresh VM before publishing anywhere.
+      # If the smoke test fails the publish steps below never run.
+      - name: Setup VM
+        run: tests/vm/setup.sh
+
+      - name: Start VM
+        run: tests/vm/start.sh
+
+      - name: Wait for VM SSH
+        run: TIMEOUT=180 tests/vm/wait.sh
+
+      - name: Install APK in VM and run smoke test
+        run: tests/integration/release_apk_smoke.sh "${{ steps.find_apk.outputs.apk }}"
+
+      - name: Capture serial log on failure
+        if: failure()
+        run: tail -200 tests/vm/qemu.log || true
+
+      - name: Stop VM
+        if: always()
+        run: tests/vm/stop.sh
+
+      # Step-level guard 3a: only attach to a GitHub release on a real v* tag push.
+      # Redundant with the job-level if; kept so a future loosening of the job guard
+      # still cannot publish a release from a non-tag ref.
+      - name: Attach APK to GitHub release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            case "$TAG" in
+              *-rc*|*-alpha*|*-beta*|*-pre*)
+                PRE=--prerelease ;;
+              *)
+                PRE= ;;
+            esac
+            gh release create "$TAG" $PRE --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" "${{ steps.find_apk.outputs.apk }}" --clobber
+
+      # Step-level guard 3b: only publish to the signed gh-pages feed on a real v* tag.
+      # Same defense-in-depth rationale as above.
+      - name: Publish to APK feed on gh-pages (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+        run: |
+          set -eu
+          TAG="${GITHUB_REF#refs/tags/}"
+          SIGN_KEY=$(mktemp)
+          printf '%s' "$FEED_SIGNING_KEY" > "$SIGN_KEY"
+          chmod 600 "$SIGN_KEY"
+
+          APK_BIN=$(find build/sdk/staging_dir -type f -executable -name apk | head -1)
+          [ -n "$APK_BIN" ] || { echo "could not find SDK apk binary"; exit 1; }
+          APK_BIN=$(realpath "$APK_BIN")
+          APK_FILE=$(realpath "${{ steps.find_apk.outputs.apk }}")
+
+          git fetch origin gh-pages:gh-pages
+          git worktree add /tmp/gh-pages gh-pages
+          FEED_DIR=/tmp/gh-pages/packages/all/uapi
+          mkdir -p "$FEED_DIR"
+          cp "$APK_FILE" "$FEED_DIR/"
+
+          cd "$FEED_DIR"
+          "$APK_BIN" --allow-untrusted mkndx --output packages.adb --sign-key "$SIGN_KEY" *.apk
+
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          cd /tmp/gh-pages
+          rm -f packages/all/uapi/.gitkeep
+          git add -A
+          git commit -m "feed: publish $TAG" || echo "(nothing to commit)"
+          git push origin gh-pages
+
+          shred -u "$SIGN_KEY" 2>/dev/null || rm -f "$SIGN_KEY"
