@@ -108,6 +108,9 @@ A small set of curated resources whose source of truth is **not** `/etc/config/`
 | `packages/installed` | apk DB (`apk add`/`del` shell-out) | `with_lock` | none | postinst runs as root |
 | `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` | none | url-validated |
 | `dhcp/leases` | `/tmp/dhcp.leases` (parse) | n/a (read-only) | n/a | dnsmasq IPv4 leases |
+| `dhcp/leases6` | `/tmp/(hosts/odhcpd|odhcpd.leases)` (parse) | n/a (read-only) | n/a | odhcpd IPv6 leases |
+| `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` | none | write-only; audit logs token+user, never the password |
+| `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` | none | dropbear re-reads per connection |
 
 Adding a non-uci resource means adding a row here. The bar for additions is high: prefer driving the underlying daemon's uci surface if the option exists, or upstreaming the option to OpenWrt uci if it doesn't, before adding non-uci state to uapi.
 

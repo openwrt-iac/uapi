@@ -12,6 +12,7 @@ let scope = require("scope");
 let handler = require("handler");
 let bus = require("bus");
 let packages = require("packages");
+let system_access = require("system_access");
 
 function load_resource(file) {
 	return loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
@@ -378,6 +379,41 @@ function dispatch(env) {
 			else if (method == "DELETE" && id != null) resp = packages.remove_feed(ctx, id);
 			else resp = errors.error(ctx, "method_not_allowed",
 			                         sprintf("Method %J not allowed on packages/feeds%s",
+			                                 method, id != null ? "/<id>" : ""));
+		}
+		return { ctx, token, resp };
+	}
+
+	if (parts[0] == "system" && length(parts) >= 2
+	    && (parts[1] == "password" || parts[1] == "authorized_keys")) {
+		let sub = parts[1];
+		if (length(parts) > 3) {
+			return { ctx, token,
+			         resp: errors.error(ctx, "not_found",
+			                            sprintf("Unknown sub-path under system/%s", sub)) };
+		}
+		let id  = length(parts) >= 3 ? parts[2] : null;
+		let scope_path = ["system", sub];
+		let verb = method_verb(method);
+		if (!scope.permits(token.scopes, scope_path, verb)) {
+			return { ctx, token,
+			         resp: errors.error(ctx, "insufficient_scope",
+			                            sprintf("Token does not permit this operation on system/%s", sub)) };
+		}
+		let resp;
+		if (sub == "password") {
+			if (method == "POST" && id == null) resp = system_access.set_password(ctx, body);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on system/password%s",
+			                                 method, id != null ? "/<id>" : ""));
+		} else {
+			if (method == "GET" && id == null)        resp = system_access.list_keys(ctx);
+			else if (method == "GET")                  resp = system_access.get_key(ctx, id);
+			else if (method == "POST" && id == null)   resp = system_access.add_key(ctx, body);
+			else if (method == "PUT" && id == null)    resp = system_access.replace_keys(ctx, body);
+			else if (method == "DELETE" && id != null) resp = system_access.remove_key(ctx, id);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on system/authorized_keys%s",
 			                                 method, id != null ? "/<id>" : ""));
 		}
 		return { ctx, token, resp };

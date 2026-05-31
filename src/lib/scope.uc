@@ -25,6 +25,8 @@ const KNOWN_PATHS = {
 	"dhcp:odhcpd": true,
 	"system": true,
 	"system:timeservers": true,
+	"system:password": true,
+	"system:authorized_keys": true,
 	"dropbear": true,
 	"dropbear:instances": true,
 	"uhttpd": true,

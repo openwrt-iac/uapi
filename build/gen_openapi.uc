@@ -300,6 +300,52 @@ function build_paths() {
 		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
 	};
 
+	paths["/system/password"] = {
+		"post": {
+			"summary": "Set the password for a local user (write-only; shells out to passwd)",
+			"requestBody": { "required": true,
+			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SystemPasswordRequest" } } } },
+			"responses": { "204": { "description": "Password set" }, ...error_responses() }
+		},
+	};
+	paths["/system/authorized_keys"] = {
+		"get": {
+			"summary": "List installed SSH public keys",
+			"responses": { "200": {
+				"description": "OK",
+				"content": { "application/json": { "schema": {
+					"type": "array",
+					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
+			}, ...error_responses() }
+		},
+		"post": {
+			"summary": "Add a single SSH public key",
+			"requestBody": { "required": true,
+			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SSHKeyAddRequest" } } } },
+			"responses": { "200": make_response(200, "Added", "SSHAuthorizedKey"), ...error_responses() }
+		},
+		"put": {
+			"summary": "Replace the authorized_keys list wholesale",
+			"requestBody": { "required": true,
+			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SSHKeyReplaceRequest" } } } },
+			"responses": { "200": {
+				"description": "Replaced",
+				"content": { "application/json": { "schema": {
+					"type": "array",
+					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
+			}, ...error_responses() }
+		},
+	};
+	paths["/system/authorized_keys/{id}"] = {
+		"parameters": [
+			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9]{12}$" } },
+		],
+		"get":    { "summary": "Get a single SSH key by stable id",
+		            "responses": { "200": make_response(200, "OK", "SSHAuthorizedKey"), ...error_responses() } },
+		"delete": { "summary": "Remove a single SSH key by stable id",
+		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+	};
+
 	paths["/healthz"] = {
 		"get": {
 			"summary": "Liveness check (no auth required)",
@@ -410,6 +456,46 @@ function build_schemas() {
 				"name": { "type": "string",
 				          "description": "Feed name (^[A-Za-z0-9_.-]+$); becomes <name>.list" },
 				"url":  { "type": "string", "description": "HTTP(S) URL of the package repository" },
+			},
+		},
+		"SystemPasswordRequest": {
+			"type": "object",
+			"required": ["user", "password"],
+			"properties": {
+				"user":     { "type": "string", "pattern": "^(root|[a-z][a-z0-9_-]*)$",
+				              "description": "Local Unix user to update; usually 'root'" },
+				"password": { "type": "string", "minLength": 8,
+				              "writeOnly": true,
+				              "description": "New password (min 8 chars). Never echoed back." },
+			},
+		},
+		"SSHAuthorizedKey": {
+			"type": "object",
+			"required": ["id", "type"],
+			"properties": {
+				"id":      { "type": "string", "pattern": "^[a-z0-9]{12}$",
+				             "description": "Stable id: sha256 prefix of the canonical key body" },
+				"type":    { "type": "string",
+				             "description": "SSH key type (e.g. ssh-ed25519, ssh-rsa, ecdsa-sha2-nistp256)" },
+				"comment": { "type": "string",
+				             "description": "Optional comment (trailing text on the key line)" },
+			},
+		},
+		"SSHKeyAddRequest": {
+			"type": "object",
+			"required": ["key"],
+			"properties": {
+				"key": { "type": "string",
+				         "description": "Full SSH public key line: <type> <base64-blob> [comment]" },
+			},
+		},
+		"SSHKeyReplaceRequest": {
+			"type": "object",
+			"required": ["keys"],
+			"properties": {
+				"keys": { "type": "array",
+				          "items": { "type": "string" },
+				          "description": "Full key lines; replaces /etc/dropbear/authorized_keys wholesale" },
 			},
 		},
 	};
