@@ -11079,7 +11079,8 @@
 						"type": "boolean"
 					},
 					"maindhcp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Use odhcpd as the IPv4 DHCP server too"
 					},
 					"leasefile": {
 						"type": "string",
@@ -11090,8 +11091,10 @@
 						"nullable": true
 					},
 					"loglevel": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 7,
+						"description": "syslog priority (0=emerg .. 7=debug)"
 					},
 					"runtime": {
 						"type": "object"
@@ -11342,32 +11345,36 @@
 						"type": "boolean"
 					},
 					"days": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 36500,
+						"description": "Certificate validity in days"
 					},
 					"bits": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1024,
+						"description": "RSA key size in bits"
 					},
 					"commonname": {
 						"type": "string",
-						"nullable": true
+						"description": "X.509 CN (required)"
 					},
 					"organization": {
 						"type": "string",
-						"nullable": true
+						"description": "X.509 O"
 					},
 					"location": {
 						"type": "string",
-						"nullable": true
+						"description": "X.509 L"
 					},
 					"state": {
 						"type": "string",
-						"nullable": true
+						"description": "X.509 ST"
 					},
 					"country": {
 						"type": "string",
-						"nullable": true
+						"pattern": "^[A-Z]{2}$",
+						"description": "ISO 3166-1 alpha-2 country code"
 					},
 					"runtime": {
 						"type": "object"
@@ -11546,15 +11553,15 @@
 					},
 					"secname": {
 						"type": "string",
-						"nullable": true
+						"description": "security name this community maps to"
 					},
 					"source": {
 						"type": "string",
-						"nullable": true
+						"description": "source network/range or 'default'"
 					},
 					"community": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMP community string"
 					},
 					"runtime": {
 						"type": "object"
@@ -11666,27 +11673,29 @@
 					},
 					"sysLocation": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMPv2-MIB::sysLocation"
 					},
 					"sysContact": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMPv2-MIB::sysContact"
 					},
 					"sysName": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMPv2-MIB::sysName"
 					},
 					"sysServices": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 127,
+						"description": "SNMPv2-MIB::sysServices bitfield"
 					},
 					"sysDescr": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMPv2-MIB::sysDescr"
 					},
 					"sysObjectID": {
 						"type": "string",
-						"nullable": true
+						"description": "SNMPv2-MIB::sysObjectID OID"
 					},
 					"runtime": {
 						"type": "object"
@@ -11756,69 +11765,89 @@
 						"type": "boolean"
 					},
 					"listen_ipv6": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Listen on IPv6 in addition to IPv4"
 					},
 					"listen_interface": {
 						"type": "string",
-						"nullable": true
+						"description": "Bind to a specific network interface (uci interface name)"
 					},
 					"listen_port": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535,
+						"description": "TCP port for the /metrics endpoint"
 					},
 					"runtime": {
 						"type": "object"
 					},
 					"cpu": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the cpu collector"
 					},
 					"meminfo": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the meminfo collector"
 					},
 					"netdev": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the netdev collector"
 					},
 					"loadavg": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the loadavg collector"
 					},
 					"filesystem": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the filesystem collector"
 					},
 					"diskstats": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the diskstats collector"
 					},
 					"uname": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the uname collector"
 					},
 					"netstat": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the netstat collector"
 					},
 					"stat": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the stat collector"
 					},
 					"vmstat": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the vmstat collector"
 					},
 					"boottime": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the boottime collector"
 					},
 					"entropy": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the entropy collector"
 					},
 					"time": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the time collector"
 					},
 					"hwmon": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the hwmon collector"
 					},
 					"textfile": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the textfile collector"
 					},
 					"thermal_zone": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the thermal_zone collector"
 					},
 					"edac": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable the edac collector"
 					}
 				}
 			},
@@ -11835,15 +11864,18 @@
 					},
 					"DatabaseDir": {
 						"type": "string",
-						"nullable": true
+						"description": "Path to vnstat's database directory"
 					},
 					"Interface5MinHours": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"description": "How many hours of 5-minute granularity data to keep"
 					},
 					"MonthRotate": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 28,
+						"description": "Day of month that monthly counters roll over"
 					},
 					"runtime": {
 						"type": "object"
@@ -11863,10 +11895,11 @@
 					},
 					"interface": {
 						"type": "string",
-						"nullable": true
+						"description": "Network interface to track (must exist in network/interfaces)"
 					},
 					"enabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Whether vnstat tracks this interface"
 					},
 					"runtime": {
 						"type": "object"

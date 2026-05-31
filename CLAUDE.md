@@ -99,6 +99,22 @@ Thin abstraction over uci itself for the long tail. Same atomic transaction reci
 
 Auto-reload mapping (package → service) is driven by `/etc/config/ucitrack` with a small fallback table. For packages with no known reload service, fall back to `/etc/init.d/<package> reload` if such a script exists; document clearly in the response when no reload occurred.
 
+### Non-uci resources
+
+A small set of curated resources whose source of truth is **not** `/etc/config/`. Each entry deviates from the standard atomic-uci-transaction recipe and is elaborated in `docs/non-uci-state.md`.
+
+| Resource | Source of truth | Lock | Reload | Notes |
+|---|---|---|---|---|
+| `packages/installed` | apk DB (`apk add`/`del` shell-out) | `with_lock` | none | postinst runs as root |
+| `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` | none | url-validated |
+| `dhcp/leases` | `/tmp/dhcp.leases` (parse) | n/a (read-only) | n/a | dnsmasq IPv4 leases |
+
+Adding a non-uci resource means adding a row here. The bar for additions is high: prefer driving the underlying daemon's uci surface if the option exists, or upstreaming the option to OpenWrt uci if it doesn't, before adding non-uci state to uapi.
+
+### Curation completeness
+
+When adding or extending a curated resource, the test is: *does this resource expose the options that a typical real configuration of this section actually sets?* If a common real-world setup of this section requires uci options the curated resource does not surface, that is a curation gap — close it. Telling users to drop to `/raw/` for a routine field is a smell.
+
 ## JSON conventions (curated layer)
 
 - `snake_case` field names (matches uci, matches Terraform conventions).

@@ -42,5 +42,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	schema_properties: {},
+	schema_properties: {
+		secname:   { type: "string", description: "security name this community maps to" },
+		source:    { type: "string",
+		             description: "source network/range or 'default'" },
+		community: { type: "string", description: "SNMP community string" },
+	},
 };

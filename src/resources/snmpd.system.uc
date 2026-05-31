@@ -40,5 +40,13 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	schema_properties: {},
+	schema_properties: {
+		sysLocation: { type: "string", description: "SNMPv2-MIB::sysLocation" },
+		sysContact:  { type: "string", description: "SNMPv2-MIB::sysContact" },
+		sysName:     { type: "string", description: "SNMPv2-MIB::sysName" },
+		sysServices: { type: "integer", minimum: 0, maximum: 127,
+		               description: "SNMPv2-MIB::sysServices bitfield" },
+		sysDescr:    { type: "string", description: "SNMPv2-MIB::sysDescr" },
+		sysObjectID: { type: "string", description: "SNMPv2-MIB::sysObjectID OID" },
+	},
 };

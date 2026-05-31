@@ -18,6 +18,21 @@ $SSH "logread | tail -200" > /tmp/uapi_obs_log.txt
 grep -F "uapi-insecure-bypass" /tmp/uapi_obs_log.txt | grep -F "$req_id" \
     || { cat /tmp/uapi_obs_log.txt; fail "no uapi-insecure-bypass line for $req_id"; }
 
+# Test 1b: a WRITE request via the bypass still emits the standard AUDIT line
+# in addition to the uapi-insecure-bypass NOTICE. Confirms the bypass doesn't
+# silence the audit trail.
+echo "--- write via .insecure bypass emits BOTH audit + bypass NOTICE ---"
+write_id=$(curl -sS -o /dev/null -D - -H "$ADMIN" -H 'Content-Type: application/json' \
+    -X PATCH "$URL/system" -d '{"description": "obs-bypass-audit-test"}' | tr -d '\r' \
+    | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
+[ -n "$write_id" ] || fail "no X-Request-Id on bypass-write"
+sleep 1
+$SSH "logread | tail -200" > /tmp/uapi_obs_log.txt
+grep -F "$write_id" /tmp/uapi_obs_log.txt | grep -F "uapi-insecure-bypass" \
+    || { cat /tmp/uapi_obs_log.txt; fail "no uapi-insecure-bypass line for write $write_id"; }
+grep -F "$write_id" /tmp/uapi_obs_log.txt | grep -E "AUDIT|NOTICE" | grep -F "PATCH" \
+    || { cat /tmp/uapi_obs_log.txt; fail "no AUDIT line for bypass-write $write_id"; }
+
 # Test 2: ACCESS knob logs every request at INFO when enabled.
 # Test 3: DEBUG knob traces ubus calls when enabled.
 # LOGGING is loaded at uhttpd parent boot, so we must restart uhttpd after

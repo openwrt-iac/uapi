@@ -52,5 +52,9 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	schema_properties: {},
+	schema_properties: {
+		interface: { type: "string",
+		             description: "Network interface to track (must exist in network/interfaces)" },
+		enabled:   { type: "boolean", description: "Whether vnstat tracks this interface" },
+	},
 };

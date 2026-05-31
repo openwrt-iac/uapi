@@ -48,5 +48,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	schema_properties: {},
+	schema_properties: {
+		maindhcp: { type: "boolean",
+		            description: "Use odhcpd as the IPv4 DHCP server too" },
+		loglevel: { type: "integer", minimum: 0, maximum: 7,
+		            description: "syslog priority (0=emerg .. 7=debug)" },
+	},
 };

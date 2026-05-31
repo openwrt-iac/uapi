@@ -55,5 +55,18 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	schema_properties: {},
+	schema_properties: (function() {
+		let props = {
+			listen_ipv6:      { type: "boolean",
+			                    description: "Listen on IPv6 in addition to IPv4" },
+			listen_interface: { type: "string",
+			                    description: "Bind to a specific network interface (uci interface name)" },
+			listen_port:      { type: "integer", minimum: 1, maximum: 65535,
+			                    description: "TCP port for the /metrics endpoint" },
+		};
+		for (let c in COLLECTOR_FIELDS)
+			props[c] = { type: "boolean",
+			             description: sprintf("Enable the %s collector", c) };
+		return props;
+	})(),
 };

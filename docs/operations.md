@@ -92,7 +92,7 @@ Leave these off unless you're debugging. They are noisy and will fill the in-mem
 
 ## Metrics
 
-Not in v1. Operators wanting router-level metrics use `node_exporter` (available in the `packages` feed); uapi's request volume is naturally low and not the bottleneck. A `/metrics` endpoint is on the v1.1+ list.
+Not in v1.x. Operators wanting router-level metrics use `node_exporter` (curated via `prometheus_node_exporter_lua/config`); uapi's request volume is naturally low and not the bottleneck. A `/metrics` endpoint remains deferred: it needs cross-fork shared state (counters/histograms) which the fork-per-request model can't share in process.
 
 ## Healthz
 

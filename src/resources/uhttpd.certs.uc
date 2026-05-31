@@ -48,9 +48,9 @@ function validate(json) {
 			push(errs, { field: "days", code: "out_of_range",
 			             message: "must be 1-36500" });
 	}
-	if (json.country != null && length(json.country) != 2)
+	if (json.country != null && !match(json.country, /^[A-Z]{2}$/))
 		push(errs, { field: "country", code: "invalid_format",
-		             message: "must be a 2-letter country code" });
+		             message: "must be a 2-letter uppercase ISO 3166-1 alpha-2 code" });
 	return errs;
 }
 
@@ -62,5 +62,16 @@ return {
 	toUci: toUci,
 	validate: validate,
 	id_prefix: "c",
-	schema_properties: {},
+	schema_properties: {
+		days:         { type: "integer", minimum: 1, maximum: 36500,
+		                description: "Certificate validity in days" },
+		bits:         { type: "integer", minimum: 1024,
+		                description: "RSA key size in bits" },
+		commonname:   { type: "string", description: "X.509 CN (required)" },
+		organization: { type: "string", description: "X.509 O" },
+		location:     { type: "string", description: "X.509 L" },
+		state:        { type: "string", description: "X.509 ST" },
+		country:      { type: "string", pattern: "^[A-Z]{2}$",
+		                description: "ISO 3166-1 alpha-2 country code" },
+	},
 };
