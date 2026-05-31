@@ -10684,11 +10684,6 @@
 						"type": "string",
 						"pattern": "^[A-Za-z0-9+/]{43}=$"
 					},
-					"preshared_key": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Optional preshared key; accepted on write, masked on read"
-					},
 					"has_preshared_key": {
 						"type": "boolean",
 						"readOnly": true
@@ -10719,6 +10714,11 @@
 					},
 					"runtime": {
 						"type": "object"
+					},
+					"preshared_key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Optional preshared key; accepted on write, masked on read"
 					}
 				}
 			},

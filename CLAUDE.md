@@ -51,18 +51,31 @@ Hybrid: two namespaces under `/api/v1/`, with different stability promises.
 
 Hand-written schemas, domain-friendly field names, semver-stable.
 
-v1 endpoints:
+v1.0 endpoints (the original ten):
 
-- `network/interfaces`
-- `network/devices`
-- `wireless/devices`
-- `wireless/interfaces`
-- `firewall/zones`
-- `firewall/rules`
-- `firewall/redirects`
-- `dhcp/hosts`
-- `dhcp/leases` (read-only runtime)
-- `system`
+- `network/interfaces`, `network/devices`
+- `wireless/devices`, `wireless/interfaces`
+- `firewall/zones`, `firewall/rules`, `firewall/redirects`
+- `dhcp/hosts`, `dhcp/leases` (read-only runtime)
+- `system` (singleton)
+
+v1.1 added (additive, non-breaking):
+
+- `network/routes`, `network/rules`, `network/bridge_vlans`, `network/wireguard_peers` (dynamic-type over `wireguard_<iface>`)
+- `firewall/forwardings`, `firewall/defaults` (singleton)
+- `dhcp/servers`, `dhcp/dnsmasq` (singleton), `dhcp/odhcpd` (singleton)
+- `system/timeservers`
+- `dropbear/instances`
+- `uhttpd/instances`, `uhttpd/certs`
+- `unbound/server` (singleton)
+- `sqm/queues`
+- `snmpd/agents`, `snmpd/com2secs`, `snmpd/groups`, `snmpd/accesses`, `snmpd/system` (singleton)
+- `lldpd/config` (singleton)
+- `prometheus_node_exporter_lua/config` (singleton)
+- `vnstat/config` (singleton), `vnstat/interfaces`
+- `packages/installed`, `packages/feeds` (non-uci: shells out to `apk`; see "Packages — non-uci writes" below)
+
+The authoritative current list lives in `build/openapi.json`; when in doubt, regenerate (`make openapi`) and read that.
 
 Each resource is implemented as a ucode module under `/usr/share/uapi/resources/` exporting the uniform contract:
 
@@ -170,14 +183,32 @@ A request to `/api/v1/raw/<package>/<section_id>` requires **both trees to permi
 
 A user who set `firewall:rules:ro` is protected even if they have `raw:rw`; the raw access still goes through firewall's domain-tree check.
 
-### Scope tree (v1)
+### Scope tree
 
+v1.0:
 - `network`, `network:interfaces`, `network:devices`
 - `wireless`, `wireless:devices`, `wireless:interfaces`
 - `firewall`, `firewall:zones`, `firewall:rules`, `firewall:redirects`
 - `dhcp`, `dhcp:hosts`, `dhcp:leases`
 - `system`
 - `raw`, `raw:<package>` (any package name)
+
+v1.1 added:
+- `network:routes`, `network:rules`, `network:bridge_vlans`, `network:wireguard_peers`
+- `firewall:forwardings`, `firewall:defaults`
+- `dhcp:servers`, `dhcp:dnsmasq`, `dhcp:odhcpd`
+- `system:timeservers`
+- `dropbear`, `dropbear:instances`
+- `uhttpd`, `uhttpd:instances`, `uhttpd:certs`
+- `unbound`, `unbound:server`
+- `sqm`, `sqm:queues`
+- `snmpd`, `snmpd:agents`, `snmpd:com2secs`, `snmpd:groups`, `snmpd:accesses`, `snmpd:system`
+- `lldpd`, `lldpd:config`
+- `prometheus_node_exporter_lua`, `prometheus_node_exporter_lua:config`
+- `vnstat`, `vnstat:config`, `vnstat:interfaces`
+- `packages`, `packages:installed`, `packages:feeds`
+
+The authoritative source is `src/lib/scope.uc`'s `KNOWN_PATHS`.
 
 ### TLS and rate limiting
 
@@ -357,21 +388,16 @@ In-repo at `examples/curl/`, one file per resource demonstrating CRUD. Doubles a
   raw.uc                            # generic /raw/ handler
   lib/
     auth.uc                         # token + hierarchical scope matcher
-    transaction.uc                  # snapshot / commit / reload / restore
+    transaction.uc                  # snapshot / commit / reload / restore; also with_lock for non-uci writes
     errors.uc                       # error envelope construction
     ids.uc                          # ULID generation
     ucitrack.uc                     # package → reload-service mapping
+    handler.uc                      # resource factory (CRUD/singleton/collection); dynamic-type hooks
+    packages.uc                     # non-uci writes: apk install/remove + feeds (under the same flock)
+    # plus: scope.uc, values.uc, bus.uc, log.uc, openapi.uc
   resources/
-    network.interfaces.uc
-    network.devices.uc
-    wireless.devices.uc
-    wireless.interfaces.uc
-    firewall.zones.uc
-    firewall.rules.uc
-    firewall.redirects.uc
-    dhcp.hosts.uc
-    dhcp.leases.uc
-    system.uc
+    # see "Curated" above for the full v1.x list (32 modules at v1.1).
+    # Authoritative list: build/openapi.json + src/main.uc RESOURCES/SINGLETONS.
   openapi.json                      # generated at build time
 
 /usr/bin/uapi-token                 # CLI (ucode script, #!/usr/bin/ucode)

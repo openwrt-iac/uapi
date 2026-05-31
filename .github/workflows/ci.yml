@@ -8,8 +8,11 @@ name: ci
 #     when dispatched against a v* tag ref (the job-level `if:` enforces it).
 on:
   push:
+    # GitHub trigger filter-patterns are NOT regex: `+` is literal, `[0-9]` is a
+    # character class without quantifier. Use a broad pattern; the real release
+    # gate is the job-level `if:` on release-apk (refs/tags/v* startsWith).
     branches: [main]
-    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -18,12 +21,12 @@ on:
 permissions:
   contents: read
 
-# Serialize per-ref so a fast tag re-push cannot race two release-apk jobs into
-# the same publish step. `cancel-in-progress: false` is critical: a release-apk
-# that is mid-publish must finish, not be killed by a follow-up event.
+# Cancel superseded runs for branch / PR pushes to save runner minutes; never
+# cancel a tag-triggered run that may be mid-publish to GitHub release or
+# gh-pages feed.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   OPENWRT_VERSION: 25.12.4

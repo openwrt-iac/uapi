@@ -51,6 +51,13 @@ echo "--- network/bridge_vlans: set up a throwaway bridge that is NOT in the man
 # a fake port so the bridge-vlan reload has no effect on traffic.
 $SSH "uci set network.uapitestbr=device; uci set network.uapitestbr.type=bridge; uci set network.uapitestbr.name=br-uapitest; uci -q delete network.uapitestbr.ports; uci add_list network.uapitestbr.ports=lan99; uci commit network"
 
+# Always clean up the throwaway bridge, even on mid-test failure, so a re-run
+# doesn't see stale uci state.
+cleanup() {
+	$SSH "uci -q delete network.uapitestbr; uci commit network; /etc/init.d/network reload" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
 echo "--- network/bridge_vlans: POST against the isolated bridge ---"
 bv=$(call -X POST -H 'Content-Type: application/json' "$URL/network/bridge_vlans" -d '{
 	"device": "br-uapitest", "vlan": 99, "ports": ["lan99:t"]
@@ -75,7 +82,6 @@ echo "$no_bridge" | tail -1 | grep -q '^422$' || fail "missing bridge expected 4
 echo "--- network/bridge_vlans: DELETE ---"
 call -X DELETE "$URL/network/bridge_vlans/$vid" | tail -1 | grep -q '^204$' || fail "DELETE bridge_vlans expected 204"
 
-echo "--- network/bridge_vlans: cleanup throwaway bridge ---"
-$SSH "uci delete network.uapitestbr; uci commit network; /etc/init.d/network reload" >/dev/null
+# Cleanup runs from the EXIT trap above.
 
 echo "network/routes + rules + bridge_vlans CRUD ok."
