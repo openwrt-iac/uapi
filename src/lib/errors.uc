@@ -18,6 +18,7 @@ const STATUS_BY_CODE = {
 	reload_failed_restored: 500,
 	reload_failed_unrecovered: 500,
 	service_unavailable: 503,
+	init_script_missing: 503,
 };
 
 const FIELD_CODES = {

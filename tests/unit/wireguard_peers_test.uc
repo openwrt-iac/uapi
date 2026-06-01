@@ -106,6 +106,7 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 				acquire: function() { return {}; },
 				release: function() {},
 				reload: function() { return null; },
+				check_services: function() { return null; },
 			},
 		});
 	}

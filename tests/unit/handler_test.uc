@@ -9,6 +9,7 @@ let rules = handler.make(rules_mod, {
 		acquire: function() { return {}; },
 		release: function() {},
 		reload: record_reload,
+		check_services: function() { return null; },
 	},
 });
 
@@ -442,7 +443,8 @@ t.describe('handler ETag regressions', () => {
 		let h = handler.make(res_with_runtime(), {
 			tx: { acquire: function() { return {}; },
 			      release: function() {},
-			      reload: function() { return null; } } });
+			      reload: function() { return null; },
+			      check_services: function() { return null; } } });
 		let c = ubus.stub({ uci: { firewall: {
 			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' },
 		}}});

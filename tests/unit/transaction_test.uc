@@ -41,6 +41,7 @@ function reload_flaky(initial_calls_failing) {
 }
 
 function noop_reload(services) { return null; }
+function noop_check(services) { return null; }
 
 function build_params(overrides) {
 	let p = {
@@ -51,6 +52,7 @@ function build_params(overrides) {
 			return { ok: true, body: { id: "r1", target: "ACCEPT" } };
 		},
 		reload: noop_reload,
+		check_services: noop_check,
 	};
 	if (overrides) {
 		for (let k in overrides) p[k] = overrides[k];
@@ -207,10 +209,8 @@ t.describe('transaction, reload failure with restore failure', () => {
 	});
 });
 
-t.describe('transaction, default_reload service-name safety', () => {
-	t.it('refuses service names with shell metacharacters', () => {
-		// We exercise default_reload indirectly: pass it as the reload fn and confirm
-		// that an unsafe name causes a reload_failed_unrecovered (both reloads refuse).
+t.describe('transaction, default_check_services pre-flight', () => {
+	t.it('refuses service names with shell metacharacters before any uci write', () => {
 		let conn = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
 		});
@@ -218,11 +218,38 @@ t.describe('transaction, default_reload service-name safety', () => {
 			reload_services: ["firewall; rm -rf /"],
 			acquire: function() { return {}; },
 			release: function() {},
-			// Use the real default_reload via params.reload omission.
-			reload: null,
+			// Use the real default_check_services via params.check_services omission.
+			check_services: null,
 		}));
-		t.assert_equal(r.kind, "reload_failed_unrecovered");
-		t.assert_true(match(r.reload_error, /unsafe name/) != null);
+		t.assert_equal(r.kind, "init_script_missing");
+		t.assert_true(match(r.message, /unsafe name/) != null);
+	});
+
+	t.it('returns init_script_missing when /etc/init.d/<svc> is absent', () => {
+		let conn = ubus.stub({
+			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
+		});
+		let r = tx.transaction(conn, build_params({
+			reload_services: ["this-daemon-definitely-not-installed-anywhere"],
+			acquire: function() { return {}; },
+			release: function() {},
+			check_services: null,  // exercise the real default
+		}));
+		t.assert_equal(r.kind, "init_script_missing");
+		t.assert_true(match(r.message, /init script .* not found/) != null);
+	});
+
+	t.it('empty reload services list passes pre-flight', () => {
+		let conn = ubus.stub({
+			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } },
+		});
+		let r = tx.transaction(conn, build_params({
+			reload_services: [],
+			acquire: function() { return {}; },
+			release: function() {},
+			check_services: null,
+		}));
+		t.assert_true(r.ok);
 	});
 });
 

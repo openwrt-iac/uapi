@@ -106,6 +106,8 @@ function translate_tx(ctx, result) {
 		return errors.error(ctx, "conflict", result.message);
 	if (result.kind == "precondition_failed")
 		return errors.error(ctx, "precondition_failed", result.message);
+	if (result.kind == "init_script_missing")
+		return errors.error(ctx, "init_script_missing", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")

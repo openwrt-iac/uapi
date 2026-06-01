@@ -3,6 +3,24 @@ let fs = require('fs');
 const LOCK_PATH = "/var/lock/uapi.lock";
 const SERVICE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
+// Pre-flight: confirm every init script we're about to reload actually exists.
+// Without this check, a write against a uci section whose daemon isn't installed
+// (e.g. POST /sqm/queues on a router without sqm-scripts) would stage + commit,
+// fail the first reload with exit 127, succeed the snapshot-restore, then fail
+// the SECOND reload with the same exit 127, and surface as `reload_failed_unrecovered`.
+// The uci state IS restored fine; only the reload couldn't run. Fail-fast here so
+// the caller gets an honest `init_script_missing` (503) before any uci write.
+function default_check_services(services) {
+	for (let svc in services) {
+		if (type(svc) != "string" || !match(svc, SERVICE_NAME_RE))
+			return sprintf("refusing to reload service with unsafe name %J", svc);
+		let path = "/etc/init.d/" + svc;
+		if (fs.stat(path) == null)
+			return sprintf("init script %s not found (is the daemon installed?)", path);
+	}
+	return null;
+}
+
 function default_reload(services) {
 	for (let svc in services) {
 		if (type(svc) != "string" || !match(svc, SERVICE_NAME_RE))
@@ -87,6 +105,11 @@ function transaction(conn, params) {
 	let acquire = params.acquire ?? default_acquire;
 	let release = params.release ?? default_release;
 	let reload = params.reload ?? default_reload;
+	let check_services = params.check_services ?? default_check_services;
+
+	let svc_err = check_services(services);
+	if (svc_err != null)
+		return { ok: false, kind: "init_script_missing", message: svc_err };
 
 	let lock = acquire(path);
 	if (lock == null) return { ok: false, kind: "locked" };

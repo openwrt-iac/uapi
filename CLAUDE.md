@@ -156,14 +156,15 @@ GETs include both managed and unmanaged sections. Clients filter via query param
 
 Every write follows this sequence:
 
-0. `flock(LOCK_EX | LOCK_NB)` on `/var/lock/uapi.lock`. On `EWOULDBLOCK`, return `423 locked` with `Retry-After: 1` immediately; no state change. The lock is released in a `finally` after the rest of the recipe.
-1. `uci export <package>` → snapshot
-2. Validate payload against resource schema → `422` on fail, no commit
-3. `uci set` / `uci add` / `uci delete` (staging only, no commit yet)
-4. `uci commit <package>`
-5. `/etc/init.d/<service> reload` via `fs.popen`, exit code checked. Done directly (not through ubus) because every ubus-mediated reload path on OpenWrt (`ubus call <svc> reload`, `ubus call rc init`, `uci apply`) is fire-and-forget: rpcd's deferred-request callback completes with `UBUS_STATUS_OK` regardless of the init script's actual exit code. Only the kernel-level wait4 on a spawned child gives us back a real success/failure bit.
-6. **On reload error (non-zero exit from the init script):** `uci import` snapshot, re-reload to restore prior daemon state, return `500 reload_failed_restored` with the captured stderr/exit-code summary in `reload_error`. If the restore itself fails, return `500 reload_failed_unrecovered` (loud; this is the worst case).
-7. **On success:** return `200` with the refreshed resource (uci-configured state).
+0. **Pre-flight service check.** For each entry in `reload_services`, confirm `/etc/init.d/<svc>` exists (and the service name matches `^[A-Za-z0-9_-]+$`). On miss, return `503 init_script_missing` immediately with the path that wasn't found, before any uci write. This catches "trying to manage a daemon that isn't installed" early; the alternative is stage+commit+reload-fail+restore+reload-fail-again, which is what the snapshot-restore path was NOT designed for.
+1. `flock(LOCK_EX | LOCK_NB)` on `/var/lock/uapi.lock`. On `EWOULDBLOCK`, return `423 locked` with `Retry-After: 1` immediately; no state change. The lock is released in a `finally` after the rest of the recipe.
+2. `uci export <package>` → snapshot
+3. Validate payload against resource schema → `422` on fail, no commit
+4. `uci set` / `uci add` / `uci delete` (staging only, no commit yet)
+5. `uci commit <package>`
+6. `/etc/init.d/<service> reload` via `fs.popen`, exit code checked. Done directly (not through ubus) because every ubus-mediated reload path on OpenWrt (`ubus call <svc> reload`, `ubus call rc init`, `uci apply`) is fire-and-forget: rpcd's deferred-request callback completes with `UBUS_STATUS_OK` regardless of the init script's actual exit code. Only the kernel-level wait4 on a spawned child gives us back a real success/failure bit.
+7. **On reload error (non-zero exit from the init script):** `uci import` snapshot, re-reload to restore prior daemon state, return `500 reload_failed_restored` with the captured stderr/exit-code summary in `reload_error`. If the restore itself fails, return `500 reload_failed_unrecovered` (loud; this is the worst case).
+8. **On success:** return `200` with the refreshed resource (uci-configured state).
 
 ### What "reloaded" means
 
@@ -282,6 +283,7 @@ Lean custom shape, RFC 7807-inspired but not strictly conformant. `application/j
 | 500  | `reload_failed_restored`         |
 | 500  | `reload_failed_unrecovered`      |
 | 503  | `service_unavailable`            |
+| 503  | `init_script_missing`            |
 
 The `reload_failed_restored` body carries the underlying ubus error as a `reload_error` extension field.
 
