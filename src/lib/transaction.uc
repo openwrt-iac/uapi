@@ -1,6 +1,23 @@
 let fs = require('fs');
 
+// Lock layout (introduced to let concurrent writes to different uci packages
+// proceed in parallel without losing the apk-vs-uci serialization guarantee):
+//
+//   /var/lock/uapi.lock              shared by uci transactions, exclusive
+//                                     by non-uci writes (apk, system/access)
+//   /var/lock/uapi.pkg.<package>.lock exclusive per-package; serializes
+//                                     writes to the same uci package only
+//
+// A uci transaction takes SH on the global + EX on its per-package file.
+// Two transactions on different packages: both SH on global (compatible),
+// each EX on its own file -> parallel.
+// Two on the same package: both SH on global, only one EX on the package
+// file -> serialized on the package one.
+// A non-uci write takes EX on the global -> waits for any in-flight uci
+// transaction (any package) and blocks new ones until done.
 const LOCK_PATH = "/var/lock/uapi.lock";
+const PKG_LOCK_PREFIX = "/var/lock/uapi.pkg.";
+const PKG_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const SERVICE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 // Pre-flight: confirm every init script we're about to reload actually exists.
@@ -37,22 +54,50 @@ function default_reload(services) {
 	return null;
 }
 
-function default_acquire(path) {
+// Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
+// non-blocking ("n" suffix). Returns the fd handle on success; null on lock
+// contention; { unavailable: <path> } on infrastructure failure (fs.open).
+function _lock_one(path, mode) {
 	let fd = fs.open(path, "w+");
 	if (!fd) return { unavailable: "" + path };
-	let r = fd.lock("xn");
-	if (r !== true) {
-		fd.close();
-		return null;
-	}
+	let r = fd.lock(mode + "n");
+	if (r !== true) { fd.close(); return null; }
 	return fd;
 }
 
+function _release_one(fd) {
+	if (fd) { fd.lock("u"); fd.close(); }
+}
+
+// Default global-exclusive lock; used by non-uci writes (apk, system/access).
+// Backward-compatible signature: ignores extras, returns a single fd.
+function default_acquire(path) {
+	return _lock_one(path ?? LOCK_PATH, "x");
+}
+
 function default_release(handle) {
-	if (handle) {
-		handle.lock("u");
-		handle.close();
-	}
+	_release_one(handle);
+}
+
+// Per-package uci-transaction lock. Holds SH on the global, EX on the
+// per-package file. Returns an opaque handle (object with both fds) or one
+// of the same null / { unavailable } sentinels.
+function default_acquire_pkg(global_path, package) {
+	if (type(package) != "string" || !match(package, PKG_NAME_RE))
+		return { unavailable: sprintf("invalid package name %J", package) };
+	let g = _lock_one(global_path ?? LOCK_PATH, "s");
+	if (g == null) return null;
+	if (type(g) == "object" && g.unavailable != null) return g;
+	let p = _lock_one(PKG_LOCK_PREFIX + package + ".lock", "x");
+	if (p == null) { _release_one(g); return null; }
+	if (type(p) == "object" && p.unavailable != null) { _release_one(g); return p; }
+	return { _g: g, _p: p };
+}
+
+function default_release_pkg(handle) {
+	if (handle == null) return;
+	_release_one(handle._p);
+	_release_one(handle._g);
 }
 
 function run_inner(conn, pkg, services, fn, snapshot, reload) {
@@ -102,8 +147,8 @@ function transaction(conn, params) {
 	let services = params.reload_services ?? [];
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
-	let acquire = params.acquire ?? default_acquire;
-	let release = params.release ?? default_release;
+	let acquire = params.acquire ?? function(p) { return default_acquire_pkg(p, pkg); };
+	let release = params.release ?? default_release_pkg;
 	let reload = params.reload ?? default_reload;
 	let check_services = params.check_services ?? default_check_services;
 
@@ -149,4 +194,7 @@ function with_lock(params) {
 	return result ?? { ok: true };
 }
 
-return { transaction, with_lock };
+return { transaction, with_lock,
+         default_acquire, default_release,
+         default_acquire_pkg, default_release_pkg,
+         default_check_services };

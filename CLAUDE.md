@@ -520,13 +520,53 @@ The emitted `openapi.json` carries the same version as the API it describes (`in
 
 ---
 
-## v1.1+ roadmap
+## Roadmap
 
-These are explicitly out-of-scope for v1.0 and require either substantive new code or an architectural change that conflicts with one of the three non-negotiable principles. Listed so v1 ships honestly about what it does not do.
+Things deliberately not yet shipped. Each entry says why and what shape the change would take.
+
+### Shipped
 
 - **ETags / `If-Match` optimistic concurrency** — shipped in v1.2.
-- **`commit-confirmed`-style timed rollback** (apply, wait, auto-revert unless the client acks within N seconds). Conflicts with the fork-per-request model (no place for a background timer); would require a small procd-managed sidecar.
-- **`/metrics` endpoint** (Prometheus-style). Counters and histograms need cross-fork shared state; a uci-backed counter or a tiny procd-managed registry is the realistic path.
-- **Per-token rate limiting.** Same shared-state problem as `/metrics`. Operators today should front the API with a reverse proxy if they need this.
-- **HTTP token creation endpoint** (for a future LuCI plugin managing uapi tokens). Deliberately CLI-only in v1; an HTTP path needs an admin-scope design that avoids handing remote attackers a token-mint endpoint on compromise.
-- **Localization of error `message` strings.** English-only in v1; codes are stable and translatable client-side.
+
+### Features (additive, future minor bumps)
+
+- **Multi-resource batch endpoint.** `POST /api/v1/batch [{path, method, body}, ...]`. All-or-nothing under one combined snapshot/restore across N packages. Real unlock for Terraform `apply`: cross-resource references become one server-side transaction. Need a combined-snapshot recipe and a precondition policy (any 4xx in the batch aborts the whole thing). No sidecar required.
+
+- **`commit-confirmed` timed rollback.** Apply, wait N seconds for client `POST /commits/<id>/confirm`, auto-revert if no ack. Conflicts with the fork-per-request model (no place for a background timer in the handler); needs a small procd-managed sidecar daemon that holds the post-commit timer and runs the rollback. Breaks the "no daemon of our own" architectural principle — explicit decision required before adoption.
+
+- **`/metrics` endpoint** (Prometheus-style). Counters and histograms need cross-fork shared state. Two paths: file-backed counters under `/tmp/uapi-metrics/` with `flock` (no daemon, simpler) or the same sidecar as `commit-confirmed` (more flexible). Pick simultaneously with the commit-confirmed decision.
+
+- **Per-token rate limiting.** Token-bucket per token-id, persisted as a small file under `/var/run/uapi-ratelimit/<token-id>` with `flock(LOCK_SH)` reads and `flock(LOCK_EX)` writes. Returns `429 too_many_requests` (new error code) with `Retry-After`. No sidecar needed.
+
+- **Token expiry + rotation.** `uci set uapi.<id>.expires_at = <epoch>` field plus an auth-time check. Add `POST /api/v1/tokens` (admin scope) for HTTP-side creation that doesn't require shell access. The token-mint endpoint needs scope-creation guard rails (a token can only mint sub-scopes of its own) to avoid privilege escalation on token compromise.
+
+- **`/api/v1/auth/whoami`** returning `{token_id, name, scopes[], expires_at, source_ip}`. One read endpoint, no risk, big ergonomic win for Terraform provider debugging.
+
+- **Dependency-aware ETags.** Today an ETag covers only the resource body. Changing a zone invalidates rules that reference it, but those rules' ETags don't reflect that. State-of-the-art: each resource declares its `depends_on` set; ETag mixes in the hash of every referenced resource. Would catch cross-resource staleness that today's `If-Match` misses.
+
+### Hardening (next, no new wire surface)
+
+- **Round-trip property tests for every resource.** `fromUci(toUci(x)) == x` for randomly-generated valid bodies. Would have caught the v1.2.0 `ipaddr`-array and defaults-leakage regressions before review.
+
+- **Fuzz harness for every `validate()`.** Adversarial JSON (deep nesting, type confusion, control bytes, near-boundary integers, malformed UTF-8) across all resource validators. Run as a CI soak step.
+
+- **Coverage measurement.** Instrumented ucode load that surfaces never-executed validate paths. Would have caught the `apk info --installed` regression (no test ever called `list_installed()` against a real apk-tools 3.x install).
+
+- **Soak / torture test.** N=1000 iterations of the full integration suite tracking memory creep, fd leaks, zombie children.
+
+- **Performance benchmark suite.** P50/P99 baselines per release for GET singleton / GET list / POST / write-under-load / full reload chain. CI fails a PR that regresses P99 by >25%.
+
+- **Per-package flock.** Today a `network` write serializes with a concurrent `firewall` write needlessly. Per-package locks plus a coarse global for cross-package operations. Real throughput win.
+
+- **Lock-and-state audit.** Walk every fd-open / lock-acquire site and prove release on every exit including `die()`. Identify any `try` without `finally`-equivalent.
+
+- **Non-uci resource base library.** `packages/*` and `system/access` duplicate `with_lock` + audit + envelope plumbing. One shared helper would simplify both and any future non-uci addition.
+
+- **Security headers on every response.** `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+
+### Out of scope by design
+
+- **Localization of error `message` strings.** English-only; codes are stable and translatable client-side.
+- **Async/parallel ubus.** `conn.call()` only, by design (see Concurrency).
+- **In-memory caches across requests.** Forked children only.
+- **Multi-tenant scoping.** Single admin namespace.

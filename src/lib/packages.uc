@@ -197,9 +197,15 @@ function create_feed_handler(ctx, body) {
 	let r = transaction.with_lock({ fn: function() {
 		let path = feed_path(name);
 		if (fs.stat(path) != null) return { ok: false, kind: "conflict" };
+		// O_EXCL: if a concurrent writer created the file between the stat
+		// above and this open, fail (don't truncate someone else's content).
 		let fp = fs.open(path, "wx");
-		if (!fp) fp = fs.open(path, "w");
-		if (!fp) return { ok: false, kind: "io_error" };
+		if (!fp) {
+			// Either the file appeared in the TOCTOU window (treat as
+			// conflict) or the open failed for an unrelated reason.
+			if (fs.stat(path) != null) return { ok: false, kind: "conflict" };
+			return { ok: false, kind: "io_error" };
+		}
 		fp.write(url + "\n");
 		fp.close();
 		let upd = apk_exec("update");
