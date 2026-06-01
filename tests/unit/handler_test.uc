@@ -509,3 +509,76 @@ t.describe('handler ETag regressions', () => {
 		t.assert_equal(r.status, 200);
 	});
 });
+
+t.describe('handler schema-type check (silent-drop guard)', () => {
+	t.it('POST with array field passed as string -> 422 invalid_type', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			target: "ACCEPT",
+			match: { src_zone: "wan", proto: ["tcp"], dest_port: "55555" },
+		});
+		t.assert_equal(r.status, 422);
+		let errs = r.body.errors;
+		let hit = null;
+		for (let e in errs)
+			if (e.field == "match.dest_port") hit = e;
+		t.assert_true(hit != null);
+		t.assert_equal(hit.code, "invalid_type");
+		t.assert_true(match(hit.message, /must be array/) != null);
+	});
+
+	t.it('POST with array field correctly typed succeeds', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			target: "ACCEPT",
+			match: { src_zone: "wan", proto: ["tcp"], dest_port: ["55555"] },
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(r.body.match.dest_port, ["55555"]);
+	});
+
+	t.it('POST with nested-object passed as string -> 422 invalid_type for the parent', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			target: "ACCEPT",
+			match: "wan",  // should be an object
+		});
+		t.assert_equal(r.status, 422);
+		let errs = r.body.errors;
+		let hit = null;
+		for (let e in errs)
+			if (e.field == "match" && e.code == "invalid_type") hit = e;
+		t.assert_true(hit != null);
+	});
+
+	t.it('PATCH carrying a wrong-typed array gets caught too', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			z_wan: { '.type': 'zone', name: 'wan' },
+			r_existing: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+		}}});
+		let r = rules.patch(c, ctx(), 'r_existing', { match: { dest_port: "9999" } });
+		t.assert_equal(r.status, 422);
+		let errs = r.body.errors;
+		let hit = null;
+		for (let e in errs)
+			if (e.field == "match.dest_port" && e.code == "invalid_type") hit = e;
+		t.assert_true(hit != null);
+	});
+
+	t.it('schema check tolerates a null value for a typed field (treated as unset)', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			target: "ACCEPT",
+			match: { src_zone: "wan", proto: null },
+		});
+		// Note: null proto means "unset"; resource.validate may have its own
+		// view but the schema-type check itself must not 422 on null.
+		t.assert_true(r.status == 200 || r.status == 422);
+		if (r.status == 422) {
+			for (let e in r.body.errors)
+				if (e.field == "match.proto")
+					t.assert_true(e.code != "invalid_type");
+		}
+	});
+});
