@@ -7,6 +7,39 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [1.2.1] - 2026-06-01
+
+Patch release. Three small bugs found by exercising v1.2.0 against a real OpenWrt 25.12.4 router, plus one polish item (an honest error code when the daemon you're configuring isn't installed).
+
+### Fixed
+
+- **`packages/installed` always returned `[]` on apk-tools 3.x.** `list_installed()` called `apk info --installed`, a flag that exists on apk-tools 2.x but not 3.x (which OpenWrt 25 ships). Plain `apk info` is the right command; it prints one installed package name per line. The new implementation also filters output to the package-name regex so diagnostic lines never end up surfacing as fake packages.
+- **`network/interfaces` `ipaddr` surfaced as an array on modern uci.** OpenWrt 25 uses `list ipaddr` for static-proto multi-address interfaces (loopback ships as `list ipaddr '127.0.0.1/8'`); uapi was returning the raw uci value, so a GET on a list-form interface returned `"ipaddr": ["127.0.0.1/8"]` instead of the schema-declared string. `fromUci` now surfaces both forms additively: `ipaddr` is always the first address as a string (preserving the v1.0/v1.1 contract); a new `ipaddrs` array carries the full list. `toUci` prefers `ipaddrs` when present and falls back to `ipaddr`. validate accepts either.
+- **Makefile `lint-emdash` scanned `build/sdk/`** (OpenWrt feeds checkouts contain em-dashes in upstream package READMEs / test fixtures we don't author or control). `grep --exclude-dir=sdk` now skips it.
+
+### Added
+
+- **New error code `503 init_script_missing` with a pre-flight check.** Before any uci write, `transaction()` now confirms each `/etc/init.d/<svc>` listed in `reload_services` actually exists; missing → fail-fast with a 503 carrying the missing path in `message`, no uci change. Motivates this: live-router testing of v1.2.0 showed that POST `/sqm/queues` on a box without sqm-scripts produced `500 reload_failed_unrecovered`. The cause: step-5 reload returned exit 127 (script not found); the snapshot-restore worked but the SECOND reload attempt also returned 127 (same missing script), so uapi recorded both errors and surfaced "unrecovered" — misleading: uci IS in a known state, only the daemon reload couldn't run because the daemon isn't installed. The new pre-flight makes the two scenarios distinct on the wire:
+  - `503 init_script_missing`: daemon not installed; uci state unchanged.
+  - `500 reload_failed_restored`: daemon installed but reload exited non-zero; uci state restored from snapshot.
+  - `500 reload_failed_unrecovered`: as before, only for the genuinely unrecoverable case (snapshot import / restore-reload both threw or returned errors).
+
+  Step numbering in the atomic-transaction recipe shifts by one in CLAUDE.md: pre-flight is step 0, flock moves to step 1, etc.
+
+### Tests
+
+- Unit: 422 → 431 (+9 covering `ipaddr`/`ipaddrs` semantics, `init_script_missing` pre-flight against absent paths and unsafe names, empty `reload_services` pass-through).
+- Integration: +1 file (`30_init_script_missing_test.sh`) verifying live behavior on a router without sqm-scripts: 503 returned, uci unchanged, healthy resources unaffected.
+
+### Live verification
+
+End-to-end run against a real OpenWrt 25.12.4 router (apk-tools 3.0.5) with the locally-built APK installed:
+
+- 6 test phases, 131 assertions: 131 pass, 0 fail.
+- `GET /packages/installed` now lists 188 packages (was 0).
+- `GET /network/interfaces/loopback` returns `"ipaddr": "127.0.0.1/8"` (schema-conformant string) and `"ipaddrs": ["127.0.0.1/8"]`.
+- `POST /sqm/queues` on the unpatched router returned `500 reload_failed_unrecovered`; on 1.2.1 it returns `503 init_script_missing` with `"init script /etc/init.d/sqm not found (is the daemon installed?)"` and leaves uci untouched.
+
 ## [1.2.0] - 2026-06-01
 
 Minor release driven by a real Terraform-provider migration that exercised the v1.1 surface against an actual edge router. Three themes:

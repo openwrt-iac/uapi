@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"description": "Native HTTP REST API for OpenWrt (curated + raw uci passthrough)",
-		"version": "1.2.0"
+		"version": "1.2.1"
 	},
 	"servers": [
 		{
