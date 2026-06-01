@@ -18,7 +18,7 @@ set -eu
 : "${UAPI_TOKEN:?UAPI_TOKEN not set}"
 N="${N:-100}"
 
-CURL="curl -ks --max-time 10 -H Authorization:Bearer\ ${UAPI_TOKEN} -o /dev/null -w %{http_code}\ %{time_total}\n"
+AUTH_HEADER="Authorization: Bearer ${UAPI_TOKEN}"
 
 endpoints="
 /api/v1/healthz
@@ -62,8 +62,8 @@ for ep in $endpoints; do
 	fail=0
 	i=0
 	while [ "$i" -lt "$N" ]; do
-		# shellcheck disable=SC2086
-		line=$($CURL "${UAPI_BASE}${ep}")
+		line=$(curl -ks --max-time 10 -H "$AUTH_HEADER" -o /dev/null \
+			-w '%{http_code} %{time_total}' "${UAPI_BASE}${ep}")
 		http=${line%% *}
 		secs=${line##* }
 		case "$http" in
