@@ -10851,8 +10851,18 @@
 						]
 					},
 					"ipaddr": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`."
+					},
+					"ipaddrs": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces."
 					},
 					"netmask": {
 						"type": "string",

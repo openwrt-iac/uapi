@@ -407,3 +407,65 @@ t.describe('unbound.server parity additions', () => {
 		t.assert_equal(errs[0].code, 'out_of_range');
 	});
 });
+
+t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () => {
+	t.it('fromUci: option ipaddr (string) surfaces in both ipaddr and ipaddrs', () => {
+		let r = interfaces.fromUci({
+			'.name': 'lan', '.anonymous': false,
+			proto: 'static', ipaddr: '192.168.1.1', netmask: '255.255.255.0',
+		});
+		t.assert_equal(r.ipaddr, '192.168.1.1');
+		t.assert_deep_equal(r.ipaddrs, ['192.168.1.1']);
+	});
+
+	t.it('fromUci: list ipaddr surfaces first in ipaddr, full list in ipaddrs', () => {
+		let r = interfaces.fromUci({
+			'.name': 'loopback', '.anonymous': false,
+			proto: 'static',
+			ipaddr: ['127.0.0.1/8', '127.0.0.2/8'],
+		});
+		t.assert_equal(r.ipaddr, '127.0.0.1/8');
+		t.assert_deep_equal(r.ipaddrs, ['127.0.0.1/8', '127.0.0.2/8']);
+	});
+
+	t.it('fromUci: missing ipaddr returns null/[]', () => {
+		let r = interfaces.fromUci({
+			'.name': 'wan6', '.anonymous': false, proto: 'dhcpv6', device: 'eth1',
+		});
+		t.assert_equal(r.ipaddr, null);
+		t.assert_deep_equal(r.ipaddrs, []);
+	});
+
+	t.it('toUci: ipaddrs list takes precedence and writes a uci list', () => {
+		let u = interfaces.toUci({
+			proto: 'static',
+			ipaddrs: ['192.168.1.1', '192.168.1.2'],
+			ipaddr: 'IGNORED',  // ipaddrs wins
+		});
+		t.assert_deep_equal(u.ipaddr, ['192.168.1.1', '192.168.1.2']);
+	});
+
+	t.it('toUci: bare ipaddr (string) writes a uci option', () => {
+		let u = interfaces.toUci({ proto: 'static', ipaddr: '192.168.1.1' });
+		t.assert_equal(u.ipaddr, '192.168.1.1');
+	});
+
+	t.it('validate: ipaddrs with bad entries reports per-index invalid_format', () => {
+		let errs = interfaces.validate({
+			proto: 'static',
+			ipaddrs: ['192.168.1.1', '999.0.0.0'],
+		});
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'ipaddrs[1]' && e.code == 'invalid_format') { found = true; break; }
+		t.assert_true(found);
+	});
+
+	t.it('validate: static proto with neither ipaddr nor ipaddrs reports required', () => {
+		let errs = interfaces.validate({ proto: 'static', device: 'eth0' });
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'ipaddr' && e.code == 'required') { found = true; break; }
+		t.assert_true(found);
+	});
+});

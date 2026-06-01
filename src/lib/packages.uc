@@ -24,7 +24,11 @@ function audit_apk_failure(ctx, action, name, r) {
 }
 
 function list_installed() {
-	let p = fs.popen("apk info --installed 2>&1", "r");
+	// On apk-tools 3.x (OpenWrt 25+), `apk info --installed` returns nothing;
+	// plain `apk info` prints one installed package name per line. Older
+	// apk-tools 2.x accepted `--installed` but on a uapi router we only
+	// target apk-tools 3.x, so the older flag is gone.
+	let p = fs.popen("apk info 2>&1", "r");
 	if (p == null) return [];
 	let raw = p.read("all") ?? "";
 	p.close();
@@ -32,6 +36,10 @@ function list_installed() {
 	for (let line in split(raw, "\n")) {
 		let t = trim(line);
 		if (t == "") continue;
+		// Defensive: apk info on some versions can return diagnostic lines
+		// that don't look like package names. Filter to the package-name
+		// charset we already enforce for writes.
+		if (!match(t, /^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$/)) continue;
 		push(names, t);
 	}
 	return names;

@@ -37,12 +37,22 @@ function fetch_runtime(conn, name) {
 function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
 	let proto = section.proto ?? "none";
+	// Modern OpenWrt (25+) writes `list ipaddr` for multi-address static
+	// interfaces (e.g. loopback ships as `list ipaddr '127.0.0.1/8'`), while
+	// older configs used `option ipaddr 'x.x.x.x'`. Surface BOTH forms:
+	// `ipaddr` keeps the v1.0/v1.1 contract (a single string; the first entry
+	// when uci has a list), and a new `ipaddrs` array holds the full set.
+	let ipaddr_raw = section.ipaddr;
+	let ipaddrs = (type(ipaddr_raw) == "array") ? ipaddr_raw
+	              : (ipaddr_raw != null && ipaddr_raw != "") ? [ipaddr_raw] : [];
+	let ipaddr_first = length(ipaddrs) > 0 ? ipaddrs[0] : null;
 	let view = {
 		id: section['.name'],
 		managed: !anonymous,
 		device: section.device ?? null,
 		proto: proto,
-		ipaddr: section.ipaddr ?? null,
+		ipaddr: ipaddr_first,
+		ipaddrs: ipaddrs,
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
 		dns: as_list(section.dns),
@@ -85,7 +95,13 @@ function toUci(json) {
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.proto != null) out.proto = json.proto;
-	if (json.ipaddr != null) out.ipaddr = json.ipaddr;
+	// Prefer ipaddrs (list form) when present; fall back to ipaddr (string).
+	// uci handles both `option ipaddr` and `list ipaddr` semantically; the
+	// list form is required for multi-address static interfaces.
+	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
+		out.ipaddr = json.ipaddrs;
+	else if (json.ipaddr != null)
+		out.ipaddr = json.ipaddr;
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
 	if (type(json.dns) == "array" && length(json.dns) > 0) out.dns = json.dns;
@@ -134,12 +150,21 @@ function validate(json) {
 		             message: "must be one of static, dhcp, dhcpv6, pppoe, none, ppp, wwan, wireguard" });
 
 	if (json.proto == "static") {
-		if (json.ipaddr == null || json.ipaddr == "")
+		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
+		let has_single = json.ipaddr != null && json.ipaddr != "";
+		if (!has_list && !has_single)
 			push(errs, { field: "ipaddr", code: "required",
-			             message: "is required when proto is static" });
-		else if (!is_valid_ipv4(json.ipaddr) && !is_valid_cidr(json.ipaddr))
+			             message: "is required when proto is static (use 'ipaddr' for a single address or 'ipaddrs' for a list)" });
+		if (has_single && !is_valid_ipv4(json.ipaddr) && !is_valid_cidr(json.ipaddr))
 			push(errs, { field: "ipaddr", code: "invalid_format",
 			             message: "must be a valid IPv4 address or CIDR" });
+		if (has_list) {
+			for (let i = 0; i < length(json.ipaddrs); i++) {
+				if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
+					push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
+					             message: "must be a valid IPv4 address or CIDR" });
+			}
+		}
 		if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
 			push(errs, { field: "netmask", code: "invalid_format",
 			             message: "must be a valid IPv4 netmask" });
@@ -230,6 +255,10 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS) },
+		ipaddr:  { type: ["string", "null"],
+		           description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`." },
+		ipaddrs: { type: "array", items: { type: "string" },
+		           description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces." },
 		dns: { type: "array", items: { type: "string" } },
 		addresses: { type: "array", items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
