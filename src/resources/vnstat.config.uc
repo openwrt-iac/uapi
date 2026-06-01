@@ -39,7 +39,7 @@ return {
 		                      description: "Path to vnstat's database directory" },
 		Interface5MinHours: { type: "integer", minimum: 0,
 		                      description: "How many hours of 5-minute granularity data to keep" },
-		MonthRotate:        { type: "integer", minimum: 1, maximum: 28,
+		MonthRotate:        { type: "integer", minimum: 1, maximum: 31,
 		                      description: "Day of month that monthly counters roll over" },
 	},
 };

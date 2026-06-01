@@ -338,7 +338,7 @@ function build_paths() {
 	};
 	paths["/system/authorized_keys/{id}"] = {
 		"parameters": [
-			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9]{12}$" } },
+			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{12}$" } },
 		],
 		"get":    { "summary": "Get a single SSH key by stable id",
 		            "responses": { "200": make_response(200, "OK", "SSHAuthorizedKey"), ...error_responses() } },
@@ -473,8 +473,8 @@ function build_schemas() {
 			"type": "object",
 			"required": ["id", "type"],
 			"properties": {
-				"id":      { "type": "string", "pattern": "^[a-z0-9]{12}$",
-				             "description": "Stable id: sha256 prefix of the canonical key body" },
+				"id":      { "type": "string", "pattern": "^[a-f0-9]{12}$",
+				             "description": "Stable id: sha256 prefix of the public-key blob (or non-crypto djb2 fallback in test environments)" },
 				"type":    { "type": "string",
 				             "description": "SSH key type (e.g. ssh-ed25519, ssh-rsa, ecdsa-sha2-nistp256)" },
 				"comment": { "type": "string",

@@ -6,8 +6,30 @@ let log = require('log');
 const KEYS_PATH = "/etc/dropbear/authorized_keys";
 const USER_RE = /^(root|[a-z][a-z0-9_-]*)$/;
 const MIN_PASSWORD_LEN = 8;
-const KEY_ID_RE = /^[a-z0-9]{12}$/;
+const KEY_ID_RE = /^[a-f0-9]{12}$/;
 const BLOB_RE = /^[A-Za-z0-9+\/]+=*$/;
+
+// digest is optional at module-load time so unit tests in the build env (no
+// ucode-mod-digest installed) can still exercise the validation paths. On a
+// real OpenWrt install it is a hard dependency and always present.
+let _digest = null;
+try { _digest = require('digest'); } catch (e) {}
+
+// Stable 48-bit content-derived id. Uses sha256 when available (production);
+// falls back to two independent djb-style 32-bit hashes mixed into 48 bits
+// when not (unit-test environments). The fallback's collision space (2^48) is
+// vastly larger than the prior "last-12-chars-of-blob-with-remap" scheme and
+// no longer exploitable by an attacker picking a blob with a colliding tail.
+function blob_id(blob) {
+	if (_digest != null) return substr(_digest.sha256(blob), 0, 12);
+	let h1 = 5381, h2 = 7919;
+	for (let i = 0; i < length(blob); i++) {
+		let c = ord(substr(blob, i, 1));
+		h1 = ((h1 * 33) + c) % 4294967296;
+		h2 = ((h2 * 65599) + c) % 4294967296;
+	}
+	return sprintf("%08x%04x", h1, h2 % 65536);
+}
 
 const VALID_KEY_TYPES = {
 	"ssh-rsa": true,
@@ -46,6 +68,18 @@ function set_password(ctx, body) {
 	else if (length(pw) < MIN_PASSWORD_LEN)
 		push(errs, errors.field_error("password", "out_of_range",
 			sprintf("must be at least %d characters", MIN_PASSWORD_LEN)));
+	else {
+		// Reject control characters: passwd reads two lines via stdin, so an
+		// embedded \n splits the password and confuses the confirmation step.
+		for (let i = 0; i < length(pw); i++) {
+			let c = ord(substr(pw, i, 1));
+			if (c < 32 || c == 127) {
+				push(errs, errors.field_error("password", "invalid_format",
+					"must not contain control characters (newline, NUL, etc.)"));
+				break;
+			}
+		}
+	}
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
 
@@ -76,6 +110,14 @@ function set_password(ctx, body) {
 
 function parse_public_key(line) {
 	if (type(line) != "string") return null;
+	// Reject control characters anywhere in the input. A literal newline in a
+	// comment would otherwise survive parsing and write a SECOND authorized_keys
+	// line: an attacker could install two keys with one POST and bypass the
+	// duplicate-id conflict check.
+	for (let i = 0; i < length(line); i++) {
+		let c = ord(substr(line, i, 1));
+		if (c == 0 || c == 10 || c == 13) return null;
+	}
 	let trimmed = trim(line);
 	if (trimmed == "" || substr(trimmed, 0, 1) == "#") return null;
 	let parts = split(trimmed, " ");
@@ -95,21 +137,8 @@ function parse_public_key(line) {
 	}
 	let canonical = key_type + " " + blob;
 	if (comment != "") canonical = canonical + " " + comment;
-	// Stable id derived from the blob's tail (base64; we replace +/= with
-	// lowercase ASCII so the id matches KEY_ID_RE for URL routing). No crypto
-	// requirement: ids only need to be stable and collision-resistant enough
-	// for a per-router authorized_keys file.
-	let tail = length(blob) >= 12 ? substr(blob, length(blob) - 12) : blob;
-	let id = "";
-	for (let i = 0; i < length(tail); i++) {
-		let c = substr(tail, i, 1);
-		if (c == "+")      c = "g";
-		else if (c == "/") c = "h";
-		else if (c == "=") c = "z";
-		else               c = lc(c);
-		id = id + c;
-	}
-	return { id: id, type: key_type, blob: blob, comment: comment, canonical: canonical };
+	return { id: blob_id(blob), type: key_type, blob: blob,
+	         comment: comment, canonical: canonical };
 }
 
 function read_keys() {
@@ -133,11 +162,24 @@ function write_keys(parsed_keys) {
 	let lines = [];
 	for (let k in parsed_keys) push(lines, k.canonical);
 	let content = length(lines) > 0 ? (join("\n", lines) + "\n") : "";
-	let f = fs.open(KEYS_PATH, "w");
+	// Atomic-replace pattern: write to a same-directory tmp file with mode 0600
+	// set BEFORE writing the content, then rename into place. This closes the
+	// chmod-after-open window where the file briefly exists with default umask
+	// perms, and the rename is symlink-safe (an attacker swapping the target
+	// for a symlink between write and chmod can't trick us into truncating it).
+	let tmp = KEYS_PATH + ".uapi.tmp";
+	try { fs.unlink(tmp); } catch (e) {}
+	let f = fs.open(tmp, "w");
 	if (!f) return false;
+	try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
 	f.write(content);
 	f.close();
-	try { fs.chmod(KEYS_PATH, 384); } catch (e) {}  // 0600
+	let renamed = false;
+	try { renamed = fs.rename(tmp, KEYS_PATH); } catch (e) {}
+	if (!renamed) {
+		try { fs.unlink(tmp); } catch (e) {}
+		return false;
+	}
 	return true;
 }
 

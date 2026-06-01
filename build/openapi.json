@@ -10068,7 +10068,7 @@
 					"required": true,
 					"schema": {
 						"type": "string",
-						"pattern": "^[a-z0-9]{12}$"
+						"pattern": "^[a-f0-9]{12}$"
 					}
 				}
 			],
@@ -10403,8 +10403,8 @@
 				"properties": {
 					"id": {
 						"type": "string",
-						"pattern": "^[a-z0-9]{12}$",
-						"description": "Stable id: sha256 prefix of the canonical key body"
+						"pattern": "^[a-f0-9]{12}$",
+						"description": "Stable id: sha256 prefix of the public-key blob (or non-crypto djb2 fallback in test environments)"
 					},
 					"type": {
 						"type": "string",
@@ -10712,6 +10712,12 @@
 							"external"
 						],
 						"description": "Source address used for hairpinned packets: internal LAN or external WAN"
+					},
+					"reflection_zone": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
 					},
 					"runtime": {
 						"type": "object"
@@ -11414,7 +11420,7 @@
 							"string",
 							"null"
 						],
-						"description": "Pin this reservation to a specific dhcp/servers instance"
+						"description": "Pin this reservation to a specific dhcp/dnsmasq instance (section name)"
 					},
 					"runtime": {
 						"type": "object"
@@ -11485,8 +11491,11 @@
 						"description": "Prefix length for IA_PD; null for IA_NA"
 					},
 					"expires_at": {
-						"type": "integer",
-						"description": "Unix epoch seconds when the lease expires"
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Unix epoch seconds when the lease expires; null for non-numeric values like 'forever'"
 					}
 				}
 			},
@@ -12004,6 +12013,7 @@
 					"resource": {
 						"type": "string",
 						"enum": [
+							"default",
 							"tiny",
 							"small",
 							"medium",
@@ -12015,10 +12025,12 @@
 					"protocol": {
 						"type": "string",
 						"enum": [
-							"auto",
+							"default",
+							"mixed",
 							"ip4_only",
 							"ip6_only",
-							"mixed"
+							"ip6_local",
+							"ip6_prefer"
 						]
 					},
 					"query_minimize": {
@@ -12040,10 +12052,12 @@
 						"description": "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf."
 					},
 					"localservice": {
-						"type": "boolean"
+						"type": "string",
+						"nullable": true
 					},
 					"hide_binddata": {
-						"type": "boolean"
+						"type": "string",
+						"nullable": true
 					},
 					"rebind_protection": {
 						"type": "string",
@@ -12505,7 +12519,7 @@
 					"MonthRotate": {
 						"type": "integer",
 						"minimum": 1,
-						"maximum": 28,
+						"maximum": 31,
 						"description": "Day of month that monthly counters roll over"
 					},
 					"runtime": {

@@ -17,12 +17,18 @@ function parse_leases(content) {
 	for (let line in split(content, "\n")) {
 		let trimmed = trim(line);
 		if (trimmed == "" || substr(trimmed, 0, 1) == "#") continue;
-		let parts = split(trimmed, " ");
+		// Split on any whitespace (space OR tab) so trailing tabs or mixed
+		// separators don't shift columns. odhcpd's statefile format also
+		// varies across versions, so the parser fails soft on shape drift.
+		let parts = split(trimmed, /[ \t]+/);
 		if (length(parts) < 7) continue;
 		let duid     = parts[0];
 		let iaid     = parts[1];
 		let hostname = parts[2] == "-" ? null : parts[2];
-		let expires  = int(parts[3]);
+		let raw_exp  = int(parts[3]);
+		// int() returns NaN (declared as float type in ucode) for non-numeric
+		// input like "-" or "forever"; coerce that to null.
+		let expires  = (type(raw_exp) == "int") ? raw_exp : null;
 		let iface    = parts[4];
 		let ia_type  = parts[5];
 		for (let i = 6; i < length(parts); i++) {
@@ -33,7 +39,8 @@ function parse_leases(content) {
 			let slash = index(token, "/");
 			if (slash >= 0) {
 				ip = substr(token, 0, slash);
-				prefix_length = int(substr(token, slash + 1));
+				let raw_plen = int(substr(token, slash + 1));
+				prefix_length = (type(raw_plen) == "int") ? raw_plen : null;
 			}
 			push(leases, {
 				duid: duid,
@@ -84,7 +91,7 @@ return {
 		                 description: "Assigned IPv6 address or prefix" },
 		prefix_length: { type: ["integer", "null"],
 		                 description: "Prefix length for IA_PD; null for IA_NA" },
-		expires_at:    { type: "integer",
-		                 description: "Unix epoch seconds when the lease expires" },
+		expires_at:    { type: ["integer", "null"],
+		                 description: "Unix epoch seconds when the lease expires; null for non-numeric values like 'forever'" },
 	},
 };

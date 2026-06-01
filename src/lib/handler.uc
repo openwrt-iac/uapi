@@ -20,7 +20,16 @@ function _fallback_hash(s) {
 
 function compute_etag(body) {
 	if (body == null) return null;
-	let canonical = sprintf("%J", body);
+	// Strip the `runtime` block before hashing: it carries live ubus/file-derived
+	// state (uptime, signal, lease counts, active addresses) that drifts second-
+	// to-second on an unchanged uci section. Including it would make ETags
+	// non-deterministic and trip spurious 412s on every If-Match round-trip.
+	let canon = body;
+	if (type(body) == "object" && body.runtime != null) {
+		canon = { ...body };
+		delete canon.runtime;
+	}
+	let canonical = sprintf("%J", canon);
 	let hex = (_digest != null) ? _digest.sha256(canonical) : _fallback_hash(canonical);
 	return substr(hex, 0, 12);
 }
@@ -33,23 +42,40 @@ function set_etag_header(resp, body) {
 	return resp;
 }
 
+// Returns either the literal "*" or an array of tag strings (without quotes
+// or W/ weak prefix), or null when no If-Match was supplied. Empty / malformed
+// values resolve to a non-matching sentinel so writes are denied rather than
+// silently allowed.
 function parse_if_match(header_value) {
-	if (type(header_value) != "string" || header_value == "") return null;
+	if (type(header_value) != "string") return null;
 	let v = trim(header_value);
+	if (v == "") return null;
 	if (v == "*") return "*";
-	// Strip surrounding quotes and optional W/ weak indicator.
-	if (substr(v, 0, 2) == "W/") v = trim(substr(v, 2));
-	if (substr(v, 0, 1) == "\"" && substr(v, length(v) - 1) == "\"")
-		v = substr(v, 1, length(v) - 2);
-	return v;
+	let out = [];
+	for (let entry in split(v, ",")) {
+		let e = trim(entry);
+		if (e == "") continue;
+		if (substr(e, 0, 2) == "W/") e = trim(substr(e, 2));
+		if (substr(e, 0, 1) == "\"") {
+			if (length(e) < 2 || substr(e, length(e) - 1) != "\"") continue;
+			e = substr(e, 1, length(e) - 2);
+		}
+		if (e == "") continue;
+		push(out, e);
+	}
+	if (length(out) == 0) return null;
+	return out;
 }
 
 function precondition_check(ctx, existing_body) {
 	let want = parse_if_match(ctx.if_match);
 	if (want == null) return null;          // no If-Match -> no check
 	if (want == "*" && existing_body != null) return null;  // wildcard ok for any existing
+	if (want == "*") return errors.error(ctx, "precondition_failed",
+		"If-Match: * requires an existing resource");
 	let have = compute_etag(existing_body);
-	if (have == want) return null;
+	for (let candidate in want)
+		if (candidate == have) return null;
 	return errors.error(ctx, "precondition_failed",
 		sprintf("If-Match did not match current ETag (current=\"%s\")", have));
 }
@@ -255,9 +281,14 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!resource.fromUci(existing, conn).managed)
+				let existing_view = resource.fromUci(existing, conn);
+				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed" };
+				let pc = precondition_check(ctx, existing_view);
+				if (pc != null)
+					return { ok: false, kind: "precondition_failed",
+					         message: pc.body.message };
 				c.uci_delete(p, id);
 				return { ok: true, body: null };
 			},

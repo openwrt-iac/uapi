@@ -22,7 +22,7 @@ function toUci(json) {
 	if (json.organization != null) out.organization = json.organization;
 	if (json.location != null)     out.location = json.location;
 	if (json.state != null)        out.state = json.state;
-	if (json.country != null)      out.country = json.country;
+	if (json.country != null)      out.country = uc("" + json.country);
 	return out;
 }
 
@@ -48,9 +48,9 @@ function validate(json) {
 			push(errs, { field: "days", code: "out_of_range",
 			             message: "must be 1-36500" });
 	}
-	if (json.country != null && !match(json.country, /^[A-Z]{2}$/))
+	if (json.country != null && !match(json.country, /^[A-Za-z]{2}$/))
 		push(errs, { field: "country", code: "invalid_format",
-		             message: "must be a 2-letter uppercase ISO 3166-1 alpha-2 code" });
+		             message: "must be a 2-letter ISO 3166-1 alpha-2 code (case-insensitive; normalized to uppercase)" });
 	return errs;
 }
 

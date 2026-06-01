@@ -25,7 +25,7 @@ function fromUci(section) {
 		leasetime: section.leasetime ?? null,
 		tag: section.tag ?? null,
 		dns: normalize_bool(section.dns, false),
-		broadcast: normalize_bool(section.broadcast, false),
+		broadcast: (section.broadcast != null) ? normalize_bool(section.broadcast, false) : null,
 		instance: section.instance ?? null,
 		runtime: {},
 	};
@@ -55,9 +55,12 @@ function toUci(json) {
 	return out;
 }
 
-function dhcp_server_instance_exists(conn, name) {
+// `dhcp.host.instance` references a dnsmasq instance (the dhcp.dnsmasq section
+// name), not a per-interface dhcp.dhcp section. dnsmasq's init reads
+// config_get_bool ... "$instance" against `config dnsmasq` entries.
+function dnsmasq_instance_exists(conn, name) {
 	let found = false;
-	conn.uci_foreach('dhcp', 'dhcp', function(s) {
+	conn.uci_foreach('dhcp', 'dnsmasq', function(s) {
 		if (s['.name'] == name) { found = true; return false; }
 	});
 	return found;
@@ -111,9 +114,9 @@ function validate(json, conn) {
 		             message: "must look like 12h, 30m, 1d, or a plain number of seconds" });
 
 	if (conn != null && json.instance != null && json.instance != "") {
-		if (!dhcp_server_instance_exists(conn, json.instance))
+		if (!dnsmasq_instance_exists(conn, json.instance))
 			push(errs, { field: "instance", code: "conflict",
-			             message: sprintf("no dhcp/servers section named %J exists",
+			             message: sprintf("no dhcp/dnsmasq section named %J exists",
 			                              json.instance) });
 	}
 
@@ -142,6 +145,6 @@ return {
 		broadcast:   { type: "boolean",
 		               description: "Force broadcast replies for clients that need it" },
 		instance:    { type: ["string", "null"],
-		               description: "Pin this reservation to a specific dhcp/servers instance" },
+		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 	},
 };

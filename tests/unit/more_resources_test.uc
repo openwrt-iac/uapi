@@ -317,13 +317,13 @@ t.describe('network.interfaces proto=dhcpv6 client fields', () => {
 let redirects = loadfile('src/resources/firewall.redirects.uc')();
 
 t.describe('firewall.redirects reflection', () => {
-	t.it('fromUci surfaces reflection (default true) + reflection_src (default internal)', () => {
+	t.it('fromUci surfaces reflection as null when uci has nothing set (preserves daemon default on PATCH)', () => {
 		let r = redirects.fromUci({
 			'.name': 'r1', '.anonymous': false,
 			target: 'DNAT', src: 'wan', dest_port: '443',
 		});
-		t.assert_true(r.reflection);
-		t.assert_equal(r.reflection_src, 'internal');
+		t.assert_equal(r.reflection, null);
+		t.assert_equal(r.reflection_src, null);
 	});
 	t.it('fromUci respects explicit reflection=0 and reflection_src=external', () => {
 		let r = redirects.fromUci({
@@ -357,13 +357,23 @@ t.describe('firewall.redirects reflection', () => {
 let unbound = loadfile('src/resources/unbound.server.uc')();
 
 t.describe('unbound.server parity additions', () => {
-	t.it('fromUci surfaces manual_conf, extended_stats, interface_auto defaults', () => {
+	t.it('fromUci surfaces manual_conf etc. as null when uci has nothing set', () => {
 		let r = unbound.fromUci({ '.name': 'ub_main' });
-		t.assert_false(r.manual_conf);
-		t.assert_false(r.extended_stats);
-		t.assert_true(r.interface_auto);
-		t.assert_true(r.localservice);
-		t.assert_true(r.hide_binddata);
+		t.assert_equal(r.manual_conf, null);
+		t.assert_equal(r.extended_stats, null);
+		t.assert_equal(r.interface_auto, null);
+		t.assert_equal(r.localservice, null);
+		t.assert_equal(r.hide_binddata, null);
+	});
+
+	t.it('fromUci surfaces explicit uci values normally', () => {
+		let r = unbound.fromUci({
+			'.name': 'ub_main',
+			manual_conf: '1', interface_auto: '0', localservice: '0',
+		});
+		t.assert_true(r.manual_conf);
+		t.assert_false(r.interface_auto);
+		t.assert_false(r.localservice);
 	});
 	t.it('toUci serializes new fields', () => {
 		let u = unbound.toUci({

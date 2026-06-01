@@ -9,14 +9,17 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-# Snapshot /etc/dropbear/authorized_keys for restore after the test.
-# We always create the backup (touch first) so the unconditional mv in cleanup
-# succeeds even on a VM that started with no authorized_keys file. The
-# .insecure marker keeps the API reachable for cleanup steps even if SSH key
-# auth gets disrupted mid-test.
-$SSH "touch /etc/dropbear/authorized_keys; cp -a /etc/dropbear/authorized_keys /tmp/uapi-test-keys.bak"
+# Snapshot /etc/dropbear/authorized_keys AND /etc/shadow for restore after the
+# test. The .insecure marker keeps the API reachable for cleanup steps even if
+# SSH key auth gets disrupted mid-test.
+$SSH "touch /etc/dropbear/authorized_keys; cp -a /etc/dropbear/authorized_keys /tmp/uapi-test-keys.bak; cp -a /etc/shadow /tmp/uapi-test-shadow.bak"
 cleanup() {
 	$SSH "cat /tmp/uapi-test-keys.bak > /etc/dropbear/authorized_keys; rm -f /tmp/uapi-test-keys.bak" 2>/dev/null || true
+	# Restore /etc/shadow (root password) so later tests in the same VM see
+	# the original credentials. The integration tests use SSH key auth so the
+	# password change wouldn't break them, but a future test exercising
+	# password-based login would silently inherit the test password.
+	$SSH "cat /tmp/uapi-test-shadow.bak > /etc/shadow; rm -f /tmp/uapi-test-shadow.bak" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

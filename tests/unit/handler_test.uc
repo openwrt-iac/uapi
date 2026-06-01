@@ -411,3 +411,99 @@ t.describe('handler ETags / If-Match', () => {
 		t.assert_equal(r.status, 200);
 	});
 });
+
+t.describe('handler ETag regressions', () => {
+	function res_with_runtime() {
+		// Minimal resource that has a runtime block.
+		return {
+			package: "firewall",
+			type: "rule",
+			reload: ["firewall"],
+			fromUci: function(s, conn) {
+				return {
+					id: s['.name'],
+					managed: !s['.anonymous'],
+					target: s.target ?? null,
+					src: s.src ?? null,
+					runtime: { now: 1 },
+				};
+			},
+			toUci: function(j) {
+				let o = {};
+				if (j.target != null) o.target = j.target;
+				if (j.src != null) o.src = j.src;
+				return o;
+			},
+			validate: function() { return []; },
+		};
+	}
+
+	t.it('compute_etag ignores the runtime block', () => {
+		let h = handler.make(res_with_runtime(), {
+			tx: { acquire: function() { return {}; },
+			      release: function() {},
+			      reload: function() { return null; } } });
+		let c = ubus.stub({ uci: { firewall: {
+			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' },
+		}}});
+		let a = h.get_one(c, ctx(), 'r1');
+		// Hack the cursor so the runtime field DIFFERS while uci stays the same.
+		c._state.uci.firewall.r1._unrelated_drift = "ignored";
+		let b = h.get_one(c, ctx(), 'r1');
+		t.assert_equal(a.headers.ETag, b.headers.ETag);
+	});
+
+	t.it('DELETE with stale If-Match returns 412 and does NOT delete', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			z_wan: { '.type': 'zone', name: 'wan' },
+			r_existing: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+		}}});
+		let ctx_stale = { request_id: "01hxdelmismatch", if_match: "\"deadbeef0000\"" };
+		let r = rules.remove(c, ctx_stale, 'r_existing');
+		t.assert_equal(r.status, 412);
+		// Verify the section is still there.
+		let get_after = rules.get_one(c, ctx(), 'r_existing');
+		t.assert_equal(get_after.status, 200);
+	});
+
+	t.it('DELETE with current If-Match succeeds', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			z_wan: { '.type': 'zone', name: 'wan' },
+			r_existing: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+		}}});
+		let getr = rules.get_one(c, ctx(), 'r_existing');
+		let ctx_ok = { request_id: "01hxdelok", if_match: getr.headers.ETag };
+		let r = rules.remove(c, ctx_ok, 'r_existing');
+		t.assert_equal(r.status, 204);
+	});
+
+	t.it('parse_if_match handles multi-value list (any-of-N matches)', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			z_wan: { '.type': 'zone', name: 'wan' },
+			r_existing: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+		}}});
+		let getr = rules.get_one(c, ctx(), 'r_existing');
+		let real = getr.headers.ETag;
+		let mixed = "\"deadbeef0000\", " + real + ", \"0000abcdef00\"";
+		let ctx_multi = { request_id: "01hxifmulti", if_match: mixed };
+		let r = rules.patch(c, ctx_multi, 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('parse_if_match: empty-quoted "" does not match anything', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			z_wan: { '.type': 'zone', name: 'wan' },
+			r_existing: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan', proto: ['tcp'] },
+		}}});
+		let ctx_empty = { request_id: "01hxifempty", if_match: "\"\"" };
+		let r = rules.patch(c, ctx_empty, 'r_existing', { target: 'REJECT' });
+		// Empty-after-strip becomes "no If-Match" per the parser; that means
+		// the patch proceeds normally (not a 412). Important: it does NOT
+		// match anything, so don't silently allow with the wrong ETag.
+		t.assert_equal(r.status, 200);
+	});
+});

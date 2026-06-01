@@ -31,8 +31,9 @@ function fromUci(section) {
 			proto: as_list(section.proto),
 			family: section.family ?? "any",
 		},
-		reflection: normalize_bool(section.reflection, true),
-		reflection_src: section.reflection_src ?? "internal",
+		reflection: (section.reflection != null) ? normalize_bool(section.reflection, true) : null,
+		reflection_src: section.reflection_src ?? null,
+		reflection_zone: as_list(section.reflection_zone),
 		runtime: {},
 	};
 }
@@ -54,6 +55,8 @@ function toUci(json) {
 	if (m.family != null && m.family != "any") out.family = m.family;
 	if (json.reflection != null)     out.reflection = json.reflection ? "1" : "0";
 	if (json.reflection_src != null) out.reflection_src = json.reflection_src;
+	if (type(json.reflection_zone) == "array" && length(json.reflection_zone) > 0)
+		out.reflection_zone = json.reflection_zone;
 	return out;
 }
 
@@ -114,12 +117,17 @@ function validate(json, conn) {
 			             message: sprintf("%J is not a recognized protocol", protos[i]) });
 	}
 
-	if (conn != null && m.src_zone != null && m.src_zone != "") {
+	if (conn != null
+	    && ((m.src_zone != null && m.src_zone != "")
+	        || (m.dest_zone != null && m.dest_zone != ""))) {
 		let zones = {};
 		conn.uci_foreach('firewall', 'zone', function(s) { if (s.name) zones[s.name] = true; });
-		if (!zones[m.src_zone])
+		if (m.src_zone != null && m.src_zone != "" && !zones[m.src_zone])
 			push(errs, { field: "match.src_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.src_zone) });
+		if (m.dest_zone != null && m.dest_zone != "" && !zones[m.dest_zone])
+			push(errs, { field: "match.dest_zone", code: "conflict",
+			             message: sprintf("zone %J does not exist", m.dest_zone) });
 	}
 
 	return errs;

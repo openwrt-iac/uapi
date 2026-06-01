@@ -11,27 +11,29 @@ const VALID_ENCRYPTION = {
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
 };
 
-function lookup_ifname(conn, section_name, ssid) {
+function lookup_ifname(conn, section_name) {
 	let status = null;
 	try { status = conn.call("network.wireless", "status"); }
 	catch (e) { return null; }
 	if (type(status) != "object") return null;
+	// Match on the authoritative i.section field. Two ifaces on different radios
+	// can share an SSID (dual-band networks), so SSID is not a safe fallback.
+	// An iface that hasn't been provisioned yet has no i.section entry and
+	// genuinely has no runtime; returning null and emitting runtime: {} is
+	// the correct behavior.
 	for (let radio_name in status) {
 		let radio = status[radio_name];
 		let ifaces = (type(radio) == "object") ? radio.interfaces : null;
 		if (type(ifaces) != "array") continue;
-		for (let i in ifaces) {
+		for (let i in ifaces)
 			if (i.section == section_name) return i.ifname ?? null;
-			let cfg = i.config ?? {};
-			if (ssid != null && cfg.ssid == ssid) return i.ifname ?? null;
-		}
 	}
 	return null;
 }
 
-function fetch_runtime(conn, section_name, ssid) {
+function fetch_runtime(conn, section_name) {
 	if (conn == null) return {};
-	let ifname = lookup_ifname(conn, section_name, ssid);
+	let ifname = lookup_ifname(conn, section_name);
 	if (ifname == null) return {};
 	let info = null, assoc = null;
 	try { info = conn.call("iwinfo", "info", { device: ifname }); }
@@ -65,7 +67,7 @@ function fromUci(section, conn) {
 		disabled: normalize_bool(section.disabled, false),
 		hidden: normalize_bool(section.hidden, false),
 		isolate: normalize_bool(section.isolate, false),
-		runtime: fetch_runtime(conn, section['.name'], section.ssid),
+		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (section.key != null) view.has_key = true;
 	return view;

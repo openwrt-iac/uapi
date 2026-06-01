@@ -165,21 +165,26 @@ t.describe('dhcp.hosts v1.2 parity additions', () => {
 			if (e.field == 'hostid' && e.code == 'invalid_format') { found = true; break; }
 		t.assert_true(found);
 	});
-	t.it('validate cross-refs instance against dhcp/servers sections', () => {
+	t.it('validate cross-refs instance against dhcp/dnsmasq sections (NOT dhcp/servers)', () => {
 		let conn = ubus.stub({ uci: { dhcp: {
-			lan_server: { '.type': 'dhcp', interface: 'lan' },
+			main_dnsmasq: { '.type': 'dnsmasq' },
+			lan_server:   { '.type': 'dhcp', interface: 'lan' },
 		}}});
 		let ok = hosts.validate({
+			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'main_dnsmasq',
+		}, conn);
+		let conflict_for_ok = false;
+		for (let e in ok)
+			if (e.field == 'instance' && e.code == 'conflict') { conflict_for_ok = true; break; }
+		t.assert_false(conflict_for_ok);
+		// A dhcp.dhcp section name is NOT a valid instance reference (it's the
+		// per-interface server, not the dnsmasq process). Should conflict.
+		let wrong = hosts.validate({
 			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'lan_server',
 		}, conn);
-		for (let e in ok)
-			t.assert_not_equal(e.field + ':' + e.code, 'instance:conflict');
-		let bad = hosts.validate({
-			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'nope',
-		}, conn);
-		let found = false;
-		for (let e in bad)
-			if (e.field == 'instance' && e.code == 'conflict') { found = true; break; }
-		t.assert_true(found);
+		let conflict_for_wrong = false;
+		for (let e in wrong)
+			if (e.field == 'instance' && e.code == 'conflict') { conflict_for_wrong = true; break; }
+		t.assert_true(conflict_for_wrong);
 	});
 });

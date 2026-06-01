@@ -38,8 +38,8 @@ echo "$servers" | tail -1 | grep -q '^200$' || fail "dhcp/servers GET expected 2
 body=$(echo "$servers" | head -1)
 case "$body" in
 	'[]') echo "  (no dhcp servers configured on this VM; skipping lease-count assertions)" ;;
-	*) echo "$body" | grep -q '"active_leases_v4":' \
-		|| fail "dhcp/servers response missing active_leases_v4 in runtime" ;;
+	*) echo "$body" | grep -q '"active_leases_v4_total":' \
+		|| fail "dhcp/servers response missing active_leases_v4_total in runtime" ;;
 esac
 
 echo "--- wireless/interfaces: GET includes runtime (may be empty if no hwsim) ---"

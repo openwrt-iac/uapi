@@ -26,6 +26,20 @@ etag=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/firewall/rules/$id" | tr -d 
 [ -n "$etag" ] || fail "no ETag on GET"
 echo "  etag=$etag"
 
+echo "--- ETag is stable across reads of the same state (runtime fields excluded) ---"
+# Hit an endpoint whose fromUci populates a runtime block from ubus
+# (network/interfaces calls network.interface.<name> status, which surfaces
+# uptime in seconds). Two consecutive GETs must return identical ETag values:
+# if they don't, ETags include drifting runtime data and any If-Match flow
+# trips spurious 412s.
+e1=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/network/interfaces/loopback" | tr -d '\r' \
+	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
+sleep 2
+e2=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/network/interfaces/loopback" | tr -d '\r' \
+	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
+[ -n "$e1" ] && [ "$e1" = "$e2" ] \
+	|| fail "ETag drifted across two reads of /network/interfaces/loopback (e1=$e1 e2=$e2)"
+
 echo "--- PATCH without If-Match still works ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X PATCH "$URL/firewall/rules/$id" -d '{"enabled": true}')

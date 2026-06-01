@@ -132,3 +132,34 @@ t.describe('system_access.get_key validation', () => {
 		t.assert_equal(sa.get_key(ctx(), "AAAA").status, 404);
 	});
 });
+
+t.describe('system_access security regressions', () => {
+	t.it('two keys whose blob tails differ ONLY in +/g or //h get distinct ids', () => {
+		// Tails 'AAAAAAAAAAAA+a' and 'AAAAAAAAAAAAga' would collide under the
+		// old base64-tail-with-remap scheme (last 12 chars: AAAAAAAAAAA+ vs
+		// AAAAAAAAAAAg → both lowercased+remapped to aaaaaaaaaaag).
+		let a = sa.parse_public_key("ssh-ed25519 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB+a a");
+		let b = sa.parse_public_key("ssh-ed25519 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBga b");
+		t.assert_true(a != null && b != null);
+		t.assert_true(a.id != b.id);
+	});
+
+	t.it('rejects a key line containing an embedded newline (no second-line injection)', () => {
+		t.assert_equal(sa.parse_public_key("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 ok\nssh-rsa AAAA evil"), null);
+	});
+
+	t.it('rejects a key line with a carriage return', () => {
+		t.assert_equal(sa.parse_public_key("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 ok\rinjected"), null);
+	});
+
+	t.it('rejects a key line with a NUL byte', () => {
+		t.assert_equal(sa.parse_public_key("ssh-ed25519 AAAA\0evil"), null);
+	});
+
+	t.it('password with embedded newline is rejected with invalid_format', () => {
+		let r = sa.set_password(ctx(), { user: "root", password: "good\npart" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "password");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+});

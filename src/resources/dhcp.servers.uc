@@ -18,11 +18,20 @@ function read_file_or_empty(path) {
 // Lightweight counters; deliberately not reusing dhcp.leases*.uc modules to
 // avoid an inter-module loadfile dependency that breaks unit-test isolation.
 // We don't surface the lease bodies here, just the counts.
-function count_v4_leases() {
+//
+// active_leases_v4 is a box-total: dnsmasq's /tmp/dhcp.leases does not reliably
+// tag leases by serving interface, so per-interface counts are not available.
+// active_leases_v6_iface is per-interface: odhcpd writes the interface name
+// into each lease line and we filter on it. The asymmetry is named in the
+// field set so a client comparing the two doesn't conflate them.
+function count_v4_leases_total() {
 	let n = 0;
 	for (let line in split(read_file_or_empty(LEASES4_PATH), "\n")) {
 		let t = trim(line);
-		if (t == "") continue;
+		if (t == "" || substr(t, 0, 1) == "#") continue;
+		// /tmp/dhcp.leases format: <expires> <mac> <ip> <hostname> [<duid>]
+		let parts = split(t, " ");
+		if (length(parts) < 4) continue;
 		n++;
 	}
 	return n;
@@ -38,7 +47,8 @@ function count_v6_leases_for(iface) {
 	for (let line in split(content, "\n")) {
 		let t = trim(line);
 		if (t == "" || substr(t, 0, 1) == "#") continue;
-		let parts = split(t, " ");
+		// Split on whitespace (space OR tab) so trailing tabs don't shift columns.
+		let parts = split(t, /[ \t]+/);
 		if (length(parts) < 7) continue;
 		if (parts[4] != iface) continue;
 		// One v6 lease line can carry multiple addresses (slots 6..end).
@@ -49,8 +59,10 @@ function count_v6_leases_for(iface) {
 }
 
 function lease_counts_for_interface(iface) {
-	return { active_leases_v4: count_v4_leases(),
-	         active_leases_v6: count_v6_leases_for(iface) };
+	return {
+		active_leases_v4_total:   count_v4_leases_total(),
+		active_leases_v6_iface:   count_v6_leases_for(iface),
+	};
 }
 const VALID_RA = {
 	"disabled": true, "server": true, "relay": true, "hybrid": true,

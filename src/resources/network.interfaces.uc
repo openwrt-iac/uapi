@@ -59,20 +59,24 @@ function fromUci(section, conn) {
 		view.ip6table = section.ip6table ?? null;
 		view.has_private_key = (section.private_key != null && section.private_key != "");
 	}
+	// For the v1.2 dhcp / dhcpv6 fields, surface null when uci has nothing
+	// explicitly set. Surfacing the daemon's effective default would cause
+	// merge_for_patch to write those defaults into uci on the next PATCH,
+	// silently changing the section's surface area for the client.
 	if (proto == "dhcp") {
-		view.peerdns = normalize_bool(section.peerdns, true);
-		view.defaultroute = normalize_bool(section.defaultroute, true);
+		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
+		view.defaultroute = (section.defaultroute != null) ? normalize_bool(section.defaultroute, true) : null;
 		view.metric = section.metric ?? null;
 		view.hostname = section.hostname ?? null;
 		view.clientid = section.clientid ?? null;
 	}
 	if (proto == "dhcpv6") {
-		view.peerdns = normalize_bool(section.peerdns, true);
+		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
 		view.reqprefix = section.reqprefix ?? null;
 		view.reqaddress = section.reqaddress ?? null;
 		view.ip6hint = section.ip6hint ?? null;
 		view.ip6ifaceid = section.ip6ifaceid ?? null;
-		view.delegate = normalize_bool(section.delegate, true);
+		view.delegate = (section.delegate != null) ? normalize_bool(section.delegate, true) : null;
 	}
 	return view;
 }

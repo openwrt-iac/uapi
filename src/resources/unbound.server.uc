@@ -3,9 +3,10 @@ let normalize_bool = values.normalize_bool;
 
 const VALID_DHCP_LINK = { "none": true, "odhcpd": true, "dnsmasq": true };
 const VALID_RECURSION = { "default": true, "passive": true, "aggressive": true };
-const VALID_RESOURCE  = { "tiny": true, "small": true, "medium": true,
+const VALID_RESOURCE  = { "default": true, "tiny": true, "small": true, "medium": true,
                           "large": true, "big": true, "huge": true };
-const VALID_PROTOCOL  = { "auto": true, "ip4_only": true, "ip6_only": true, "mixed": true };
+const VALID_PROTOCOL  = { "default": true, "mixed": true, "ip4_only": true,
+                          "ip6_only": true, "ip6_local": true, "ip6_prefer": true };
 const VALID_REBIND    = { "0": true, "1": true, "2": true };
 const VALID_DOMAIN_TYPE = {
 	"deny": true, "refuse": true, "static": true, "transparent": true,
@@ -28,11 +29,11 @@ function fromUci(section) {
 		protocol: section.protocol ?? null,
 		query_minimize: normalize_bool(section.query_minimize, false),
 		prefetch: normalize_bool(section.prefetch, false),
-		manual_conf: normalize_bool(section.manual_conf, false),
-		extended_stats: normalize_bool(section.extended_stats, false),
-		interface_auto: normalize_bool(section.interface_auto, true),
-		localservice: normalize_bool(section.localservice, true),
-		hide_binddata: normalize_bool(section.hide_binddata, true),
+		manual_conf: (section.manual_conf != null) ? normalize_bool(section.manual_conf, false) : null,
+		extended_stats: (section.extended_stats != null) ? normalize_bool(section.extended_stats, false) : null,
+		interface_auto: (section.interface_auto != null) ? normalize_bool(section.interface_auto, true) : null,
+		localservice: (section.localservice != null) ? normalize_bool(section.localservice, true) : null,
+		hide_binddata: (section.hide_binddata != null) ? normalize_bool(section.hide_binddata, true) : null,
 		rebind_protection: section.rebind_protection ?? null,
 		num_threads: section.num_threads ?? null,
 		ttl_min: section.ttl_min ?? null,
