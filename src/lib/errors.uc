@@ -18,6 +18,8 @@ const STATUS_BY_CODE = {
 	precondition_failed: 412,
 	invalid_cursor: 400,
 	idempotency_key_conflict: 409,
+	// batch_partial_failure body is emitted directly with the failing sub
+	// request's HTTP status; no STATUS_BY_CODE entry needed.
 	internal_error: 500,
 	reload_failed_restored: 500,
 	reload_failed_unrecovered: 500,

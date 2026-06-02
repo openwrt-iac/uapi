@@ -105,6 +105,7 @@ return {
 	package: "firewall",
 	type: "rule",
 	reload: ["firewall"],
+	depends_on: ["firewall:zone"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

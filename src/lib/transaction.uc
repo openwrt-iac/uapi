@@ -153,6 +153,12 @@ function transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let check_services = params.check_services ?? default_check_services;
 
+	// Bare mode: run fn against `conn` without acquiring any lock, taking a
+	// snapshot, committing, or reloading. Used by /batch to compose many
+	// handler-level writes under a single outer multi_transaction lock+commit.
+	if (params.bare === true)
+		return fn(conn, pkg);
+
 	let svc_err = check_services(services);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
@@ -171,6 +177,98 @@ function transaction(conn, params) {
 		caught = e;
 	}
 	release(lock);
+	if (caught != null) die(caught);
+	return result;
+}
+
+// multi_transaction snapshots, EX-locks, and on-failure restores N packages
+// atomically. Caller passes a sorted-deduped package list and an fn that
+// performs all uci writes inside the locked region. On success all packages
+// commit and the union of reload services runs once; on any failure all
+// packages are restored from their snapshots in reverse order. Per-package
+// EX locks are acquired in sorted order to avoid deadlocks vs other writers.
+function multi_transaction(conn, params) {
+	let packages = params.packages ?? [];
+	let services = params.reload_services ?? [];
+	let fn = params.fn;
+	let path = params.lock_path ?? LOCK_PATH;
+	let reload = params.reload ?? default_reload;
+	let check_services = params.check_services ?? default_check_services;
+
+	let svc_err = check_services(services);
+	if (svc_err != null)
+		return { ok: false, kind: "init_script_missing", message: svc_err };
+
+	// Validate package names + sort + dedup so lock acquisition is deterministic.
+	let unique = {};
+	for (let p in packages) {
+		if (type(p) != "string" || !match(p, SAFE_NAME_RE))
+			return { ok: false, kind: "lock_unavailable",
+			         error: sprintf("invalid package name %J", p) };
+		unique[p] = true;
+	}
+	let sorted = [];
+	for (let p in unique) push(sorted, p);
+	sort(sorted);
+
+	// Acquire global SH + per-package EX in sorted order.
+	let acquired = [];
+	let g = _lock_one(path, "s");
+	if (g == null) return { ok: false, kind: "locked" };
+	if (type(g) == "object" && g.unavailable != null)
+		return { ok: false, kind: "lock_unavailable", error: g.unavailable };
+	for (let pkg in sorted) {
+		let p = _lock_one(PKG_LOCK_PREFIX + pkg + ".lock", "x");
+		if (p == null) {
+			for (let h in acquired) _release_one(h);
+			_release_one(g);
+			return { ok: false, kind: "locked" };
+		}
+		if (type(p) == "object" && p.unavailable != null) {
+			for (let h in acquired) _release_one(h);
+			_release_one(g);
+			return { ok: false, kind: "lock_unavailable", error: p.unavailable };
+		}
+		push(acquired, p);
+	}
+
+	let snapshots = {};
+	let result = null;
+	let caught = null;
+	try {
+		for (let pkg in sorted) snapshots[pkg] = conn.uci_export(pkg);
+		let inner = fn(conn);
+		if (!inner || inner.ok === false) {
+			for (let pkg in sorted) conn.uci_revert(pkg);
+			result = inner ?? { ok: false, kind: "unknown" };
+		} else {
+			for (let pkg in sorted) conn.uci_commit(pkg);
+			let reload_err = reload(services);
+			if (reload_err == null) {
+				result = { ok: true, body: inner.body ?? inner };
+			} else {
+				let restore_err = null;
+				try {
+					for (let pkg in sorted) {
+						conn.uci_import(pkg, snapshots[pkg]);
+						conn.uci_commit(pkg);
+					}
+					let r2 = reload(services);
+					if (r2 != null) restore_err = "reload during restore failed: " + r2;
+				} catch (e) { restore_err = "" + e; }
+				if (restore_err != null) {
+					result = { ok: false, kind: "reload_failed_unrecovered",
+					           reload_error: reload_err, restore_error: restore_err };
+				} else {
+					result = { ok: false, kind: "reload_failed_restored",
+					           reload_error: reload_err };
+				}
+			}
+		}
+	} catch (e) { caught = e; }
+
+	for (let h in acquired) _release_one(h);
+	_release_one(g);
 	if (caught != null) die(caught);
 	return result;
 }
@@ -195,7 +293,7 @@ function with_lock(params) {
 	return result ?? { ok: true };
 }
 
-return { transaction, with_lock,
+return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg,
          default_check_services };

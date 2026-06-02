@@ -10,6 +10,7 @@ let errors = require("errors");
 let auth = require("auth");
 let scope = require("scope");
 let handler = require("handler");
+let transaction = require("transaction");
 let bus = require("bus");
 let packages = require("packages");
 let system_access = require("system_access");
@@ -71,6 +72,21 @@ const SINGLETONS = {
 	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
 };
 
+// BARE variants run inside an outer multi_transaction's lock+commit (for the
+// /batch endpoint). They reuse the same resource modules but pass
+// `tx: { bare: true }` so each create/patch/replace/remove call skips its
+// own per-package flock, snapshot, commit, and reload.
+// Read-only collections (dhcp:leases, dhcp:leases6) are write-incapable and
+// excluded from batch.
+const BARE_RESOURCES = {};
+const BARE_SINGLETONS = {};
+for (let k in RESOURCE_SOURCES) {
+	let src = RESOURCE_SOURCES[k];
+	if (src.toUci == null && src.list_fn != null) continue;
+	if (SINGLETONS[k] != null) BARE_SINGLETONS[k] = handler.make_singleton(src, { tx: { bare: true } });
+	else if (RESOURCES[k] != null) BARE_RESOURCES[k] = handler.make(src, { tx: { bare: true } });
+}
+
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
 
 function read_version() {
@@ -87,6 +103,10 @@ const INSECURE_MARKER = "/etc/uapi.insecure";
 const REASON = {
 	"200": "OK",
 	"204": "No Content",
+	"207": "Multi-Status",
+	"304": "Not Modified",
+	"412": "Precondition Failed",
+	"429": "Too Many Requests",
 	"400": "Bad Request",
 	"401": "Unauthorized",
 	"403": "Forbidden",
@@ -396,6 +416,180 @@ function record_metrics_for(method, path, status, duration_ms) {
 	metrics.record_request(method, tpl, status, duration_ms);
 }
 
+// Pull (package, reload_services) from a sub-request path. Returns null if
+// the path does not target a writable, batch-eligible resource.
+function batch_resolve_target(parts) {
+	if (length(parts) < 1) return null;
+	let key, kind;
+	if (length(parts) == 1) { key = parts[0]; kind = "singleton"; }
+	else { key = parts[0] + ":" + parts[1]; }
+	if (BARE_SINGLETONS[key]) {
+		let src = RESOURCE_SOURCES[key];
+		return { kind: "singleton", key, h: BARE_SINGLETONS[key],
+		         package: src.package, reload: src.reload ?? [] };
+	}
+	if (BARE_RESOURCES[key]) {
+		let src = RESOURCE_SOURCES[key];
+		return { kind: "resource", key, h: BARE_RESOURCES[key],
+		         package: src.package, reload: src.reload ?? [] };
+	}
+	return null;
+}
+
+function batch_run_one(conn, sub_ctx, scopes, op) {
+	if (type(op) != "object" || type(op.method) != "string" || type(op.path) != "string")
+		return { status: 400, headers: {},
+		         body: { code: "bad_request",
+		                 message: "sub-request must have string method + path",
+		                 request_id: sub_ctx.request_id } };
+	let parts = split_path(op.path);
+	let domain = parts[0] ?? "";
+	let sub = length(parts) >= 2 ? parts[1] : null;
+	let m = op.method;
+	// Per-sub scope check uses the same logic the top-level dispatch uses.
+	let scope_path = sub != null ? [domain, sub] : [domain];
+	if (!scope.permits(scopes, scope_path, method_verb(m)))
+		return errors.error(sub_ctx, "insufficient_scope",
+			sprintf("Token does not permit %s on %s", m, op.path));
+
+	let tgt = batch_resolve_target(parts);
+	if (tgt == null)
+		return errors.error(sub_ctx, "not_found",
+			sprintf("No batch-eligible handler for %s", op.path));
+
+	if (op.if_match != null) sub_ctx.if_match = op.if_match;
+	sub_ctx.json_patch = false;  // batch sub-requests use merge-patch semantics
+
+	if (tgt.kind == "singleton") {
+		if (m == "GET")    return tgt.h.get(conn, sub_ctx);
+		if (m == "PATCH")  return tgt.h.patch(conn, sub_ctx, op.body);
+		return errors.error(sub_ctx, "method_not_allowed",
+			sprintf("Method %s not allowed on %s", m, op.path));
+	}
+
+	let id = length(parts) >= 3 ? parts[2] : null;
+	if (id == null) {
+		if (m == "GET")  return tgt.h.list(conn, sub_ctx, {});
+		if (m == "POST") return tgt.h.create(conn, sub_ctx, op.body);
+		return errors.error(sub_ctx, "method_not_allowed",
+			sprintf("Method %s not allowed on %s", m, op.path));
+	}
+	if (m == "GET")    return tgt.h.get_one(conn, sub_ctx, id);
+	if (m == "PUT")    return tgt.h.replace(conn, sub_ctx, id, op.body);
+	if (m == "PATCH")  return tgt.h.patch(conn, sub_ctx, id, op.body);
+	if (m == "DELETE") return tgt.h.remove(conn, sub_ctx, id);
+	return errors.error(sub_ctx, "method_not_allowed",
+		sprintf("Method %s not allowed on %s", m, op.path));
+}
+
+function _is_write_method(m) {
+	return m == "POST" || m == "PUT" || m == "PATCH" || m == "DELETE";
+}
+
+function batch_dispatch(env, conn, ctx, token, method, body) {
+	if (method != "POST")
+		return errors.error(ctx, "method_not_allowed", "batch only supports POST");
+	if (type(body) != "object" || type(body.operations) != "array")
+		return errors.error(ctx, "bad_request",
+			"body must be {\"operations\": [{path, method, body?, if_match?}, ...]}");
+	let ops = body.operations;
+	if (length(ops) == 0)
+		return errors.error(ctx, "bad_request", "operations must be non-empty");
+	if (length(ops) > 50)
+		return errors.error(ctx, "bad_request", "operations capped at 50");
+
+	// Pre-resolve every sub-request's target so we know which packages to
+	// lock and which reload services to run, and so a typo aborts before any
+	// state changes. Only WRITE ops contribute to the lock/reload set; an
+	// all-reads batch acquires nothing and reloads nothing.
+	let packages_seen = {}, reload_seen = {};
+	for (let i = 0; i < length(ops); i++) {
+		let op = ops[i];
+		if (type(op) != "object" || type(op.path) != "string")
+			return errors.error(ctx, "bad_request",
+				sprintf("operations[%d] missing path", i));
+		let tgt = batch_resolve_target(split_path(op.path));
+		if (tgt == null)
+			return errors.error(ctx, "not_found",
+				sprintf("operations[%d]: no batch-eligible handler for %s", i, op.path));
+		if (_is_write_method(op.method ?? "")) {
+			packages_seen[tgt.package] = true;
+			for (let svc in tgt.reload) reload_seen[svc] = true;
+		}
+	}
+	let pkgs = [], reloads = [];
+	for (let p in packages_seen) push(pkgs, p);
+	for (let s in reload_seen) push(reloads, s);
+	sort(pkgs); sort(reloads);
+
+	let aborted = null;
+	let results = [];
+	let run_ops = function(c) {
+		for (let i = 0; i < length(ops); i++) {
+			let sub_ctx = { request_id: ctx.request_id + "." + i };
+			let resp = batch_run_one(c, sub_ctx, token.scopes, ops[i]);
+			push(results, { status: resp.status, body: resp.body });
+			if (resp.status >= 400) {
+				aborted = { index: i, envelope: resp };
+				return { ok: false, kind: "batch_aborted" };
+			}
+		}
+		return { ok: true };
+	};
+
+	let r;
+	if (length(pkgs) == 0) {
+		// Pure-read batch: no flock, no snapshot, no commit, no reload.
+		r = run_ops(conn);
+	} else {
+		r = transaction.multi_transaction(conn, {
+			packages: pkgs,
+			reload_services: reloads,
+			fn: run_ops,
+		});
+	}
+
+	if (aborted != null) {
+		return {
+			status: aborted.envelope.status,
+			headers: errors.new_context(ctx.request_id) != null
+			         ? { "Content-Type": "application/json",
+			             "X-Request-Id": ctx.request_id }
+			         : {},
+			body: {
+				code: "batch_partial_failure",
+				message: sprintf("batch aborted at index %d; all changes reverted",
+				                 aborted.index),
+				request_id: ctx.request_id,
+				aborted_at_index: aborted.index,
+				error: aborted.envelope.body,
+				reverted: true,
+			},
+		};
+	}
+
+	if (r.kind == "init_script_missing")
+		return errors.error(ctx, "init_script_missing", r.message);
+	if (r.kind == "reload_failed_restored")
+		return errors.reload_failed_restored(ctx, r.reload_error);
+	if (r.kind == "reload_failed_unrecovered")
+		return errors.reload_failed_unrecovered(ctx, r.reload_error, r.restore_error);
+	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+			sprintf("batch lock unavailable: %s", r.error));
+	if (!r.ok)
+		return errors.error(ctx, "internal_error",
+			sprintf("batch returned unknown kind %J", r.kind));
+
+	return {
+		status: 207,
+		headers: { "Content-Type": "application/json",
+		           "X-Request-Id": ctx.request_id },
+		body: { results, request_id: ctx.request_id },
+	};
+}
+
 function diagnostics_response(ctx) {
 	let resources_loaded = [];
 	for (let k in RESOURCE_SOURCES) push(resources_loaded, k);
@@ -508,6 +702,11 @@ function dispatch(env) {
 	}
 	ctx.body_text = body_text;
 	ctx.idempotency_key = env.HTTP_IDEMPOTENCY_KEY ?? qs.idempotency_key ?? null;
+	// PATCH with Content-Type: application/json-patch+json switches the
+	// handler from merge-patch (RFC 7396, the default) to RFC 6902 ops.
+	let ctype = env.CONTENT_TYPE ?? "";
+	ctx.json_patch = (method == "PATCH"
+	                  && index(ctype, "application/json-patch+json") >= 0);
 
 	let query = parse_query(env.QUERY_STRING);
 
@@ -599,6 +798,10 @@ function dispatch(env) {
 			           "X-Request-Id": ctx.request_id },
 			body: text,
 		} };
+	}
+
+	if (path == "/batch") {
+		return { ctx, token, resp: batch_dispatch(env, conn, ctx, token, method, body) };
 	}
 
 	if (path == "/diagnostics") {

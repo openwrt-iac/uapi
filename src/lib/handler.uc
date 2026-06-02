@@ -1,6 +1,7 @@
 let ids = require("ids");
 let errors = require("errors");
 let transaction = require("transaction");
+let jsonpatch = require("jsonpatch");
 
 // ETag computation. Uses sha256 from ucode-mod-digest when available (real
 // router); falls back to a non-crypto stable string hash for unit-test
@@ -18,7 +19,45 @@ function _fallback_hash(s) {
 	return sprintf("%08x", h);
 }
 
-function compute_etag(body) {
+function _hash(s) {
+	let hex = (_digest != null) ? _digest.sha256(s) : _fallback_hash(s);
+	return substr(hex, 0, 12);
+}
+
+// Hashes the current uci-configured state of every section under the given
+// `pkg:type` keys. Used to mix dependency-state into a dependent resource's
+// ETag so the dependent's ETag changes when a referenced zone (etc.) changes.
+// The cache lives on ctx (._dep_cache) so a list of N rules depending on
+// firewall:zones costs O(zones) once, not O(zones * rules).
+function _deps_hash(ctx, conn, depends_on) {
+	if (depends_on == null || type(depends_on) != "array" || length(depends_on) == 0)
+		return "";
+	if (ctx == null) ctx = {};
+	if (ctx._dep_cache == null) ctx._dep_cache = {};
+	let cache = ctx._dep_cache;
+	let parts = [];
+	for (let dep in depends_on) {
+		if (type(dep) != "string") continue;
+		if (cache[dep] != null) { push(parts, cache[dep]); continue; }
+		let kv = split(dep, ":");
+		if (length(kv) != 2) { cache[dep] = ""; continue; }
+		let pkg = kv[0], dep_type = kv[1];
+		let body_lines = [];
+		try {
+			conn.uci_foreach(pkg, null, function(s) {
+				if (s['.type'] != dep_type) return;
+				push(body_lines, sprintf("%J", s));
+			});
+		} catch (_) {}
+		sort(body_lines);
+		let h = _hash(dep + "|" + join("\n", body_lines));
+		cache[dep] = h;
+		push(parts, h);
+	}
+	return _hash(join(",", parts));
+}
+
+function compute_etag(body, deps_hash) {
 	if (body == null) return null;
 	// Strip the `runtime` block before hashing: it carries live ubus/file-derived
 	// state (uptime, signal, lease counts, active addresses) that drifts second-
@@ -30,8 +69,9 @@ function compute_etag(body) {
 		delete canon.runtime;
 	}
 	let canonical = sprintf("%J", canon);
-	let hex = (_digest != null) ? _digest.sha256(canonical) : _fallback_hash(canonical);
-	return substr(hex, 0, 12);
+	if (deps_hash != null && deps_hash != "")
+		canonical = canonical + ":" + deps_hash;
+	return _hash(canonical);
 }
 
 // Cursor pagination for collection GETs. The cursor is `c_<last_seen_id>`;
@@ -76,8 +116,8 @@ function paginate(ctx, items, query) {
 	return resp;
 }
 
-function set_etag_header(resp, body) {
-	let etag = compute_etag(body);
+function set_etag_header(resp, body, deps_hash) {
+	let etag = compute_etag(body, deps_hash);
 	if (etag == null) return resp;
 	if (resp.headers == null) resp.headers = {};
 	resp.headers["ETag"] = "\"" + etag + "\"";
@@ -109,13 +149,13 @@ function parse_if_match(header_value) {
 	return out;
 }
 
-function precondition_check(ctx, existing_body) {
+function precondition_check(ctx, existing_body, deps_hash) {
 	let want = parse_if_match(ctx.if_match);
 	if (want == null) return null;          // no If-Match -> no check
 	if (want == "*" && existing_body != null) return null;  // wildcard ok for any existing
 	if (want == "*") return errors.error(ctx, "precondition_failed",
 		"If-Match: * requires an existing resource");
-	let have = compute_etag(existing_body);
+	let have = compute_etag(existing_body, deps_hash);
 	for (let candidate in want)
 		if (candidate == have) return null;
 	return errors.error(ctx, "precondition_failed",
@@ -347,7 +387,8 @@ function make(resource, opts) {
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
 		let body = resource.fromUci(s, conn);
-		return set_etag_header(errors.ok(ctx, body), body);
+		let dh = _deps_hash(ctx, conn, resource.depends_on);
+		return set_etag_header(errors.ok(ctx, body), body, dh);
 	}
 
 	function create(conn, ctx, body) {
@@ -386,7 +427,8 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
-				let pc = precondition_check(ctx, existing_view);
+				let pc = precondition_check(ctx, existing_view,
+					_deps_hash(ctx, c, resource.depends_on));
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -419,16 +461,38 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
-				let pc = precondition_check(ctx, existing_view);
+				let pc = precondition_check(ctx, existing_view,
+					_deps_hash(ctx, c, resource.depends_on));
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
 				let existing_json = existing_view;
-				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
-				let merged_json = merge_fn(existing, existing_json, body);
+				let schema_body, merged_json;
+				if (ctx != null && ctx.json_patch == true) {
+					// RFC 6902. Apply ops to a JSON view of existing state; the
+					// result IS the full new body (like PUT). Schema-check the
+					// full result since merge-patch's delta-only check doesn't
+					// apply when we synthesised the post-image ourselves.
+					let jp_result = jsonpatch.apply(existing_json, body);
+					if (!jp_result.ok) {
+						if (jp_result.code == "precondition_failed")
+							return { ok: false, kind: "precondition_failed",
+							         message: jp_result.message };
+						return { ok: false, kind: "validation",
+						         errors: [errors.field_error(
+						           sprintf("[%d]", jp_result.op_index ?? 0),
+						           "invalid_format", jp_result.message)] };
+					}
+					merged_json = jp_result.value;
+					schema_body = merged_json;
+				} else {
+					let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
+					merged_json = merge_fn(existing, existing_json, body);
+					schema_body = body;
+				}
 
-				let errs = _validate_with_schema(resource, body, merged_json, c, id);
+				let errs = _validate_with_schema(resource, schema_body, merged_json, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -461,7 +525,8 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed" };
-				let pc = precondition_check(ctx, existing_view);
+				let pc = precondition_check(ctx, existing_view,
+					_deps_hash(ctx, c, resource.depends_on));
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -527,7 +592,8 @@ function make_singleton(resource, opts) {
 			return errors.error(ctx, "not_found",
 			                    sprintf("singleton %s.%s missing", pkg, sec_type));
 		let body = resource.fromUci(s, conn);
-		return set_etag_header(errors.ok(ctx, body), body);
+		let dh = _deps_hash(ctx, conn, resource.depends_on);
+		return set_etag_header(errors.ok(ctx, body), body, dh);
 	}
 
 	function patch(conn, ctx, body) {
@@ -540,15 +606,33 @@ function make_singleton(resource, opts) {
 				let id = existing['.name'];
 
 				let existing_view = resource.fromUci(existing, conn);
-				let pc = precondition_check(ctx, existing_view);
+				let pc = precondition_check(ctx, existing_view,
+					_deps_hash(ctx, c, resource.depends_on));
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
-				let merged = { ...existing_view };
-				for (let k in body) merged[k] = body[k];
+				let merged, schema_body;
+				if (ctx != null && ctx.json_patch == true) {
+					let jp_result = jsonpatch.apply(existing_view, body);
+					if (!jp_result.ok) {
+						if (jp_result.code == "precondition_failed")
+							return { ok: false, kind: "precondition_failed",
+							         message: jp_result.message };
+						return { ok: false, kind: "validation",
+						         errors: [errors.field_error(
+						           sprintf("[%d]", jp_result.op_index ?? 0),
+						           "invalid_format", jp_result.message)] };
+					}
+					merged = jp_result.value;
+					schema_body = merged;
+				} else {
+					merged = { ...existing_view };
+					for (let k in body) merged[k] = body[k];
+					schema_body = body;
+				}
 
-				let errs = _validate_with_schema(resource, body, merged, c, id);
+				let errs = _validate_with_schema(resource, schema_body, merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

@@ -118,6 +118,7 @@ return {
 	package: "firewall",
 	type: "redirect",
 	reload: ["firewall"],
+	depends_on: ["firewall:zone"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

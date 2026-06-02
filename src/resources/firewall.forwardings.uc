@@ -71,6 +71,7 @@ return {
 	package: "firewall",
 	type: "forwarding",
 	reload: ["firewall"],
+	depends_on: ["firewall:zone"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
