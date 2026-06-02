@@ -45,6 +45,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Unit tests
         run: make test-unit
+      - name: Coverage inventory (modules + functions)
+        run: make coverage
 
   lint:
     runs-on: ubuntu-latest
@@ -91,6 +93,20 @@ jobs:
       - name: Run integration tests
         run: tests/integration/run.sh
 
+      - name: Soak test (60s read-only with RSS/fd leak watch)
+        run: DURATION=60 PARALLEL=2 tests/soak/ci_soak.sh
+
+      - name: Perf bench + regression gate
+        run: N=50 tests/bench/ci_bench.sh
+
+      - name: Upload bench result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-run
+          path: bench/run-*.json
+          if-no-files-found: ignore
+
       - name: Capture serial log on failure
         if: failure()
         run: tail -200 tests/vm/qemu.log || true
@@ -118,6 +134,22 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need tag object for verify-tag
+
+      # Tags MUST be signed. Verifies against .github/allowed-signers. If the
+      # tag is unsigned or the signer is not in the allowed list, this fails
+      # before any artifact is built or published.
+      - name: Verify tag signature
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! grep -qE '^[^#[:space:]]' .github/allowed-signers; then
+            echo "ERROR: .github/allowed-signers has no entries; tags cannot be verified."
+            echo "Add a signer per the file's setup instructions before tagging."
+            exit 1
+          fi
+          git config gpg.ssh.allowedSignersFile "$GITHUB_WORKSPACE/.github/allowed-signers"
+          git verify-tag "$TAG"
 
       - name: Install tooling
         run: |
@@ -133,11 +165,15 @@ jobs:
           path: build/sdk
           key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
 
-      - name: Download SDK if cache miss
+      - name: Download SDK if cache miss (verified by sha256)
         run: |
           if [ ! -d build/sdk/staging_dir ]; then
             mkdir -p build/sdk
-            curl -fsSL "$OPENWRT_SDK_URL" | tar --use-compress-program=unzstd -xf - -C build/sdk --strip-components=1
+            SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
+            curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
+            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" )
+            tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" -C build/sdk --strip-components=1
+            rm -f "/tmp/$SDK_TARBALL"
           fi
 
       - name: Cache OpenWrt VM image
