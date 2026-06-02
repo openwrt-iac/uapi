@@ -1,21 +1,6 @@
-// Property-test harness for resource modules.
-//
-// Two distinct properties we care about:
-//
-//   1. **Round-trip stability.** For any randomly-generated section that uci
-//      could plausibly produce, `fromUci(toUci(fromUci(section)))` must yield
-//      the same JSON view as `fromUci(section)`. This is the practical
-//      "drift-free" property a Terraform provider relies on: read, store,
-//      write-back-unchanged, read again -> identical shape.
-//
-//   2. **Validate is total.** For ANY input (well-typed or not), `validate()`
-//      must return an array of field errors. It must never throw, never
-//      return null, never return a non-array. This is the "fuzz-safe" property.
-//
-// ucode lacks Math.random(); we get determinism by passing a small PRNG state
-// through the generators. Seed is provided per test so reruns reproduce.
-
-// ---- PRNG ------------------------------------------------------------------
+// Property-test harness. Two contracts: (1) fromUci -> toUci -> fromUci is
+// stable (drift-free for Terraform); (2) validate is total (never throws).
+// ucode has no Math.random, so we thread a deterministic LCG state.
 
 function lcg(seed) {
 	let state = seed;
@@ -60,12 +45,6 @@ function ripv4_cidr(rng) {
 	return ripv4(rng) + "/" + (rng() % 33);
 }
 
-// ---- Adversarial fuzz generators -------------------------------------------
-//
-// Each returns a value of some unpredictable shape/size to throw at validate().
-// The intent is NOT to produce things validate would accept (it shouldn't), but
-// to ensure validate handles them without throwing.
-
 function fuzz_any(rng) {
 	let pick = rng() % 12;
 	if (pick == 0) return null;
@@ -102,11 +81,6 @@ function fuzz_object(rng) {
 	return o;
 }
 
-// ---- Property: validate is total -------------------------------------------
-//
-// Run N adversarial bodies through validate. Each invocation must return an
-// array (possibly empty); must not throw.
-
 function check_validate_total(resource, n_iterations, seed) {
 	let rng = lcg(seed);
 	let surprises = [];
@@ -127,7 +101,6 @@ function check_validate_total(resource, n_iterations, seed) {
 	return surprises;
 }
 
-// Stable-shape equality (handles arrays, objects, nulls).
 function json_eq(a, b) {
 	if (a == null && b == null) return true;
 	if (a == null || b == null) return false;
@@ -145,13 +118,6 @@ function json_eq(a, b) {
 	}
 	return a == b;
 }
-
-// ---- Property: round-trip stability ----------------------------------------
-//
-// Given a synthesized uci section (the kind ucode-mod-uci would return), check
-// that fromUci -> toUci -> fromUci yields the same JSON view as the first
-// fromUci. We do this by manufacturing the "after-write" section view: the
-// toUci output becomes the new options + a few fixed metadata fields.
 
 function synthesize_section_from_toUci(out, sec_type, sec_name) {
 	let s = { ...out };

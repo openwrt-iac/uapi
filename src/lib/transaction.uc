@@ -17,8 +17,9 @@ let fs = require('fs');
 // transaction (any package) and blocks new ones until done.
 const LOCK_PATH = "/var/lock/uapi.lock";
 const PKG_LOCK_PREFIX = "/var/lock/uapi.pkg.";
-const PKG_NAME_RE = /^[A-Za-z0-9_-]+$/;
-const SERVICE_NAME_RE = /^[A-Za-z0-9_-]+$/;
+// Same charset for both: uci package names and init-script names must match
+// /^[A-Za-z0-9_-]+$/ before we let them anywhere near a shell command or path.
+const SAFE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 // Pre-flight: confirm every init script we're about to reload actually exists.
 // Without this check, a write against a uci section whose daemon isn't installed
@@ -29,7 +30,7 @@ const SERVICE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 // the caller gets an honest `init_script_missing` (503) before any uci write.
 function default_check_services(services) {
 	for (let svc in services) {
-		if (type(svc) != "string" || !match(svc, SERVICE_NAME_RE))
+		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
 		let path = "/etc/init.d/" + svc;
 		if (fs.stat(path) == null)
@@ -40,7 +41,7 @@ function default_check_services(services) {
 
 function default_reload(services) {
 	for (let svc in services) {
-		if (type(svc) != "string" || !match(svc, SERVICE_NAME_RE))
+		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
 		let cmd = sprintf("/etc/init.d/%s reload 2>&1", svc);
 		let p = fs.popen(cmd, "r");
@@ -83,7 +84,7 @@ function default_release(handle) {
 // per-package file. Returns an opaque handle (object with both fds) or one
 // of the same null / { unavailable } sentinels.
 function default_acquire_pkg(global_path, package) {
-	if (type(package) != "string" || !match(package, PKG_NAME_RE))
+	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
 	let g = _lock_one(global_path ?? LOCK_PATH, "s");
 	if (g == null) return null;

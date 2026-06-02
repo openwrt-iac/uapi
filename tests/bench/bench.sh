@@ -1,16 +1,6 @@
 #!/bin/sh
-# uapi performance benchmark, read-only.
-#
-# Hits a handful of representative GET endpoints in tight loops and reports
-# min / median / p95 / p99 / max latency per endpoint. Intentionally read-only:
-# safe to run against the live router (no writes, no state changes).
-#
-# Usage:
-#   UAPI_BASE=https://192.168.10.123 UAPI_TOKEN=... ./tests/bench/bench.sh
-#   UAPI_BASE=... UAPI_TOKEN=... N=200 ./tests/bench/bench.sh  # override count
-#
-# Output: one block per endpoint with the latency distribution. Exits 1 on
-# any non-2xx response.
+# Read-only latency bench. Usage:
+#   UAPI_BASE=https://router UAPI_TOKEN=... [N=100] ./tests/bench/bench.sh
 
 set -eu
 

@@ -1,18 +1,8 @@
 #!/bin/sh
-# uapi soak test, long-duration, read-only.
-#
-# Hammers a mix of read endpoints in parallel for DURATION seconds. Watches
-# the uhttpd process from a side channel (SSH) to surface obvious leaks:
-# resident set growth, fd count growth, child accumulation. Read-only so it
-# is safe against the live router.
-#
-# Usage:
-#   UAPI_BASE=https://192.168.10.123 UAPI_TOKEN=... ROUTER_SSH=root@192.168.10.123 \
-#     DURATION=1800 PARALLEL=4 ./tests/soak/soak.sh
-#
-# Defaults: DURATION=600 (10 min), PARALLEL=4.
-# If ROUTER_SSH is empty, the leak-watch side channel is skipped; the load
-# loop still runs and reports request counts and error totals.
+# Read-only long-duration load test. Usage:
+#   UAPI_BASE=https://router UAPI_TOKEN=... [ROUTER_SSH=root@router] \
+#     [DURATION=600] [PARALLEL=4] ./tests/soak/soak.sh
+# ROUTER_SSH enables a side-channel RSS/fd/child sampler over SSH.
 
 set -eu
 

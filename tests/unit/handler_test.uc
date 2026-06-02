@@ -608,11 +608,9 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 	});
 });
 
-// PATCH must not re-validate the existing-uci-string view of integer-typed
-// fields. dropbear.instances declares Port as `{ type: "integer" }` while
-// fromUci returns it as a uci string. Before the fix, PATCH with any body
-// that did NOT touch Port still 422'd because the merge inherited "22" and
-// the schema check fired on the merged body.
+// dropbear.instances declares Port as integer while fromUci returns the uci
+// string. Regression sentinel: PATCH must not 422 on Port when body didn't
+// touch it.
 let dropbear_mod = loadfile('src/resources/dropbear.instances.uc')();
 let dropbear = handler.make(dropbear_mod, {
 	tx: {

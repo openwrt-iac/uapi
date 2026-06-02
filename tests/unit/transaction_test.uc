@@ -282,17 +282,14 @@ t.describe('transaction, per-package + global flock layout', () => {
 
 	t.it('per-package lock allows different packages to proceed in parallel', () => {
 		clean_locks();
-		// First transaction holds firewall: SH on global + EX on pkg.firewall
 		let g1 = fs.open("/tmp/uapi-test-global.lock", "w+");
 		g1.lock("sn");
 		let p1 = fs.open("/tmp/uapi-test-pkg-firewall.lock", "w+");
 		p1.lock("xn");
-		// Second transaction on a different package: should succeed.
 		let g2 = fs.open("/tmp/uapi-test-global.lock", "w+");
 		t.assert_equal(g2.lock("sn"), true);
 		let p2 = fs.open("/tmp/uapi-test-pkg-network.lock", "w+");
 		t.assert_equal(p2.lock("xn"), true);
-		// Cleanup
 		p2.lock("u"); p2.close();
 		g2.lock("u"); g2.close();
 		p1.lock("u"); p1.close();
@@ -304,7 +301,6 @@ t.describe('transaction, per-package + global flock layout', () => {
 		clean_locks();
 		let p1 = fs.open("/tmp/uapi-test-pkg-firewall.lock", "w+");
 		t.assert_equal(p1.lock("xn"), true);
-		// Second attempt on same package: must NOT succeed (non-blocking).
 		let p2 = fs.open("/tmp/uapi-test-pkg-firewall.lock", "w+");
 		t.assert_true(p2.lock("xn") !== true);
 		p2.close();
@@ -316,7 +312,6 @@ t.describe('transaction, per-package + global flock layout', () => {
 		clean_locks();
 		let g_sh = fs.open("/tmp/uapi-test-global.lock", "w+");
 		g_sh.lock("sn");
-		// Non-uci write tries EX on global: must NOT succeed (non-blocking).
 		let g_ex = fs.open("/tmp/uapi-test-global.lock", "w+");
 		t.assert_true(g_ex.lock("xn") !== true);
 		g_ex.close();
@@ -328,7 +323,6 @@ t.describe('transaction, per-package + global flock layout', () => {
 		clean_locks();
 		let g_ex = fs.open("/tmp/uapi-test-global.lock", "w+");
 		g_ex.lock("xn");
-		// uci tx tries SH on global: must NOT succeed (non-blocking).
 		let g_sh = fs.open("/tmp/uapi-test-global.lock", "w+");
 		t.assert_true(g_sh.lock("sn") !== true);
 		g_sh.close();

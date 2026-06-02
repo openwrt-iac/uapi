@@ -1,14 +1,6 @@
 #!/usr/bin/ucode
-// Coverage inventory: walks src/resources and src/lib, maps each module to
-// the unit test files that mention it, and prints a one-line summary plus a
-// per-module breakdown sorted by coverage status.
-//
-// "Coverage" here is structural, not branch coverage and not line coverage. It
-// answers: for every shipped module, does at least one unit test exercise it?
-// The property-test harness counts as coverage for any module whose `validate`
-// or fromUci/toUci it touches.
-//
-// Output goes to stdout. Exit 1 if any covered=false rows exist so CI can fail.
+// Structural test-coverage inventory: every module under src/resources and
+// src/lib must be mentioned in at least one unit test. Exit 1 on any miss.
 
 import * as fs from 'fs';
 

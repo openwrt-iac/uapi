@@ -1,8 +1,6 @@
 let t = require('harness');
 let ph = loadfile('tests/property_harness.uc')();
 
-// Every resource module currently shipped, loaded so the suites below can
-// fan out across all of them. Add new entries here when a resource lands.
 const RESOURCES = [
 	{ name: "firewall.zones",       file: "firewall.zones.uc" },
 	{ name: "firewall.rules",       file: "firewall.rules.uc" },
@@ -52,12 +50,6 @@ t.describe('property: validate() is total across every resource', () => {
 		});
 	}
 });
-
-// ----------------------------------------------------------------------------
-// Round-trip stability tests: synthesize "after-write" uci sections that
-// resemble what ucode-mod-uci produces, then check fromUci -> toUci -> fromUci
-// reaches a fixed point. Per-resource fixtures drive coverage so we can
-// extend incrementally; only resources with at least one fixture run here.
 
 t.describe('property: fromUci -> toUci -> fromUci is stable', () => {
 	let cases = [
