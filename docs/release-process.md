@@ -78,7 +78,15 @@ Per-release steps (operator does these in order):
    git tag -s v2.0.0 -m "v2.0.0"
    git push origin v2.0.0
    ```
-   The tag MUST be signed with a key listed in `.github/allowed-signers`.
+   The tag MUST be signed with a GPG key whose public block is in
+   `.github/release-signers.asc`. Set up once locally:
+   ```
+   git config --global user.signingkey <YOUR-GPG-FINGERPRINT>
+   git config --global tag.gpgsign true
+   gpg --armor --export <YOUR-GPG-FINGERPRINT> > .github/release-signers.asc
+   git add .github/release-signers.asc && git commit -m "release: trust <fingerprint>"
+   git push
+   ```
    CI's release-apk job runs `git verify-tag` first; an unsigned tag (or a
    tag from a signer not in the allowed list) fails the workflow before
    any artifact is produced.
@@ -149,7 +157,7 @@ Before tagging:
 - [ ] `CHANGELOG.md` has the entry for this version.
 - [ ] `make test coverage` green.
 - [ ] CI on `main` green for the commit that will be tagged.
-- [ ] At least one signed-tag key in `.github/allowed-signers`.
+- [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
   `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
 - [ ] `gh workflow run ci.yml --ref main` green - validates the per-arch

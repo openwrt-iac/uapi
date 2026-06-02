@@ -141,21 +141,20 @@ jobs:
         with:
           fetch-depth: 0  # need tag object for verify-tag
 
-      # Tags MUST be signed. Verifies against .github/allowed-signers. If the
-      # tag is unsigned or the signer is not in the allowed list, this fails
+      # Tags MUST be signed by a key in .github/release-signers.asc. CI
+      # imports the file's keys into a clean keyring and runs `git verify-tag`;
+      # an unsigned tag or one signed by a non-listed key fails the workflow
       # before any artifact is built or published.
       - name: Verify tag signature
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # An allowed-signers entry needs principal + namespace + key-type +
-          # key body. Comments and blank lines do not count.
-          if ! grep -E '^[^#[:space:]]+[[:space:]]+(namespaces=[^[:space:]]+[[:space:]]+)?(ssh-ed25519|ssh-rsa|ssh-ecdsa|ecdsa-sha2-[a-z0-9-]+)[[:space:]]+[A-Za-z0-9+/=]+' .github/allowed-signers >/dev/null; then
-            echo "ERROR: .github/allowed-signers has no valid entry."
-            echo "Each entry must be: <principal> [namespaces=git] ssh-<algo> <base64-key>"
-            echo "Add a signer per the file's setup instructions before tagging."
+          if ! grep -q 'BEGIN PGP PUBLIC KEY BLOCK' .github/release-signers.asc; then
+            echo "ERROR: .github/release-signers.asc has no PGP public-key block."
+            echo "Export your key with: gpg --armor --export <fingerprint> > .github/release-signers.asc"
             exit 1
           fi
-          git config gpg.ssh.allowedSignersFile "$GITHUB_WORKSPACE/.github/allowed-signers"
+          export GNUPGHOME=$(mktemp -d)
+          gpg --batch --import .github/release-signers.asc
           git verify-tag "$TAG"
 
       - name: Install tooling
