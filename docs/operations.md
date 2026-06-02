@@ -92,17 +92,109 @@ Leave these off unless you're debugging. They are noisy and will fill the in-mem
 
 ## Metrics
 
-Not in v1.x. Operators wanting router-level metrics use `node_exporter` (curated via `prometheus_node_exporter_lua/config`); uapi's request volume is naturally low and not the bottleneck. A `/metrics` endpoint remains deferred: it needs cross-fork shared state (counters/histograms) which the fork-per-request model can't share in process.
+`GET /api/v1/metrics` returns Prometheus 0.0.4 text. Scope: `uapi:metrics:ro`
+(covered by `*:ro`). Counters and histograms are file-backed under
+`/tmp/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
+operational counters; aggregate longer-term retention server-side).
+
+Series:
+
+| Series | Type | Labels |
+|---|---|---|
+| `uapi_requests_total` | counter | `method`, `path` (template, e.g. `/firewall/rules/:id`), `status` |
+| `uapi_request_duration_seconds_bucket` | histogram | `method`, `path`, `le` |
+| `uapi_request_duration_seconds_count` | counter | `method`, `path` |
+| `uapi_rate_limit_drops_total` | counter | `token_id` |
+| `uapi_lock_contention_total` | counter | `lock_type` |
+| `uapi_validate_errors_total` | counter | `resource`, `code` |
+
+Path templates are normalized (`/firewall/rules/:id` not the concrete
+ULID) to keep label cardinality bounded as clients create/destroy
+resources.
+
+Sample Prometheus scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: uapi
+    scrape_interval: 30s
+    metrics_path: /api/v1/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials: <metrics-token>
+    static_configs:
+      - targets: ['router.example.com']
+```
+
+For broader router-level metrics (load, memory, network counters), the
+curated `prometheus_node_exporter_lua/config` resource manages
+node_exporter's config separately.
+
+## Rate limiting
+
+Per-token token-bucket, file-backed at `/tmp/uapi-ratelimit/<token>.txt`.
+Defaults: **100 req/s, burst 200** per token. Tune globally via
+`/etc/config/uapi`:
+
+```
+config ratelimit
+    option rate '500'
+    option burst '1000'
+```
+
+No reload needed; the config is read on each authed request.
+
+Per-token overrides win over global: `uci set uapi.<token>.rate='10'`,
+`uci set uapi.<token>.burst='20'`. Useful for noisy CI tokens that
+shouldn't share the global budget.
+
+Exceeded rate returns `429 too_many_requests` with `Retry-After: <seconds>`.
+The drop is counted in `uapi_rate_limit_drops_total{token_id}` for
+operator visibility. Rate limit is a defense-in-depth abuse guard, not a
+security control on its own; use `allowed_cidrs` on the token for actual
+source-IP enforcement.
+
+## Diagnostics
+
+`GET /api/v1/diagnostics` returns version, uptime, loaded resources, and
+current lock holders. Scope: `uapi:diagnostics:ro`.
+
+```json
+{
+  "version": "2.0.0",
+  "uptime_seconds": 123456,
+  "resources_loaded": ["firewall:rules", "firewall:zones", ...],
+  "lock_state": {
+    "global_held": false,
+    "per_package": {}
+  },
+  "request_id": "01HX..."
+}
+```
+
+Useful for "is anything stuck holding the global lock?" - a non-empty
+`per_package` map under steady state would point at a wedged write
+transaction.
 
 ## Healthz
 
 ```sh
 curl -k https://<router>/api/v1/healthz
-# 200 { "status": "ok", "version": "<version>" }
-# 503 { "status": "degraded", "errors": ["<ubus error>"] } when ubus is unreachable
+# 200 with body:
+# { "status": "ok", "version": "2.0.0",
+#   "checks": { "ubus": "ok", "uci": "ok",
+#               "lock_dir": "ok", "time_sync": "ok" } }
+# 503 with body:
+# { "status": "degraded", "version": "...", "checks": {...},
+#   "errors": ["ubus: ...", "time_sync: clock not synced (epoch below sanity floor)"] }
 ```
 
-No auth required; TLS-for-non-localhost still applies. Monitors should poll healthz, not a real endpoint, to avoid burning audit-log noise.
+No auth required; TLS-for-non-localhost still applies. Monitors should
+poll healthz (not a real endpoint) to avoid burning audit-log noise.
+`time_sync` returns `unknown` for the first 60 seconds after boot
+(uptime too short to tell), `degraded` if the wall clock is below 2023,
+otherwise `ok`.
 
 ## Insecure-test bypass
 

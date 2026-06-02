@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-A router running **OpenWrt 25.12+** (the first apk-based release line). Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`, `uhttpd-mod-ucode`, `ucode`, and the `ucode-mod-{ubus,uci,fs,digest,log}` mods. The package's `Depends:` makes apk resolve them automatically.
+A router running **OpenWrt 25.12+** (the first apk-based release line). Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`, `uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log}` mods, and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's `Depends:` makes apk resolve them automatically.
 
 ## Install from a local .apk
 
@@ -14,15 +14,17 @@ apk add /path/to/uapi-<version>-r1.apk
 
 The post-install hook will:
 
-1. Run `/etc/uci-defaults/99-uapi` which adds `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'` to `uhttpd.main` and reloads uhttpd.
+1. Run `/etc/uci-defaults/99-uapi` which adds `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'` to `uhttpd.main` and restarts uhttpd.
 2. Delete itself.
-3. Print the bootstrap message.
+3. Print the bootstrap message (first install only; suppressed on upgrade or reinstall).
 
 Verify:
 
 ```sh
 curl -k https://localhost/api/v1/healthz
-# { "status": "ok", "version": "<version>" }
+# { "status": "ok", "version": "<version>",
+#   "checks": { "ubus": "ok", "uci": "ok",
+#               "lock_dir": "ok", "time_sync": "ok" } }
 ```
 
 ## Install from the project feed
@@ -42,7 +44,7 @@ apk update
 apk add uapi
 ```
 
-The feed currently ships pre-release (`-rc`) packages; expect to upgrade as the project hardens. Until v1.0.0 final, `apk add` will pull the latest release candidate.
+The feed currently ships v2.x packages as the stable line. v1.2.1 stays available indefinitely for operators who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` (or `apk add uapi=1.2.1-r1`) gets you there.
 
 ## TLS
 

@@ -4,11 +4,20 @@ The curated endpoints (`/firewall/rules`, `/network/interfaces`, etc.) wrap a sm
 
 ## Stability
 
-**URL structure, verbs, auth/scope behavior, and error envelope are v1-stable.**
+**URL structure, verbs, auth/scope behavior, and error envelope are
+stable within a package major** (today: v2.x). The composition rule
+(`raw:*` permission + the section's domain-tree permission both
+required) is part of the contract and will not loosen across minor
+bumps.
 
-**Payload shape follows uci.** uci is OpenWrt's moving target: when an OpenWrt release renames a field, drops a section type, or changes the default for an option, `/raw/<that-package>/...` payloads change with it. Track those upstream changes the way you'd track them if you were editing `/etc/config/...` directly.
+**Payload shape follows uci.** uci is OpenWrt's moving target: when an
+OpenWrt release renames a field, drops a section type, or changes the
+default for an option, `/raw/<that-package>/...` payloads change with
+it. Track those upstream changes the way you'd track them if you were
+editing `/etc/config/...` directly.
 
-If you want a stable, semver-bound contract, use the curated endpoint for that resource if one exists, or open an issue to add one.
+If you want a stable, semver-bound contract, use the curated endpoint
+for that resource if one exists, or open an issue to add one.
 
 ## Shape
 

@@ -9,21 +9,39 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
 ```
 /usr/share/uapi/main.uc                  uhttpd ucode-prefix entry point
 /usr/share/uapi/raw.uc                   generic /raw/<package>/<id> handler
-/usr/share/uapi/lib/*.uc                 shared modules
-/usr/share/uapi/resources/*.uc           curated resource modules
+/usr/share/uapi/VERSION                  package version (one line)
+/usr/share/uapi/lib/*.uc                 shared modules (auth, scope, transaction,
+                                          handler, errors, ids, ratelimit, metrics,
+                                          idempotency, jsonpatch, token_store,
+                                          non_uci, system_access, packages, log,
+                                          bus, values, ucitrack, openapi)
+/usr/share/uapi/resources/*.uc           curated resource modules (32 files)
 /usr/share/uapi/openapi.json             generated OpenAPI 3.1 spec
 /usr/bin/uapi-token                      token CLI
 /etc/config/uapi                         conffile (mode 0600, conffile-marked)
 /etc/uci-defaults/99-uapi                one-shot install hook
 ```
 
-`/etc/config/uapi` is marked as a conffile, so upgrades preserve operator-created tokens.
+Runtime files created on first use (tmpfs, reset on reboot):
+
+```
+/tmp/uapi-ratelimit/<token>.txt          per-token bucket state
+/tmp/uapi-idempotency/<sha>.json         per-key cached POST responses (24h TTL)
+/tmp/uapi-metrics/<series>/<labels>.txt  Prometheus counter/histogram store
+/var/run/uapi-token-update/<token>       last-used throttle sentinel
+/var/lock/uapi.lock                      global flock (SH for uci tx, EX for non-uci)
+/var/lock/uapi.pkg.<package>.lock        per-package EX flock
+```
+
+`/etc/config/uapi` is marked as a conffile, so upgrades preserve
+operator-created tokens.
 
 Dependencies (pulled in automatically):
 
 ```
 uhttpd uhttpd-mod-ucode ucode
 ucode-mod-ubus ucode-mod-uci ucode-mod-fs ucode-mod-digest ucode-mod-log
+rpcd-mod-iwinfo
 ```
 
 ## Build steps
@@ -90,3 +108,15 @@ After that, `https://<router>/api/v1/healthz` is reachable.
 3. Reloads uhttpd.
 
 The token store at `/etc/config/uapi` is preserved (conffile semantics). To wipe it: `rm /etc/config/uapi` after removal.
+
+## Release artifacts
+
+Tag-pushed releases produce more than just the APK:
+
+- **APK** at `bin/packages/all/uapi-<version>-r<N>.apk`. `PKGARCH:=all` means a single APK works on every OpenWrt arch.
+- **SPDX 2.3 SBOM** at `build/sbom.spdx.json` (via `make sbom APK=<apk>`). Carries every shipped file's sha256, package dependencies, and the built APK's verification hash.
+- **Multi-arch verification**: CI's `verify-arch-build` matrix cross-compiles against `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` SDKs to prove the arch-neutrality invariant (no compiled code snuck in).
+- **Signed tag**: required for the publish workflow to run; verified against `.github/allowed-signers`.
+- **Reproducible SDK pin**: `build/sdk.sha256` records the exact SDK tarball checksums for all four arches.
+
+See `docs/release-process.md` for the full release flow, signed-tag setup, and pre-tag checklist.

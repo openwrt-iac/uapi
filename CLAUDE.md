@@ -100,17 +100,25 @@ Each resource is implemented as a ucode module under `/usr/share/uapi/resources/
 
 ```ucode
 return {
-    package: "network",            // uci package
-    type: "interface",              // uci section type
-    reload: ["network"],            // ubus services to reload on write
-    schema: { ... },                // validation rules (ucode predicate or JSON Schema)
-    fromUci: (section) => {...},    // uci section → response JSON
-    toUci: (json) => {...},         // request JSON → uci option dict
-    runtime: (id) => {...},         // optional: fetch runtime state via ubus
+    package: "network",                    // uci package
+    type: "interface",                     // uci section type
+    reload: ["network"],                   // ubus services to reload on write
+    depends_on: ["network:device"],        // optional; mix referenced state into ETag
+    schema_properties: { ... },            // type/enum/min/max/pattern/items; enforced centrally
+    fromUci: function(section, conn) {...},// uci section → response JSON (conn optional, for runtime block)
+    toUci:   function(json) {...},         // request JSON → uci option dict
+    validate: function(json, conn, id) {...return [];}, // cross-field / cross-section rules
+    merge_for_patch: function(existing, existing_json, body) {...}, // optional, nested-object patches
 };
 ```
 
-Schemas live **inline in the resource module**, not in separate JSON Schema files. ucode predicates are more expressive than pure JSON Schema (e.g., "valid CIDR", "must reference an existing zone") and there's no install/packaging complexity.
+Schemas live **inline in the resource module**, not in separate JSON
+Schema files. `schema_properties` is the centrally-enforced
+type/enum/range/pattern/items table (handler.check_schema_types walks it
+on every write and 422s shape mismatches before `validate()` runs);
+`validate()` carries the cross-field, cross-section, and format-string
+logic that pure JSON Schema can't express (e.g. "src_zone must reference
+an existing zone").
 
 ### Generic raw passthrough (`/api/v1/raw/<package>/<section_id>`)
 
@@ -197,7 +205,8 @@ Snapshot-and-restore catches the case where the init script's reload action exit
 
 - **Bearer tokens, local-only creation.** No rpcd sessions. No HTTP login endpoint.
 - **Token store:** sha256+salt hash in `/etc/config/uapi`. Cleartext token shown only once at creation. Re-read on every request (no in-memory cache, per "Concurrency"); newly created tokens take effect immediately, no `uhttpd reload` required.
-- **CLI:** `uapi-token create --name <label> --scope <s> [--scope <s>...]`, plus `list` / `show` / `revoke`. Scopes validated against the known tree, `--force` bypasses for forward-compat with unknown future endpoints.
+- **CLI:** `uapi-token create --name <label> --scope <s> [--scope <s>...] [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...] [--force]`, plus `list` / `show` / `revoke`. Scopes validated against the known tree, `--force` bypasses for forward-compat with unknown future endpoints. `--expires-in` and `--allowed-cidr` are v2 additions for token expiry and source-IP scoping.
+- **HTTP token mint:** `POST /tokens` (scope `uapi:tokens:rw` or `*:rw`). Body `{name, scopes, expires_in_seconds?, allowed_cidrs?}`. Requested scopes must be a strict subset of caller's (`scope.subsets`); escalation -> `403 scope_escalation_blocked`. Returns the cleartext bearer once. `GET /tokens`, `GET /tokens/<id>`, `DELETE /tokens/<id>` round out the HTTP surface. `GET /auth/whoami` returns the calling token's metadata.
 - **Wire format:** `Authorization: Bearer <token>` header.
 - **Public endpoints (no auth):** `/healthz` (liveness) and `/openapi.json` (spec discovery). Both still pass the TLS check; only the bearer requirement is waived.
 

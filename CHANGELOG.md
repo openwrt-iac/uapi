@@ -27,8 +27,12 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
 - **`schema_properties` completeness sweep.** Every fromUci-surfaced field has
   a typed schema entry. Bodies that previously slipped past the type check
   (silent drops in the toUci layer) now return `422 validation_failed`.
-- **v1 surface removal.** `/api/v1/` no longer mounts. Versioning policy: one
-  major per installed package, never parallel.
+- **v1 wire contract removed.** The URL prefix stays `/api/v1/` (semver-major
+  maps to package-major, not URL component), but the v1 wire contract
+  (field shapes, string-form integers, missing schema entries) is gone -
+  v2 ships under the same prefix. Versioning policy: one major per
+  installed package, never parallel. Operators who need the v1 contract
+  keep the 1.2.1 APK.
 
 ### Added
 

@@ -14,19 +14,44 @@ Look at `/etc/config/<package>` on a real router. Find the section type you want
 
 ```ucode
 return {
-    package: "<package>",         // uci package
-    type: "<section-type>",        // uci section type
-    reload: ["<service>"],         // ubus services to reload on write
-    fromUci: (section) => {...},   // uci section dict -> response JSON
-    toUci: (json) => {...},        // request JSON -> uci option dict
-    validate: (json, conn) => [],  // returns array of {field, code, message}
-    schema_properties: { ... },    // optional; OpenAPI enrichment (enums/formats)
+    package: "<package>",              // uci package
+    type: "<section-type>",            // uci section type
+    reload: ["<service>"],             // ubus services to reload on write
+    depends_on: ["<pkg>:<type>"],      // optional; mix referenced sections into ETag
+    fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
+    toUci:   function(json) { ... },          // request JSON -> uci option dict
+    validate: function(json, conn, id) { ... return []; }, // {field, code, message}[]
+    schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
+    // Optional, less common:
+    merge_for_patch: function(existing, existing_json, body) { ... },  // nested-object merge
+    type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
+    create_type:     function(body) { ... },
+    id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
 };
 ```
 
-`fromUci` and `toUci` form a (lossy) bijection: round-tripping a section through both should produce the same uci options.
+`fromUci` and `toUci` form a (lossy) bijection: round-tripping a section
+through both should produce the same uci options. `fromUci` may take a
+second `conn` arg to read ubus state for the `runtime: {...}` block;
+resources that don't need it ignore the extra arg.
 
-`validate` runs on every write. It must return an array of errors (each `{field, code, message}`), one per problem; the caller decides whether to translate to a `422` response. The codes come from a fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`, `not_in_enum`, `conflict`, `read_only`.
+`validate` runs on every write inside the per-package flock. It must
+return an array of errors (each `{field, code, message}`), one per
+problem; the caller translates to a `422` response. Codes come from a
+fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
+`not_in_enum`, `conflict`, `read_only`.
+
+`schema_properties` is the source of truth for type/enum/min/max/pattern/items
+shape checks - the central `handler.check_schema_types` walks this on every
+write and 422s shape mismatches BEFORE `validate()` runs. Per-field
+constraints that fit (type, enum, range, pattern, items recursion) belong
+here; cross-field / cross-section / format-string logic stays in `validate()`.
+
+`depends_on: ["firewall:zone"]` mixes the hash of every `firewall.zone`
+section into this resource's ETag. Use it when a write to the referenced
+type should invalidate dependent ETags (`firewall.rules` -> `firewall:zone`,
+`sqm.queues` -> `network:interface`, etc.). See `docs/architecture.md`
+"ETag derivation" for the full mechanism.
 
 For cross-reference validation (e.g. "this firewall rule's `src_zone` must be a real zone"), use the `conn` argument. See `firewall.rules.uc`'s `load_zones(conn)` for the pattern.
 
@@ -58,13 +83,17 @@ let errs = mod.validate({ ... }, c);
 
 ## 5. Register the resource
 
-`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry (single-section types like `system`). Add a line:
+`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry (single-section types like `system`). Both use the two-arg `load_resource` form so the source module is registered into `RESOURCE_SOURCES` (which backs `/schema/<...>`):
 
 ```ucode
-"<domain>:<plural-type>": handler.make(load_resource("<package>.<plural-type>.uc")),
+"<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>", "<package>.<plural-type>.uc")),
 ```
 
-Use `handler.make_singleton` for singletons, `handler.make_collection` for read-only runtime lists.
+Use `handler.make_singleton` for singletons, `handler.make_collection`
+for read-only runtime lists. Writable resources also automatically
+become eligible for `POST /batch` via main.uc's `BARE_RESOURCES` /
+`BARE_SINGLETONS` construction loop - no extra step needed. Read-only
+collections are excluded from batch (they have no `toUci`).
 
 ## 6. Add an integration test
 

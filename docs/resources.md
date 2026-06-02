@@ -1,85 +1,117 @@
 # Curated resources
 
-This is a sketch of what each curated endpoint does. For the full schema (every field, its type, enum values where applicable), read `build/openapi.json` (also served at `/api/v1/openapi.json` on a live router) or open it in Swagger UI.
+This document indexes the 32 curated resources shipped in v2.0. For the full
+schema (every field, its type, enum values, ranges, patterns), read
+`build/openapi.json` (also served at `/api/v1/openapi.json` on a live
+router) or open it in Swagger UI. Per-resource sample curls live in
+`examples/curl/`.
 
-The curl example for each is in `examples/curl/`.
+The authoritative inventory is the OpenAPI spec; if this document drifts,
+the spec wins.
 
-## `/api/v1/firewall/rules`
+## Network
 
-Wraps `config rule` in `/etc/config/firewall`. Full CRUD.
-
-Curated shape uses a nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family}` block to keep the top level focused on what the rule *does* (`target`, `enabled`, `name`). Cross-reference validation rejects rules referencing zones that don't exist.
-
-Reload: `firewall` (fw4).
-
-## `/api/v1/firewall/zones`
-
-Wraps `config zone`. `input`/`output`/`forward` policies, `network` list (interfaces this zone covers), `masq`/`mtu_fix` toggles.
-
-Reload: `firewall`.
-
-## `/api/v1/firewall/redirects`
-
-Wraps `config redirect` (port forwards). Like rules but with `src_dport`/`dest_ip`/`dest_port` for DNAT and `target` defaulting to `DNAT`.
-
-Reload: `firewall`.
-
-## `/api/v1/network/interfaces`
-
-Wraps `config interface` in `/etc/config/network`. `proto` (static/dhcp/dhcpv6/pppoe/none/ppp/wwan), `ipaddr`/`netmask`/`gateway`/`dns` for static, plus `device`, `mtu`, `auto`, `ip6assign`.
-
-**Be careful editing the interface that backs your management connection.** `/etc/init.d/network reload` returns exit 0 even when an interface fails to come up at runtime; you can lose the box. uapi only sees the init script's exit code, not the daemon's runtime convergence. Use `/raw/network/<id>` if you need finer control over the timing, or front the API with a session that survives the reload.
+| Path | Wraps | Notes |
+|---|---|---|
+| `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). |
+| `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. |
+| `network/routes` | `config route` | Static routes; cross-refs interface. |
+| `network/rules` | `config rule` | Policy routing. |
+| `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
+| `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. `depends_on: network:interface`. |
 
 Reload: `network` (netifd).
 
-## `/api/v1/network/devices`
+**Editing the interface that backs your management connection is dangerous.**
+`/etc/init.d/network reload` returns exit 0 even when an interface fails to
+come up at runtime; uapi only sees the init script's exit code, not the
+daemon's runtime convergence.
 
-Wraps `config device` (bridges, VLANs, etc.). `type` enum (`bridge`, `8021q`, `8021ad`, `macvlan`, `veth`, `tun`, `tap`). For bridges, `ports` is the member-interface list. For 8021q, `vid` is the VLAN id.
+## Firewall
 
-Reload: `network`.
+| Path | Wraps | Notes |
+|---|---|---|
+| `firewall/zones` | `config zone` | input/output/forward policies, `network` list. |
+| `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family}`. `depends_on: firewall:zone`. |
+| `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. `depends_on: firewall:zone`. |
+| `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. `depends_on: firewall:zone`. |
+| `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. |
 
-## `/api/v1/wireless/devices`
+Reload: `firewall` (fw4).
 
-Wraps `config wifi-device` (radios). `type` (`mac80211`/`broadcom`), `band` (`2g`/`5g`/`6g`/`60g`), `channel`, `htmode`, `country`, `txpower`, `disabled`.
+## Wireless
 
-Reload: `network`.
+| Path | Wraps | Notes |
+|---|---|---|
+| `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), band, channel, htmode, country, txpower. |
+| `wireless/interfaces` | `config wifi-iface` | SSIDs. `key` write-only; responses include `has_key: bool`. `runtime` carries iwinfo state. |
 
-## `/api/v1/wireless/interfaces`
+Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
+`runtime` block on `wireless/interfaces`.
 
-Wraps `config wifi-iface` (SSIDs). `device` references a wifi-device id, `network` references a network interface, `mode` (`ap`/`sta`/etc.), `ssid`, `encryption`, `key`, plus flags.
+## DHCP
 
-**The `key` field is write-only.** `fromUci` does not return it. Responses include `has_key: true` when one is set, so clients can tell whether a key exists without seeing it. To rotate, send `{"key": "newvalue"}` via PATCH.
+| Path | Wraps | Notes |
+|---|---|---|
+| `dhcp/hosts` | `config host` | Static leases. `mac` (or `mac_aliases` for multi-MAC), `ip`, `name`, `leasetime`, `duid`, `tag`. |
+| `dhcp/servers` | `config dhcp` | Per-interface server config. `depends_on: network:interface`. `runtime` carries active-lease counts. |
+| `dhcp/dnsmasq` (singleton) | `config dnsmasq` | Global dnsmasq tuning; forwarders, address overrides, rebind protection. |
+| `dhcp/odhcpd` (singleton) | `config odhcpd` | `maindhcp`, `leasefile`, `loglevel`. |
+| `dhcp/leases` (read-only collection) | `/tmp/dhcp.leases` | IPv4 leases parsed from dnsmasq's lease file. |
+| `dhcp/leases6` (read-only collection) | `/tmp/(hosts/odhcpd|odhcpd.leases)` | IPv6 leases from odhcpd. Per-IA-address entries. |
 
-Reload: `network`.
+Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 
-## `/api/v1/dhcp/hosts`
+## System
 
-Wraps `config host` (static leases) in `/etc/config/dhcp`. `mac` and `ip` required, plus optional `name`, `leasetime`, `tag`, `dns` (whether to add a DNS entry).
+| Path | Wraps | Notes |
+|---|---|---|
+| `system` (singleton) | `config system` | hostname, timezone, log_size, log_ip, log_proto, log_remote, urandom_seed. |
+| `system/timeservers` | `config timeserver` | NTP server list; reloads sysntpd. |
+| `system/password` | `/bin/busybox passwd` (non-uci, write-only) | `POST {user, password}` -> 204. Audit-logged without password. |
+| `system/authorized_keys` | `/etc/dropbear/authorized_keys` (non-uci) | `GET`/`POST`/`PUT`/`DELETE` for SSH key entries. Server-side key-type validation. |
 
-Reload: `dnsmasq`.
+## Other daemons
 
-## `/api/v1/dhcp/leases` (read-only)
+| Path | Wraps | Notes |
+|---|---|---|
+| `dropbear/instances` | `config dropbear` | Per-instance SSH config (port, password_auth, root_login, etc.). |
+| `uhttpd/instances` | `config uhttpd` | Per-instance HTTP server. Validate refuses to strip uapi's own `ucode_prefix` from `main` (self-lockout protection). |
+| `uhttpd/certs` | `config cert` | px5g cert generation params. |
+| `unbound/server` (singleton) | `config unbound` | Recursive DNS tuning. |
+| `sqm/queues` | `config queue` | Per-interface SQM shaping. `depends_on: network:interface`. |
+| `snmpd/agents` | `config agent` | SNMP listen addrs. |
+| `snmpd/com2secs` | `config com2sec` | community-to-security mapping. |
+| `snmpd/groups` | `config group` | SNMP group definitions. |
+| `snmpd/accesses` | `config access` | group-to-view ACLs. |
+| `snmpd/system` (singleton) | `config system` (snmpd) | sys_location, sys_contact, etc. (snake_case in v2). |
+| `lldpd/config` (singleton) | `config config` (lldpd) | LLDP/CDP/etc. toggles. |
+| `prometheus_node_exporter_lua/config` (singleton) | `config main` | listen + per-collector toggles. |
+| `vnstat/config` (singleton) | `config vnstat` | database_dir, interface_5min_hours, month_rotate (snake_case in v2). |
+| `vnstat/interfaces` | `config interface` (vnstat) | Per-iface enable. |
 
-Source: `/tmp/dhcp.leases` (IPv4 only in v1). One entry per active lease: `expires_at` (unix ts), `mac`, `ip`, `hostname`, `duid`.
+## Packages (non-uci)
 
-`GET /api/v1/dhcp/leases` returns the full list. `GET /api/v1/dhcp/leases/<mac>` returns one. All write methods return `405 method_not_allowed`.
+| Path | Source of truth | Notes |
+|---|---|---|
+| `packages/installed` | apk DB | `GET` lists, `POST {name}` installs (`apk add`), `DELETE /<name>` removes. |
+| `packages/feeds` | `/etc/apk/repositories.d/*.list` | `POST {name, url}` creates a feed file + `apk update`. |
 
-IPv6 leases (via odhcpd) are not exposed in v1.
+## Generic raw passthrough
 
-## `/api/v1/system` (singleton)
+`/api/v1/raw/<package>/<id>` is the escape hatch for any uci config type
+uapi doesn't curate. See `docs/raw.md` for full semantics, scope
+composition rules, and stability caveat.
 
-Wraps the lone `config system` section in `/etc/config/system`. `hostname`, `description`, `notes`, `timezone`, `zonename`, `log_size`, `log_ip`, `log_proto`, `log_remote`, `urandom_seed`.
+## System endpoints
 
-GET and PATCH only. No POST or DELETE (you can't create or remove the singleton). The URL has no `/<id>` segment.
-
-Reload: none (system config is read on demand).
-
-## `/api/v1/raw/<package>/<id>` (generic)
-
-The escape hatch for any uci config type uapi doesn't curate. See `docs/raw.md` for full semantics, scope composition rules, and the stability caveat.
-
-## `/api/v1/healthz` and `/api/v1/openapi.json`
-
-`/healthz` is a no-auth liveness probe (TLS-for-non-localhost still applies). Returns `{status: "ok", version}` or 503 if ubus is unreachable.
-
-`/openapi.json` is the OpenAPI 3.1 spec, no auth, public for tooling.
+| Path | Auth | Notes |
+|---|---|---|
+| `GET /healthz` | none | `{status, version, checks: {ubus, uci, lock_dir, time_sync}}`. 503 when any subsystem is degraded. |
+| `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
+| `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
+| `GET /auth/whoami` | any token | Token introspection: id, scopes, source_ip, expires_at, allowed_cidrs, last_used. |
+| `GET /tokens`, `POST /tokens`, `DELETE /tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the requested scopes to be a strict subset of the caller's. |
+| `GET /metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
+| `GET /diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
+| `POST /batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |
