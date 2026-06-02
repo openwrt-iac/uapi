@@ -12,12 +12,35 @@ architecture (x86_64, aarch64, arm, mips, etc.) at the same OpenWrt major
 version. We do NOT build a separate APK per arch; the OpenWrt apk-tools
 install handles arch-neutral packages directly.
 
-The CI matrix builds a single APK (against the x86_64 SDK because that's
-the simplest to host on GitHub runners), smoke-tests it in an x86 QEMU VM,
-and publishes that one artifact to both the GitHub Release and the
-gh-pages feed.
+The `release-apk` job builds a single APK (against the x86_64 SDK because
+that's the simplest to host on GitHub runners), smoke-tests it in an x86
+QEMU VM, and publishes that one artifact to both the GitHub Release and
+the gh-pages feed.
 
-Operators who want additional per-arch validation can run
+The `verify-arch-build` matrix job cross-compiles against the SDKs for
+`aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push to PROVE
+the arch-neutrality invariant - if any arch's build diverges from
+expectation, something arch-specific snuck into the package and the
+release should be held. Per-arch SDK tarball sha256 lives in
+`build/sdk.sha256`; refresh those lines whenever `OPENWRT_VERSION` bumps
+(URLs are in the matrix in `.github/workflows/ci.yml`).
+
+### Pre-tag arch validation
+
+`verify-arch-build` also accepts `workflow_dispatch`, so you can validate
+the SDK pins against a candidate without tagging:
+
+```
+gh workflow run ci.yml --ref main
+```
+
+This fires the same `unit + lint + integration + verify-arch-build`
+chain that a tag push would, minus the `release-apk` publish steps.
+Useful right after bumping `OPENWRT_VERSION` to confirm the new
+per-arch sha256 lines actually match upstream.
+
+Operators who want a runtime per-arch smoke test (the CI matrix only
+verifies compile) can run
 `tests/integration/release_apk_smoke.sh <path-to-apk>` against their own
 arch's QEMU VM or live router.
 
@@ -127,12 +150,15 @@ Before tagging:
 - [ ] `make test coverage` green.
 - [ ] CI on `main` green for the commit that will be tagged.
 - [ ] At least one signed-tag key in `.github/allowed-signers`.
-- [ ] `build/sdk.sha256` pins the right SDK version (check `OPENWRT_VERSION`
-  in `.github/workflows/ci.yml`).
+- [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
+  `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
+- [ ] `gh workflow run ci.yml --ref main` green - validates the per-arch
+  SDK pins via `verify-arch-build` without consuming a tag.
 
 After tagging, before announcing:
 
 - [ ] release-apk workflow completed.
+- [ ] verify-arch-build matrix completed (all three non-x86 arches green).
 - [ ] APK attached to the GitHub Release.
 - [ ] APK visible in the gh-pages feed; `apk update` finds it.
 - [ ] Smoke install on a real router works.
@@ -153,19 +179,18 @@ If a tagged release is broken in the field:
 
 We do not delete published APKs from the gh-pages feed.
 
-## What if multi-arch becomes necessary
+## If uapi ever grows compiled code
 
-The day uapi grows a compiled component (it shouldn't - the architectural
-principle is "no compiled code, only ucode + shell"), this section needs to
-be rewritten and the Makefile's `PKGARCH:=all` removed. The CI workflow
-would then need a matrix per arch:
+The current arch-neutrality contract depends on `PKGARCH:=all` in
+`build/openwrt/uapi/Makefile` (pure ucode + shell). If a future change
+adds a C component:
 
-```yaml
-strategy:
-  matrix:
-    arch: [x86_64, aarch64_generic, arm_cortex-a7_neon-vfpv4, mips_24kc]
-```
+1. Drop `PKGARCH:=all` from the package Makefile.
+2. Convert `release-apk` from a single job into a matrix over arch (same
+   matrix `verify-arch-build` uses today).
+3. The smoke test still only runs on x86_64 (the QEMU image we host); add
+   per-arch QEMU images if real runtime coverage matters.
+4. Plan for ~4x release-apk runtime.
 
-Per-arch SDK URLs would live in `build/sdk-<arch>.sha256`; the smoke test
-would still only run on x86_64 (the QEMU image we host). Plan for ~4x
-release-apk runtime if this ever becomes necessary.
+This is documented in case the principle is ever revisited; the
+architectural intent is that it should not be.
