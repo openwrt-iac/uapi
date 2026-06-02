@@ -652,3 +652,56 @@ t.describe('handler schema-type check: PATCH does not re-validate uci-string fie
 		t.assert_equal(r.status, 200);
 	});
 });
+
+// No shipped resource has a 3+ level schema today. This synthetic fixture
+// pins the recursion contract so a future regression would surface here.
+let deep_mod = {
+	package: "deeptest",
+	type: "deep",
+	reload: [],
+	fromUci: function(s) { return { id: s['.name'], managed: true }; },
+	toUci: function() { return {}; },
+	validate: function() { return []; },
+	schema_properties: {
+		a: { type: "object", properties: {
+			b: { type: "object", properties: {
+				c: { type: "object", properties: {
+					leaf: { type: "string" },
+				}},
+			}},
+		}},
+	},
+};
+let deep = handler.make(deep_mod, {
+	tx: {
+		acquire: function() { return {}; },
+		release: function() {},
+		reload: record_reload,
+		check_services: function() { return null; },
+	},
+});
+
+t.describe('handler schema-type check recurses past two levels', () => {
+	t.it('leaf type error 3 levels deep surfaces with full dotted path', () => {
+		let c = ubus.stub({ uci: { deeptest: {} } });
+		let r = deep.create(c, ctx(), { a: { b: { c: { leaf: 42 } } } });
+		t.assert_equal(r.status, 422);
+		let hit = null;
+		for (let e in r.body.errors)
+			if (e.field == "a.b.c.leaf" && e.code == "invalid_type") hit = e;
+		t.assert_true(hit != null);
+	});
+
+	t.it('mid-tree wrong-type stops recursion at that node', () => {
+		let c = ubus.stub({ uci: { deeptest: {} } });
+		let r = deep.create(c, ctx(), { a: { b: "should-be-object" } });
+		t.assert_equal(r.status, 422);
+		let hit = null;
+		for (let e in r.body.errors)
+			if (e.field == "a.b" && e.code == "invalid_type") hit = e;
+		t.assert_true(hit != null);
+		// And no spurious error for a.b.c.leaf since recursion bailed.
+		for (let e in r.body.errors)
+			t.assert_true(e.field != "a.b.c.leaf");
+	});
+});
