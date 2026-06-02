@@ -20,6 +20,7 @@
     </p>
     <div class="cta">
       <a class="btn primary" href="install/">Install</a>
+      <a class="btn" href="https://registry.terraform.io/providers/raspbeguy/uapi">Terraform provider</a>
       <a class="btn" href="https://github.com/raspbeguy/uapi">View on GitHub</a>
       <a class="btn" href="https://github.com/raspbeguy/uapi/blob/main/build/openapi.json">OpenAPI spec</a>
     </div>
@@ -74,9 +75,50 @@
   </div>
 </section>
 
+<section class="terraform">
+  <div class="container">
+    <h2>Drive it from Terraform</h2>
+    <p>
+      The reference client is the
+      <a href="https://registry.terraform.io/providers/raspbeguy/uapi"><code>raspbeguy/uapi</code> Terraform provider</a>.
+      uapi's wire surface (stable IDs, dependency-aware ETags, optimistic
+      <code>If-Match</code> concurrency, idempotency keys for safe POST
+      retries, atomic <code>/batch</code> across packages) was designed
+      around what an IaC provider needs.
+    </p>
+<pre><code>terraform {
+  required_providers {
+    uapi = {
+      source  = "raspbeguy/uapi"
+      version = "~&gt; 0.1"
+    }
+  }
+}
+
+provider "uapi" {
+  endpoint = "https://router.example.com/api/v1"
+  token    = var.uapi_token       # mint with `uapi-token create`
+}
+
+resource "uapi_firewall_rule" "ssh_mgmt" {
+  name   = "allow-ssh-mgmt"
+  target = "ACCEPT"
+  match {
+    src_zone  = "lan"
+    proto     = ["tcp"]
+    dest_port = [22]
+  }
+}</code></pre>
+    <p>
+      The provider is a separate project; see its registry page for the
+      full resource catalog and version compatibility matrix.
+    </p>
+  </div>
+</section>
+
 <section class="quickstart">
   <div class="container">
-    <h2>Quickstart</h2>
+    <h2>Quickstart (raw HTTP)</h2>
     <ol>
       <li>
         <strong>Install</strong> from the signed APK feed (one-liner at <a href="install/">/install/</a>):
@@ -165,6 +207,7 @@ curl -H "Authorization: Bearer $TOKEN" \
       - MIT licensed
       - <a href="install/">APK feed</a>
       - <a href="uapi-feed.pub.pem">signing key</a>
+      - <a href="https://registry.terraform.io/providers/raspbeguy/uapi">Terraform provider</a>
     </p>
   </div>
 </footer>

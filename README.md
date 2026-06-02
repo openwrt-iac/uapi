@@ -1,6 +1,6 @@
 # uapi
 
-Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates standard REST verbs (GET, POST, PUT, PATCH, DELETE) into ubus/uci operations so modern edge routers become first-class targets for Infrastructure-as-Code workflows. Primary design validation is serving as the backend for a custom Terraform provider, but the API is client-agnostic.
+Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates standard REST verbs (GET, POST, PUT, PATCH, DELETE) into ubus/uci operations so modern edge routers become first-class targets for Infrastructure-as-Code workflows. Primary design validation is serving as the backend for the [`raspbeguy/uapi` Terraform provider](https://registry.terraform.io/providers/raspbeguy/uapi), but the API is client-agnostic.
 
 - Direct-to-bus: runs as a uhttpd-mod-ucode handler. No daemon, no `/etc/config/` file mangling.
 - Atomic transactions (single AND multi-package via `POST /batch`): snapshot, validate, commit, reload, restore-on-failure in a single request.
