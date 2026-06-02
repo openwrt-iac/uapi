@@ -21,6 +21,7 @@ function encode_time(ms, len) {
 
 function read_random(n) {
 	let f = fs.open("/dev/urandom", "r");
+	if (!f) die("ids.read_random: could not open /dev/urandom");
 	let b = f.read(n);
 	f.close();
 	return b;

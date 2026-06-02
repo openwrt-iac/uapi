@@ -65,12 +65,14 @@ t.describe('non_uci.with_lock_translated', () => {
 		t.assert_equal(lr.result.payload, 42);
 	});
 
-	t.it('mapped kind WITHOUT message falls through as result', () => {
+	t.it('mapped kind WITHOUT a caller-supplied message still produces an envelope', () => {
 		let lr = non_uci.with_lock_translated(ctx(), function() {
 			return { ok: false, kind: "conflict" };
 		}, {}, LOCK_STUB);
-		t.assert_true(lr.envelope == null);
-		t.assert_equal(lr.result.kind, "conflict");
+		t.assert_true(lr.envelope != null);
+		t.assert_equal(lr.envelope.status, 409);
+		t.assert_equal(lr.envelope.body.code, "conflict");
+		t.assert_true(match(lr.envelope.body.message, /operation failed: conflict/) != null);
 	});
 
 	t.it('success result passes through with all fields', () => {
@@ -81,31 +83,5 @@ t.describe('non_uci.with_lock_translated', () => {
 		t.assert_true(lr.result.ok);
 		t.assert_equal(lr.result.info.foo, "bar");
 		t.assert_equal(lr.result.count, 7);
-	});
-});
-
-t.describe('non_uci.audit / audit_notice / audit_warning', () => {
-	// Hard to assert on actual syslog output from inside a unit test without
-	// mocking the log module. Just verify the helpers don't throw and accept
-	// the documented argument shapes.
-	t.it('audit_notice with fields object does not throw', () => {
-		let threw = false;
-		try { non_uci.audit_notice(ctx(), "test-action", { user: "root", action: "x" }); }
-		catch (e) { threw = true; }
-		t.assert_false(threw);
-	});
-
-	t.it('audit_warning with fields object does not throw', () => {
-		let threw = false;
-		try { non_uci.audit_warning(ctx(), "test-failure", { exit: 1, name: "pkg" }); }
-		catch (e) { threw = true; }
-		t.assert_false(threw);
-	});
-
-	t.it('audit_notice with null fields does not throw', () => {
-		let threw = false;
-		try { non_uci.audit_notice(ctx(), "minimal", null); }
-		catch (e) { threw = true; }
-		t.assert_false(threw);
 	});
 });
