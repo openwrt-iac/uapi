@@ -3,6 +3,7 @@ let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
+let as_int = values.as_int;
 
 const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
@@ -56,13 +57,13 @@ function fromUci(section, conn) {
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
 		dns: as_list(section.dns),
-		ip6assign: section.ip6assign ?? null,
-		mtu: section.mtu ?? null,
+		ip6assign: as_int(section.ip6assign),
+		mtu: as_int(section.mtu),
 		auto: normalize_bool(section.auto, true),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (proto == "wireguard") {
-		view.listen_port = section.listen_port ?? null;
+		view.listen_port = as_int(section.listen_port);
 		view.addresses = as_list(section.addresses);
 		view.nohostroute = normalize_bool(section.nohostroute, false);
 		view.ip4table = section.ip4table ?? null;
@@ -76,7 +77,7 @@ function fromUci(section, conn) {
 	if (proto == "dhcp") {
 		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
 		view.defaultroute = (section.defaultroute != null) ? normalize_bool(section.defaultroute, true) : null;
-		view.metric = section.metric ?? null;
+		view.metric = as_int(section.metric);
 		view.hostname = section.hostname ?? null;
 		view.clientid = section.clientid ?? null;
 	}

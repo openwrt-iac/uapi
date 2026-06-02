@@ -256,7 +256,7 @@ t.describe('network.interfaces proto=dhcp client fields', () => {
 		t.assert_equal(r.proto, 'dhcp');
 		t.assert_false(r.peerdns);
 		t.assert_true(r.defaultroute);
-		t.assert_equal(r.metric, '100');
+		t.assert_equal(r.metric, 100);
 		t.assert_equal(r.hostname, 'router');
 		t.assert_equal(r.clientid, 'aa:bb');
 	});

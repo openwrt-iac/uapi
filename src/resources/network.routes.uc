@@ -1,6 +1,7 @@
 let values = require('values');
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
+let as_int = values.as_int;
 
 const VALID_TYPES = {
 	"unicast": true, "blackhole": true, "unreachable": true,
@@ -17,9 +18,9 @@ function fromUci(section) {
 		target: section.target ?? null,
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
-		table: section.table ?? null,
-		metric: section.metric ?? null,
-		mtu: section.mtu ?? null,
+		table: as_int(section.table),
+		metric: as_int(section.metric),
+		mtu: as_int(section.mtu),
 		source: section.source ?? null,
 		type: section.type ?? "unicast",
 		runtime: {},

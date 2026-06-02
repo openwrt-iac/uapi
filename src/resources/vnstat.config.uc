@@ -3,8 +3,8 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: true,
 		database_dir:        section.DatabaseDir ?? null,
-		interface_5min_hours: section.Interface5MinHours ?? null,
-		month_rotate:        section.MonthRotate ?? null,
+		interface_5min_hours: as_int(section.Interface5MinHours),
+		month_rotate:        as_int(section.MonthRotate),
 		runtime: {},
 	};
 }

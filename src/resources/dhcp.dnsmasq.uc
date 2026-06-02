@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 let as_list = values.as_list;
 
 function fromUci(section) {
@@ -11,8 +12,8 @@ function fromUci(section) {
 		noresolv: normalize_bool(section.noresolv, false),
 		rebind_protection: normalize_bool(section.rebind_protection, true),
 		expandhosts: normalize_bool(section.expandhosts, false),
-		cachesize: section.cachesize ?? null,
-		port: section.port ?? null,
+		cachesize: as_int(section.cachesize),
+		port: as_int(section.port),
 		domainneeded: normalize_bool(section.domainneeded, true),
 		boguspriv: normalize_bool(section.boguspriv, true),
 		filterwin2k: normalize_bool(section.filterwin2k, false),

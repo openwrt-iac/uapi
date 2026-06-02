@@ -29,7 +29,7 @@ call -X DELETE "$URL/network/routes/$rid" | tail -1 | grep -q '^204$' || fail "D
 
 echo "--- network/rules: POST a PBR rule ---"
 rule=$(call -X POST -H 'Content-Type: application/json' "$URL/network/rules" -d '{
-	"src": "192.168.10.0/24", "lookup": "42", "priority": 30000
+	"src": "192.168.10.0/24", "lookup": 42, "priority": 30000
 }')
 echo "$rule"
 status=$(echo "$rule" | tail -1)
@@ -38,7 +38,7 @@ plid=$(echo "$rule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/
 
 echo "--- network/rules: missing selector rejected ---"
 bad_rule=$(call -X POST -H 'Content-Type: application/json' "$URL/network/rules" -d '{
-	"lookup": "42"
+	"lookup": 42
 }')
 echo "$bad_rule" | tail -1 | grep -q '^422$' || fail "no-selector rule expected 422"
 

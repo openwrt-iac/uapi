@@ -17,6 +17,17 @@ function as_list(v) {
 	return [v];
 }
 
+// uci stores everything as strings; the curated layer wants real numeric
+// values for fields declared `type: "integer"`. Returns null on missing or
+// non-numeric input to avoid the silent int("abc") = 0 trap.
+function as_int(v) {
+	if (v == null) return null;
+	if (type(v) == "int") return v;
+	if (type(v) == "string" && v != "" && match(v, /^-?[0-9]+$/))
+		return int(v);
+	return null;
+}
+
 function is_valid_ipv4(s) {
 	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
 	for (let part in split(s, ".")) {
@@ -45,6 +56,6 @@ function is_valid_cidr(s) {
 }
 
 return {
-	normalize_bool, as_list,
+	normalize_bool, as_list, as_int,
 	is_valid_ipv4, is_valid_ip, is_valid_cidr,
 };

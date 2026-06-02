@@ -5,7 +5,7 @@ function fromUci(section) {
 		sys_location:  section.sysLocation ?? null,
 		sys_contact:   section.sysContact ?? null,
 		sys_name:      section.sysName ?? null,
-		sys_services:  section.sysServices ?? null,
+		sys_services:  as_int(section.sysServices),
 		sys_descr:     section.sysDescr ?? null,
 		sys_object_id: section.sysObjectID ?? null,
 		runtime: {},

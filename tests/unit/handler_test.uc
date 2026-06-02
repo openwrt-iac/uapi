@@ -629,8 +629,8 @@ t.describe('handler schema-type check: PATCH does not re-validate uci-string fie
 		let r = dropbear.patch(c, ctx(), 'd_main', { root_login: false });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.root_login, false);
-		// port is still the original uci string view.
-		t.assert_equal(r.body.port, '22');
+		// port is the as_int-coerced view of uci's "22".
+		t.assert_equal(r.body.port, 22);
 	});
 
 	t.it('PATCH still rejects a wrong-typed delta even when the merge would pass', () => {

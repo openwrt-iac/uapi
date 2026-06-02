@@ -2,6 +2,7 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 let is_valid_cidr = values.is_valid_cidr;
+let as_int = values.as_int;
 
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 
@@ -22,8 +23,8 @@ function fromUci(section) {
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
 		allowed_ips: as_list(section.allowed_ips),
 		endpoint_host: section.endpoint_host ?? null,
-		endpoint_port: section.endpoint_port ?? null,
-		persistent_keepalive: section.persistent_keepalive ?? null,
+		endpoint_port: as_int(section.endpoint_port),
+		persistent_keepalive: as_int(section.persistent_keepalive),
 		route_allowed_ips: normalize_bool(section.route_allowed_ips, false),
 		disabled: normalize_bool(section.disabled, false),
 		runtime: {},

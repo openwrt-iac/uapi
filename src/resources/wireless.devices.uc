@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const VALID_TYPES = { "mac80211": true, "broadcom": true };
 const VALID_BANDS = { "2g": true, "5g": true, "6g": true, "60g": true };
@@ -14,7 +15,7 @@ function fromUci(section) {
 		channel: section.channel ?? null,
 		htmode: section.htmode ?? null,
 		country: section.country ?? null,
-		txpower: section.txpower ?? null,
+		txpower: as_int(section.txpower),
 		disabled: normalize_bool(section.disabled, false),
 		runtime: {},
 	};

@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 let as_list = values.as_list;
 
 function fromUci(section) {
@@ -11,7 +12,7 @@ function fromUci(section) {
 		enable_sonmp: normalize_bool(section.enable_sonmp, false),
 		enable_edp: normalize_bool(section.enable_edp, false),
 		enable_lldpmed: normalize_bool(section.enable_lldpmed, false),
-		lldp_class: section.lldp_class ?? null,
+		lldp_class: as_int(section.lldp_class),
 		lldp_description: normalize_bool(section.lldp_description, true),
 		lldp_capabilities: normalize_bool(section.lldp_capabilities, true),
 		lldp_mgmt_ip: section.lldp_mgmt_ip ?? null,

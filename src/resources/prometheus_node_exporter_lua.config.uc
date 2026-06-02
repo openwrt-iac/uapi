@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const COLLECTOR_FIELDS = [
 	"cpu", "meminfo", "netdev", "loadavg", "filesystem", "diskstats",
@@ -13,7 +14,7 @@ function fromUci(section) {
 		managed: true,
 		listen_ipv6: normalize_bool(section.listen_ipv6, false),
 		listen_interface: section.listen_interface ?? null,
-		listen_port: section.listen_port ?? null,
+		listen_port: as_int(section.listen_port),
 		runtime: {},
 	};
 	for (let c in COLLECTOR_FIELDS)

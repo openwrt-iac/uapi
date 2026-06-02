@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 let as_list = values.as_list;
 let fs = require('fs');
 
@@ -80,8 +81,8 @@ function fromUci(section, conn) {
 		id: section['.name'],
 		managed: !anonymous,
 		interface: iface,
-		start: section.start ?? null,
-		limit: section.limit ?? null,
+		start: as_int(section.start),
+		limit: as_int(section.limit),
 		leasetime: section.leasetime ?? null,
 		ignore: normalize_bool(section.ignore, false),
 		force: normalize_bool(section.force, false),

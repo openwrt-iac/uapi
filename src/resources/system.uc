@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const HOSTNAME_RE = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
 
@@ -12,7 +13,7 @@ function fromUci(section) {
 		notes: section.notes ?? null,
 		timezone: section.timezone ?? null,
 		zonename: section.zonename ?? null,
-		log_size: section.log_size ?? null,
+		log_size: as_int(section.log_size),
 		log_ip: section.log_ip ?? null,
 		log_proto: section.log_proto ?? null,
 		log_remote: normalize_bool(section.log_remote, false),

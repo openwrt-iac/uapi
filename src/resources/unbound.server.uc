@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const VALID_DHCP_LINK = { "none": true, "odhcpd": true, "dnsmasq": true };
 const VALID_RECURSION = { "default": true, "passive": true, "aggressive": true };
@@ -19,10 +20,10 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: true,
 		enabled: normalize_bool(section.enabled, true),
-		listen_port: section.listen_port ?? null,
+		listen_port: as_int(section.listen_port),
 		dhcp_link: section.dhcp_link ?? null,
-		add_local_fqdn: section.add_local_fqdn ?? null,
-		add_wan_fqdn: section.add_wan_fqdn ?? null,
+		add_local_fqdn: as_int(section.add_local_fqdn),
+		add_wan_fqdn: as_int(section.add_wan_fqdn),
 		dnssec_enabled: normalize_bool(section.dnssec_enabled, false),
 		recursion: section.recursion ?? null,
 		resource: section.resource ?? null,
@@ -35,8 +36,8 @@ function fromUci(section) {
 		localservice: (section.localservice != null) ? normalize_bool(section.localservice, true) : null,
 		hide_binddata: (section.hide_binddata != null) ? normalize_bool(section.hide_binddata, true) : null,
 		rebind_protection: section.rebind_protection ?? null,
-		num_threads: section.num_threads ?? null,
-		ttl_min: section.ttl_min ?? null,
+		num_threads: as_int(section.num_threads),
+		ttl_min: as_int(section.ttl_min),
 		domain: section.domain ?? null,
 		domain_type: section.domain_type ?? null,
 		runtime: {},

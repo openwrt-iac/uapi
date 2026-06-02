@@ -60,7 +60,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		name:    { type: "string", pattern: "^[a-zA-Z0-9_-]+$",
+		name:    { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+$",
 		           description: "Zone name; alphanumerics, dashes, underscores" },
 		input:   { type: "string", enum: keys(VALID_POLICIES) },
 		output:  { type: "string", enum: keys(VALID_POLICIES) },

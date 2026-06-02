@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 function fromUci(section) {
 	return {
@@ -8,7 +9,7 @@ function fromUci(section) {
 		maindhcp: normalize_bool(section.maindhcp, false),
 		leasefile: section.leasefile ?? null,
 		leasetrigger: section.leasetrigger ?? null,
-		loglevel: section.loglevel ?? null,
+		loglevel: as_int(section.loglevel),
 		runtime: {},
 	};
 }

@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 let as_list = values.as_list;
 
 const UAPI_PREFIX = "/api/v1=/usr/share/uapi/main.uc";
@@ -17,12 +18,12 @@ function fromUci(section) {
 		cgi_prefix: section.cgi_prefix ?? null,
 		lua_prefix: as_list(section.lua_prefix),
 		ucode_prefix: as_list(section.ucode_prefix),
-		max_requests: section.max_requests ?? null,
-		max_connections: section.max_connections ?? null,
-		script_timeout: section.script_timeout ?? null,
-		network_timeout: section.network_timeout ?? null,
-		http_keepalive: section.http_keepalive ?? null,
-		tcp_keepalive: section.tcp_keepalive ?? null,
+		max_requests: as_int(section.max_requests),
+		max_connections: as_int(section.max_connections),
+		script_timeout: as_int(section.script_timeout),
+		network_timeout: as_int(section.network_timeout),
+		http_keepalive: as_int(section.http_keepalive),
+		tcp_keepalive: as_int(section.tcp_keepalive),
 		index_page: as_list(section.index_page),
 		error_page: section.error_page ?? null,
 		no_dirlists: normalize_bool(section.no_dirlists, false),

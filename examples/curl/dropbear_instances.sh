@@ -15,10 +15,10 @@ req "$UAPI_BASE/dropbear/instances" | head -c 600; echo
 echo
 echo "# Add a key-only dropbear on a non-default port, lan only"
 created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/dropbear/instances" -d '{
-	"Port": 2222,
-	"PasswordAuth": false,
-	"RootPasswordAuth": false,
-	"RootLogin": true,
+	"port": 2222,
+	"password_auth": false,
+	"root_password_auth": false,
+	"root_login": true,
 	"interface": "lan"
 }')
 echo "$created"

@@ -3,8 +3,8 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		days: section.days ?? null,
-		bits: section.bits ?? null,
+		days: as_int(section.days),
+		bits: as_int(section.bits),
 		commonname: section.commonname ?? null,
 		organization: section.organization ?? null,
 		location: section.location ?? null,

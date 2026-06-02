@@ -1,5 +1,6 @@
 let values = require('values');
 let as_list = values.as_list;
+let as_int = values.as_int;
 
 const PORT_RE = /^[A-Za-z0-9._-]+(:[tu*]+)?$/;
 
@@ -9,7 +10,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		device: section.device ?? null,
-		vlan: section.vlan ?? null,
+		vlan: as_int(section.vlan),
 		ports: as_list(section.ports),
 		runtime: {},
 	};

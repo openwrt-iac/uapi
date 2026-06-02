@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const VALID_QDISCS  = { "cake": true, "fq_codel": true, "pie": true, "htb": true };
 const VALID_SCRIPTS = { "piece_of_cake.qos": true, "simple.qos": true,
@@ -13,12 +14,12 @@ function fromUci(section) {
 		managed: !anonymous,
 		enabled: normalize_bool(section.enabled, true),
 		interface: section.interface ?? null,
-		download: section.download ?? null,
-		upload: section.upload ?? null,
+		download: as_int(section.download),
+		upload: as_int(section.upload),
 		qdisc: section.qdisc ?? null,
 		script: section.script ?? null,
 		linklayer: section.linklayer ?? null,
-		overhead: section.overhead ?? null,
+		overhead: as_int(section.overhead),
 		runtime: {},
 	};
 }

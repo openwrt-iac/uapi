@@ -10556,7 +10556,10 @@
 						"type": "boolean"
 					},
 					"name": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"pattern": "^[a-zA-Z0-9_-]+$",
 						"description": "Zone name; alphanumerics, dashes, underscores"
 					},
@@ -12184,9 +12187,6 @@
 						"type": "string",
 						"pattern": "^[A-Za-z]{2}$",
 						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
-					},
-					"runtime": {
-						"type": "object"
 					}
 				}
 			},
@@ -12582,9 +12582,6 @@
 					"sys_object_id": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysObjectID OID"
-					},
-					"runtime": {
-						"type": "object"
 					}
 				}
 			},
@@ -12773,9 +12770,6 @@
 						"minimum": 1,
 						"maximum": 31,
 						"description": "Day of month that monthly counters roll over"
-					},
-					"runtime": {
-						"type": "object"
 					}
 				}
 			},

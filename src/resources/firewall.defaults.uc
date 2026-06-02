@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let as_int = values.as_int;
 
 const VALID_POLICIES = { "ACCEPT": true, "REJECT": true, "DROP": true };
 
@@ -12,8 +13,8 @@ function fromUci(section) {
 		forward: section.forward ?? null,
 		syn_flood: normalize_bool(section.syn_flood, false),
 		drop_invalid: normalize_bool(section.drop_invalid, false),
-		synflood_burst: section.synflood_burst ?? null,
-		synflood_rate: section.synflood_rate ?? null,
+		synflood_burst: as_int(section.synflood_burst),
+		synflood_rate: as_int(section.synflood_rate),
 		tcp_syncookies: normalize_bool(section.tcp_syncookies, false),
 		flow_offloading: normalize_bool(section.flow_offloading, false),
 		flow_offloading_hw: normalize_bool(section.flow_offloading_hw, false),

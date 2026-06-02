@@ -1,6 +1,7 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let as_int = values.as_int;
 
 const VALID_TYPES = {
 	"bridge": true, "8021q": true, "8021ad": true, "macvlan": true,
@@ -15,9 +16,9 @@ function fromUci(section) {
 		name: section.name ?? null,
 		type: section.type ?? null,
 		ports: as_list(section.ports),
-		vid: section.vid ?? null,
+		vid: as_int(section.vid),
 		ifname: section.ifname ?? null,
-		mtu: section.mtu ?? null,
+		mtu: as_int(section.mtu),
 		macaddr: section.macaddr ?? null,
 		ipv6: normalize_bool(section.ipv6, true),
 		runtime: {},
