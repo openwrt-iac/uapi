@@ -10,6 +10,7 @@ PARALLEL="${PARALLEL:-2}"
 UAPI_BASE="${UAPI_BASE:-http://127.0.0.1:8080}"
 SSH="${SSH:-tests/vm/ssh.sh}"
 
+$SSH 'uapi-token revoke ci_soak >/dev/null 2>&1' || true
 TOKEN=$($SSH 'uapi-token create --name ci_soak --scope "*:ro" 2>/dev/null' | head -1)
 [ -n "$TOKEN" ] || { echo "FAIL: could not mint soak token"; exit 1; }
 

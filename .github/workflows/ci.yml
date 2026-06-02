@@ -143,8 +143,11 @@ jobs:
       - name: Verify tag signature
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          if ! grep -qE '^[^#[:space:]]' .github/allowed-signers; then
-            echo "ERROR: .github/allowed-signers has no entries; tags cannot be verified."
+          # An allowed-signers entry needs principal + namespace + key-type +
+          # key body. Comments and blank lines do not count.
+          if ! grep -E '^[^#[:space:]]+[[:space:]]+(namespaces=[^[:space:]]+[[:space:]]+)?(ssh-ed25519|ssh-rsa|ssh-ecdsa|ecdsa-sha2-[a-z0-9-]+)[[:space:]]+[A-Za-z0-9+/=]+' .github/allowed-signers >/dev/null; then
+            echo "ERROR: .github/allowed-signers has no valid entry."
+            echo "Each entry must be: <principal> [namespaces=git] ssh-<algo> <base64-key>"
             echo "Add a signer per the file's setup instructions before tagging."
             exit 1
           fi
@@ -164,6 +167,16 @@ jobs:
         with:
           path: build/sdk
           key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
+
+      - name: Verify SDK pin is in sync with OPENWRT_VERSION
+        run: |
+          SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
+          grep -q "  $SDK_TARBALL\$" build/sdk.sha256 || {
+            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
+            echo "OPENWRT_VERSION=$OPENWRT_VERSION; OPENWRT_SDK_URL=$OPENWRT_SDK_URL."
+            echo "Regenerate the checksum from upstream and commit it."
+            exit 1
+          }
 
       - name: Download SDK if cache miss (verified by sha256)
         run: |

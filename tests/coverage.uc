@@ -1,21 +1,16 @@
 #!/usr/bin/ucode
-// Coverage inventory at two granularities:
-//
-//   1. Module-level: every src/resources/* and src/lib/* module is mentioned
-//      in at least one test file. Exits 1 on miss.
-//
-//   2. Function-level (lib only): exported names in `return { ... }` are
-//      cross-referenced against test bodies for usage. Exits 1 if function
-//      coverage drops below COVERAGE_FN_THRESHOLD (default 80%).
-//
-// Function-level is a static analysis, not a runtime tracer (ucode exposes no
-// AST or trace hook for branch-level instrumentation). For each lib module,
-// the script parses the final `return { ... }` block, extracts identifier-
-// shaped names, and grep-checks usage as `<module>.<name>` across tests/.
+// Two-granularity coverage: module presence in tests, and per-export
+// function reference. Identifier matching is tokenized (non-identifier
+// boundary on each side) to avoid `default_acquire` being "found" inside
+// `default_acquire_pkg`. Production callers are scanned across src/ AND
+// cli/; an export referenced only inside its own home file counts as
+// internal-use coverage. Exit 1 on any uncovered module, any unit-test
+// percentage below FN_THRESHOLD, or any dead export.
 
 import * as fs from 'fs';
 
 const FN_THRESHOLD = 80;
+const IDENT = "A-Za-z0-9_";
 
 function read_all(path) {
 	let fp = fs.open(path, "r");
@@ -29,6 +24,12 @@ function list(dir) {
 	let r = fs.lsdir(dir) ?? [];
 	sort(r);
 	return r;
+}
+
+// Regex-quote a name into a tokenized pattern: not preceded or followed by
+// another identifier character. Matches the exact name only.
+function token_re(name) {
+	return regexp("(^|[^" + IDENT + "])" + name + "([^" + IDENT + "]|$)");
 }
 
 let test_bodies = {};
@@ -73,84 +74,73 @@ for (let m in modules) {
 	else push(uncovered, m);
 }
 
-// --- Function-level (lib modules only) ---
-//
-// Parse the trailing `return { ... };` block of each lib module to find
-// exported identifiers. ucode shorthand `{ foo }` and `{ foo: foo }` both
-// produce the same exported name `foo`.
 function extract_exports(src) {
 	let m = match(src, /return\s*\{([^}]*)\}\s*;?\s*$/);
 	if (!m) return [];
-	let body = m[1];
 	let names = {};
-	for (let chunk in split(body, ",")) {
+	for (let chunk in split(m[1], ",")) {
 		let s = trim(chunk);
 		if (s == "") continue;
-		// Strip trailing `: value` if present.
 		let colon = index(s, ":");
 		if (colon >= 0) s = trim(substr(s, 0, colon));
-		// Identifier?
 		if (match(s, /^[A-Za-z_][A-Za-z0-9_]*$/))
 			names[s] = true;
 	}
 	return keys(names);
 }
 
-// Collect production source bodies (everything under src/ EXCEPT the lib
-// module's own file, so a function referenced only by its own home doesn't
-// count). Functions called from another src file are "exercised in production"
-// and gated by the integration suite; we count them as covered.
 let production_bodies = {};
 function add_dir(dir) {
-	for (let f in list(dir)) production_bodies[dir + "/" + f] = read_all(dir + "/" + f);
+	for (let f in list(dir)) {
+		let path = dir + "/" + f;
+		let body = read_all(path);
+		if (body != "") production_bodies[path] = body;
+	}
+}
+function add_file(path) {
+	let body = read_all(path);
+	if (body != "") production_bodies[path] = body;
 }
 add_dir("src");
 add_dir("src/lib");
 add_dir("src/resources");
+add_file("cli/uapi-token");
 
 function used_in_production(module_name, fn_name, own_file) {
-	let token = module_name + "." + fn_name;
+	let re = token_re(module_name + "\\." + fn_name);
 	for (let path in keys(production_bodies)) {
 		if (path == own_file) continue;
-		if (index(production_bodies[path], token) >= 0) return path;
+		if (match(production_bodies[path], re)) return path;
 	}
 	return null;
 }
 
-// Tests usually alias modules: `let tx = require('transaction')`, then use
-// `tx.default_acquire_pkg(...)`. Direct `module.name` matches would miss
-// these. The heuristic: any test that mentions the module AND contains a
-// `.name(` or `.name)` token references the function via its alias. Cheap
-// false positives (a different module's same-named field) are acceptable
-// since this is a coverage SIGNAL, not a proof.
+// A test that uses `let alias = require('module')` then `alias.name(...)`
+// counts as direct test coverage. The `.` is the left token boundary (any
+// identifier char preceding it is part of the alias, not the name); we
+// require non-identifier on the right only.
 function tested_via_alias(module_name, fn_name) {
-	let needle = "." + fn_name;
+	let re = regexp("\\." + fn_name + "([^" + IDENT + "]|$)");
 	for (let f in keys(test_bodies)) {
 		let body = test_bodies[f];
 		if (index(body, "require('" + module_name + "')") < 0
 		    && index(body, "src/lib/" + module_name + ".uc") < 0) continue;
-		if (index(body, needle + "(") >= 0) return true;
-		if (index(body, needle + ")") >= 0) return true;
-		if (index(body, needle + ".") >= 0) return true;
-		if (index(body, needle + ",") >= 0) return true;
-		if (index(body, needle + ";") >= 0) return true;
+		if (match(body, re)) return true;
 	}
 	return false;
 }
 
-// Internal reference detection. A bareword `name` appearing in the module
-// outside its `function name(...)` declaration line means another exported
-// function uses it (typical pattern: `params.foo ?? default_foo`). These
-// count as production-covered, since the using path IS covered.
+// An export referenced inside its own module outside its declaration line
+// (`function name(...)` or `name = function(...)`) is internally used.
 function used_internally(src, name) {
-	let count = 0;
+	let token_in_line = regexp("(^|[^" + IDENT + "])" + name + "([^" + IDENT + "]|$)");
+	let def_lhs = regexp("^[[:space:]]*function[[:space:]]+" + name + "[[:space:]]*\\(");
+	let def_assign = regexp("^[[:space:]]*(let[[:space:]]+|const[[:space:]]+)?" + name + "[[:space:]]*=[[:space:]]*function");
 	for (let line in split(src, "\n")) {
-		if (index(line, name) < 0) continue;
-		// Strip the function-definition line.
-		if (match(line, "^[[:space:]]*function[[:space:]]+" + name + "[[:space:]]*\\(")) continue;
-		if (match(line, name + "[[:space:]]*=[[:space:]]*function")) continue;
-		count++;
-		if (count >= 1) return true;
+		if (!match(line, token_in_line)) continue;
+		if (match(line, def_lhs)) continue;
+		if (match(line, def_assign)) continue;
+		return true;
 	}
 	return false;
 }
@@ -178,14 +168,16 @@ for (let m in modules) {
 	}
 	if (length(dead) > 0) fn_dead[m.name] = dead;
 }
+
+let unit_pct = (fn_total > 0) ? (fn_unit * 100.0) / fn_total : 100.0;
 let fn_covered = fn_unit + fn_prod_only;
+let fn_pct = (fn_total > 0) ? (fn_covered * 100.0) / fn_total : 100.0;
 
 printf("uapi coverage inventory\n");
 printf("=======================\n");
 printf("modules total:        %d\n", length(modules));
 printf("modules covered:      %d (%.1f%%)\n", covered, (covered * 100.0) / length(modules));
-printf("modules uncovered:    %d\n", length(uncovered));
-printf("\n");
+printf("modules uncovered:    %d\n\n", length(uncovered));
 
 if (length(uncovered) > 0) {
 	printf("UNCOVERED MODULES:\n");
@@ -194,21 +186,20 @@ if (length(uncovered) > 0) {
 	printf("\n");
 }
 
-let fn_pct = (fn_total > 0) ? (fn_covered * 100.0) / fn_total : 100.0;
-printf("lib functions total:           %d\n", fn_total);
-printf("  unit-tested:                 %d\n", fn_unit);
-printf("  exercised in production only: %d\n", fn_prod_only);
-printf("  covered (unit + production): %d (%.1f%%; threshold %d%%)\n",
-       fn_covered, fn_pct, FN_THRESHOLD);
+printf("lib exports total:                %d\n", fn_total);
+printf("  unit-tested directly:           %d (%.1f%%; threshold %d%%)\n",
+       fn_unit, unit_pct, FN_THRESHOLD);
+printf("  exercised via production calls: %d\n", fn_prod_only);
+printf("  total covered:                  %d (%.1f%%)\n", fn_covered, fn_pct);
 
 if (length(fn_dead) > 0) {
-	printf("\nDEAD LIB FUNCTIONS (not referenced anywhere):\n");
+	printf("\nDEAD LIB EXPORTS (not referenced anywhere):\n");
 	for (let mod in keys(fn_dead))
 		printf("  %-12s %s\n", mod, join(", ", fn_dead[mod]));
 }
 
 let exit_code = 0;
 if (length(uncovered) > 0) exit_code = 1;
-if (fn_pct < FN_THRESHOLD) exit_code = 1;
+if (unit_pct < FN_THRESHOLD) exit_code = 1;
 if (length(fn_dead) > 0) exit_code = 1;
 exit(exit_code);

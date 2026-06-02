@@ -11,6 +11,7 @@ REGRESSION_PCT="${REGRESSION_PCT:-25}"
 UAPI_BASE="${UAPI_BASE:-http://127.0.0.1:8080}"
 SSH="${SSH:-tests/vm/ssh.sh}"
 
+$SSH 'uapi-token revoke ci_bench >/dev/null 2>&1' || true
 TOKEN=$($SSH 'uapi-token create --name ci_bench --scope "*:ro" 2>/dev/null' | head -1)
 [ -n "$TOKEN" ] || { echo "FAIL: could not mint bench token"; exit 1; }
 
@@ -74,6 +75,14 @@ for ep in $endpoints; do
 		$0 ~ "\""e"\"" { match($0, /"p99_ms":[[:space:]]*[0-9]+/); print substr($0, RSTART+9, RLENGTH-9); exit }
 	' bench/baseline.json | tr -d ' ')
 	[ -n "$base" ] || { printf '  %-32s no baseline (skipped)\n' "$ep"; continue; }
+	# Empty $cur means the current run did not produce a p99 for this
+	# endpoint (parser miss, endpoint dropped, awk regex unmatched). That
+	# is a real measurement gap, not a pass.
+	case "$cur" in
+		'' | *[!0-9]*)
+			printf '  [FAIL] %-30s no current p99 (parser miss or endpoint missing)\n' "$ep"
+			fail=$((fail+1)); continue ;;
+	esac
 	# Allow up to REGRESSION_PCT% growth.
 	max_allowed=$((base + base * REGRESSION_PCT / 100))
 	# Add a 5ms floor so noise around sub-millisecond endpoints doesn't false-fail.
