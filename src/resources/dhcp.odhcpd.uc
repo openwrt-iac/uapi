@@ -31,13 +31,6 @@ function validate(json) {
 		return errs;
 	}
 
-	if (json.loglevel != null) {
-		let l = int(json.loglevel);
-		if (l < 0 || l > 7)
-			push(errs, { field: "loglevel", code: "out_of_range",
-			             message: "must be 0-7" });
-	}
-
 	return errs;
 }
 

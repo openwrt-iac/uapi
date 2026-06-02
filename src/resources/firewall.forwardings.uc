@@ -48,10 +48,6 @@ function validate(json, conn) {
 	if (json.dest == null || json.dest == "")
 		push(errs, { field: "dest", code: "required", message: "is required" });
 
-	if (json.family != null && !VALID_FAMILIES[json.family])
-		push(errs, { field: "family", code: "not_in_enum",
-		             message: "must be one of any, ipv4, ipv6" });
-
 	if (conn != null) {
 		let zones = null;
 		if (json.src != null && json.src != "") {

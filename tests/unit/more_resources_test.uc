@@ -1,8 +1,16 @@
 let t = require('harness');
+let handler = require('handler');
 
 let zones = loadfile('src/resources/firewall.zones.uc')();
 let redirects = loadfile('src/resources/firewall.redirects.uc')();
 let interfaces = loadfile('src/resources/network.interfaces.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('firewall.zones', () => {
 	t.it('contract', () => {
@@ -30,7 +38,7 @@ t.describe('firewall.zones', () => {
 	});
 
 	t.it('validate rejects bad policy', () => {
-		let errs = zones.validate({ name: 'lan', input: 'BOGUS' }, null);
+		let errs = full_validate(zones, { name: 'lan', input: 'BOGUS' }, null);
 		let ie = filter(errs, function(e) { return e.field == "input"; });
 		t.assert_equal(ie[0].code, 'not_in_enum');
 	});
@@ -110,7 +118,7 @@ t.describe('network.interfaces', () => {
 	});
 
 	t.it('validate rejects unknown proto', () => {
-		let errs = interfaces.validate({ proto: 'whatever' }, null);
+		let errs = full_validate(interfaces, { proto: 'whatever' }, null);
 		let pe = filter(errs, function(e) { return e.field == "proto"; });
 		t.assert_equal(pe[0].code, 'not_in_enum');
 	});
@@ -264,7 +272,7 @@ t.describe('network.interfaces proto=dhcp client fields', () => {
 		t.assert_equal(u.clientid, 'x');
 	});
 	t.it('validate rejects negative metric on dhcp', () => {
-		let errs = interfaces.validate({ proto: 'dhcp', device: 'eth1', metric: -3 });
+		let errs = full_validate(interfaces, { proto: 'dhcp', device: 'eth1', metric: -3 }, null);
 		let found = false;
 		for (let e in errs)
 			if (e.field == 'metric' && e.code == 'out_of_range') { found = true; break; }
@@ -299,7 +307,7 @@ t.describe('network.interfaces proto=dhcpv6 client fields', () => {
 		t.assert_equal(u.delegate, '1');
 	});
 	t.it('validate rejects bad reqaddress enum', () => {
-		let errs = interfaces.validate({ proto: 'dhcpv6', reqaddress: 'always' });
+		let errs = full_validate(interfaces, { proto: 'dhcpv6', reqaddress: 'always' }, null);
 		let found = false;
 		for (let e in errs)
 			if (e.field == 'reqaddress' && e.code == 'not_in_enum') { found = true; break; }
@@ -343,10 +351,10 @@ t.describe('firewall.redirects reflection', () => {
 		t.assert_equal(u.reflection_src, 'external');
 	});
 	t.it('validate rejects bad reflection_src', () => {
-		let errs = redirects.validate({
+		let errs = full_validate(redirects, {
 			match: { src_zone: 'wan' }, target: 'DNAT',
 			reflection_src: 'wat',
-		});
+		}, null);
 		let found = false;
 		for (let e in errs)
 			if (e.field == 'reflection_src' && e.code == 'not_in_enum') { found = true; break; }

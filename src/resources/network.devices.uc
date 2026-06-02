@@ -50,9 +50,6 @@ function validate(json) {
 
 	if (json.type == null || json.type == "")
 		push(errs, { field: "type", code: "required", message: "is required" });
-	else if (!VALID_TYPES[json.type])
-		push(errs, { field: "type", code: "not_in_enum",
-		             message: "must be one of bridge, 8021q, 8021ad, macvlan, veth, tun, tap" });
 
 	if (json.type == "bridge" && (type(json.ports) != "array" || length(json.ports) == 0))
 		push(errs, { field: "ports", code: "required",

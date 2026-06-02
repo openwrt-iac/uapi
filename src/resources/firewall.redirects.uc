@@ -68,10 +68,6 @@ function validate(json, conn) {
 		return errs;
 	}
 
-	if (json.target != null && !VALID_TARGETS[json.target])
-		push(errs, { field: "target", code: "not_in_enum",
-		             message: "must be one of DNAT, SNAT" });
-
 	let m = json.match ?? {};
 	if (type(m) != "object") {
 		push(errs, { field: "match", code: "invalid_type", message: "must be an object" });
@@ -100,21 +96,6 @@ function validate(json, conn) {
 		if (dest_ips[i] != "" && !is_valid_ipv4(dest_ips[i]))
 			push(errs, { field: sprintf("match.dest_ip[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv4 address" });
-	}
-
-	if (m.family != null && !VALID_FAMILIES[m.family])
-		push(errs, { field: "match.family", code: "not_in_enum",
-		             message: "must be one of any, ipv4, ipv6" });
-
-	if (json.reflection_src != null && !VALID_REFLECTION_SRC[json.reflection_src])
-		push(errs, { field: "reflection_src", code: "not_in_enum",
-		             message: "must be internal or external" });
-
-	let protos = as_list(m.proto);
-	for (let i = 0; i < length(protos); i++) {
-		if (!VALID_PROTOS[protos[i]])
-			push(errs, { field: sprintf("match.proto[%d]", i), code: "not_in_enum",
-			             message: sprintf("%J is not a recognized protocol", protos[i]) });
 	}
 
 	if (conn != null

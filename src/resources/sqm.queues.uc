@@ -65,16 +65,6 @@ function validate(json, conn) {
 			push(errs, { field: "upload", code: "out_of_range",
 			             message: "must be non-negative" });
 	}
-	if (json.qdisc != null && !VALID_QDISCS[json.qdisc])
-		push(errs, { field: "qdisc", code: "not_in_enum",
-		             message: "unknown qdisc" });
-	if (json.script != null && !VALID_SCRIPTS[json.script])
-		push(errs, { field: "script", code: "not_in_enum",
-		             message: "unknown script" });
-	if (json.linklayer != null && !VALID_LINK[json.linklayer])
-		push(errs, { field: "linklayer", code: "not_in_enum",
-		             message: "must be none, ethernet, or atm" });
-
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists(conn, json.interface))
 			push(errs, { field: "interface", code: "conflict",

@@ -1,8 +1,16 @@
 let t = require('harness');
 let ubus = require('bus');
+let handler = require('handler');
 let routes = loadfile('src/resources/network.routes.uc')();
 let rules = loadfile('src/resources/network.rules.uc')();
 let bv = loadfile('src/resources/network.bridge_vlans.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('network.routes contract', () => {
 	t.it('declares package, type, reload', () => {
@@ -76,7 +84,7 @@ t.describe('network.rules.validate', () => {
 		t.assert_equal(le[0].code, "required");
 	});
 	t.it('rejects bad action enum', () => {
-		let errs = rules.validate({ src: '192.168.1.0/24', action: 'bogus' }, null);
+		let errs = full_validate(rules, { src: '192.168.1.0/24', action: 'bogus' }, null);
 		let ae = filter(errs, function(e) { return e.field == "action"; });
 		t.assert_equal(ae[0].code, "not_in_enum");
 	});
@@ -98,7 +106,7 @@ t.describe('network.bridge_vlans contract', () => {
 
 t.describe('network.bridge_vlans.validate', () => {
 	t.it('rejects vlan out of range', () => {
-		let errs = bv.validate({ device: 'br-lan', vlan: 5000 }, null);
+		let errs = full_validate(bv, { device: 'br-lan', vlan: 5000 }, null);
 		let ve = filter(errs, function(e) { return e.field == "vlan"; });
 		t.assert_equal(ve[0].code, "out_of_range");
 	});

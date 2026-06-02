@@ -38,12 +38,6 @@ function validate(json) {
 		             message: "body must be a JSON object" });
 		return errs;
 	}
-	if (json.Port != null) {
-		let p = int(json.Port);
-		if (p < 1 || p > 65535)
-			push(errs, { field: "Port", code: "out_of_range",
-			             message: "must be 1-65535" });
-	}
 	return errs;
 }
 

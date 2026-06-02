@@ -45,12 +45,6 @@ function validate(json) {
 		return errs;
 	}
 
-	for (let field in ["input", "output", "forward"]) {
-		if (json[field] != null && !VALID_POLICIES[json[field]])
-			push(errs, { field: field, code: "not_in_enum",
-			             message: "must be one of ACCEPT, REJECT, DROP" });
-	}
-
 	for (let field in ["synflood_burst", "synflood_rate"]) {
 		if (json[field] == null) continue;
 		let n = int(json[field]);

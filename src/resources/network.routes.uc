@@ -90,10 +90,6 @@ function validate(json, conn) {
 			             message: "must be non-negative" });
 	}
 
-	if (json.type != null && !VALID_TYPES[json.type])
-		push(errs, { field: "type", code: "not_in_enum",
-		             message: "unknown route type" });
-
 	let needs_iface = (json.type == null || json.type == "unicast");
 	if (conn != null && needs_iface && json.interface != null && json.interface != "") {
 		if (!interface_exists(conn, json.interface))

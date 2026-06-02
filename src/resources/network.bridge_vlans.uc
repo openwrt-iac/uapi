@@ -46,12 +46,6 @@ function validate(json, conn) {
 
 	if (json.vlan == null)
 		push(errs, { field: "vlan", code: "required", message: "is required" });
-	else {
-		let v = int(json.vlan);
-		if (v < 1 || v > 4094)
-			push(errs, { field: "vlan", code: "out_of_range",
-			             message: "must be 1-4094" });
-	}
 
 	let ports = as_list(json.ports);
 	for (let i = 0; i < length(ports); i++) {

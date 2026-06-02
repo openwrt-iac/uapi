@@ -49,17 +49,6 @@ function validate(json) {
 	else if (!match(json.name, NAME_RE))
 		push(errs, { field: "name", code: "invalid_format", message: "must be alphanumeric, _, or -" });
 
-	for (let f in ["input", "output", "forward"]) {
-		let v = json[f];
-		if (v != null && !VALID_POLICIES[v])
-			push(errs, { field: f, code: "not_in_enum",
-			             message: "must be one of ACCEPT, REJECT, DROP" });
-	}
-
-	if (json.family != null && !VALID_FAMILIES[json.family])
-		push(errs, { field: "family", code: "not_in_enum",
-		             message: "must be one of any, ipv4, ipv6" });
-
 	return errs;
 }
 

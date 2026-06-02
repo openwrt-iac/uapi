@@ -68,13 +68,8 @@ function validate(json, conn) {
 		return errs;
 	}
 
-	if (json.target == null) {
-		push(errs, { field: "target", code: "required",
-		             message: "is required" });
-	} else if (!VALID_TARGETS[json.target]) {
-		push(errs, { field: "target", code: "not_in_enum",
-		             message: "must be one of ACCEPT, REJECT, DROP, NOTRACK, MARK" });
-	}
+	if (json.target == null)
+		push(errs, { field: "target", code: "required", message: "is required" });
 
 	let m = json.match ?? {};
 	if (type(m) != "object") {
@@ -86,22 +81,6 @@ function validate(json, conn) {
 	if (m.src_zone == null || m.src_zone == "") {
 		push(errs, { field: "match.src_zone", code: "required",
 		             message: "is required" });
-	}
-
-	if (m.family != null && !VALID_FAMILIES[m.family]) {
-		push(errs, { field: "match.family", code: "not_in_enum",
-		             message: "must be one of any, ipv4, ipv6" });
-	}
-
-	let protos = as_list(m.proto);
-	for (let i = 0; i < length(protos); i++) {
-		if (!VALID_PROTOS[protos[i]]) {
-			push(errs, {
-				field: sprintf("match.proto[%d]", i),
-				code: "not_in_enum",
-				message: sprintf("%J is not a recognized protocol", protos[i]),
-			});
-		}
 	}
 
 	if (conn != null && m.src_zone != null && m.src_zone != "") {

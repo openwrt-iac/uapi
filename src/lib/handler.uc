@@ -565,4 +565,5 @@ function make_collection(resource) {
 	};
 }
 
-return { make, make_singleton, make_collection, translate_tx, load_section };
+return { make, make_singleton, make_collection, translate_tx, load_section,
+         check_schema_types };

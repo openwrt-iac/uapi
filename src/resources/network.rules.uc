@@ -72,10 +72,6 @@ function validate(json) {
 			             message: "must be 0-32766" });
 	}
 
-	if (json.action != null && !VALID_ACTIONS[json.action])
-		push(errs, { field: "action", code: "not_in_enum",
-		             message: "must be one of lookup, goto, unreachable, prohibit, blackhole, throw" });
-
 	let action = json.action ?? "lookup";
 	if (action == "lookup" && (json.lookup == null || json.lookup == ""))
 		push(errs, { field: "lookup", code: "required",

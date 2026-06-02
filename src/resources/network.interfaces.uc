@@ -145,9 +145,6 @@ function validate(json) {
 
 	if (json.proto == null || json.proto == "")
 		push(errs, { field: "proto", code: "required", message: "is required" });
-	else if (!VALID_PROTOS[json.proto])
-		push(errs, { field: "proto", code: "not_in_enum",
-		             message: "must be one of static, dhcp, dhcpv6, pppoe, none, ppp, wwan, wireguard" });
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
@@ -186,12 +183,6 @@ function validate(json) {
 				push(errs, { field: sprintf("addresses[%d]", i), code: "invalid_format",
 				             message: "must be a valid IPv4 CIDR" });
 		}
-		if (json.listen_port != null) {
-			let p = int(json.listen_port);
-			if (p < 0 || p > 65535)
-				push(errs, { field: "listen_port", code: "out_of_range",
-				             message: "must be 0-65535" });
-		}
 	}
 
 	let dns = as_list(json.dns);
@@ -201,23 +192,11 @@ function validate(json) {
 			             message: "must be an IP address" });
 	}
 
-	if (json.proto == "dhcp") {
-		if (json.metric != null) {
-			let m = int(json.metric);
-			if (m < 0)
-				push(errs, { field: "metric", code: "out_of_range",
-				             message: "must be non-negative" });
-		}
-	}
-
 	if (json.proto == "dhcpv6") {
 		if (json.reqprefix != null && json.reqprefix != ""
 		    && !match("" + json.reqprefix, REQPREFIX_RE))
 			push(errs, { field: "reqprefix", code: "invalid_format",
 			             message: "must be 'auto', 'no', or a numeric prefix size" });
-		if (json.reqaddress != null && !VALID_REQADDRESS[json.reqaddress])
-			push(errs, { field: "reqaddress", code: "not_in_enum",
-			             message: "must be try, force, or none" });
 		if (json.ip6hint != null && json.ip6hint != ""
 		    && !match(json.ip6hint, IPV6_PREFIX_RE))
 			push(errs, { field: "ip6hint", code: "invalid_format",

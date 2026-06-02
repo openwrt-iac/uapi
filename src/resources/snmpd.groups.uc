@@ -29,9 +29,6 @@ function validate(json) {
 	}
 	if (json.group == null || json.group == "")
 		push(errs, { field: "group", code: "required", message: "is required" });
-	if (json.version != null && !VALID_VERSIONS[json.version])
-		push(errs, { field: "version", code: "not_in_enum",
-		             message: "must be v1, v2c, or usm" });
 	return errs;
 }
 

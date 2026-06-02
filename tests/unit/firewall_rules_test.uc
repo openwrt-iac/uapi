@@ -1,6 +1,14 @@
 let t = require('harness');
 let ubus = require('bus');
+let handler = require('handler');
 let rules = loadfile('src/resources/firewall.rules.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('firewall.rules contract', () => {
 	t.it('declares package, type, and reload services', () => {
@@ -175,20 +183,20 @@ t.describe('firewall.rules.validate, required fields', () => {
 
 t.describe('firewall.rules.validate, enums', () => {
 	t.it('rejects unknown target', () => {
-		let errs = rules.validate({ target: 'WHATEVER', match: { src_zone: 'wan' } }, null);
+		let errs = full_validate(rules, { target: 'WHATEVER', match: { src_zone: 'wan' } }, null);
 		let te = filter(errs, function(e) { return e.field == "target"; });
 		t.assert_equal(te[0].code, "not_in_enum");
 	});
 
 	t.it('rejects unknown family', () => {
-		let errs = rules.validate(
+		let errs = full_validate(rules,
 			{ target: 'ACCEPT', match: { src_zone: 'wan', family: 'ipxx' } }, null);
 		let fe = filter(errs, function(e) { return e.field == "match.family"; });
 		t.assert_equal(fe[0].code, "not_in_enum");
 	});
 
 	t.it('rejects unknown protocol with the position in the field path', () => {
-		let errs = rules.validate(
+		let errs = full_validate(rules,
 			{ target: 'ACCEPT', match: { src_zone: 'wan', proto: ['tcp', 'bogus'] } },
 			null);
 		let pe = filter(errs, function(e) { return match(e.field, /match\.proto\[/); });

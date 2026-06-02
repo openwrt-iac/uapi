@@ -1,6 +1,14 @@
 let t = require('harness');
 let ubus = require('bus');
+let handler = require('handler');
 let fwd = loadfile('src/resources/firewall.forwardings.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('firewall.forwardings contract', () => {
 	t.it('declares package, type, and reload services', () => {
@@ -81,7 +89,7 @@ t.describe('firewall.forwardings.validate', () => {
 	});
 
 	t.it('rejects bad family enum', () => {
-		let errs = fwd.validate({ src: 'lan', dest: 'wan', family: 'bogus' }, null);
+		let errs = full_validate(fwd, { src: 'lan', dest: 'wan', family: 'bogus' }, null);
 		let fe = filter(errs, function(e) { return e.field == "family"; });
 		t.assert_equal(fe[0].code, "not_in_enum");
 	});

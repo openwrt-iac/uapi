@@ -1,8 +1,16 @@
 let t = require('harness');
+let handler = require('handler');
 
 let netdev = loadfile('src/resources/network.devices.uc')();
 let widev = loadfile('src/resources/wireless.devices.uc')();
 let wiface = loadfile('src/resources/wireless.interfaces.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('network.devices', () => {
 	t.it('contract', () => {
@@ -29,7 +37,7 @@ t.describe('network.devices', () => {
 	});
 
 	t.it('validate rejects unknown type', () => {
-		let errs = netdev.validate({ name: 'x', type: 'weirdo' }, null);
+		let errs = full_validate(netdev, { name: 'x', type: 'weirdo' }, null);
 		let te = filter(errs, function(e) { return e.field == "type"; });
 		t.assert_equal(te[0].code, 'not_in_enum');
 	});

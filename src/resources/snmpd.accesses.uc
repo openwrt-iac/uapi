@@ -49,15 +49,6 @@ function validate(json, conn) {
 	}
 	if (json.group == null || json.group == "")
 		push(errs, { field: "group", code: "required", message: "is required" });
-	if (json.version != null && !VALID_VERSIONS[json.version])
-		push(errs, { field: "version", code: "not_in_enum",
-		             message: "must be any, v1, v2c, or usm" });
-	if (json.level != null && !VALID_LEVELS[json.level])
-		push(errs, { field: "level", code: "not_in_enum",
-		             message: "must be noauth, auth, or priv" });
-	if (json.prefix != null && !VALID_PREFIXES[json.prefix])
-		push(errs, { field: "prefix", code: "not_in_enum",
-		             message: "must be exact or prefix" });
 	if (conn != null && json.group != null && json.group != "") {
 		if (!group_exists(conn, json.group))
 			push(errs, { field: "group", code: "conflict",

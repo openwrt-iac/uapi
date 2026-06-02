@@ -1,8 +1,16 @@
 let t = require('harness');
 let ubus = require('bus');
+let handler = require('handler');
 let servers = loadfile('src/resources/dhcp.servers.uc')();
 let dnsmasq = loadfile('src/resources/dhcp.dnsmasq.uc')();
 let odhcpd = loadfile('src/resources/dhcp.odhcpd.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('dhcp.servers contract', () => {
 	t.it('declares package, type, reload', () => {
@@ -81,7 +89,7 @@ t.describe('dhcp.odhcpd contract', () => {
 		t.assert_deep_equal(odhcpd.reload, ["odhcpd"]);
 	});
 	t.it('rejects loglevel out of range', () => {
-		let errs = odhcpd.validate({ loglevel: 10 });
+		let errs = full_validate(odhcpd, { loglevel: 10 }, null);
 		let le = filter(errs, function(e) { return e.field == "loglevel"; });
 		t.assert_equal(le[0].code, "out_of_range");
 	});
