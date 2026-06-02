@@ -122,11 +122,8 @@ function _json_type_name(val) {
 }
 
 function _format_want(want) {
-	if (type(want) == "array") {
-		let parts = [];
-		for (let w in want) push(parts, w);
-		return length(parts) > 0 ? join(" or ", parts) : "<unspecified>";
-	}
+	if (type(want) == "array")
+		return length(want) > 0 ? join(" or ", want) : "<unspecified>";
 	return "" + want;
 }
 

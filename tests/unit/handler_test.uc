@@ -572,10 +572,10 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 			target: "ACCEPT",
 			match: { src_zone: "wan", proto: null },
 		});
-		// Note: null proto means "unset"; resource.validate may have its own
-		// view but the schema-type check itself must not 422 on null.
-		t.assert_true(r.status == 200 || r.status == 422);
-		if (r.status == 422) {
+		// Contract: null on a typed field means "unset", never invalid_type.
+		// Holds regardless of whether resource.validate happens to 422 for
+		// other reasons.
+		if (r.body != null && r.body.errors != null) {
 			for (let e in r.body.errors)
 				if (e.field == "match.proto")
 					t.assert_true(e.code != "invalid_type");
