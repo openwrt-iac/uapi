@@ -64,6 +64,66 @@ t.describe('handler.list', () => {
 	});
 });
 
+t.describe('handler.list pagination', () => {
+	function seed_many(c, n) {
+		for (let i = 0; i < n; i++) {
+			c._state.uci.firewall["r_" + sprintf("%02d", i)] = {
+				'.type': 'rule', '.anonymous': false,
+				target: 'ACCEPT', src: 'wan', name: "rule_" + i,
+			};
+		}
+	}
+
+	t.it('returns the full list when below the default page size', () => {
+		let c = with_zones();
+		seed_many(c, 5);
+		let r = rules.list(c, ctx(), {});
+		t.assert_equal(length(r.body), 5);
+		t.assert_equal(r.headers["X-Next-Cursor"], null);
+	});
+
+	t.it('honors ?limit=N and emits a next cursor when there are more', () => {
+		let c = with_zones();
+		seed_many(c, 6);
+		let r = rules.list(c, ctx(), { limit: "2" });
+		t.assert_equal(length(r.body), 2);
+		t.assert_true(r.headers["X-Next-Cursor"] != null);
+		t.assert_true(index(r.headers.Link, "rel=\"next\"") >= 0);
+	});
+
+	t.it('follows the next cursor across pages', () => {
+		let c = with_zones();
+		seed_many(c, 5);
+		let p1 = rules.list(c, ctx(), { limit: "2" });
+		let nxt = p1.headers["X-Next-Cursor"];
+		let p2 = rules.list(c, ctx(), { limit: "2", cursor: nxt });
+		t.assert_equal(length(p2.body), 2);
+		t.assert_true(p2.body[0].id != p1.body[length(p1.body) - 1].id);
+	});
+
+	t.it('rejects a cursor whose id is not in the current result', () => {
+		let c = with_zones();
+		seed_many(c, 3);
+		let r = rules.list(c, ctx(), { cursor: "c_r_99" });
+		t.assert_equal(r.status, 400);
+		t.assert_equal(r.body.code, "invalid_cursor");
+	});
+
+	t.it('rejects a malformed cursor', () => {
+		let c = with_zones();
+		seed_many(c, 3);
+		let r = rules.list(c, ctx(), { cursor: "not-our-shape" });
+		t.assert_equal(r.body.code, "invalid_cursor");
+	});
+
+	t.it('rejects limit outside 1..500', () => {
+		let c = with_zones();
+		seed_many(c, 3);
+		t.assert_equal(rules.list(c, ctx(), { limit: "0" }).status, 400);
+		t.assert_equal(rules.list(c, ctx(), { limit: "501" }).status, 400);
+	});
+});
+
 t.describe('handler.get_one', () => {
 	t.it('returns 404 when id is unknown', () => {
 		let c = with_zones();

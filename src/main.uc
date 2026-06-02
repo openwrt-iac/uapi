@@ -14,6 +14,9 @@ let bus = require("bus");
 let packages = require("packages");
 let system_access = require("system_access");
 let token_store = require("token_store");
+let ratelimit = require("ratelimit");
+let metrics = require("metrics");
+let idempotency = require("idempotency");
 
 // RESOURCE_SOURCES retains the raw resource modules (with .schema_properties,
 // .package, .type) for the /schema/<...> endpoint. The handler wrappers in
@@ -361,6 +364,71 @@ function if_none_match_matches(if_none_match, current_etag) {
 	return false;
 }
 
+// path_template lowers a concrete request path to a label that does not
+// explode metric cardinality. Concrete segment values (ids, ULIDs, hex
+// digests) become `<id>`; named segments (resource, package, sub) pass
+// through. Without this, `uapi_requests_total` would grow unbounded as
+// clients create resources.
+function path_template(method, parts) {
+	if (length(parts) == 0) return "/";
+	let out = ["/" + parts[0]];
+	for (let i = 1; i < length(parts); i++) {
+		let p = parts[i];
+		if (i == 1 && (parts[0] == "raw" || parts[0] == "schema")) {
+			// /raw/:package/:id, /schema/:package/:resource
+			push(out, p);
+		} else if (p == "adopt" || p == "whoami" || p == "installed" || p == "feeds"
+			   || p == "password" || p == "authorized_keys") {
+			push(out, p);
+		} else if (i >= 2) {
+			push(out, ":id");
+		} else {
+			push(out, p);
+		}
+	}
+	return join("/", out);
+}
+
+function record_metrics_for(method, path, status, duration_ms) {
+	let parts = split_path(path);
+	let tpl = path_template(method, parts);
+	if (tpl == "/healthz" || tpl == "/metrics") return;
+	metrics.record_request(method, tpl, status, duration_ms);
+}
+
+function diagnostics_response(ctx) {
+	let resources_loaded = [];
+	for (let k in RESOURCE_SOURCES) push(resources_loaded, k);
+	sort(resources_loaded);
+
+	let uptime_s = 0;
+	let upf = fs.open("/proc/uptime", "r");
+	if (upf) {
+		let line = upf.read("line") ?? "";
+		upf.close();
+		let toks = split(trim(line), " ");
+		if (length(toks) > 0) uptime_s = int(toks[0]);
+	}
+
+	let global_held = false;
+	let pkg_held = {};
+	let lock_dir_entries;
+	try { lock_dir_entries = fs.lsdir("/var/lock"); } catch (_) { lock_dir_entries = []; }
+	for (let name in lock_dir_entries ?? []) {
+		if (name == "uapi.lock") global_held = true;
+		else if (substr(name, 0, 9) == "uapi.pkg." && substr(name, length(name) - 5) == ".lock")
+			pkg_held[substr(name, 9, length(name) - 14)] = true;
+	}
+
+	return errors.ok(ctx, {
+		version: VERSION,
+		uptime_seconds: uptime_s,
+		resources_loaded,
+		lock_state: { global_held, per_package: pkg_held },
+		request_id: ctx.request_id,
+	});
+}
+
 function maybe_304(resp, ctx) {
 	if (ctx == null || ctx.if_none_match == null) return resp;
 	if (resp.status != 200) return resp;
@@ -427,8 +495,9 @@ function dispatch(env) {
 	}
 
 	let body = null;
+	let body_text = "";
 	if (method == "POST" || method == "PUT" || method == "PATCH") {
-		let body_text = read_body(env);
+		body_text = read_body(env);
 		if (body_text != "") {
 			try { body = json(body_text); }
 			catch (e) {
@@ -437,6 +506,8 @@ function dispatch(env) {
 			}
 		}
 	}
+	ctx.body_text = body_text;
+	ctx.idempotency_key = env.HTTP_IDEMPOTENCY_KEY ?? qs.idempotency_key ?? null;
 
 	let query = parse_query(env.QUERY_STRING);
 
@@ -471,7 +542,76 @@ function dispatch(env) {
 	try { token_store.update_last_used(conn, token.name, env.REMOTE_ADDR, now_epoch); }
 	catch (_) {}
 
+	// Rate limit. Defaults are generous (100 req/s, burst 200) so this only
+	// fires under abuse. /metrics and /healthz are NOT exempt - a runaway
+	// scraper deserves the same treatment.
+	let rl_global = ratelimit.load_config(conn);
+	let rl = ratelimit.check(token.name, { now: now_epoch,
+	                                       rate: rl_global.rate,
+	                                       burst: rl_global.burst });
+	if (!rl.allowed) {
+		try { metrics.record_rate_limit_drop(token.name); } catch (_) {}
+		let resp = errors.error(ctx, "too_many_requests",
+			"Rate limit exceeded for this token");
+		resp.headers["Retry-After"] = "" + rl.retry_after_seconds;
+		return { ctx, token, resp };
+	}
+
+	// Idempotency for POST. A repeat of the same (token, key, body) replays
+	// the cached response; a same-key/different-body POST returns 409.
+	if (method == "POST" && ctx.idempotency_key != null) {
+		if (!idempotency.validate_key(ctx.idempotency_key))
+			return { ctx, token,
+			         resp: errors.error(ctx, "bad_request",
+			                            "Idempotency-Key has an invalid shape") };
+		let lk = idempotency.lookup(token.name, ctx.idempotency_key,
+		                            body_text, now_epoch);
+		if (lk.state == "hit") {
+			let cached = lk.response;
+			cached.headers = cached.headers ?? {};
+			cached.headers["X-Request-Id"] = ctx.request_id;
+			cached.headers["Idempotent-Replayed"] = "true";
+			return { ctx, token, resp: cached };
+		}
+		if (lk.state == "conflict")
+			return { ctx, token,
+			         resp: errors.error(ctx, "idempotency_key_conflict",
+			                            "Idempotency-Key was previously used with a different body") };
+	}
+
 	let parts = split_path(path);
+
+	if (path == "/metrics") {
+		if (method != "GET")
+			return { ctx, token,
+			         resp: errors.error(ctx, "method_not_allowed",
+			                            "metrics only supports GET") };
+		if (!scope.permits(token.scopes, ["uapi", "metrics"], "ro"))
+			return { ctx, token,
+			         resp: errors.error(ctx, "insufficient_scope",
+			                            "Token does not permit reading uapi/metrics") };
+		let text;
+		try { text = metrics.format_prometheus(); }
+		catch (e) { text = ""; }
+		return { ctx, token, resp: {
+			status: 200,
+			headers: { "Content-Type": "text/plain; version=0.0.4",
+			           "X-Request-Id": ctx.request_id },
+			body: text,
+		} };
+	}
+
+	if (path == "/diagnostics") {
+		if (method != "GET")
+			return { ctx, token,
+			         resp: errors.error(ctx, "method_not_allowed",
+			                            "diagnostics only supports GET") };
+		if (!scope.permits(token.scopes, ["uapi", "diagnostics"], "ro"))
+			return { ctx, token,
+			         resp: errors.error(ctx, "insufficient_scope",
+			                            "Token does not permit reading uapi/diagnostics") };
+		return { ctx, token, resp: diagnostics_response(ctx) };
+	}
 
 	if (length(parts) >= 1 && parts[0] == "auth") {
 		if (length(parts) == 2 && parts[1] == "whoami") {
@@ -680,6 +820,34 @@ global.handle_request = function(env) {
 	let path = env.PATH_INFO ?? "/";
 	let end = clock(true);
 	let duration_ms = int(((end[0] - start[0]) * 1000) + ((end[1] - start[1]) / 1000000));
+
+	// Idempotency store: cache 2xx POST responses so a repeated key replays.
+	// Only when the request actually carried a key (not on replay itself, the
+	// replay path returns before metrics/idempotency-store).
+	if (method == "POST" && token != null && ctx != null
+	    && ctx.idempotency_key != null
+	    && resp.status >= 200 && resp.status < 300
+	    && (resp.headers == null || resp.headers["Idempotent-Replayed"] == null)) {
+		try { idempotency.store(token.name, ctx.idempotency_key,
+		                        ctx.body_text ?? "", resp); }
+		catch (_) {}
+	}
+
+	// Per-request metrics. Wrapped so a metrics-storage failure can never
+	// crash the request path.
+	try { record_metrics_for(method, path, resp.status, duration_ms); } catch (_) {}
+	if (resp.status == 422 && resp.body != null && type(resp.body) == "object"
+	    && type(resp.body.errors) == "array") {
+		let parts = split_path(path);
+		let resource = (length(parts) >= 2) ? (parts[0] + "." + parts[1]) : (parts[0] ?? "_root");
+		for (let e in resp.body.errors) {
+			try { metrics.record_validate_error(resource, e.code ?? "unknown"); }
+			catch (_) {}
+		}
+	}
+	if (resp.status == 423) {
+		try { metrics.record_lock_contention("uapi"); } catch (_) {}
+	}
 
 	let is_write = method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE";
 	let is_audit_path = path != "/healthz";

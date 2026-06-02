@@ -54,6 +54,8 @@ const KNOWN_PATHS = {
 	"packages:feeds": true,
 	"uapi": true,
 	"uapi:tokens": true,
+	"uapi:metrics": true,
+	"uapi:diagnostics": true,
 	"raw": true,
 };
 

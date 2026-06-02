@@ -34,6 +34,48 @@ function compute_etag(body) {
 	return substr(hex, 0, 12);
 }
 
+// Cursor pagination for collection GETs. The cursor is `c_<last_seen_id>`;
+// items after the matching id (lexicographic walk through the result array)
+// form the next page. Clients without ?cursor get items 0..limit-1; when
+// further items exist, the response carries `Link: <...?cursor=...>; rel="next"`
+// (RFC 8288). Without `?limit` the default is 100; the maximum is 500.
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;
+const CURSOR_RE = /^c_[A-Za-z0-9_-]+$/;
+
+function paginate(ctx, items, query) {
+	let limit = DEFAULT_LIMIT;
+	if (query != null && query.limit != null) {
+		let n = +query.limit;
+		if (type(n) != "int" && type(n) != "double") n = int(query.limit);
+		if (n < 1 || n > MAX_LIMIT)
+			return errors.error(ctx, "bad_request",
+				sprintf("limit must be between 1 and %d", MAX_LIMIT));
+		limit = n;
+	}
+	let start = 0;
+	if (query != null && query.cursor != null && query.cursor != "") {
+		if (!match(query.cursor, CURSOR_RE))
+			return errors.error(ctx, "invalid_cursor", "cursor is malformed");
+		let after_id = substr(query.cursor, 2);
+		let found = false;
+		for (let i = 0; i < length(items); i++) {
+			if (items[i].id == after_id) { start = i + 1; found = true; break; }
+		}
+		if (!found)
+			return errors.error(ctx, "invalid_cursor", "cursor refers to no current item");
+	}
+	let end = start + limit;
+	let page = slice(items, start, end);
+	let resp = errors.ok(ctx, page);
+	if (end < length(items) && length(page) > 0) {
+		let next = "c_" + page[length(page) - 1].id;
+		resp.headers["Link"] = sprintf("<?cursor=%s&limit=%d>; rel=\"next\"", next, limit);
+		resp.headers["X-Next-Cursor"] = next;
+	}
+	return resp;
+}
+
 function set_etag_header(resp, body) {
 	let etag = compute_etag(body);
 	if (etag == null) return resp;
@@ -296,7 +338,7 @@ function make(resource, opts) {
 			if (want_managed == "false" && r.managed) return;
 			push(out, r);
 		});
-		return errors.ok(ctx, out);
+		return paginate(ctx, out, query);
 	}
 
 	function get_one(conn, ctx, id) {
@@ -542,7 +584,7 @@ function make_collection(resource) {
 	}
 
 	function list(conn, ctx, query) {
-		return errors.ok(ctx, resource.list_fn(conn, query));
+		return paginate(ctx, resource.list_fn(conn, query), query);
 	}
 
 	function get_one(conn, ctx, id) {
