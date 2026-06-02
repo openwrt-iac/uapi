@@ -1,6 +1,6 @@
 let fs = require('fs');
 let errors = require('errors');
-let transaction = require('transaction');
+let non_uci = require('non_uci');
 
 const PKG_NAME_RE  = /^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$/;
 const FEED_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
@@ -17,10 +17,8 @@ function apk_exec(args) {
 }
 
 function audit_apk_failure(ctx, action, name, r) {
-	let log = require('log');
-	log.syslog(log.LOG_WARNING,
-		sprintf("uapi-pkg-failure %s action=%s name=%J exit=%d output=%J",
-			ctx.request_id, action, name, r.exit_code, r.output));
+	non_uci.audit_warning(ctx, "pkg-failure",
+		{ action: action, name: name, exit: r.exit_code, output: r.output });
 }
 
 function list_installed() {
@@ -95,14 +93,12 @@ function install_handler(ctx, body) {
 			[errors.field_error("name", "invalid_format",
 			                    "must match ^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$")]);
 
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let exec = apk_exec(sprintf("add -- %s", name));
 		return { ok: exec.ok, exec: exec };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
+	});
+	if (lr.envelope) return lr.envelope;
+	let r = lr.result;
 	if (!r.exec.ok) {
 		audit_apk_failure(ctx, "install", name, r.exec);
 		return errors.error(ctx, "internal_error",
@@ -122,14 +118,12 @@ function remove_handler(ctx, name) {
 	if (!info_one(name))
 		return errors.error(ctx, "not_found", sprintf("package %J is not installed", name));
 
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let exec = apk_exec(sprintf("del -- %s", name));
 		return { ok: exec.ok, exec: exec };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
+	});
+	if (lr.envelope) return lr.envelope;
+	let r = lr.result;
 	if (!r.exec.ok) {
 		audit_apk_failure(ctx, "remove", name, r.exec);
 		return errors.error(ctx, "internal_error",
@@ -194,7 +188,7 @@ function create_feed_handler(ctx, body) {
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
 
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let path = feed_path(name);
 		if (fs.stat(path) != null) return { ok: false, kind: "conflict" };
 		// O_EXCL: if a concurrent writer created the file between the stat
@@ -211,17 +205,12 @@ function create_feed_handler(ctx, body) {
 		let upd = apk_exec("update");
 		return { ok: true, update_ok: upd.ok, update_output: upd.output,
 		         update_exit: upd.exit_code };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "conflict")
-		return errors.error(ctx, "conflict",
-			sprintf("feed %J already exists", name));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error",
-			sprintf("could not create feed %J", name));
+	}, {
+		conflict: sprintf("feed %J already exists", name),
+		io_error: sprintf("could not create feed %J", name),
+	});
+	if (lr.envelope) return lr.envelope;
+	let r = lr.result;
 
 	let update_status = "ok";
 	if (!r.update_ok) {
@@ -243,21 +232,16 @@ function remove_feed_handler(ctx, id) {
 		return errors.error(ctx, "not_found",
 			sprintf("feed %J not found", id));
 
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		if (fs.stat(path) == null) return { ok: false, kind: "gone" };
 		if (!fs.unlink(path)) return { ok: false, kind: "io_error" };
 		apk_exec("update");
 		return { ok: true };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "gone")
-		return errors.error(ctx, "not_found", sprintf("feed %J vanished", id));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error",
-			sprintf("could not remove feed %J", id));
+	}, {
+		gone:     sprintf("feed %J vanished", id),
+		io_error: sprintf("could not remove feed %J", id),
+	});
+	if (lr.envelope) return lr.envelope;
 	return errors.no_content(ctx);
 }
 

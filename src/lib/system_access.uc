@@ -1,7 +1,6 @@
 let fs = require('fs');
 let errors = require('errors');
-let transaction = require('transaction');
-let log = require('log');
+let non_uci = require('non_uci');
 
 const KEYS_PATH = "/etc/dropbear/authorized_keys";
 const USER_RE = /^(root|[a-z][a-z0-9_-]*)$/;
@@ -42,14 +41,11 @@ const VALID_KEY_TYPES = {
 };
 
 function audit_password(ctx, user) {
-	log.syslog(log.LOG_NOTICE,
-		sprintf("uapi-passwd-set %s user=%J", ctx.request_id, user));
+	non_uci.audit_notice(ctx, "passwd-set", { user: user });
 }
 
 function audit_passwd_failure(ctx, user, exit_code) {
-	log.syslog(log.LOG_WARNING,
-		sprintf("uapi-passwd-failure %s user=%J exit=%d",
-			ctx.request_id, user, exit_code));
+	non_uci.audit_warning(ctx, "passwd-failure", { user: user, exit: exit_code });
 }
 
 function set_password(ctx, body) {
@@ -83,7 +79,7 @@ function set_password(ctx, body) {
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
 
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let cmd = sprintf("/bin/busybox passwd %s >/dev/null 2>&1", user);
 		let p = fs.popen(cmd, "w");
 		if (p == null) return { ok: false, kind: "io_error" };
@@ -91,13 +87,9 @@ function set_password(ctx, body) {
 		p.write(pw + "\n");
 		let exit = p.close();
 		return { ok: exit == 0, exit_code: exit };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error", "could not exec passwd(1)");
+	}, { io_error: "could not exec passwd(1)" });
+	if (lr.envelope) return lr.envelope;
+	let r = lr.result;
 	if (!r.ok) {
 		audit_passwd_failure(ctx, user, r.exit_code);
 		return errors.error(ctx, "internal_error",
@@ -212,7 +204,7 @@ function add_key(ctx, body) {
 		return errors.validation_failed(ctx, [errors.field_error("key", "invalid_format",
 			sprintf("must be a valid SSH public key (allowed types: %s)",
 				join(", ", keys(VALID_KEY_TYPES))))]);
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let existing = read_keys();
 		for (let k in existing)
 			if (k.id == parsed.id)
@@ -220,17 +212,11 @@ function add_key(ctx, body) {
 		push(existing, parsed);
 		if (!write_keys(existing)) return { ok: false, kind: "io_error" };
 		return { ok: true };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "conflict")
-		return errors.error(ctx, "conflict",
-			sprintf("key %s already present", parsed.id));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error",
-			sprintf("could not write %s", KEYS_PATH));
+	}, {
+		conflict: sprintf("key %s already present", parsed.id),
+		io_error: sprintf("could not write %s", KEYS_PATH),
+	});
+	if (lr.envelope) return lr.envelope;
 	return errors.ok(ctx, key_view(parsed));
 }
 
@@ -257,17 +243,11 @@ function replace_keys(ctx, body) {
 		seen[k.id] = true;
 		push(final, k);
 	}
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		if (!write_keys(final)) return { ok: false, kind: "io_error" };
 		return { ok: true };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error",
-			sprintf("could not write %s", KEYS_PATH));
+	}, { io_error: sprintf("could not write %s", KEYS_PATH) });
+	if (lr.envelope) return lr.envelope;
 	let view = [];
 	for (let k in final) push(view, key_view(k));
 	return errors.ok(ctx, view);
@@ -276,7 +256,7 @@ function replace_keys(ctx, body) {
 function remove_key(ctx, id) {
 	if (!match(id, KEY_ID_RE))
 		return errors.error(ctx, "not_found", sprintf("invalid key id %J", id));
-	let r = transaction.with_lock({ fn: function() {
+	let lr = non_uci.with_lock_translated(ctx, function() {
 		let existing = read_keys();
 		let kept = [];
 		let found = false;
@@ -287,16 +267,11 @@ function remove_key(ctx, id) {
 		if (!found) return { ok: false, kind: "not_found" };
 		if (!write_keys(kept)) return { ok: false, kind: "io_error" };
 		return { ok: true };
-	}});
-	if (r.kind == "locked") return errors.locked(ctx);
-	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
-	if (r.kind == "not_found")
-		return errors.error(ctx, "not_found", sprintf("no key with id %J", id));
-	if (r.kind == "io_error")
-		return errors.error(ctx, "internal_error",
-			sprintf("could not write %s", KEYS_PATH));
+	}, {
+		not_found: sprintf("no key with id %J", id),
+		io_error:  sprintf("could not write %s", KEYS_PATH),
+	});
+	if (lr.envelope) return lr.envelope;
 	return errors.no_content(ctx);
 }
 
