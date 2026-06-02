@@ -242,8 +242,21 @@ function multi_transaction(conn, params) {
 			for (let pkg in sorted) conn.uci_revert(pkg);
 			result = inner ?? { ok: false, kind: "unknown" };
 		} else {
-			for (let pkg in sorted) conn.uci_commit(pkg);
-			let reload_err = reload(services);
+			// Commit each package, but capture the first failure so we can
+			// still attempt a restore on every package (committed or not).
+			// Without this, a mid-loop commit throw leaves earlier packages
+			// committed and breaks the across-packages atomicity contract.
+			let commit_err = null;
+			for (let pkg in sorted) {
+				let caught_commit = null;
+				try { conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
+				if (caught_commit != null) {
+					commit_err = sprintf("uci_commit(%s) failed: %s",
+					                     pkg, caught_commit);
+					break;
+				}
+			}
+			let reload_err = (commit_err == null) ? reload(services) : commit_err;
 			if (reload_err == null) {
 				result = { ok: true, body: inner.body ?? inner };
 			} else {

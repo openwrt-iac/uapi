@@ -26,6 +26,10 @@ function _read_state(token_id) {
 	f.close();
 	let parts = split(trim(line), " ");
 	if (length(parts) != 2) return null;
+	// File could be corrupted (truncated write, manual edit) - require digit
+	// shapes before parsing so we don't accept NaN and lock the token out.
+	if (!match(parts[0], /^-?[0-9]+(\.[0-9]+)?$/)) return null;
+	if (!match(parts[1], /^-?[0-9]+$/)) return null;
 	let tokens = +parts[0];
 	let last_ms = +parts[1];
 	if (type(tokens) != "double" && type(tokens) != "int") return null;

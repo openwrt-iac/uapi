@@ -184,16 +184,15 @@ function subsumes(outer_scopes, inner_scope) {
 		}
 		return false;
 	}
-	// For concrete or partial-wildcard inner scopes, the rule is: there must
-	// exist some outer scope whose segment-path is a prefix of inner's, with
-	// a verb that covers inner's verb. We rely on `permits()`'s own
-	// resolution to handle deepest-wins correctly: a token granting
-	// `firewall:ro` should not subsume `firewall:rules:rw`. Replace any
-	// wildcard segment in inner with a concrete probe segment for the check
-	// (probe value doesn't matter because outer can only match it via `*`).
+	// For concrete or partial-wildcard inner scopes: there must exist some
+	// outer scope whose segment-path is a prefix of inner's, with a verb
+	// that covers inner's verb. permits() handles deepest-wins resolution
+	// for us. Wildcard inner segments are replaced with a sentinel that
+	// cannot appear in any valid scope (SEGMENT_RE rejects "?"), so only an
+	// outer `*` segment matches it.
 	let probe = [];
 	for (let seg in p.segments)
-		push(probe, seg == "*" ? "__probe__" : seg);
+		push(probe, seg == "*" ? "?" : seg);
 	return permits(outer_scopes, probe, p.verb);
 }
 

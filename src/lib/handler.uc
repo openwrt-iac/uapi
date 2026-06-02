@@ -29,6 +29,19 @@ function _hash(s) {
 // ETag so the dependent's ETag changes when a referenced zone (etc.) changes.
 // The cache lives on ctx (._dep_cache) so a list of N rules depending on
 // firewall:zones costs O(zones) once, not O(zones * rules).
+// Canonical serialization of a uci section: keys sorted lexicographically so
+// the hash is stable across runs that may load options in different insertion
+// order (which can happen across uci_import).
+function _canon_section(s) {
+	if (type(s) != "object") return sprintf("%J", s);
+	let keys = [];
+	for (let k in s) push(keys, k);
+	sort(keys);
+	let pieces = [];
+	for (let k in keys) push(pieces, sprintf("%J:%J", k, s[k]));
+	return "{" + join(",", pieces) + "}";
+}
+
 function _deps_hash(ctx, conn, depends_on) {
 	if (depends_on == null || type(depends_on) != "array" || length(depends_on) == 0)
 		return "";
@@ -46,7 +59,7 @@ function _deps_hash(ctx, conn, depends_on) {
 		try {
 			conn.uci_foreach(pkg, null, function(s) {
 				if (s['.type'] != dep_type) return;
-				push(body_lines, sprintf("%J", s));
+				push(body_lines, _canon_section(s));
 			});
 		} catch (_) {}
 		sort(body_lines);
@@ -86,8 +99,12 @@ const CURSOR_RE = /^c_[A-Za-z0-9_-]+$/;
 function paginate(ctx, items, query) {
 	let limit = DEFAULT_LIMIT;
 	if (query != null && query.limit != null) {
-		let n = +query.limit;
-		if (type(n) != "int" && type(n) != "double") n = int(query.limit);
+		// Force int conversion: `+s` accepts trailing junk and returns NaN
+		// silently. Require digit-only input via the regex, then int().
+		if (type(query.limit) != "string" || !match(query.limit, /^[1-9][0-9]{0,4}$/))
+			return errors.error(ctx, "bad_request",
+				sprintf("limit must be a positive integer 1..%d", MAX_LIMIT));
+		let n = int(query.limit);
 		if (n < 1 || n > MAX_LIMIT)
 			return errors.error(ctx, "bad_request",
 				sprintf("limit must be between 1 and %d", MAX_LIMIT));
@@ -368,6 +385,21 @@ function make(resource, opts) {
 		return p;
 	}
 
+	// Replace the ETag on a write-success response with one that includes the
+	// resource's depends_on hash, so the create/replace/patch ETag matches the
+	// next GET on the same resource. translate_tx can't do this itself (no
+	// conn access).
+	function _etag_with_deps(resp, conn, ctx) {
+		if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
+		if (resp.body == null) return resp;
+		if (resource.depends_on == null) return resp;
+		let dh = _deps_hash(ctx, conn, resource.depends_on);
+		if (dh == "") return resp;
+		if (resp.headers == null) resp.headers = {};
+		resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
+		return resp;
+	}
+
 	function list(conn, ctx, query) {
 		let want_managed = query.managed;
 		let out = [];
@@ -410,7 +442,8 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		let resp = translate_tx(ctx, result);
+		return _etag_with_deps(resp, conn, ctx);
 	}
 
 	function replace(conn, ctx, id, body) {
@@ -447,7 +480,8 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		let resp = translate_tx(ctx, result);
+		return _etag_with_deps(resp, conn, ctx);
 	}
 
 	function patch(conn, ctx, id, body) {
@@ -511,7 +545,8 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		let resp = translate_tx(ctx, result);
+		return _etag_with_deps(resp, conn, ctx);
 	}
 
 	function remove(conn, ctx, id) {
@@ -575,6 +610,17 @@ function make_singleton(resource, opts) {
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;
+	}
+
+	function _etag_with_deps(resp, conn, ctx) {
+		if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
+		if (resp.body == null) return resp;
+		if (resource.depends_on == null) return resp;
+		let dh = _deps_hash(ctx, conn, resource.depends_on);
+		if (dh == "") return resp;
+		if (resp.headers == null) resp.headers = {};
+		resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
+		return resp;
 	}
 
 	function find(conn) {
@@ -651,7 +697,8 @@ function make_singleton(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		let resp = translate_tx(ctx, result);
+		return _etag_with_deps(resp, conn, ctx);
 	}
 
 	return { get, patch };

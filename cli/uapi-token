@@ -8,6 +8,7 @@ import * as fs from 'fs';
 let uci_mod = require('uci');
 let digest = require('digest');
 let scope = require('scope');
+let values = require('values');
 
 const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
@@ -82,6 +83,14 @@ function cmd_create(opts) {
 
 	if (!opts.force)
 		for (let s in opts.scopes) scope.validate_against_known_tree(s);
+
+	// Reject malformed --allowed-cidr at mint time. Otherwise a typo silently
+	// produces a token that denies every request with `ip_not_permitted` and
+	// the operator has no signal what went wrong.
+	for (let c in opts.allowed_cidrs) {
+		if (!values.is_valid_cidr(c))
+			die(sprintf("uapi-token create: %J is not a valid IPv4 CIDR", c));
+	}
 
 	ensure_package();
 	let cursor = uci_mod.cursor();

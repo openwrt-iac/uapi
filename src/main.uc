@@ -391,13 +391,26 @@ function if_none_match_matches(if_none_match, current_etag) {
 // clients create resources.
 function path_template(method, parts) {
 	if (length(parts) == 0) return "/";
-	let out = ["/" + parts[0]];
+	let top = parts[0];
+	// Top-level resources whose second segment is the resource id (not a
+	// sub-resource name). Adding tokens/auth here collapses /tokens/<id> and
+	// /auth/<thing> into one metric series instead of one per id.
+	if (top == "tokens") {
+		if (length(parts) == 1) return "/tokens";
+		return "/tokens/:id";
+	}
+	if (top == "auth") {
+		if (length(parts) == 1) return "/auth";
+		if (parts[1] == "whoami") return "/auth/whoami";
+		return "/auth/:id";
+	}
+	let out = ["/" + top];
 	for (let i = 1; i < length(parts); i++) {
 		let p = parts[i];
-		if (i == 1 && (parts[0] == "raw" || parts[0] == "schema")) {
+		if (i == 1 && (top == "raw" || top == "schema")) {
 			// /raw/:package/:id, /schema/:package/:resource
 			push(out, p);
-		} else if (p == "adopt" || p == "whoami" || p == "installed" || p == "feeds"
+		} else if (p == "adopt" || p == "installed" || p == "feeds"
 			   || p == "password" || p == "authorized_keys") {
 			push(out, p);
 		} else if (i >= 2) {
