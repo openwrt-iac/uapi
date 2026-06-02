@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install uapi - signed APK feed</title>
+<meta name="description" content="Install uapi from the signed APK feed for OpenWrt 25.12+.">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="container">
+    <div class="brand"><a href="../" style="color:inherit;border:none;">uapi</a></div>
+    <h1>Install uapi</h1>
+    <p class="lede">
+      The signed APK feed for OpenWrt 25.12+. Run these on your router as root.
+    </p>
+  </div>
+</header>
+
+<section class="quickstart">
+  <div class="container">
+    <h2>Three steps</h2>
+    <ol>
+      <li>
+        <strong>Trust the feed signing key</strong>
+<pre><code>curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem \
+    | tee /etc/apk/keys/uapi-feed.pub.pem &gt; /dev/null</code></pre>
+      </li>
+
+      <li>
+        <strong>Add the feed</strong>
+<pre><code>echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' \
+    &gt; /etc/apk/repositories.d/uapi.list
+apk update</code></pre>
+      </li>
+
+      <li>
+        <strong>Install</strong>
+<pre><code>apk add uapi</code></pre>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>What just happened</h2>
+    <p>
+      uapi installed under <code>/usr/share/uapi/</code>, registered
+      <code>/api/v1=/usr/share/uapi/main.uc</code> with uhttpd's
+      <code>main</code> instance, and restarted uhttpd. The token store
+      lives at <code>/etc/config/uapi</code> (a conffile - preserved across
+      upgrades).
+    </p>
+    <p>
+      Mint a token and try the API:
+    </p>
+<pre><code>uapi-token create --name first-token --scope '*:rw'
+# (the cleartext token is printed once - copy it)
+
+curl -H "Authorization: Bearer &lt;token&gt;" \
+     https://&lt;router&gt;/api/v1/system</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>Upgrades and rollback</h2>
+    <p>
+      <code>apk upgrade uapi</code> picks up new versions from this feed.
+      The token store is preserved. To pin a specific version:
+      <code>apk add uapi=2.0.0-r1</code>.
+    </p>
+    <p>
+      Past versions stay on the feed indefinitely - you can downgrade if
+      a release breaks something for your config. See
+      <a href="https://github.com/raspbeguy/uapi/blob/main/CHANGELOG.md">CHANGELOG</a>
+      for per-release breaking-change notes.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>Feed contents</h2>
+    <ul class="docs-list">
+      <li><a href="../uapi-feed.pub.pem">uapi-feed.pub.pem</a> - feed signing key (RSA-4096, PEM-encoded)</li>
+      <li><a href="../packages/all/uapi/">packages/all/uapi/</a> - APK files + signed index</li>
+      <li><a href="https://github.com/raspbeguy/uapi">github.com/raspbeguy/uapi</a> - source, issues, releases</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>
+      <a href="../">&larr; back to project home</a>
+      - <a href="https://github.com/raspbeguy/uapi">github</a>
+      - MIT licensed
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

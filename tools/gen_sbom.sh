@@ -1,5 +1,5 @@
 #!/bin/sh
-# gen_sbom.sh — emit SPDX 2.3 SBOM for the staged uapi package.
+# gen_sbom.sh - emit SPDX 2.3 SBOM for the staged uapi package.
 #
 # Usage:
 #   tools/gen_sbom.sh <staging-dir> [--version <X.Y.Z>] [--apk <built.apk>] > sbom.spdx.json
