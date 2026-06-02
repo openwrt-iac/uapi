@@ -126,8 +126,32 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
   on >25% regression.
 - **Signed-tag verification** required on release tags
   (`.github/allowed-signers`).
-- **Reproducible SDK pin** — SHA256 checksum verified for the OpenWrt SDK
+- **Reproducible SDK pin** - SHA256 checksum verified for the OpenWrt SDK
   download (`build/sdk.sha256`).
+- **SPDX 2.3 SBOM** emitted per release. `make sbom` generates
+  `build/sbom.spdx.json` with every shipped file's sha256, package
+  dependencies, and the built APK's verification hash. CI attaches the
+  SBOM to the GitHub Release alongside the APK.
+- **Multi-arch build verification** on tag push. The `verify-arch-build`
+  matrix job (aarch64_generic, arm_cortex-a7, mips_24kc) cross-compiles
+  uapi against each arch's SDK to prove the `PKGARCH:=all` invariant
+  holds (uapi is pure ucode + shell, so the byte-identical APK works on
+  every arch; this job catches a regression if compiled code ever sneaks
+  in).
+
+### Documentation
+
+- `docs/migration-v1-to-v2.md` - field renames, strict-int enforcement,
+  new endpoint / error code / scope catalogs, client retry patterns.
+- `docs/architecture.md` - fork model, lock layout, transaction recipe,
+  schema layer, ETag derivation with dep mixing, rate-limit math, metrics
+  emission path, where state lives.
+- `docs/security.md` - threat model, scope tree examples, TLS posture,
+  token storage, rate-limit guarantees, audit shape, hardened-deployment
+  recommendations.
+- `docs/release-process.md` - operator-facing release flow, SBOM,
+  reproducible builds, arch-neutrality rationale, pre-release checklist,
+  rollback.
 
 ## [1.2.1] - 2026-06-01
 

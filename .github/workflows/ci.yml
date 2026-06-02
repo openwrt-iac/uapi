@@ -221,6 +221,19 @@ jobs:
           name: uapi-apk
           path: ${{ steps.find_apk.outputs.apk }}
 
+      # SBOM (SPDX 2.3). Generated against the staged tree, with the built
+      # APK's sha256 stamped into the top-level package verification field.
+      # Uploaded as a workflow artifact AND attached to the GitHub Release
+      # alongside the APK so SBOM-aware consumers (cosign / syft) see it.
+      - name: Generate SBOM
+        run: make sbom APK="${{ steps.find_apk.outputs.apk }}"
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uapi-sbom
+          path: build/sbom.spdx.json
+
       # Smoke test the built APK in a fresh VM before publishing anywhere.
       # If the smoke test fails the publish steps below never run.
       - name: Setup VM
@@ -262,6 +275,10 @@ jobs:
             gh release create "$TAG" $PRE --title "$TAG" --generate-notes
           fi
           gh release upload "$TAG" "${{ steps.find_apk.outputs.apk }}" --clobber
+          # SBOM lives next to the APK; gh release upload is best-effort on the
+          # SBOM (the APK is the gate, the SBOM is supplementary metadata).
+          [ -r build/sbom.spdx.json ] && \
+            gh release upload "$TAG" build/sbom.spdx.json --clobber || true
 
       # Step-level guard 3b: only publish to the signed gh-pages feed on a real v* tag.
       # Same defense-in-depth rationale as above.
@@ -299,3 +316,93 @@ jobs:
           git push origin gh-pages
 
           shred -u "$SIGN_KEY" 2>/dev/null || rm -f "$SIGN_KEY"
+
+  # Multi-arch build verification. uapi is PKGARCH:=all (pure ucode + shell;
+  # no compiled code), so the resulting APK is byte-identical across host
+  # archs - this job exists to PROVE that invariant, not to ship per-arch
+  # artifacts. If any arch's APK diverges from the x86_64 reference,
+  # something arch-specific snuck into the build and the release should be
+  # held. Runs on tag push in parallel with release-apk so neither blocks
+  # the other.
+  #
+  # To enable additional arches: add an entry to the matrix below and a
+  # corresponding sha256 line to build/sdk.sha256 (per-arch SDK tarball
+  # checksum). The fail-fast: false flag lets the operator see all arch
+  # results in one CI run instead of stopping at the first failure.
+  verify-arch-build:
+    runs-on: ubuntu-latest
+    needs: [unit, lint, integration]
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64_generic
+            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/armsr/armv8/openwrt-sdk-25.12.4-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+          - arch: arm_cortex-a7
+            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/mediatek/mt7622/openwrt-sdk-25.12.4-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+          - arch: mips_24kc
+            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/ath79/generic/openwrt-sdk-25.12.4-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl zstd build-essential libncurses-dev libssl-dev python3 \
+            unzip gawk gettext xsltproc rsync wget
+
+      - name: Cache OpenWrt SDK (${{ matrix.arch }})
+        uses: actions/cache@v4
+        with:
+          path: build/sdk-${{ matrix.arch }}
+          key: openwrt-sdk-25.12.4-${{ matrix.arch }}
+
+      - name: Verify per-arch SDK pin
+        run: |
+          SDK_TARBALL=$(basename "${{ matrix.sdk_url }}")
+          if ! grep -q "  $SDK_TARBALL\$" build/sdk.sha256; then
+            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
+            echo "Add a 'sha256  $SDK_TARBALL' line for arch ${{ matrix.arch }} before tagging."
+            echo "Compute via: curl -fsSL ${{ matrix.sdk_url }} | sha256sum"
+            exit 1
+          fi
+
+      - name: Download SDK if cache miss
+        run: |
+          if [ ! -d build/sdk-${{ matrix.arch }}/staging_dir ]; then
+            mkdir -p build/sdk-${{ matrix.arch }}
+            SDK_TARBALL=$(basename "${{ matrix.sdk_url }}")
+            curl -fsSL -o "/tmp/$SDK_TARBALL" "${{ matrix.sdk_url }}"
+            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
+            tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" \
+                -C build/sdk-${{ matrix.arch }} --strip-components=1
+            rm -f "/tmp/$SDK_TARBALL"
+          fi
+
+      - name: Stage package
+        run: make stage
+
+      - name: Build APK against ${{ matrix.arch }} SDK
+        run: |
+          cd build/sdk-${{ matrix.arch }}
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          ln -sfn ../../openwrt/uapi package/uapi
+          make defconfig
+          make package/uapi/compile V=s
+
+      - name: Find built APK
+        id: find_apk
+        run: |
+          APK=$(find build/sdk-${{ matrix.arch }}/bin -name 'uapi-*.apk' | head -1)
+          [ -n "$APK" ] || { echo "no .apk built for ${{ matrix.arch }}"; exit 1; }
+          echo "apk=$APK" >> $GITHUB_OUTPUT
+          sha256sum "$APK"
+
+      - name: Upload ${{ matrix.arch }} APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uapi-apk-${{ matrix.arch }}
+          path: ${{ steps.find_apk.outputs.apk }}

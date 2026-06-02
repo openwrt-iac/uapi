@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration coverage bench soak lint lint-emdash lint-syntax openapi openapi-check stage vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration coverage bench soak lint lint-emdash lint-syntax openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -16,6 +16,7 @@ help:
 	@echo "  lint-syntax        ucode -c on all .uc files"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
+	@echo "  sbom               emit SPDX 2.3 SBOM (build/sbom.spdx.json); APK=<path> attaches built APK sha256"
 	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.4 QEMU VM"
 
 test: lint test-unit
@@ -62,6 +63,13 @@ stage:
 	@chmod +x build/openwrt/uapi/files/usr/bin/uapi-token \
 	          build/openwrt/uapi/files/etc/uci-defaults/99-uapi
 	@echo "staged to build/openwrt/uapi/files/"
+
+# Emit an SPDX 2.3 SBOM for the staged package.
+# APK=<path> attaches the built artifact's sha256 + size to the package
+# verification fields; omit if you're just SBOM'ing the staged tree.
+sbom: stage
+	@tools/gen_sbom.sh build/openwrt/uapi/files $(if $(APK),--apk $(APK)) > build/sbom.spdx.json
+	@echo "wrote build/sbom.spdx.json ($$(wc -c < build/sbom.spdx.json) bytes)"
 
 vm-setup:
 	@tests/vm/setup.sh
