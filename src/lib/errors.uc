@@ -51,13 +51,8 @@ function base_headers(ctx) {
 	return {
 		"Content-Type": "application/json",
 		"X-Request-Id": ctx.request_id,
-		// Security defaults applied to every response.
-		// HSTS: 1 year, includeSubDomains. The endpoint is meant for IaC over TLS;
-		//   plain HTTP is only accepted on loopback or under the .insecure marker,
-		//   neither of which sets this header (browsers in those cases are unusual).
-		// nosniff: API responses are JSON; never let a confused client guess HTML.
-		// no-referrer: the X-Request-Id appears in URLs of audit logs; don't leak.
-		// no-store: API responses carry token-scoped data; don't cache.
+		// HSTS, nosniff, no-referrer (request_id leaks in URLs), no-store
+		// (token-scoped data). Standard OWASP defaults for an API.
 		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 		"X-Content-Type-Options": "nosniff",
 		"Referrer-Policy": "no-referrer",

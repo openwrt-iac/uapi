@@ -15,9 +15,7 @@ try { _digest = require('digest'); } catch (_) {}
 function _fp_inputs(token_name, key, body_text) {
 	let payload = (token_name ?? "-") + "|" + key + "|" + (body_text ?? "");
 	if (_digest != null) return _digest.sha256(payload);
-	// Fallback for test environments. Not cryptographic; the worst case is
-	// two clients with no digest module thinking they share an entry, which
-	// only matters in tests.
+	// Non-crypto fallback for test environments lacking ucode-mod-digest.
 	let h1 = 5381, h2 = 7919;
 	for (let i = 0; i < length(payload); i++) {
 		let c = ord(substr(payload, i, 1));

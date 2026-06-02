@@ -19,10 +19,7 @@ let ratelimit = require("ratelimit");
 let metrics = require("metrics");
 let idempotency = require("idempotency");
 
-// RESOURCE_SOURCES retains the raw resource modules (with .schema_properties,
-// .package, .type) for the /schema/<...> endpoint. The handler wrappers in
-// RESOURCES/SINGLETONS do not expose these fields, so we keep a parallel map
-// populated by load_resource at construction time.
+// /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
 
 function load_resource(key, file) {
@@ -72,12 +69,9 @@ const SINGLETONS = {
 	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
 };
 
-// BARE variants run inside an outer multi_transaction's lock+commit (for the
-// /batch endpoint). They reuse the same resource modules but pass
-// `tx: { bare: true }` so each create/patch/replace/remove call skips its
-// own per-package flock, snapshot, commit, and reload.
-// Read-only collections (dhcp:leases, dhcp:leases6) are write-incapable and
-// excluded from batch.
+// BARE variants run inside /batch's outer multi_transaction (skip own lock,
+// snapshot, commit, reload). Read-only collections have no toUci and are
+// excluded.
 const BARE_RESOURCES = {};
 const BARE_SINGLETONS = {};
 for (let k in RESOURCE_SOURCES) {
@@ -459,7 +453,6 @@ function batch_run_one(conn, sub_ctx, scopes, op) {
 	let domain = parts[0] ?? "";
 	let sub = length(parts) >= 2 ? parts[1] : null;
 	let m = op.method;
-	// Per-sub scope check uses the same logic the top-level dispatch uses.
 	let scope_path = sub != null ? [domain, sub] : [domain];
 	if (!scope.permits(scopes, scope_path, method_verb(m)))
 		return errors.error(sub_ctx, "insufficient_scope",
@@ -499,7 +492,7 @@ function _is_write_method(m) {
 	return m == "POST" || m == "PUT" || m == "PATCH" || m == "DELETE";
 }
 
-function batch_dispatch(env, conn, ctx, token, method, body) {
+function batch_dispatch(conn, ctx, token, method, body) {
 	if (method != "POST")
 		return errors.error(ctx, "method_not_allowed", "batch only supports POST");
 	if (type(body) != "object" || type(body.operations) != "array")
@@ -511,10 +504,8 @@ function batch_dispatch(env, conn, ctx, token, method, body) {
 	if (length(ops) > 50)
 		return errors.error(ctx, "bad_request", "operations capped at 50");
 
-	// Pre-resolve every sub-request's target so we know which packages to
-	// lock and which reload services to run, and so a typo aborts before any
-	// state changes. Only WRITE ops contribute to the lock/reload set; an
-	// all-reads batch acquires nothing and reloads nothing.
+	// Pre-resolve targets up-front: a typo aborts before any lock is taken.
+	// Only WRITE ops contribute to the lock/reload set.
 	let packages_seen = {}, reload_seen = {};
 	for (let i = 0; i < length(ops); i++) {
 		let op = ops[i];
@@ -565,10 +556,8 @@ function batch_dispatch(env, conn, ctx, token, method, body) {
 	if (aborted != null) {
 		return {
 			status: aborted.envelope.status,
-			headers: errors.new_context(ctx.request_id) != null
-			         ? { "Content-Type": "application/json",
-			             "X-Request-Id": ctx.request_id }
-			         : {},
+			headers: { "Content-Type": "application/json",
+			           "X-Request-Id": ctx.request_id },
 			body: {
 				code: "batch_partial_failure",
 				message: sprintf("batch aborted at index %d; all changes reverted",
@@ -651,12 +640,9 @@ function maybe_304(resp, ctx) {
 }
 
 function dispatch(env) {
-	// uhttpd's CGI env has a hard-coded HTTP_* allowlist (see env_strings[]
-	// in uhttpd source): If-Match, If-None-Match, and X-Request-Id are not
-	// in it, so env.HTTP_* is unreliable for these. Each one falls back to
-	// a query parameter (?if_match=, ?if_none_match=, ?request_id=) that
-	// uhttpd forwards verbatim via QUERY_STRING. A reverse proxy in front
-	// of uhttpd that propagates the headers still works via the header path.
+	// uhttpd's CGI env drops If-Match/If-None-Match/X-Request-Id/Idempotency-Key.
+	// Fall back to query params; reverse proxies that forward the headers still
+	// work via the header path.
 	let qs = parse_query(env.QUERY_STRING);
 	let inbound_rid = env.HTTP_X_REQUEST_ID ?? qs.request_id ?? null;
 	let ctx = errors.new_context(inbound_rid);
@@ -754,13 +740,12 @@ function dispatch(env) {
 	try { token_store.update_last_used(conn, token.name, env.REMOTE_ADDR, now_epoch); }
 	catch (_) {}
 
-	// Rate limit. Defaults are generous (100 req/s, burst 200) so this only
-	// fires under abuse. /metrics and /healthz are NOT exempt - a runaway
-	// scraper deserves the same treatment.
-	let rl_global = ratelimit.load_config(conn);
+	// Rate limit. Per-token rate/burst (uci options on the token section)
+	// override the global config defaults from /etc/config/uapi.
+	let rl_eff = ratelimit.effective_limits(ratelimit.load_config(conn), token);
 	let rl = ratelimit.check(token.name, { now: now_epoch,
-	                                       rate: rl_global.rate,
-	                                       burst: rl_global.burst });
+	                                       rate: rl_eff.rate,
+	                                       burst: rl_eff.burst });
 	if (!rl.allowed) {
 		try { metrics.record_rate_limit_drop(token.name); } catch (_) {}
 		let resp = errors.error(ctx, "too_many_requests",
@@ -814,7 +799,7 @@ function dispatch(env) {
 	}
 
 	if (path == "/batch") {
-		return { ctx, token, resp: batch_dispatch(env, conn, ctx, token, method, body) };
+		return { ctx, token, resp: batch_dispatch(conn, ctx, token, method, body) };
 	}
 
 	if (path == "/diagnostics") {
@@ -1049,8 +1034,6 @@ global.handle_request = function(env) {
 		catch (_) {}
 	}
 
-	// Per-request metrics. Wrapped so a metrics-storage failure can never
-	// crash the request path.
 	try { record_metrics_for(method, path, resp.status, duration_ms); } catch (_) {}
 	if (resp.status == 422 && resp.body != null && type(resp.body) == "object"
 	    && type(resp.body.errors) == "array") {

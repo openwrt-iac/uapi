@@ -57,6 +57,8 @@ function _read_record(s, include_secret) {
 		allowed_cidrs: cidrs,
 		last_used_at: values.as_int(s.last_used_at),
 		last_used_ip: s.last_used_ip ?? null,
+		rate: values.as_int(s.rate),
+		burst: values.as_int(s.burst),
 	};
 	if (include_secret) {
 		rec.salt = s.salt;
@@ -91,8 +93,7 @@ function get_public(conn, name) {
 }
 
 function _ensure_uapi_file(conn) {
-	// uci needs the package file to exist before commit; on fresh routers without
-	// any tokens minted the conffile may still be empty - touch it.
+	// uci requires the package file before commit; touch it if absent.
 	let path = "/etc/config/" + PACKAGE;
 	if (fs.stat(path) == null) {
 		let f = fs.open(path, "w");

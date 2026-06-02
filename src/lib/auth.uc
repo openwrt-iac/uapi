@@ -46,6 +46,8 @@ function authorize(tokens, authorization_header, hash_fn, req) {
 			allowed_cidrs: cidrs,
 			last_used_at: t.last_used_at ?? null,
 			last_used_ip: t.last_used_ip ?? null,
+			rate: t.rate ?? null,
+			burst: t.burst ?? null,
 		} };
 	}
 	return { ok: false, kind: "invalid_token", reason: "no_match" };

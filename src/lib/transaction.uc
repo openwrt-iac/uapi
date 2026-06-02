@@ -21,13 +21,10 @@ const PKG_LOCK_PREFIX = "/var/lock/uapi.pkg.";
 // /^[A-Za-z0-9_-]+$/ before we let them anywhere near a shell command or path.
 const SAFE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
-// Pre-flight: confirm every init script we're about to reload actually exists.
-// Without this check, a write against a uci section whose daemon isn't installed
-// (e.g. POST /sqm/queues on a router without sqm-scripts) would stage + commit,
-// fail the first reload with exit 127, succeed the snapshot-restore, then fail
-// the SECOND reload with the same exit 127, and surface as `reload_failed_unrecovered`.
-// The uci state IS restored fine; only the reload couldn't run. Fail-fast here so
-// the caller gets an honest `init_script_missing` (503) before any uci write.
+// Fail-fast before any uci write if a target init script is missing. The
+// alternative path stages+commits, fails reload with exit 127, fails the
+// restore-reload identically, and reports `reload_failed_unrecovered` -
+// misleading since uci IS in a clean state.
 function default_check_services(services) {
 	for (let svc in services) {
 		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))

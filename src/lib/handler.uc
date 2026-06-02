@@ -24,14 +24,9 @@ function _hash(s) {
 	return substr(hex, 0, 12);
 }
 
-// Hashes the current uci-configured state of every section under the given
-// `pkg:type` keys. Used to mix dependency-state into a dependent resource's
-// ETag so the dependent's ETag changes when a referenced zone (etc.) changes.
-// The cache lives on ctx (._dep_cache) so a list of N rules depending on
-// firewall:zones costs O(zones) once, not O(zones * rules).
-// Canonical serialization of a uci section: keys sorted lexicographically so
-// the hash is stable across runs that may load options in different insertion
-// order (which can happen across uci_import).
+// Mix referenced sections into the dependent's ETag. Per-request cache on
+// ctx._dep_cache keeps a list of N rules depending on M zones at O(N+M).
+// Sort keys so hashes are stable across uci_import/load order changes.
 function _canon_section(s) {
 	if (type(s) != "object") return sprintf("%J", s);
 	let keys = [];
@@ -186,15 +181,9 @@ function build_field_errors(raw_errs) {
 	return out;
 }
 
-// Schema-driven shape check. Resources declare `schema_properties` to describe
-// their fields; without this gate, a body that passes the wrong JSON type for
-// a typed field (a string where the schema declares an array, a number where
-// it declares a string) used to fall through resource.validate() and reach
-// toUci(), which silently dropped the value. Surface it as 422 invalid_type
-// instead. Both check_schema_types and resource.validate run on every CRUD
-// request; their errors are merged and deduplicated by (field, code). Returns
-// raw field-error records (not field_error() wrappers); the caller combines
-// them with the resource's own errors.
+// Without this gate, wrong-type fields fall through resource.validate() and
+// reach toUci() where they are silently dropped. Surface as 422 instead.
+// Errors merge+dedup with resource.validate's by (field, code).
 function _json_type_matches(want, val) {
 	if (type(want) == "array") {
 		for (let w in want)

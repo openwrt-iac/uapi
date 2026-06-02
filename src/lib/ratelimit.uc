@@ -1,13 +1,8 @@
 let fs = require('fs');
 
-// File-backed token-bucket per token id.
+// File-backed token-bucket per token id:
 //   /tmp/uapi-ratelimit/<token>.txt   "<tokens_float> <last_refill_ms>"
-//
-// Writes are racy across forks but bounded: at most one request worth of
-// drift per worst-case race, and that drift is bounded by the burst size.
-// Atomic-write (tmpfile + rename) prevents partial reads under reader/writer
-// overlap. flock is avoided on the hot path because every authed request
-// passes through here.
+// Atomic tmpfile+rename writes; no flock (every authed request passes here).
 const DIR = "/tmp/uapi-ratelimit";
 const DEFAULT_RATE = 100;
 const DEFAULT_BURST = 200;
