@@ -4,7 +4,6 @@ let as_int = values.as_int;
 let as_list = values.as_list;
 let fs = require('fs');
 
-const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
 const LEASES4_PATH = "/tmp/dhcp.leases";
 const LEASES6_PATHS = ["/tmp/hosts/odhcpd", "/tmp/odhcpd.leases"];
 
@@ -133,10 +132,6 @@ function validate(json, conn) {
 
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required", message: "is required" });
-
-	if (json.leasetime != null && json.leasetime != "" && !match(json.leasetime, LEASETIME_RE))
-		push(errs, { field: "leasetime", code: "invalid_format",
-		             message: "must look like 12h, 30m, 1d, or plain seconds" });
 
 	if (json.ra != null && !VALID_RA[json.ra])
 		push(errs, { field: "ra", code: "not_in_enum",

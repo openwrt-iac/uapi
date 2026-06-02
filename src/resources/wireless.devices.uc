@@ -12,7 +12,8 @@ function fromUci(section) {
 		managed: !anonymous,
 		type: section.type ?? null,
 		band: section.band ?? null,
-		channel: section.channel ?? null,
+		channel: (section.channel == "auto" || section.channel == null)
+		         ? section.channel : as_int(section.channel),
 		htmode: section.htmode ?? null,
 		country: section.country ?? null,
 		txpower: as_int(section.txpower),

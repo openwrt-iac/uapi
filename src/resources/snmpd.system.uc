@@ -1,3 +1,6 @@
+let values = require('values');
+let as_int = values.as_int;
+
 function fromUci(section) {
 	return {
 		id: section['.name'],

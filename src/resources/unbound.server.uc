@@ -101,18 +101,6 @@ function validate(json) {
 	if (json.domain_type != null && !VALID_DOMAIN_TYPE[json.domain_type])
 		push(errs, { field: "domain_type", code: "not_in_enum",
 		             message: "must be one of " + join(", ", keys(VALID_DOMAIN_TYPE)) });
-	if (json.num_threads != null) {
-		let n = int(json.num_threads);
-		if (n < 1 || n > 64)
-			push(errs, { field: "num_threads", code: "out_of_range",
-			             message: "must be 1-64" });
-	}
-	if (json.ttl_min != null) {
-		let t = int(json.ttl_min);
-		if (t < 0 || t > 86400)
-			push(errs, { field: "ttl_min", code: "out_of_range",
-			             message: "must be 0-86400 seconds" });
-	}
 	return errs;
 }
 
@@ -124,12 +112,22 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
+		enabled:           { type: "boolean" },
+		listen_port:       { type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { type: "string", enum: keys(VALID_DHCP_LINK) },
+		add_local_fqdn:    { type: ["integer", "null"], minimum: 0, maximum: 4,
+		                     description: "How aggressively to add local FQDNs (0..4)" },
+		add_wan_fqdn:      { type: ["integer", "null"], minimum: 0, maximum: 4,
+		                     description: "How aggressively to add WAN FQDNs (0..4)" },
+		dnssec_enabled:    { type: "boolean" },
 		recursion:         { type: "string", enum: keys(VALID_RECURSION) },
 		resource:          { type: "string", enum: keys(VALID_RESOURCE) },
 		protocol:          { type: "string", enum: keys(VALID_PROTOCOL) },
+		query_minimize:    { type: "boolean" },
+		prefetch:          { type: "boolean" },
 		rebind_protection: { type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
+		domain:            { type: ["string", "null"] },
 		domain_type:       { type: "string", enum: keys(VALID_DOMAIN_TYPE),
 		                     description: "Local-zone type for the configured domain" },
 		manual_conf:       { type: "boolean",
@@ -138,6 +136,8 @@ return {
 		                     description: "Emit extended statistics (stats-extended: yes)" },
 		interface_auto:    { type: "boolean",
 		                     description: "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf." },
+		localservice:      { type: "boolean" },
+		hide_binddata:     { type: "boolean" },
 		num_threads:       { type: "integer", minimum: 1, maximum: 64 },
 		ttl_min:           { type: "integer", minimum: 0, maximum: 86400 },
 	},

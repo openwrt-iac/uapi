@@ -12201,6 +12201,9 @@
 						"type": "string",
 						"pattern": "^[A-Za-z]{2}$",
 						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
+					},
+					"runtime": {
+						"type": "object"
 					}
 				}
 			},
@@ -12219,8 +12222,9 @@
 						"type": "boolean"
 					},
 					"listen_port": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535
 					},
 					"dhcp_link": {
 						"type": "string",
@@ -12231,12 +12235,22 @@
 						]
 					},
 					"add_local_fqdn": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 4,
+						"description": "How aggressively to add local FQDNs (0..4)"
 					},
 					"add_wan_fqdn": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 4,
+						"description": "How aggressively to add WAN FQDNs (0..4)"
 					},
 					"dnssec_enabled": {
 						"type": "boolean"
@@ -12291,12 +12305,10 @@
 						"description": "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf."
 					},
 					"localservice": {
-						"type": "string",
-						"nullable": true
+						"type": "boolean"
 					},
 					"hide_binddata": {
-						"type": "string",
-						"nullable": true
+						"type": "boolean"
 					},
 					"rebind_protection": {
 						"type": "string",
@@ -12318,8 +12330,10 @@
 						"maximum": 86400
 					},
 					"domain": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"domain_type": {
 						"type": "string",
@@ -12596,6 +12610,9 @@
 					"sys_object_id": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysObjectID OID"
+					},
+					"runtime": {
+						"type": "object"
 					}
 				}
 			},
@@ -12784,6 +12801,9 @@
 						"minimum": 1,
 						"maximum": 31,
 						"description": "Day of month that monthly counters roll over"
+					},
+					"runtime": {
+						"type": "object"
 					}
 				}
 			},

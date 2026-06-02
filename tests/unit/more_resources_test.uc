@@ -410,7 +410,7 @@ t.describe('unbound.server parity additions', () => {
 		t.assert_equal(errs[0].code, 'not_in_enum');
 	});
 	t.it('validate bounds num_threads', () => {
-		let errs = unbound.validate({ num_threads: 200 });
+		let errs = full_validate(unbound, { num_threads: 200 }, null);
 		t.assert_equal(errs[0].field, 'num_threads');
 		t.assert_equal(errs[0].code, 'out_of_range');
 	});

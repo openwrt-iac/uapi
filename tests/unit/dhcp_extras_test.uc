@@ -27,7 +27,7 @@ t.describe('dhcp.servers.validate', () => {
 		t.assert_equal(errs[0].code, "required");
 	});
 	t.it('rejects bad leasetime', () => {
-		let errs = servers.validate({ interface: 'lan', leasetime: 'forever' }, null);
+		let errs = full_validate(servers, { interface: 'lan', leasetime: 'forever' }, null);
 		let le = filter(errs, function(e) { return e.field == "leasetime"; });
 		t.assert_equal(le[0].code, "invalid_format");
 	});
