@@ -52,6 +52,8 @@ const KNOWN_PATHS = {
 	"packages": true,
 	"packages:installed": true,
 	"packages:feeds": true,
+	"uapi": true,
+	"uapi:tokens": true,
 	"raw": true,
 };
 
@@ -161,9 +163,51 @@ function permits(token_scopes, resource_path, verb) {
 	return verb == "ro";
 }
 
+// subsumes(outer, inner) returns true iff every (path, verb) `inner` permits
+// is also permitted by `outer`. Used to prevent scope escalation when one
+// token mints another: caller's scopes must subsume the requested scopes.
+function subsumes(outer_scopes, inner_scope) {
+	let p = parse(inner_scope);
+	// Build a representative resource path. For `*:rw`, the inner_scope's
+	// segments are ["*"], representing any resource; permits() short-circuits
+	// `*` matches, so checking the outer permits "*:rw" reduces to "outer must
+	// have a top-level wildcard at the requested verb".
+	if (length(p.segments) == 1 && p.segments[0] == "*") {
+		for (let s in outer_scopes) {
+			let op = parse(s);
+			if (length(op.segments) == 1 && op.segments[0] == "*") {
+				if (op.verb == "rw" || (op.verb == "ro" && p.verb == "ro"))
+					return true;
+			}
+		}
+		return false;
+	}
+	// For concrete or partial-wildcard inner scopes, the rule is: there must
+	// exist some outer scope whose segment-path is a prefix of inner's, with
+	// a verb that covers inner's verb. We rely on `permits()`'s own
+	// resolution to handle deepest-wins correctly: a token granting
+	// `firewall:ro` should not subsume `firewall:rules:rw`. Replace any
+	// wildcard segment in inner with a concrete probe segment for the check
+	// (probe value doesn't matter because outer can only match it via `*`).
+	let probe = [];
+	for (let seg in p.segments)
+		push(probe, seg == "*" ? "__probe__" : seg);
+	return permits(outer_scopes, probe, p.verb);
+}
+
+function subsets(outer_scopes, requested_scopes) {
+	if (type(requested_scopes) != "array") return false;
+	for (let s in requested_scopes) {
+		if (!subsumes(outer_scopes, s)) return false;
+	}
+	return true;
+}
+
 return {
 	parse,
 	permits,
 	is_known_path,
 	validate_against_known_tree,
+	subsumes,
+	subsets,
 };

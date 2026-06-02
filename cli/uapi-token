@@ -33,15 +33,35 @@ function as_list(v) {
 	return [v];
 }
 
+function parse_duration_to_seconds(s) {
+	if (type(s) != "string" || s == "") return null;
+	let m = match(s, /^([0-9]+)([smhd]?)$/);
+	if (!m) return null;
+	let n = int(m[1]);
+	let suffix = m[2];
+	if (suffix == "" || suffix == "s") return n;
+	if (suffix == "m") return n * 60;
+	if (suffix == "h") return n * 3600;
+	if (suffix == "d") return n * 86400;
+	return null;
+}
+
 function parse_args() {
 	let cmd = ARGV[0];
-	let opts = { name: null, scopes: [], force: false, positional: [] };
+	let opts = { name: null, scopes: [], force: false, positional: [],
+	             expires_in_seconds: null, allowed_cidrs: [] };
 	let i = 1;
 	while (i < length(ARGV)) {
 		let a = ARGV[i];
 		if (a == "--name") opts.name = ARGV[++i];
 		else if (a == "--scope") push(opts.scopes, ARGV[++i]);
 		else if (a == "--force") opts.force = true;
+		else if (a == "--expires-in") {
+			let n = parse_duration_to_seconds(ARGV[++i]);
+			if (n == null) die("uapi-token: --expires-in needs <N>[smhd]");
+			opts.expires_in_seconds = n;
+		}
+		else if (a == "--allowed-cidr") push(opts.allowed_cidrs, ARGV[++i]);
 		else push(opts.positional, a);
 		i++;
 	}
@@ -81,6 +101,12 @@ function cmd_create(opts) {
 	cursor.set(PACKAGE, opts.name, "salt", salt);
 	cursor.set(PACKAGE, opts.name, "hash", hash);
 	cursor.set(PACKAGE, opts.name, "scopes", opts.scopes);
+	if (opts.expires_in_seconds != null) {
+		let now = time();
+		cursor.set(PACKAGE, opts.name, "expires_at", "" + (now + opts.expires_in_seconds));
+	}
+	if (length(opts.allowed_cidrs) > 0)
+		cursor.set(PACKAGE, opts.name, "allowed_cidrs", opts.allowed_cidrs);
 	cursor.commit(PACKAGE);
 
 	printf("%s\n", bearer);
@@ -93,7 +119,10 @@ function cmd_list() {
 	let cursor = uci_mod.cursor();
 	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
 		let scopes = as_list(s.scopes);
-		printf("%s\tscopes=%s\n", s['.name'], join(",", scopes));
+		let extra = "";
+		if (s.expires_at != null) extra += "\texpires_at=" + s.expires_at;
+		if (s.allowed_cidrs != null) extra += "\tallowed_cidrs=" + join(",", as_list(s.allowed_cidrs));
+		printf("%s\tscopes=%s%s\n", s['.name'], join(",", scopes), extra);
 	});
 }
 
@@ -107,6 +136,13 @@ function cmd_show(opts) {
 	let scopes = as_list(s.scopes);
 	printf("name: %s\nscopes:\n", name);
 	for (let sc in scopes) printf("  - %s\n", sc);
+	if (s.expires_at != null) printf("expires_at: %s\n", s.expires_at);
+	if (s.allowed_cidrs != null) {
+		printf("allowed_cidrs:\n");
+		for (let c in as_list(s.allowed_cidrs)) printf("  - %s\n", c);
+	}
+	if (s.last_used_at != null) printf("last_used_at: %s\n", s.last_used_at);
+	if (s.last_used_ip != null) printf("last_used_ip: %s\n", s.last_used_ip);
 }
 
 function cmd_revoke(opts) {
@@ -124,7 +160,8 @@ function cmd_revoke(opts) {
 function print_help() {
 	fs.stderr.write(
 "Usage:\n" +
-"  uapi-token create --name <name> --scope <scope> [--scope <scope>...] [--force]\n" +
+"  uapi-token create --name <name> --scope <scope> [--scope <scope>...]\n" +
+"                   [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...] [--force]\n" +
 "  uapi-token list\n" +
 "  uapi-token show <name>\n" +
 "  uapi-token revoke <name>\n");

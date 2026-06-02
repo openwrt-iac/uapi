@@ -5,6 +5,7 @@ const STATUS_BY_CODE = {
 	unauthorized: 401,
 	invalid_token: 401,
 	insufficient_scope: 403,
+	scope_escalation_blocked: 403,
 	tls_required: 403,
 	not_found: 404,
 	method_not_allowed: 405,

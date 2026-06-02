@@ -55,7 +55,42 @@ function is_valid_cidr(s) {
 	return prefix >= 0 && prefix <= 32;
 }
 
+function ipv4_to_int(s) {
+	let parts = split(s, ".");
+	let n = 0;
+	for (let p in parts) n = (n * 256) + int(p);
+	return n;
+}
+
+function ipv4_in_cidr(addr, cidr) {
+	if (!is_valid_ipv4(addr) || !is_valid_cidr(cidr)) return false;
+	let parts = split(cidr, "/");
+	let net = ipv4_to_int(parts[0]);
+	let prefix = int(parts[1]);
+	if (prefix == 0) return true;
+	let mask = (-1 << (32 - prefix)) & 0xFFFFFFFF;
+	return (ipv4_to_int(addr) & mask) == (net & mask);
+}
+
+// Strips IPv4-mapped-in-IPv6 prefix when a sockaddr_in6 produced ::ffff:1.2.3.4.
+function normalize_addr(addr) {
+	if (type(addr) != "string") return null;
+	if (substr(addr, 0, 7) == "::ffff:") return substr(addr, 7);
+	return addr;
+}
+
+function ipv4_in_any_cidr(addr, cidr_list) {
+	let a = normalize_addr(addr);
+	if (a == null) return false;
+	if (type(cidr_list) != "array") return false;
+	for (let c in cidr_list) {
+		if (ipv4_in_cidr(a, c)) return true;
+	}
+	return false;
+}
+
 return {
 	normalize_bool, as_list, as_int,
 	is_valid_ipv4, is_valid_ip, is_valid_cidr,
+	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 };

@@ -80,3 +80,73 @@ t.describe('auth.authorize, token lookup via hash', () => {
 	});
 });
 
+t.describe('auth.authorize, expiry', () => {
+	let WITH_EXPIRY = [{
+		name: "shortlived", salt: "s1", hash: "s1:expiring",
+		scopes: ["*:rw"], expires_at: 1000,
+	}];
+
+	t.it('accepts a token while it is still valid', () => {
+		let r = auth.authorize(WITH_EXPIRY, "Bearer expiring", plain_hash,
+			{ now: 999, remote_addr: "127.0.0.1" });
+		t.assert_true(r.ok);
+		t.assert_equal(r.token.expires_at, 1000);
+	});
+
+	t.it('rejects a token exactly at expiry second', () => {
+		let r = auth.authorize(WITH_EXPIRY, "Bearer expiring", plain_hash,
+			{ now: 1000, remote_addr: "127.0.0.1" });
+		t.assert_false(r.ok);
+		t.assert_equal(r.kind, "invalid_token");
+		t.assert_equal(r.reason, "expired");
+	});
+
+	t.it('rejects a token past expiry', () => {
+		let r = auth.authorize(WITH_EXPIRY, "Bearer expiring", plain_hash,
+			{ now: 9999, remote_addr: "127.0.0.1" });
+		t.assert_equal(r.reason, "expired");
+	});
+
+	t.it('skips expiry when now is not provided', () => {
+		// Falling back to no-check is safer than failing closed: a clockless
+		// router otherwise locks itself out of every token. Caller decides.
+		let r = auth.authorize(WITH_EXPIRY, "Bearer expiring", plain_hash, {});
+		t.assert_true(r.ok);
+	});
+});
+
+t.describe('auth.authorize, IP scoping', () => {
+	let CIDR_SCOPED = [{
+		name: "lan", salt: "s2", hash: "s2:lanonly",
+		scopes: ["*:rw"], allowed_cidrs: ["192.168.1.0/24"],
+	}];
+
+	t.it('accepts a request from inside the allowed CIDR', () => {
+		let r = auth.authorize(CIDR_SCOPED, "Bearer lanonly", plain_hash,
+			{ remote_addr: "192.168.1.42", now: 100 });
+		t.assert_true(r.ok);
+	});
+
+	t.it('rejects a request from outside the allowed CIDRs', () => {
+		let r = auth.authorize(CIDR_SCOPED, "Bearer lanonly", plain_hash,
+			{ remote_addr: "10.0.0.5", now: 100 });
+		t.assert_false(r.ok);
+		t.assert_equal(r.reason, "ip_not_permitted");
+	});
+
+	t.it('accepts an IPv4-mapped IPv6 address inside the CIDR', () => {
+		let r = auth.authorize(CIDR_SCOPED, "Bearer lanonly", plain_hash,
+			{ remote_addr: "::ffff:192.168.1.99", now: 100 });
+		t.assert_true(r.ok);
+	});
+
+	t.it('empty allowed_cidrs means any source', () => {
+		let any_ip = [{ name: "open", salt: "s3", hash: "s3:open",
+		                scopes: ["*:ro"], allowed_cidrs: [] }];
+		let r = auth.authorize(any_ip, "Bearer open", plain_hash,
+			{ remote_addr: "8.8.8.8", now: 100 });
+		t.assert_true(r.ok);
+	});
+});
+
+

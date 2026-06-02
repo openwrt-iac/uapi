@@ -13,6 +13,7 @@ let handler = require("handler");
 let bus = require("bus");
 let packages = require("packages");
 let system_access = require("system_access");
+let token_store = require("token_store");
 
 // RESOURCE_SOURCES retains the raw resource modules (with .schema_properties,
 // .package, .type) for the /schema/<...> endpoint. The handler wrappers in
@@ -160,19 +161,7 @@ function split_path(path) {
 }
 
 function load_tokens(conn) {
-	let tokens = [];
-	conn.uci_foreach('uapi', 'token', function(s) {
-		if (!s.salt || !s.hash) return;
-		let scopes = type(s.scopes) == "array" ? s.scopes
-		             : (s.scopes != null ? [s.scopes] : []);
-		push(tokens, {
-			name: s['.name'] ?? "anonymous",
-			salt: s.salt,
-			hash: s.hash,
-			scopes: scopes,
-		});
-	});
-	return tokens;
+	return token_store.list_for_auth(conn);
 }
 
 function hash_bearer(salt, bearer) {
@@ -327,11 +316,30 @@ function whoami_response(ctx, token, env) {
 		token_id: token.name,
 		scopes: token.scopes,
 		source_ip: env.REMOTE_ADDR ?? null,
-		expires_at: null,
-		allowed_cidrs: [],
-		last_used_at: null,
-		last_used_ip: null,
+		expires_at: token.expires_at ?? null,
+		allowed_cidrs: token.allowed_cidrs ?? [],
+		last_used_at: token.last_used_at ?? null,
+		last_used_ip: token.last_used_ip ?? null,
 	});
+}
+
+function tokens_translate(ctx, r) {
+	if (r.ok) return errors.ok(ctx, r.body);
+	if (r.kind == "validation") return errors.validation_failed(ctx, r.errors);
+	if (r.kind == "conflict") return errors.error(ctx, "conflict", r.message);
+	if (r.kind == "not_found") return errors.error(ctx, "not_found", r.message);
+	if (r.kind == "scope_escalation_blocked")
+		return errors.error(ctx, "scope_escalation_blocked",
+			"Requested scopes are not a subset of the caller's scopes");
+	if (r.kind == "locked") return errors.locked(ctx, 1);
+	if (r.kind == "init_script_missing")
+		return errors.error(ctx, "init_script_missing", r.message);
+	if (r.kind == "reload_failed_restored")
+		return errors.reload_failed_restored(ctx, r.reload_error);
+	if (r.kind == "reload_failed_unrecovered")
+		return errors.reload_failed_unrecovered(ctx, r.reload_error, r.restore_error);
+	return errors.error(ctx, "internal_error",
+		sprintf("token transaction returned unknown kind %J", r.kind));
 }
 
 function strip_etag_quotes(s) {
@@ -440,14 +448,28 @@ function dispatch(env) {
 	}
 
 	let tokens = load_tokens(conn);
-	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION, hash_bearer);
+	let now_epoch;
+	try { now_epoch = time(); } catch (_) { now_epoch = null; }
+	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION, hash_bearer,
+		{ remote_addr: env.REMOTE_ADDR, now: now_epoch });
 	if (!auth_result.ok) {
-		return { ctx, resp: errors.error(ctx, auth_result.kind,
-		                                 auth_result.kind == "unauthorized"
-		                                 ? "Missing or malformed Authorization header"
-		                                 : "Token not recognized") };
+		let msg;
+		if (auth_result.kind == "unauthorized")
+			msg = "Missing or malformed Authorization header";
+		else if (auth_result.reason == "expired")
+			msg = "Token expired";
+		else if (auth_result.reason == "ip_not_permitted")
+			msg = "Source IP not permitted for this token";
+		else
+			msg = "Token not recognized";
+		return { ctx, resp: errors.error(ctx, auth_result.kind, msg) };
 	}
 	let token = auth_result.token;
+
+	// Best-effort last-used tracking. Throttled to ~1 write/minute/token by
+	// token_store. Auth has already succeeded; any failure here is silent.
+	try { token_store.update_last_used(conn, token.name, env.REMOTE_ADDR, now_epoch); }
+	catch (_) {}
 
 	let parts = split_path(path);
 
@@ -463,6 +485,40 @@ function dispatch(env) {
 		         resp: errors.error(ctx, "not_found",
 		                            sprintf("Unknown auth sub-path %J",
 		                                    length(parts) >= 2 ? parts[1] : "")) };
+	}
+
+	if (length(parts) >= 1 && parts[0] == "tokens") {
+		let id = length(parts) >= 2 ? parts[1] : null;
+		if (length(parts) > 2)
+			return { ctx, token,
+			         resp: errors.error(ctx, "not_found", "Unknown tokens sub-path") };
+		let scope_path = ["uapi", "tokens"];
+		let verb = method_verb(method);
+		if (!scope.permits(token.scopes, scope_path, verb))
+			return { ctx, token,
+			         resp: errors.error(ctx, "insufficient_scope",
+			                            "Token does not permit this operation on uapi/tokens") };
+		let resp;
+		if (method == "GET" && id == null) {
+			resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
+		} else if (method == "GET") {
+			let rec = token_store.get_public(conn, id);
+			if (rec == null) resp = errors.error(ctx, "not_found",
+				sprintf("Token %J not found", id));
+			else resp = errors.ok(ctx, rec);
+		} else if (method == "POST" && id == null) {
+			let r = token_store.create(conn, body, token.scopes, now_epoch);
+			resp = tokens_translate(ctx, r);
+		} else if (method == "DELETE" && id != null) {
+			let r = token_store.remove(conn, id);
+			if (r.ok) resp = errors.no_content(ctx);
+			else resp = tokens_translate(ctx, r);
+		} else {
+			resp = errors.error(ctx, "method_not_allowed",
+				sprintf("Method %J not allowed on tokens%s",
+					method, id != null ? "/<id>" : ""));
+		}
+		return { ctx, token, resp };
 	}
 
 	if (length(parts) >= 2 && parts[0] == "raw") {

@@ -210,3 +210,52 @@ t.describe('scope.permits, input validation', () => {
 		t.assert_throws(() => scope.permits(["*:rw"], [], "ro"));
 	});
 });
+
+t.describe('scope.subsumes', () => {
+	t.it('*:rw subsumes any concrete scope', () => {
+		t.assert_true(scope.subsumes(["*:rw"], "firewall:rules:rw"));
+		t.assert_true(scope.subsumes(["*:rw"], "firewall:rules:ro"));
+		t.assert_true(scope.subsumes(["*:rw"], "*:rw"));
+		t.assert_true(scope.subsumes(["*:rw"], "*:ro"));
+	});
+
+	t.it('*:ro covers ro but not rw', () => {
+		t.assert_true(scope.subsumes(["*:ro"], "firewall:rules:ro"));
+		t.assert_false(scope.subsumes(["*:ro"], "firewall:rules:rw"));
+		t.assert_true(scope.subsumes(["*:ro"], "*:ro"));
+		t.assert_false(scope.subsumes(["*:ro"], "*:rw"));
+	});
+
+	t.it('domain-level scope covers descendant subresources', () => {
+		t.assert_true(scope.subsumes(["firewall:rw"], "firewall:rules:rw"));
+		t.assert_true(scope.subsumes(["firewall:ro"], "firewall:rules:ro"));
+		t.assert_false(scope.subsumes(["firewall:ro"], "firewall:rules:rw"));
+	});
+
+	t.it('descendant scope does not cover its ancestor', () => {
+		t.assert_false(scope.subsumes(["firewall:rules:rw"], "firewall:rw"));
+	});
+
+	t.it('unrelated scopes do not subsume', () => {
+		t.assert_false(scope.subsumes(["firewall:rw"], "network:rw"));
+	});
+});
+
+t.describe('scope.subsets', () => {
+	t.it('returns true when every requested scope is covered', () => {
+		t.assert_true(scope.subsets(["*:rw"], ["firewall:rules:rw", "network:ro"]));
+	});
+
+	t.it('returns false when one requested scope is not covered', () => {
+		t.assert_false(scope.subsets(["firewall:rw"], ["firewall:rules:rw", "network:ro"]));
+	});
+
+	t.it('returns false for non-array input', () => {
+		t.assert_false(scope.subsets(["*:rw"], null));
+		t.assert_false(scope.subsets(["*:rw"], "firewall:ro"));
+	});
+
+	t.it('returns true for empty requested set (vacuously)', () => {
+		t.assert_true(scope.subsets(["firewall:rw"], []));
+	});
+});

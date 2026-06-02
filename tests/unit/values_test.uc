@@ -73,3 +73,42 @@ t.describe('values.is_valid_cidr', () => {
 			t.assert_false(v.is_valid_cidr(s));
 	});
 });
+
+t.describe('values.ipv4_in_cidr', () => {
+	t.it('returns true for addresses inside the range', () => {
+		t.assert_true(v.ipv4_in_cidr("192.168.1.42", "192.168.1.0/24"));
+		t.assert_true(v.ipv4_in_cidr("10.255.255.255", "10.0.0.0/8"));
+		t.assert_true(v.ipv4_in_cidr("8.8.8.8", "0.0.0.0/0"));
+		t.assert_true(v.ipv4_in_cidr("1.2.3.4", "1.2.3.4/32"));
+	});
+
+	t.it('returns false for addresses outside the range', () => {
+		t.assert_false(v.ipv4_in_cidr("192.168.2.42", "192.168.1.0/24"));
+		t.assert_false(v.ipv4_in_cidr("11.0.0.1", "10.0.0.0/8"));
+	});
+
+	t.it('returns false for malformed inputs', () => {
+		t.assert_false(v.ipv4_in_cidr("not-an-ip", "192.168.1.0/24"));
+		t.assert_false(v.ipv4_in_cidr("192.168.1.42", "not-a-cidr"));
+		t.assert_false(v.ipv4_in_cidr(null, "192.168.1.0/24"));
+	});
+});
+
+t.describe('values.ipv4_in_any_cidr', () => {
+	t.it('matches when any one CIDR contains the address', () => {
+		t.assert_true(v.ipv4_in_any_cidr("10.0.0.1",
+			["192.168.1.0/24", "10.0.0.0/8"]));
+		t.assert_false(v.ipv4_in_any_cidr("172.16.0.1",
+			["192.168.1.0/24", "10.0.0.0/8"]));
+	});
+
+	t.it('strips IPv4-mapped IPv6 prefix before matching', () => {
+		t.assert_true(v.ipv4_in_any_cidr("::ffff:192.168.1.10",
+			["192.168.1.0/24"]));
+	});
+
+	t.it('returns false for non-array cidr list', () => {
+		t.assert_false(v.ipv4_in_any_cidr("1.2.3.4", null));
+		t.assert_false(v.ipv4_in_any_cidr("1.2.3.4", "1.2.3.4/32"));
+	});
+});
