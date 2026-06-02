@@ -581,4 +581,76 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 					t.assert_true(e.code != "invalid_type");
 		}
 	});
+
+	t.it('match-as-string emits a SINGLE (field, code) error (no duplicate from resource.validate)', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			target: "ACCEPT",
+			match: "wan",
+		});
+		t.assert_equal(r.status, 422);
+		let hits = 0;
+		for (let e in r.body.errors)
+			if (e.field == "match" && e.code == "invalid_type") hits++;
+		t.assert_equal(hits, 1);
+	});
+
+	t.it('error message uses JSON Schema vocabulary (got integer, not got int)', () => {
+		let c = with_zones();
+		// target wants string; pass a JSON integer.
+		let r = rules.create(c, ctx(), { target: 42, match: { src_zone: "wan" } });
+		t.assert_equal(r.status, 422);
+		let hit = null;
+		for (let e in r.body.errors)
+			if (e.field == "target" && e.code == "invalid_type") hit = e;
+		t.assert_true(hit != null);
+		t.assert_true(match(hit.message, /got integer/) != null);
+	});
+});
+
+// PATCH must not re-validate the existing-uci-string view of integer-typed
+// fields. dropbear.instances declares Port as `{ type: "integer" }` while
+// fromUci returns it as a uci string. Before the fix, PATCH with any body
+// that did NOT touch Port still 422'd because the merge inherited "22" and
+// the schema check fired on the merged body.
+let dropbear_mod = loadfile('src/resources/dropbear.instances.uc')();
+let dropbear = handler.make(dropbear_mod, {
+	tx: {
+		acquire: function() { return {}; },
+		release: function() {},
+		reload: record_reload,
+		check_services: function() { return null; },
+	},
+});
+
+t.describe('handler schema-type check: PATCH does not re-validate uci-string fields', () => {
+	t.it('PATCH on an unrelated field of dropbear.instances does not 422 on Port', () => {
+		let c = ubus.stub({ uci: { dropbear: {
+			d_main: { '.type': 'dropbear', '.anonymous': false, Port: '22', RootLogin: '1' },
+		}}});
+		let r = dropbear.patch(c, ctx(), 'd_main', { RootLogin: false });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.RootLogin, false);
+		// Port is still the original uci string view.
+		t.assert_equal(r.body.Port, '22');
+	});
+
+	t.it('PATCH still rejects a wrong-typed delta even when the merge would pass', () => {
+		let c = ubus.stub({ uci: { dropbear: {
+			d_main: { '.type': 'dropbear', '.anonymous': false, Port: '22' },
+		}}});
+		// Port as a string in the delta: schema_properties declares integer.
+		let r = dropbear.patch(c, ctx(), 'd_main', { Port: 'not-a-number' });
+		t.assert_equal(r.status, 422);
+		let hit = null;
+		for (let e in r.body.errors)
+			if (e.field == 'Port' && e.code == 'invalid_type') hit = e;
+		t.assert_true(hit != null);
+	});
+
+	t.it('POST that supplies an integer for an integer-typed field still works', () => {
+		let c = ubus.stub({ uci: { dropbear: {} } });
+		let r = dropbear.create(c, ctx(), { Port: 2222 });
+		t.assert_equal(r.status, 200);
+	});
 });

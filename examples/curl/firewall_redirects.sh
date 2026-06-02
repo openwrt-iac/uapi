@@ -19,8 +19,8 @@ created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/firewall/redirects" -d '{
 		"src_dport": ["443"],
 		"proto": ["tcp"],
 		"dest_zone": "lan",
-		"dest_ip": "192.168.1.10",
-		"dest_port": "443"
+		"dest_ip": ["192.168.1.10"],
+		"dest_port": ["443"]
 	}
 }')
 echo "$created"

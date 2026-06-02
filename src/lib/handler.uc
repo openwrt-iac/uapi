@@ -92,10 +92,16 @@ function build_field_errors(raw_errs) {
 // a typed field (a string where the schema declares an array, a number where
 // it declares a string) used to fall through resource.validate() and reach
 // toUci(), which silently dropped the value. Surface it as 422 invalid_type
-// instead. Runs before resource.validate so the resource-specific checks see
-// only well-typed input. Returns raw field-error records (not field_error()
-// wrappers); the caller combines them with the resource's own errors.
+// instead. Both check_schema_types and resource.validate run on every CRUD
+// request; their errors are merged and deduplicated by (field, code). Returns
+// raw field-error records (not field_error() wrappers); the caller combines
+// them with the resource's own errors.
 function _json_type_matches(want, val) {
+	if (type(want) == "array") {
+		for (let w in want)
+			if (_json_type_matches(w, val)) return true;
+		return false;
+	}
 	let got = type(val);
 	if (want == "integer") return got == "int";
 	if (want == "number")  return got == "int" || got == "double";
@@ -104,20 +110,22 @@ function _json_type_matches(want, val) {
 	return want == got;
 }
 
-function _type_matches(want, val) {
-	if (type(want) == "array") {
-		for (let w in want)
-			if (_json_type_matches(w, val)) return true;
-		return false;
-	}
-	return _json_type_matches(want, val);
+// Map ucode's type() names back to JSON Schema vocabulary so error messages
+// don't mix vocabularies ("must be string, got int" -> "must be string, got
+// integer"). Falls through for shared names (string, array, object, null).
+function _json_type_name(val) {
+	let got = type(val);
+	if (got == "int")    return "integer";
+	if (got == "double") return "number";
+	if (got == "bool")   return "boolean";
+	return got;
 }
 
 function _format_want(want) {
 	if (type(want) == "array") {
 		let parts = [];
 		for (let w in want) push(parts, w);
-		return join(" or ", parts);
+		return length(parts) > 0 ? join(" or ", parts) : "<unspecified>";
 	}
 	return "" + want;
 }
@@ -133,11 +141,12 @@ function check_schema_types(schema_properties, body, prefix) {
 		if (val == null) continue;
 		let field_path = (prefix != null && prefix != "") ? prefix + "." + key : key;
 		let want = spec.type;
-		if (want != null && !_type_matches(want, val)) {
+		if (want != null && !_json_type_matches(want, val)) {
 			push(errs, {
 				field: field_path,
 				code: "invalid_type",
-				message: sprintf("must be %s, got %s", _format_want(want), type(val)),
+				message: sprintf("must be %s, got %s",
+				                 _format_want(want), _json_type_name(val)),
 			});
 			continue;
 		}
@@ -149,13 +158,32 @@ function check_schema_types(schema_properties, body, prefix) {
 	return errs;
 }
 
-function _validate_with_schema(resource, body, conn, id) {
-	let type_errs = check_schema_types(resource.schema_properties, body);
-	let errs = resource.validate(body, conn, id);
-	if (length(type_errs) == 0) return errs;
+// schema_body: type-checked by check_schema_types (the wire delta from the
+// client). validate_body: passed to resource.validate (the FULL post-merge
+// view for cross-field checks). For POST/PUT both are the same body. For
+// PATCH they differ: the merge inherits fromUci's view of existing options,
+// which uci returns as strings even for integer-typed schema fields, so type-
+// checking the merge would falsely 422 on any patch that didn't touch the
+// integer field. Schema-check the delta only.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
+	let type_errs = check_schema_types(resource.schema_properties, schema_body);
+	let val_errs = resource.validate(validate_body, conn, id);
+	let seen = {};
 	let merged = [];
-	for (let e in type_errs) push(merged, e);
-	for (let e in errs) push(merged, e);
+	for (let e in type_errs) {
+		let k = (e.field ?? "") + "|" + (e.code ?? "");
+		if (seen[k]) continue;
+		seen[k] = true;
+		push(merged, e);
+	}
+	if (val_errs != null) {
+		for (let e in val_errs) {
+			let k = (e.field ?? "") + "|" + (e.code ?? "");
+			if (seen[k]) continue;
+			seen[k] = true;
+			push(merged, e);
+		}
+	}
 	return merged;
 }
 
@@ -251,7 +279,7 @@ function make(resource, opts) {
 	function create(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let errs = _validate_with_schema(resource, body, c, null);
+				let errs = _validate_with_schema(resource, body, body, c, null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				let new_id = ids.new_id(id_prefix);
@@ -273,7 +301,7 @@ function make(resource, opts) {
 	function replace(conn, ctx, id, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let errs = _validate_with_schema(resource, body, c, id);
+				let errs = _validate_with_schema(resource, body, body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				let existing = load_section(c, p, id);
@@ -326,7 +354,7 @@ function make(resource, opts) {
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
 				let merged_json = merge_fn(existing, existing_json, body);
 
-				let errs = _validate_with_schema(resource, merged_json, c, id);
+				let errs = _validate_with_schema(resource, body, merged_json, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -446,7 +474,7 @@ function make_singleton(resource, opts) {
 				let merged = { ...existing_view };
 				for (let k in body) merged[k] = body[k];
 
-				let errs = _validate_with_schema(resource, merged, c, id);
+				let errs = _validate_with_schema(resource, body, merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
