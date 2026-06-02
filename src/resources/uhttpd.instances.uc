@@ -63,25 +63,12 @@ function uapi_prefix_present(json) {
 	return false;
 }
 
-const VALID_LISTEN_RE = /^(\[[0-9A-Fa-f:]+\]|[0-9A-Fa-f:.]*):[0-9]+$/;
-
 function validate(json, conn, id) {
 	let errs = [];
 	if (type(json) != "object") {
 		push(errs, { field: "", code: "invalid_type",
 		             message: "body must be a JSON object" });
 		return errs;
-	}
-
-	for (let f in ["listen_http", "listen_https"]) {
-		let l = json[f];
-		if (type(l) != "array") continue;
-		for (let i = 0; i < length(l); i++) {
-			if (type(l[i]) != "string" || !match(l[i], VALID_LISTEN_RE))
-				push(errs, { field: sprintf("%s[%d]", f, i),
-				             code: "invalid_format",
-				             message: "must be <host>:<port>, e.g. 0.0.0.0:80 or [::]:443" });
-		}
 	}
 
 	// Self-lockout protection: refuse a write to the 'main' instance that

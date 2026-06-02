@@ -4,8 +4,6 @@ let as_list = values.as_list;
 let is_valid_cidr = values.is_valid_cidr;
 let as_int = values.as_int;
 
-const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
-
 function parent_from_type(t) {
 	if (type(t) != "string" || substr(t, 0, 10) != "wireguard_") return null;
 	return substr(t, 10);
@@ -71,14 +69,6 @@ function validate(json, conn) {
 	if (json.public_key == null || json.public_key == "")
 		push(errs, { field: "public_key", code: "required",
 		             message: "is required" });
-	else if (!match(json.public_key, WG_KEY_RE))
-		push(errs, { field: "public_key", code: "invalid_format",
-		             message: "must be a 44-char base64 WireGuard public key" });
-
-	if (json.preshared_key != null && json.preshared_key != ""
-	    && !match(json.preshared_key, WG_KEY_RE))
-		push(errs, { field: "preshared_key", code: "invalid_format",
-		             message: "must be a 44-char base64 WireGuard preshared key" });
 
 	let aips = as_list(json.allowed_ips);
 	if (length(aips) == 0)

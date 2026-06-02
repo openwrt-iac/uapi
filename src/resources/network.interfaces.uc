@@ -11,7 +11,6 @@ const VALID_PROTOS = {
 };
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
-const REQPREFIX_RE = /^(auto|no|[0-9]+)$/;
 const IPV6_PREFIX_RE = /^[0-9A-Fa-f:]+\/[0-9]+$/;
 const IPV6_IFACEID_RE = /^[0-9A-Fa-f:]+$/;
 
@@ -194,10 +193,6 @@ function validate(json) {
 	}
 
 	if (json.proto == "dhcpv6") {
-		if (json.reqprefix != null && json.reqprefix != ""
-		    && !match("" + json.reqprefix, REQPREFIX_RE))
-			push(errs, { field: "reqprefix", code: "invalid_format",
-			             message: "must be 'auto', 'no', or a numeric prefix size" });
 		if (json.ip6hint != null && json.ip6hint != ""
 		    && !match(json.ip6hint, IPV6_PREFIX_RE))
 			push(errs, { field: "ip6hint", code: "invalid_format",

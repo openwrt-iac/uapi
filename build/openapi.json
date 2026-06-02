@@ -11074,8 +11074,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$",
-						"description": "MAC address override"
+						"pattern": "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
+						"description": "MAC address override (colon or dash separated)"
 					},
 					"ipv6": {
 						"type": "boolean",
@@ -11390,7 +11390,8 @@
 						],
 						"minimum": 0,
 						"maximum": 196,
-						"description": "Channel number, or 'auto'"
+						"pattern": "^auto$",
+						"description": "Channel number (0-196) or the string \"auto\""
 					},
 					"htmode": {
 						"type": [
@@ -11528,7 +11529,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$",
+						"pattern": "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
 						"description": "Primary MAC address for IPv4 reservation"
 					},
 					"mac_aliases": {
@@ -11670,8 +11671,7 @@
 						"type": "boolean"
 					},
 					"interface": {
-						"type": "string",
-						"nullable": true
+						"type": "string"
 					},
 					"start": {
 						"type": "integer",
@@ -11684,8 +11684,11 @@
 						"maximum": 254
 					},
 					"leasetime": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9]+[smhdwMY]?$"
 					},
 					"ignore": {
 						"type": "boolean"
@@ -11715,12 +11718,19 @@
 						]
 					},
 					"ra_default": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 2,
+						"description": "0 default, 1 deprecate prefix, 2 advertise as router"
 					},
 					"domain": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"dhcp_option": {
 						"type": "array",
@@ -11745,12 +11755,17 @@
 						"type": "boolean"
 					},
 					"domain": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"local": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
 						"type": "boolean"
@@ -11787,12 +11802,16 @@
 						"type": "boolean"
 					},
 					"leasefile": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"resolvfile": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"server": {
 						"type": "array",
@@ -11983,8 +12002,7 @@
 						"type": "boolean"
 					},
 					"enable": {
-						"type": "boolean",
-						"description": "Enable this dropbear instance"
+						"type": "boolean"
 					},
 					"port": {
 						"type": "integer",
@@ -11992,23 +12010,19 @@
 						"maximum": 65535
 					},
 					"password_auth": {
-						"type": "boolean",
-						"description": "Allow password authentication"
+						"type": "boolean"
 					},
 					"root_password_auth": {
-						"type": "boolean",
-						"description": "Allow root password login"
+						"type": "boolean"
 					},
 					"root_login": {
-						"type": "boolean",
-						"description": "Allow root SSH login at all"
+						"type": "boolean"
 					},
 					"banner_file": {
 						"type": [
 							"string",
 							"null"
-						],
-						"description": "Path to SSH banner file"
+						]
 					},
 					"interface": {
 						"type": [

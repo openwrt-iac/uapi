@@ -2,6 +2,13 @@ let t = require('harness');
 let bus = require('bus');
 let handler = require('handler');
 let system_resource = loadfile('src/resources/system.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 let system_h = handler.make_singleton(system_resource, {
 	tx: { acquire: function() { return {}; }, release: function() {},
 	      reload: function() { return null; },
@@ -67,7 +74,7 @@ t.describe('system resource', () => {
 	});
 
 	t.it('validate rejects hostnames with spaces', () => {
-		let errs = system_resource.validate({ hostname: 'router 1' }, null);
+		let errs = full_validate(system_resource, { hostname: 'router 1' }, null);
 		let he = filter(errs, function(e) { return e.field == "hostname"; });
 		t.assert_equal(he[0].code, 'invalid_format');
 	});

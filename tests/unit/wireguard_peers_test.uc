@@ -1,6 +1,14 @@
 let t = require('harness');
 let ubus = require('bus');
+let handler = require('handler');
 let wgp = loadfile('src/resources/network.wireguard_peers.uc')();
+
+function full_validate(r, body, conn) {
+	let out = [];
+	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in r.validate(body, conn)) push(out, e);
+	return out;
+}
 
 t.describe('network.wireguard_peers contract', () => {
 	t.it('declares package, sentinel type, reload', () => {
@@ -57,7 +65,7 @@ t.describe('network.wireguard_peers.validate', () => {
 		t.assert_equal(fields.allowed_ips, "required");
 	});
 	t.it('rejects bad public_key shape', () => {
-		let errs = wgp.validate({
+		let errs = full_validate(wgp, {
 			interface: 'wg1', public_key: 'shortkey', allowed_ips: ['10.42.0.2/32'],
 		}, null);
 		let pk = filter(errs, function(e) { return e.field == "public_key"; });

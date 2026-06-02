@@ -2,8 +2,6 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
-const HOSTNAME_RE = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
-
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -44,10 +42,6 @@ function validate(json) {
 		push(errs, { field: "", code: "invalid_type", message: "body must be a JSON object" });
 		return errs;
 	}
-
-	if (json.hostname != null && json.hostname != "" && !match(json.hostname, HOSTNAME_RE))
-		push(errs, { field: "hostname", code: "invalid_format",
-		             message: "must be a valid hostname (alphanumerics, dashes, underscores, dots)" });
 
 	return errs;
 }

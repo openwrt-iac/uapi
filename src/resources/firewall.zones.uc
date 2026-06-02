@@ -4,7 +4,6 @@ let as_list = values.as_list;
 
 const VALID_POLICIES = { "ACCEPT": true, "REJECT": true, "DROP": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-const NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -46,8 +45,6 @@ function validate(json) {
 
 	if (json.name == null || json.name == "")
 		push(errs, { field: "name", code: "required", message: "is required" });
-	else if (!match(json.name, NAME_RE))
-		push(errs, { field: "name", code: "invalid_format", message: "must be alphanumeric, _, or -" });
 
 	return errs;
 }

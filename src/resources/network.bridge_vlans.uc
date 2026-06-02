@@ -2,8 +2,6 @@ let values = require('values');
 let as_list = values.as_list;
 let as_int = values.as_int;
 
-const PORT_RE = /^[A-Za-z0-9._-]+(:[tu*]+)?$/;
-
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -47,13 +45,6 @@ function validate(json, conn) {
 
 	if (json.vlan == null)
 		push(errs, { field: "vlan", code: "required", message: "is required" });
-
-	let ports = as_list(json.ports);
-	for (let i = 0; i < length(ports); i++) {
-		if (!match(ports[i], PORT_RE))
-			push(errs, { field: sprintf("ports[%d]", i), code: "invalid_format",
-			             message: "must match <name>[:t|:u|:*] (e.g. eth0:t)" });
-	}
 
 	if (conn != null && json.device != null && json.device != "") {
 		if (!bridge_exists(conn, json.device))

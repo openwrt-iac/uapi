@@ -131,7 +131,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		mac:         { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$",
+		mac:         { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
 		               description: "Primary MAC address for IPv4 reservation" },
 		mac_aliases: { type: "array", items: { type: "string" },
 		               description: "Additional MACs for the same reservation (uci list mac)" },

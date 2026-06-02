@@ -111,7 +111,7 @@ t.describe('network.bridge_vlans.validate', () => {
 		t.assert_equal(ve[0].code, "out_of_range");
 	});
 	t.it('rejects bad port spec', () => {
-		let errs = bv.validate({ device: 'br-lan', vlan: 10, ports: ['eth0:x'] }, null);
+		let errs = full_validate(bv, { device: 'br-lan', vlan: 10, ports: ['eth0:x'] }, null);
 		let pe = filter(errs, function(e) { return match(e.field, /^ports\[/); });
 		t.assert_equal(pe[0].code, "invalid_format");
 	});

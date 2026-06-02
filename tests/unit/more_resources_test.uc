@@ -234,10 +234,10 @@ t.describe('uhttpd.instances self-lockout protection', () => {
 	});
 
 	t.it("validate rejects bogus listen entries with invalid_format", () => {
-		let errs = uhttpd_inst.validate({
+		let errs = full_validate(uhttpd_inst, {
 			listen_http: ['no-port-here'],
 			ucode_prefix: ['/api/v1=/usr/share/uapi/main.uc'],
-		}, null, 'main');
+		}, null);
 		let found = false;
 		for (let e in errs)
 			if (e.code == 'invalid_format') { found = true; break; }
