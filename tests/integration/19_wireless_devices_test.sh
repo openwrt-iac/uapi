@@ -15,7 +15,7 @@ echo "--- POST /wireless/devices creates a radio entry ---"
 created=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/devices" -d '{
 	"type": "mac80211",
 	"band": "2g",
-	"channel": "1",
+	"channel": 1,
 	"htmode": "HT20"
 }')
 echo "$created"
@@ -47,10 +47,10 @@ echo "$bad_band" | tail -1 | grep -q '^422$' || fail "unknown band expected 422"
 
 echo "--- PATCH /wireless/devices/$id (change channel) ---"
 patched=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/$id" -d '{
-	"channel": "6"
+	"channel": 6
 }')
 echo "$patched" | tail -1 | grep -q '^200$' || fail "PATCH expected 200"
-echo "$patched" | grep -q '"channel": "6"' || fail "PATCH did not update channel"
+echo "$patched" | grep -q '"channel": 6' || fail "PATCH did not update channel"
 
 echo "--- DELETE /wireless/devices/$id ---"
 call -X DELETE "$URL/wireless/devices/$id" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
