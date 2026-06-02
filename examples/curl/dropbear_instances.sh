@@ -19,7 +19,7 @@ created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/dropbear/instances" -d '{
 	"PasswordAuth": false,
 	"RootPasswordAuth": false,
 	"RootLogin": true,
-	"Interface": "lan"
+	"interface": "lan"
 }')
 echo "$created"
 id=$(printf '%s' "$created" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')

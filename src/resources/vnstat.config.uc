@@ -2,18 +2,18 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		DatabaseDir: section.DatabaseDir ?? null,
-		Interface5MinHours: section.Interface5MinHours ?? null,
-		MonthRotate: section.MonthRotate ?? null,
+		database_dir:        section.DatabaseDir ?? null,
+		interface_5min_hours: section.Interface5MinHours ?? null,
+		month_rotate:        section.MonthRotate ?? null,
 		runtime: {},
 	};
 }
 
 function toUci(json) {
 	let out = {};
-	if (json.DatabaseDir != null)        out.DatabaseDir = json.DatabaseDir;
-	if (json.Interface5MinHours != null) out.Interface5MinHours = "" + json.Interface5MinHours;
-	if (json.MonthRotate != null)        out.MonthRotate = "" + json.MonthRotate;
+	if (json.database_dir != null)         out.DatabaseDir = json.database_dir;
+	if (json.interface_5min_hours != null) out.Interface5MinHours = "" + json.interface_5min_hours;
+	if (json.month_rotate != null)         out.MonthRotate = "" + json.month_rotate;
 	return out;
 }
 
@@ -35,11 +35,11 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		DatabaseDir:        { type: "string",
-		                      description: "Path to vnstat's database directory" },
-		Interface5MinHours: { type: "integer", minimum: 0,
-		                      description: "How many hours of 5-minute granularity data to keep" },
-		MonthRotate:        { type: "integer", minimum: 1, maximum: 31,
-		                      description: "Day of month that monthly counters roll over" },
+		database_dir:         { type: "string",
+		                        description: "Path to vnstat's database directory" },
+		interface_5min_hours: { type: "integer", minimum: 0,
+		                        description: "How many hours of 5-minute granularity data to keep" },
+		month_rotate:         { type: "integer", minimum: 1, maximum: 31,
+		                        description: "Day of month that monthly counters roll over" },
 	},
 };

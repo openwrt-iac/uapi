@@ -60,10 +60,16 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
+		name:    { type: "string", pattern: "^[a-zA-Z0-9_-]+$",
+		           description: "Zone name; alphanumerics, dashes, underscores" },
 		input:   { type: "string", enum: keys(VALID_POLICIES) },
 		output:  { type: "string", enum: keys(VALID_POLICIES) },
 		forward: { type: "string", enum: keys(VALID_POLICIES) },
 		family:  { type: "string", enum: keys(VALID_FAMILIES) },
 		network: { type: "array", items: { type: "string" } },
+		masq:    { type: "boolean",
+		           description: "Enable IPv4 masquerading on this zone" },
+		mtu_fix: { type: "boolean",
+		           description: "Clamp MSS to PMTU for traffic in this zone" },
 	},
 };

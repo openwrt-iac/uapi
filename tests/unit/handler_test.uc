@@ -608,9 +608,9 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 	});
 });
 
-// dropbear.instances declares Port as integer while fromUci returns the uci
-// string. Regression sentinel: PATCH must not 422 on Port when body didn't
-// touch it.
+// dropbear.instances declares port as integer while fromUci returns the uci
+// string view of the underlying uci-native Port key. Regression sentinel:
+// PATCH must not 422 on port when body didn't touch it.
 let dropbear_mod = loadfile('src/resources/dropbear.instances.uc')();
 let dropbear = handler.make(dropbear_mod, {
 	tx: {
@@ -622,33 +622,33 @@ let dropbear = handler.make(dropbear_mod, {
 });
 
 t.describe('handler schema-type check: PATCH does not re-validate uci-string fields', () => {
-	t.it('PATCH on an unrelated field of dropbear.instances does not 422 on Port', () => {
+	t.it('PATCH on an unrelated field of dropbear.instances does not 422 on port', () => {
 		let c = ubus.stub({ uci: { dropbear: {
 			d_main: { '.type': 'dropbear', '.anonymous': false, Port: '22', RootLogin: '1' },
 		}}});
-		let r = dropbear.patch(c, ctx(), 'd_main', { RootLogin: false });
+		let r = dropbear.patch(c, ctx(), 'd_main', { root_login: false });
 		t.assert_equal(r.status, 200);
-		t.assert_equal(r.body.RootLogin, false);
-		// Port is still the original uci string view.
-		t.assert_equal(r.body.Port, '22');
+		t.assert_equal(r.body.root_login, false);
+		// port is still the original uci string view.
+		t.assert_equal(r.body.port, '22');
 	});
 
 	t.it('PATCH still rejects a wrong-typed delta even when the merge would pass', () => {
 		let c = ubus.stub({ uci: { dropbear: {
 			d_main: { '.type': 'dropbear', '.anonymous': false, Port: '22' },
 		}}});
-		// Port as a string in the delta: schema_properties declares integer.
-		let r = dropbear.patch(c, ctx(), 'd_main', { Port: 'not-a-number' });
+		// port as a string in the delta: schema_properties declares integer.
+		let r = dropbear.patch(c, ctx(), 'd_main', { port: 'not-a-number' });
 		t.assert_equal(r.status, 422);
 		let hit = null;
 		for (let e in r.body.errors)
-			if (e.field == 'Port' && e.code == 'invalid_type') hit = e;
+			if (e.field == 'port' && e.code == 'invalid_type') hit = e;
 		t.assert_true(hit != null);
 	});
 
 	t.it('POST that supplies an integer for an integer-typed field still works', () => {
 		let c = ubus.stub({ uci: { dropbear: {} } });
-		let r = dropbear.create(c, ctx(), { Port: 2222 });
+		let r = dropbear.create(c, ctx(), { port: 2222 });
 		t.assert_equal(r.status, 200);
 	});
 });

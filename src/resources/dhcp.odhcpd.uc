@@ -42,9 +42,13 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		maindhcp: { type: "boolean",
-		            description: "Use odhcpd as the IPv4 DHCP server too" },
-		loglevel: { type: "integer", minimum: 0, maximum: 7,
-		            description: "syslog priority (0=emerg .. 7=debug)" },
+		maindhcp:     { type: "boolean",
+		                description: "Use odhcpd as the IPv4 DHCP server too" },
+		leasefile:    { type: ["string", "null"],
+		                description: "Path where odhcpd persists active leases" },
+		leasetrigger: { type: ["string", "null"],
+		                description: "Script invoked on lease add/update/del" },
+		loglevel:     { type: "integer", minimum: 0, maximum: 7,
+		                description: "syslog priority (0=emerg .. 7=debug)" },
 	},
 };

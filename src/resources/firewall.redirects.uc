@@ -141,5 +141,10 @@ return {
 		              description: "Enable NAT loopback / hairpinning for this redirect (fw4 default true)" },
 		reflection_src: { type: "string", enum: keys(VALID_REFLECTION_SRC),
 		                  description: "Source address used for hairpinned packets: internal LAN or external WAN" },
+		reflection_zone: { type: "array", items: { type: "string" },
+		                   description: "Zones in which NAT reflection is allowed (uci list reflection_zone)" },
+		name:    { type: ["string", "null"],
+		           description: "Human-readable label for this redirect" },
+		enabled: { type: "boolean" },
 	},
 };

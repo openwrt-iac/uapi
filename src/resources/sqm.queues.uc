@@ -70,10 +70,16 @@ return {
 	validate: validate,
 	id_prefix: "q",
 	schema_properties: {
+		enabled:   { type: "boolean",
+		             description: "Whether SQM is active on this interface" },
+		interface: { type: "string",
+		             description: "Network interface name SQM applies to" },
 		qdisc:     { type: "string", enum: keys(VALID_QDISCS) },
 		script:    { type: "string", enum: keys(VALID_SCRIPTS) },
 		linklayer: { type: "string", enum: keys(VALID_LINK) },
 		download:  { type: "integer", minimum: 0 },
 		upload:    { type: "integer", minimum: 0 },
+		overhead:  { type: "integer",
+		             description: "Per-packet overhead bytes for link-layer accounting" },
 	},
 };

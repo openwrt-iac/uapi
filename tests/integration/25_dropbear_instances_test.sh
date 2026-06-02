@@ -17,30 +17,30 @@ trap cleanup EXIT INT TERM
 
 echo "--- dropbear/instances: POST a second instance on a high port ---"
 created=$(call -X POST -H 'Content-Type: application/json' "$URL/dropbear/instances" -d '{
-	"Port": 22422,
-	"PasswordAuth": false,
-	"RootPasswordAuth": false,
-	"RootLogin": true
+	"port": 22422,
+	"password_auth": false,
+	"root_password_auth": false,
+	"root_login": true
 }')
 echo "$created"
 status=$(echo "$created" | tail -1)
 [ "$status" = "200" ] || fail "POST expected 200, got $status"
 did=$(echo "$created" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
-echo "--- dropbear/instances: response normalizes PasswordAuth to a JSON bool ---"
-echo "$created" | head -1 | grep -q '"PasswordAuth": false' \
-	|| fail "expected PasswordAuth=false on read"
+echo "--- dropbear/instances: response normalizes password_auth to a JSON bool ---"
+echo "$created" | head -1 | grep -q '"password_auth": false' \
+	|| fail "expected password_auth=false on read"
 
 echo "--- dropbear/instances: PATCH changes the port ---"
 patched=$(call -X PATCH -H 'Content-Type: application/json' \
-	"$URL/dropbear/instances/$did" -d '{ "Port": 22423 }')
+	"$URL/dropbear/instances/$did" -d '{ "port": 22423 }')
 echo "$patched" | tail -1 | grep -q '^200$' || fail "PATCH expected 200"
 
-echo "--- dropbear/instances: invalid Port rejected with 422 ---"
+echo "--- dropbear/instances: invalid port rejected with 422 ---"
 bad=$(call -X POST -H 'Content-Type: application/json' "$URL/dropbear/instances" -d '{
-	"Port": 99999
+	"port": 99999
 }')
-echo "$bad" | tail -1 | grep -q '^422$' || fail "expected 422 on bad Port"
+echo "$bad" | tail -1 | grep -q '^422$' || fail "expected 422 on bad port"
 
 echo "--- dropbear/instances: DELETE returns 204 ---"
 call -X DELETE "$URL/dropbear/instances/$did" | tail -1 | grep -q '^204$' \

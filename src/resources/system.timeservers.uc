@@ -54,6 +54,14 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		server: { type: "array", items: { type: "string" } },
+		enabled:       { type: "boolean",
+		                 description: "Whether sysntpd runs at all" },
+		enable_server: { type: "boolean",
+		                 description: "Also serve time to LAN clients" },
+		interface:     { type: ["string", "null"],
+		                 description: "Bind sysntpd to a specific network interface" },
+		server:        { type: "array", items: { type: "string" } },
+		use_dhcp:      { type: "boolean",
+		                 description: "Accept NTP servers learned via DHCP option 42" },
 	},
 };

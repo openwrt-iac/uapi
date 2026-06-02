@@ -40,6 +40,10 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
+		group:   { type: "string",
+		           description: "Group name referenced by snmpd/accesses entries" },
 		version: { type: "string", enum: keys(VALID_VERSIONS) },
+		secname: { type: ["string", "null"],
+		           description: "Security name (community for v1/v2c, USM user for v3)" },
 	},
 };

@@ -10455,8 +10455,11 @@
 						"type": "boolean"
 					},
 					"name": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Human-readable label for this rule"
 					},
 					"target": {
 						"type": "string",
@@ -10554,7 +10557,8 @@
 					},
 					"name": {
 						"type": "string",
-						"nullable": true
+						"pattern": "^[a-zA-Z0-9_-]+$",
+						"description": "Zone name; alphanumerics, dashes, underscores"
 					},
 					"input": {
 						"type": "string",
@@ -10587,10 +10591,12 @@
 						}
 					},
 					"masq": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable IPv4 masquerading on this zone"
 					},
 					"mtu_fix": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Clamp MSS to PMTU for traffic in this zone"
 					},
 					"family": {
 						"type": "string",
@@ -10617,8 +10623,11 @@
 						"type": "boolean"
 					},
 					"name": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Human-readable label for this redirect"
 					},
 					"target": {
 						"type": "string",
@@ -10717,7 +10726,8 @@
 						"type": "array",
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Zones in which NAT reflection is allowed (uci list reflection_zone)"
 					},
 					"runtime": {
 						"type": "object"
@@ -10795,10 +10805,12 @@
 						]
 					},
 					"syn_flood": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable SYN flood protection"
 					},
 					"drop_invalid": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Drop packets with invalid conntrack state"
 					},
 					"synflood_burst": {
 						"type": "integer",
@@ -10811,13 +10823,16 @@
 						"maximum": 1000000
 					},
 					"tcp_syncookies": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable kernel TCP SYN cookies"
 					},
 					"flow_offloading": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable software flow offloading"
 					},
 					"flow_offloading_hw": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable hardware flow offloading (requires NIC support)"
 					},
 					"runtime": {
 						"type": "object"
@@ -10836,8 +10851,11 @@
 						"type": "boolean"
 					},
 					"device": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Physical or logical L2 device this interface binds to"
 					},
 					"proto": {
 						"type": "string",
@@ -10867,12 +10885,18 @@
 						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces."
 					},
 					"netmask": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 netmask (static proto)"
 					},
 					"gateway": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 default gateway (static proto)"
 					},
 					"dns": {
 						"type": "array",
@@ -10881,15 +10905,25 @@
 						}
 					},
 					"ip6assign": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 128,
+						"description": "Prefix length to assign downstream from a delegated prefix"
 					},
 					"mtu": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 65535
 					},
 					"auto": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Bring this interface up at boot"
 					},
 					"runtime": {
 						"type": "object"
@@ -10913,6 +10947,24 @@
 						"type": "integer",
 						"minimum": 0,
 						"maximum": 65535
+					},
+					"nohostroute": {
+						"type": "boolean",
+						"description": "Suppress the implicit host-route for wireguard endpoint"
+					},
+					"ip4table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table to install WireGuard IPv4 routes into"
+					},
+					"ip6table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table to install WireGuard IPv6 routes into"
 					},
 					"peerdns": {
 						"type": "boolean",
@@ -10976,7 +11028,7 @@
 					},
 					"name": {
 						"type": "string",
-						"nullable": true
+						"description": "Device name as seen by netifd / the kernel"
 					},
 					"type": {
 						"type": "string",
@@ -10997,23 +11049,34 @@
 						}
 					},
 					"vid": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 4094,
+						"description": "VLAN id for 8021q / 8021ad devices"
 					},
 					"ifname": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Underlying parent interface (e.g. for macvlan/8021q)"
 					},
 					"mtu": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 65535
 					},
 					"macaddr": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$",
+						"description": "MAC address override"
 					},
 					"ipv6": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable IPv6 on this device"
 					},
 					"runtime": {
 						"type": "object"
@@ -11032,24 +11095,37 @@
 						"type": "boolean"
 					},
 					"interface": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Parent network interface name"
 					},
 					"target": {
 						"type": "string",
-						"nullable": true
+						"description": "Destination IPv4 address or CIDR"
 					},
 					"netmask": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 netmask if target is an address (not CIDR)"
 					},
 					"gateway": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 next-hop address"
 					},
 					"table": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Routing table id"
 					},
 					"metric": {
 						"type": "integer",
@@ -11060,8 +11136,11 @@
 						"minimum": 0
 					},
 					"source": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Preferred source address (IPv4 or CIDR)"
 					},
 					"type": {
 						"type": "string",
@@ -11094,20 +11173,32 @@
 						"type": "boolean"
 					},
 					"in": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match traffic arriving on this interface"
 					},
 					"out": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match traffic departing on this interface"
 					},
 					"src": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match source IPv4 address or CIDR"
 					},
 					"dest": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match destination IPv4 address or CIDR"
 					},
 					"priority": {
 						"type": "integer",
@@ -11115,12 +11206,20 @@
 						"maximum": 32766
 					},
 					"lookup": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Routing table id to look up when action is lookup"
 					},
 					"goto": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Priority of the rule to jump to when action is goto"
 					},
 					"action": {
 						"type": "string",
@@ -11134,11 +11233,15 @@
 						]
 					},
 					"invert": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Invert the match selectors"
 					},
 					"mark": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match fwmark (value or value/mask)"
 					},
 					"runtime": {
 						"type": "object"
@@ -11158,7 +11261,7 @@
 					},
 					"device": {
 						"type": "string",
-						"nullable": true
+						"description": "Parent bridge device name (must exist in network/devices type=bridge)"
 					},
 					"vlan": {
 						"type": "integer",
@@ -11168,8 +11271,10 @@
 					"ports": {
 						"type": "array",
 						"items": {
-							"type": "string"
-						}
+							"type": "string",
+							"pattern": "^[A-Za-z0-9._-]+(:[tu*]+)?$"
+						},
+						"description": "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix"
 					},
 					"runtime": {
 						"type": "object"
@@ -11189,11 +11294,14 @@
 					},
 					"interface": {
 						"type": "string",
-						"nullable": true
+						"description": "Parent WireGuard interface (network/interfaces name with proto=wireguard)"
 					},
 					"description": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Human-readable label for this peer"
 					},
 					"public_key": {
 						"type": "string",
@@ -11210,8 +11318,11 @@
 						}
 					},
 					"endpoint_host": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Remote endpoint hostname or IP"
 					},
 					"endpoint_port": {
 						"type": "integer",
@@ -11224,10 +11335,12 @@
 						"maximum": 65535
 					},
 					"route_allowed_ips": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Auto-install routes for allowed_ips"
 					},
 					"disabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Skip this peer when starting the tunnel"
 					},
 					"runtime": {
 						"type": "object"
@@ -11235,6 +11348,7 @@
 					"preshared_key": {
 						"type": "string",
 						"writeOnly": true,
+						"pattern": "^[A-Za-z0-9+/]{43}=$",
 						"description": "Optional preshared key; accepted on write, masked on read"
 					}
 				}
@@ -11267,23 +11381,41 @@
 						]
 					},
 					"channel": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"string"
+						],
+						"minimum": 0,
+						"maximum": 196,
+						"description": "Channel number, or 'auto'"
 					},
 					"htmode": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "HT/VHT/HE mode label (e.g. HT20, VHT80, HE160)"
 					},
 					"country": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[A-Za-z]{2}$",
+						"description": "ISO 3166-1 alpha-2 regulatory country code"
 					},
 					"txpower": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 30,
+						"description": "TX power in dBm"
 					},
 					"disabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Disable this radio at boot"
 					},
 					"runtime": {
 						"type": "object"
@@ -11303,11 +11435,14 @@
 					},
 					"device": {
 						"type": "string",
-						"nullable": true
+						"description": "Parent radio (wireless/devices id)"
 					},
 					"network": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Network interface this SSID bridges into"
 					},
 					"mode": {
 						"type": "string",
@@ -11321,8 +11456,11 @@
 						]
 					},
 					"ssid": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "SSID broadcast (or joined in sta mode)"
 					},
 					"encryption": {
 						"type": "string",
@@ -11341,13 +11479,16 @@
 						]
 					},
 					"disabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Disable this iface at boot"
 					},
 					"hidden": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Suppress SSID in beacon frames"
 					},
 					"isolate": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Block station-to-station traffic on this AP"
 					},
 					"runtime": {
 						"type": "object"
@@ -11686,12 +11827,18 @@
 						"description": "Use odhcpd as the IPv4 DHCP server too"
 					},
 					"leasefile": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path where odhcpd persists active leases"
 					},
 					"leasetrigger": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Script invoked on lease add/update/del"
 					},
 					"loglevel": {
 						"type": "integer",
@@ -11716,36 +11863,58 @@
 						"type": "boolean"
 					},
 					"hostname": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$",
+						"description": "System hostname (alphanumerics, dashes, underscores, dots)"
 					},
 					"description": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Free-form system description shown in LuCI"
 					},
 					"notes": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Operator-facing notes"
 					},
 					"timezone": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "POSIX TZ string (e.g. CET-1CEST,M3.5.0,M10.5.0/3)"
 					},
 					"zonename": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IANA zone name (e.g. Europe/Paris)"
 					},
 					"log_size": {
 						"type": "integer",
 						"minimum": 0
 					},
 					"log_ip": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Remote syslog collector IP address"
 					},
 					"log_proto": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Remote syslog transport (udp or tcp)"
 					},
 					"log_remote": {
 						"type": "boolean"
@@ -11770,14 +11939,19 @@
 						"type": "boolean"
 					},
 					"enabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Whether sysntpd runs at all"
 					},
 					"enable_server": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Also serve time to LAN clients"
 					},
 					"interface": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Bind sysntpd to a specific network interface"
 					},
 					"server": {
 						"type": "array",
@@ -11786,7 +11960,8 @@
 						}
 					},
 					"use_dhcp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Accept NTP servers learned via DHCP option 42"
 					},
 					"runtime": {
 						"type": "object"
@@ -11805,32 +11980,43 @@
 						"type": "boolean"
 					},
 					"enable": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Enable this dropbear instance"
 					},
-					"Port": {
+					"port": {
 						"type": "integer",
 						"minimum": 1,
 						"maximum": 65535
 					},
-					"PasswordAuth": {
-						"type": "boolean"
+					"password_auth": {
+						"type": "boolean",
+						"description": "Allow password authentication"
 					},
-					"RootPasswordAuth": {
-						"type": "boolean"
+					"root_password_auth": {
+						"type": "boolean",
+						"description": "Allow root password login"
 					},
-					"RootLogin": {
-						"type": "boolean"
+					"root_login": {
+						"type": "boolean",
+						"description": "Allow root SSH login at all"
 					},
-					"BannerFile": {
-						"type": "string",
-						"nullable": true
+					"banner_file": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to SSH banner file"
 					},
-					"Interface": {
-						"type": "string",
-						"nullable": true
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Listen interface or IP"
 					},
-					"GatewayPorts": {
-						"type": "boolean"
+					"gateway_ports": {
+						"type": "boolean",
+						"description": "Allow remote port forwarding"
 					},
 					"runtime": {
 						"type": "object"
@@ -11851,30 +12037,44 @@
 					"listen_http": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"listen_https": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"home": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Document root"
 					},
 					"cert": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to TLS certificate file"
 					},
 					"key": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to TLS key file"
 					},
 					"cgi_prefix": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "URL prefix served as CGI"
 					},
 					"lua_prefix": {
 						"type": "array",
@@ -11919,17 +12119,23 @@
 						}
 					},
 					"error_page": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path served when a request 404s"
 					},
 					"no_dirlists": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Disable directory listings"
 					},
 					"no_symlinks": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Refuse to follow symlinks under home"
 					},
 					"rfc1918_filter": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Reject requests from RFC1918 ranges with non-RFC1918 host header"
 					},
 					"runtime": {
 						"type": "object"
@@ -12133,11 +12339,12 @@
 						"type": "boolean"
 					},
 					"enabled": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Whether SQM is active on this interface"
 					},
 					"interface": {
 						"type": "string",
-						"nullable": true
+						"description": "Network interface name SQM applies to"
 					},
 					"download": {
 						"type": "integer",
@@ -12174,8 +12381,8 @@
 						]
 					},
 					"overhead": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"description": "Per-packet overhead bytes for link-layer accounting"
 					},
 					"runtime": {
 						"type": "object"
@@ -12245,7 +12452,7 @@
 					},
 					"group": {
 						"type": "string",
-						"nullable": true
+						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
 						"type": "string",
@@ -12256,8 +12463,11 @@
 						]
 					},
 					"secname": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Security name (community for v1/v2c, USM user for v3)"
 					},
 					"runtime": {
 						"type": "object"
@@ -12277,11 +12487,14 @@
 					},
 					"group": {
 						"type": "string",
-						"nullable": true
+						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
 						"type": "string",
@@ -12308,16 +12521,25 @@
 						]
 					},
 					"read": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "View name granted for read access"
 					},
 					"write": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "View name granted for write access"
 					},
 					"notify": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "View name granted for notifications"
 					},
 					"runtime": {
 						"type": "object"
@@ -12335,29 +12557,29 @@
 					"managed": {
 						"type": "boolean"
 					},
-					"sysLocation": {
+					"sys_location": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysLocation"
 					},
-					"sysContact": {
+					"sys_contact": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysContact"
 					},
-					"sysName": {
+					"sys_name": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysName"
 					},
-					"sysServices": {
+					"sys_services": {
 						"type": "integer",
 						"minimum": 0,
 						"maximum": 127,
 						"description": "SNMPv2-MIB::sysServices bitfield"
 					},
-					"sysDescr": {
+					"sys_descr": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysDescr"
 					},
-					"sysObjectID": {
+					"sys_object_id": {
 						"type": "string",
 						"description": "SNMPv2-MIB::sysObjectID OID"
 					},
@@ -12378,19 +12600,24 @@
 						"type": "boolean"
 					},
 					"enable_cdp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Emit Cisco Discovery Protocol frames"
 					},
 					"enable_fdp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Emit Foundry Discovery Protocol frames"
 					},
 					"enable_sonmp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Emit Nortel SONMP frames"
 					},
 					"enable_edp": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Emit Extreme Discovery Protocol frames"
 					},
 					"enable_lldpmed": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Emit LLDP-MED extensions"
 					},
 					"lldp_class": {
 						"type": "integer",
@@ -12398,14 +12625,19 @@
 						"maximum": 4
 					},
 					"lldp_description": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Advertise the system description TLV"
 					},
 					"lldp_capabilities": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Advertise the system capabilities TLV"
 					},
 					"lldp_mgmt_ip": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
 						"type": "array",
@@ -12527,16 +12759,16 @@
 					"managed": {
 						"type": "boolean"
 					},
-					"DatabaseDir": {
+					"database_dir": {
 						"type": "string",
 						"description": "Path to vnstat's database directory"
 					},
-					"Interface5MinHours": {
+					"interface_5min_hours": {
 						"type": "integer",
 						"minimum": 0,
 						"description": "How many hours of 5-minute granularity data to keep"
 					},
-					"MonthRotate": {
+					"month_rotate": {
 						"type": "integer",
 						"minimum": 1,
 						"maximum": 31,

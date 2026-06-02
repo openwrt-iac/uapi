@@ -109,7 +109,10 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		target: { type: "string", enum: keys(VALID_TARGETS) },
+		name:    { type: ["string", "null"],
+		           description: "Human-readable label for this rule" },
+		target:  { type: "string", enum: keys(VALID_TARGETS) },
+		enabled: { type: "boolean" },
 		match: {
 			type: "object",
 			properties: {

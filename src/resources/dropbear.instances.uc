@@ -6,28 +6,28 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enable: normalize_bool(section.enable, true),
-		Port: section.Port ?? null,
-		PasswordAuth: normalize_bool(section.PasswordAuth, true),
-		RootPasswordAuth: normalize_bool(section.RootPasswordAuth, true),
-		RootLogin: normalize_bool(section.RootLogin, true),
-		BannerFile: section.BannerFile ?? null,
-		Interface: section.Interface ?? null,
-		GatewayPorts: normalize_bool(section.GatewayPorts, false),
+		enable:             normalize_bool(section.enable, true),
+		port:               section.Port ?? null,
+		password_auth:      normalize_bool(section.PasswordAuth, true),
+		root_password_auth: normalize_bool(section.RootPasswordAuth, true),
+		root_login:         normalize_bool(section.RootLogin, true),
+		banner_file:        section.BannerFile ?? null,
+		interface:          section.Interface ?? null,
+		gateway_ports:      normalize_bool(section.GatewayPorts, false),
 		runtime: {},
 	};
 }
 
 function toUci(json) {
 	let out = {};
-	if (json.enable != null)            out.enable = json.enable ? "1" : "0";
-	if (json.Port != null)              out.Port = "" + json.Port;
-	if (json.PasswordAuth != null)      out.PasswordAuth = json.PasswordAuth ? "1" : "0";
-	if (json.RootPasswordAuth != null)  out.RootPasswordAuth = json.RootPasswordAuth ? "1" : "0";
-	if (json.RootLogin != null)         out.RootLogin = json.RootLogin ? "1" : "0";
-	if (json.BannerFile != null)        out.BannerFile = json.BannerFile;
-	if (json.Interface != null)         out.Interface = json.Interface;
-	if (json.GatewayPorts != null)      out.GatewayPorts = json.GatewayPorts ? "1" : "0";
+	if (json.enable != null)             out.enable = json.enable ? "1" : "0";
+	if (json.port != null)               out.Port = "" + json.port;
+	if (json.password_auth != null)      out.PasswordAuth = json.password_auth ? "1" : "0";
+	if (json.root_password_auth != null) out.RootPasswordAuth = json.root_password_auth ? "1" : "0";
+	if (json.root_login != null)         out.RootLogin = json.root_login ? "1" : "0";
+	if (json.banner_file != null)        out.BannerFile = json.banner_file;
+	if (json.interface != null)          out.Interface = json.interface;
+	if (json.gateway_ports != null)      out.GatewayPorts = json.gateway_ports ? "1" : "0";
 	return out;
 }
 
@@ -50,6 +50,13 @@ return {
 	validate: validate,
 	id_prefix: "d",
 	schema_properties: {
-		Port: { type: "integer", minimum: 1, maximum: 65535 },
+		enable:             { type: "boolean", description: "Enable this dropbear instance" },
+		port:               { type: "integer", minimum: 1, maximum: 65535 },
+		password_auth:      { type: "boolean", description: "Allow password authentication" },
+		root_password_auth: { type: "boolean", description: "Allow root password login" },
+		root_login:         { type: "boolean", description: "Allow root SSH login at all" },
+		banner_file:        { type: ["string", "null"], description: "Path to SSH banner file" },
+		interface:          { type: ["string", "null"], description: "Listen interface or IP" },
+		gateway_ports:      { type: "boolean", description: "Allow remote port forwarding" },
 	},
 };

@@ -71,7 +71,10 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		vlan: { type: "integer", minimum: 1, maximum: 4094 },
-		ports: { type: "array", items: { type: "string" } },
+		device: { type: "string",
+		          description: "Parent bridge device name (must exist in network/devices type=bridge)" },
+		vlan:   { type: "integer", minimum: 1, maximum: 4094 },
+		ports:  { type: "array", items: { type: "string", pattern: "^[A-Za-z0-9._-]+(:[tu*]+)?$" },
+		          description: "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix" },
 	},
 };
