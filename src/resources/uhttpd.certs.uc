@@ -36,9 +36,6 @@ function validate(json) {
 	if (json.commonname == null || json.commonname == "")
 		push(errs, { field: "commonname", code: "required",
 		             message: "is required (cert CN)" });
-	if (json.country != null && !match(json.country, /^[A-Za-z]{2}$/))
-		push(errs, { field: "country", code: "invalid_format",
-		             message: "must be a 2-letter ISO 3166-1 alpha-2 code (case-insensitive; normalized to uppercase)" });
 	return errs;
 }
 
@@ -59,7 +56,7 @@ return {
 		organization: { type: "string", description: "X.509 O" },
 		location:     { type: "string", description: "X.509 L" },
 		state:        { type: "string", description: "X.509 ST" },
-		country:      { type: "string", pattern: "^[A-Z]{2}$",
-		                description: "ISO 3166-1 alpha-2 country code" },
+		country:      { type: "string", pattern: "^[A-Za-z]{2}$",
+		                description: "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)" },
 	},
 };

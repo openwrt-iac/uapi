@@ -69,7 +69,7 @@ t.describe('dhcp.dnsmasq.fromUci', () => {
 
 t.describe('dhcp.dnsmasq.validate', () => {
 	t.it('rejects port out of range', () => {
-		let errs = dnsmasq.validate({ port: 99999 });
+		let errs = full_validate(dnsmasq, { port: 99999 }, null);
 		let pe = filter(errs, function(e) { return e.field == "port"; });
 		t.assert_equal(pe[0].code, "out_of_range");
 	});

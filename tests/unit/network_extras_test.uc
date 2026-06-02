@@ -74,7 +74,7 @@ t.describe('network.rules.validate', () => {
 		t.assert_equal(errs[0].code, "required");
 	});
 	t.it('rejects priority out of range', () => {
-		let errs = rules.validate({ src: '192.168.1.0/24', priority: 99999, lookup: 42 }, null);
+		let errs = full_validate(rules, { src: '192.168.1.0/24', priority: 99999, lookup: 42 }, null);
 		let pe = filter(errs, function(e) { return e.field == "priority"; });
 		t.assert_equal(pe[0].code, "out_of_range");
 	});

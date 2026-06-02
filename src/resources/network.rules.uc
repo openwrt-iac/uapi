@@ -65,13 +65,6 @@ function validate(json) {
 		push(errs, { field: "dest", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
 
-	if (json.priority != null) {
-		let p = int(json.priority);
-		if (p < 0 || p > 32766)
-			push(errs, { field: "priority", code: "out_of_range",
-			             message: "must be 0-32766" });
-	}
-
 	let action = json.action ?? "lookup";
 	if (action == "lookup" && (json.lookup == null || json.lookup == ""))
 		push(errs, { field: "lookup", code: "required",
@@ -91,6 +84,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		action: { type: "string", enum: keys(VALID_ACTIONS) },
+		action:   { type: "string", enum: keys(VALID_ACTIONS) },
+		priority: { type: "integer", minimum: 0, maximum: 32766 },
 	},
 };

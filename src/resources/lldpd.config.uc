@@ -41,12 +41,6 @@ function validate(json) {
 		             message: "body must be a JSON object" });
 		return errs;
 	}
-	if (json.lldp_class != null) {
-		let c = int(json.lldp_class);
-		if (c < 1 || c > 4)
-			push(errs, { field: "lldp_class", code: "out_of_range",
-			             message: "must be 1-4" });
-	}
 	return errs;
 }
 
@@ -58,6 +52,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
+		lldp_class: { type: "integer", minimum: 1, maximum: 4 },
 		interface: { type: "array", items: { type: "string" } },
 	},
 };

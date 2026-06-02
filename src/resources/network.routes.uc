@@ -76,20 +76,6 @@ function validate(json, conn) {
 		push(errs, { field: "source", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
 
-	if (json.metric != null) {
-		let m = int(json.metric);
-		if (m < 0)
-			push(errs, { field: "metric", code: "out_of_range",
-			             message: "must be non-negative" });
-	}
-
-	if (json.mtu != null) {
-		let m = int(json.mtu);
-		if (m < 0)
-			push(errs, { field: "mtu", code: "out_of_range",
-			             message: "must be non-negative" });
-	}
-
 	let needs_iface = (json.type == null || json.type == "unicast");
 	if (conn != null && needs_iface && json.interface != null && json.interface != "") {
 		if (!interface_exists(conn, json.interface))
@@ -108,6 +94,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		type: { type: "string", enum: keys(VALID_TYPES) },
+		type:   { type: "string", enum: keys(VALID_TYPES) },
+		metric: { type: "integer", minimum: 0 },
+		mtu:    { type: "integer", minimum: 0 },
 	},
 };

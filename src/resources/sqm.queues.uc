@@ -53,18 +53,6 @@ function validate(json, conn) {
 	}
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required", message: "is required" });
-	if (json.download != null) {
-		let d = int(json.download);
-		if (d < 0)
-			push(errs, { field: "download", code: "out_of_range",
-			             message: "must be non-negative" });
-	}
-	if (json.upload != null) {
-		let u = int(json.upload);
-		if (u < 0)
-			push(errs, { field: "upload", code: "out_of_range",
-			             message: "must be non-negative" });
-	}
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists(conn, json.interface))
 			push(errs, { field: "interface", code: "conflict",
@@ -82,8 +70,10 @@ return {
 	validate: validate,
 	id_prefix: "q",
 	schema_properties: {
-		qdisc: { type: "string", enum: keys(VALID_QDISCS) },
-		script: { type: "string", enum: keys(VALID_SCRIPTS) },
+		qdisc:     { type: "string", enum: keys(VALID_QDISCS) },
+		script:    { type: "string", enum: keys(VALID_SCRIPTS) },
 		linklayer: { type: "string", enum: keys(VALID_LINK) },
+		download:  { type: "integer", minimum: 0 },
+		upload:    { type: "integer", minimum: 0 },
 	},
 };

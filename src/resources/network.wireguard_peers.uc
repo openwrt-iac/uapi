@@ -89,19 +89,6 @@ function validate(json, conn) {
 			             message: "must be a valid IPv4 CIDR" });
 	}
 
-	if (json.endpoint_port != null) {
-		let p = int(json.endpoint_port);
-		if (p < 1 || p > 65535)
-			push(errs, { field: "endpoint_port", code: "out_of_range",
-			             message: "must be 1-65535" });
-	}
-	if (json.persistent_keepalive != null) {
-		let k = int(json.persistent_keepalive);
-		if (k < 0 || k > 65535)
-			push(errs, { field: "persistent_keepalive", code: "out_of_range",
-			             message: "must be 0-65535" });
-	}
-
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists_with_wg_proto(conn, json.interface))
 			push(errs, { field: "interface", code: "conflict",
@@ -147,5 +134,7 @@ return {
 		                 description: "Optional preshared key; accepted on write, masked on read" },
 		has_preshared_key: { type: "boolean", readOnly: true },
 		allowed_ips: { type: "array", items: { type: "string" } },
+		endpoint_port:        { type: "integer", minimum: 1, maximum: 65535 },
+		persistent_keepalive: { type: "integer", minimum: 0, maximum: 65535 },
 	},
 };

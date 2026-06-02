@@ -83,16 +83,6 @@ function validate(json, conn, id) {
 		}
 	}
 
-	let int_fields = ["max_requests", "max_connections", "script_timeout",
-	                  "network_timeout", "http_keepalive", "tcp_keepalive"];
-	for (let f in int_fields) {
-		if (json[f] == null) continue;
-		let n = int(json[f]);
-		if (n < 0)
-			push(errs, { field: f, code: "out_of_range",
-			             message: "must be non-negative" });
-	}
-
 	// Self-lockout protection: refuse a write to the 'main' instance that
 	// would strip uapi's own ucode_prefix entry. Applies to PUT and PATCH
 	// (id == 'main'); POST creates a new instance with a generated id and
@@ -126,10 +116,16 @@ return {
 	validate: validate,
 	merge_for_patch: merge_for_patch,
 	schema_properties: {
-		listen_http:  { type: "array", items: { type: "string" } },
-		listen_https: { type: "array", items: { type: "string" } },
-		ucode_prefix: { type: "array", items: { type: "string" } },
-		lua_prefix:   { type: "array", items: { type: "string" } },
-		index_page:   { type: "array", items: { type: "string" } },
+		listen_http:     { type: "array", items: { type: "string" } },
+		listen_https:    { type: "array", items: { type: "string" } },
+		ucode_prefix:    { type: "array", items: { type: "string" } },
+		lua_prefix:      { type: "array", items: { type: "string" } },
+		index_page:      { type: "array", items: { type: "string" } },
+		max_requests:    { type: "integer", minimum: 0 },
+		max_connections: { type: "integer", minimum: 0 },
+		script_timeout:  { type: "integer", minimum: 0 },
+		network_timeout: { type: "integer", minimum: 0 },
+		http_keepalive:  { type: "integer", minimum: 0 },
+		tcp_keepalive:   { type: "integer", minimum: 0 },
 	},
 };

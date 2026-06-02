@@ -60,19 +60,6 @@ function validate(json) {
 		return errs;
 	}
 
-	if (json.cachesize != null) {
-		let c = int(json.cachesize);
-		if (c < 0 || c > 1000000)
-			push(errs, { field: "cachesize", code: "out_of_range",
-			             message: "must be 0-1000000" });
-	}
-	if (json.port != null) {
-		let p = int(json.port);
-		if (p < 1 || p > 65535)
-			push(errs, { field: "port", code: "out_of_range",
-			             message: "must be 1-65535 (use a separate option to disable DNS)" });
-	}
-
 	return errs;
 }
 
@@ -84,7 +71,9 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		server:  { type: "array", items: { type: "string" } },
-		address: { type: "array", items: { type: "string" } },
+		cachesize: { type: "integer", minimum: 0, maximum: 1000000 },
+		port:      { type: "integer", minimum: 1, maximum: 65535 },
+		server:    { type: "array", items: { type: "string" } },
+		address:   { type: "array", items: { type: "string" } },
 	},
 };

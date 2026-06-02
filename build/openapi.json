@@ -10801,12 +10801,14 @@
 						"type": "boolean"
 					},
 					"synflood_burst": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 1000000
 					},
 					"synflood_rate": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 1000000
 					},
 					"tcp_syncookies": {
 						"type": "boolean"
@@ -11050,12 +11052,12 @@
 						"nullable": true
 					},
 					"metric": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"mtu": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"source": {
 						"type": "string",
@@ -11108,8 +11110,9 @@
 						"nullable": true
 					},
 					"priority": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 32766
 					},
 					"lookup": {
 						"type": "string",
@@ -11211,12 +11214,14 @@
 						"nullable": true
 					},
 					"endpoint_port": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535
 					},
 					"persistent_keepalive": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 65535
 					},
 					"route_allowed_ips": {
 						"type": "boolean"
@@ -11525,12 +11530,14 @@
 						"nullable": true
 					},
 					"start": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 254
 					},
 					"limit": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 254
 					},
 					"leasetime": {
 						"type": "string",
@@ -11611,12 +11618,14 @@
 						"type": "boolean"
 					},
 					"cachesize": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 1000000
 					},
 					"port": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 65535
 					},
 					"domainneeded": {
 						"type": "boolean"
@@ -11727,8 +11736,8 @@
 						"nullable": true
 					},
 					"log_size": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"log_ip": {
 						"type": "string",
@@ -11880,28 +11889,28 @@
 						}
 					},
 					"max_requests": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"max_connections": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"script_timeout": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"network_timeout": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"http_keepalive": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"tcp_keepalive": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"index_page": {
 						"type": "array",
@@ -11967,8 +11976,8 @@
 					},
 					"country": {
 						"type": "string",
-						"pattern": "^[A-Z]{2}$",
-						"description": "ISO 3166-1 alpha-2 country code"
+						"pattern": "^[A-Za-z]{2}$",
+						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
 					},
 					"runtime": {
 						"type": "object"
@@ -12131,12 +12140,12 @@
 						"nullable": true
 					},
 					"download": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"upload": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 0
 					},
 					"qdisc": {
 						"type": "string",
@@ -12384,8 +12393,9 @@
 						"type": "boolean"
 					},
 					"lldp_class": {
-						"type": "string",
-						"nullable": true
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 4
 					},
 					"lldp_description": {
 						"type": "boolean"

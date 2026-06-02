@@ -48,13 +48,6 @@ function validate(json) {
 		push(errs, { field: "hostname", code: "invalid_format",
 		             message: "must be a valid hostname (alphanumerics, dashes, underscores, dots)" });
 
-	if (json.log_size != null) {
-		let n = int(json.log_size);
-		if (n < 0)
-			push(errs, { field: "log_size", code: "out_of_range",
-			             message: "must be a non-negative number" });
-	}
-
 	return errs;
 }
 
@@ -66,7 +59,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		log_remote: { type: "boolean" },
+		log_size:     { type: "integer", minimum: 0 },
+		log_remote:   { type: "boolean" },
 		urandom_seed: { type: "boolean" },
 	},
 };

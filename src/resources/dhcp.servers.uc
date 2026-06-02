@@ -133,18 +133,6 @@ function validate(json, conn) {
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required", message: "is required" });
 
-	if (json.start != null) {
-		let s = int(json.start);
-		if (s < 0 || s > 254)
-			push(errs, { field: "start", code: "out_of_range",
-			             message: "must be 0-254 (dnsmasq pool offset within /24)" });
-	}
-	if (json.limit != null) {
-		let l = int(json.limit);
-		if (l < 0 || l > 254)
-			push(errs, { field: "limit", code: "out_of_range",
-			             message: "must be 0-254 (dnsmasq pool size within /24)" });
-	}
 	if (json.leasetime != null && json.leasetime != "" && !match(json.leasetime, LEASETIME_RE))
 		push(errs, { field: "leasetime", code: "invalid_format",
 		             message: "must look like 12h, 30m, 1d, or plain seconds" });
@@ -175,6 +163,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
+		start:  { type: "integer", minimum: 0, maximum: 254 },
+		limit:  { type: "integer", minimum: 0, maximum: 254 },
 		ra:     { type: "string", enum: keys(VALID_RA) },
 		dhcpv6: { type: "string", enum: keys(VALID_RA) },
 		dhcp_option: { type: "array", items: { type: "string" } },
