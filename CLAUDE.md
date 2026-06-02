@@ -546,6 +546,13 @@ Things deliberately not yet shipped. Each entry says why and what shape the chan
 ### Shipped
 
 - **ETags / `If-Match` optimistic concurrency** — shipped in v1.2.
+- **Schema-driven type check.** handler.uc walks `schema_properties` before every `resource.validate()` and 422s shape mismatches that previously fell through to `toUci()` and were silently dropped. PATCH schema-checks the wire delta only (the merge inherits fromUci's uci-string view of integer fields). Errors are deduped by `(field, code)`; messages use JSON Schema vocabulary (`got integer`, not `got int`).
+- **Round-trip property tests + adversarial fuzz harness.** `tests/property_harness.uc` exposes a deterministic LCG and two contract checkers used by `tests/unit/property_test.uc`: every resource gets 200 fuzz bodies through `validate()` (must never throw) and 7 representative resources have synthesized-section fixtures that prove `fromUci -> toUci -> fromUci` is stable.
+- **Coverage inventory.** `make coverage` walks `src/resources` and `src/lib`; CI gates on 100% structural coverage.
+- **Latency benchmark.** `make bench` reports p50/p95/p99 across representative reads against a live router.
+- **Soak harness.** `make soak` runs a long read-only load loop with optional SSH-side RSS/fd/child sampling.
+- **Per-package flock.** uci transactions hold SH on `/var/lock/uapi.lock` + EX on `/var/lock/uapi.pkg.<package>.lock`. Different packages run in parallel; same package serializes; non-uci writes (apk, system/access) hold the global EX. Live-verified cross-package POSTs overlap; same-package POSTs return `423 locked` (non-blocking, client retries).
+- **Security headers on every response.** `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
 
 ### Features (additive, future minor bumps)
 
@@ -565,23 +572,19 @@ Things deliberately not yet shipped. Each entry says why and what shape the chan
 
 ### Hardening (next, no new wire surface)
 
-- **Round-trip property tests for every resource.** `fromUci(toUci(x)) == x` for randomly-generated valid bodies. Would have caught the v1.2.0 `ipaddr`-array and defaults-leakage regressions before review.
+- **Branch / line coverage measurement.** Today's `make coverage` is structural (does any test mention this module?). Real branch coverage would surface never-executed validate paths and was what would have caught the `apk info --installed` regression. Needs ucode instrumentation hooks or an external tracer; non-trivial.
 
-- **Fuzz harness for every `validate()`.** Adversarial JSON (deep nesting, type confusion, control bytes, near-boundary integers, malformed UTF-8) across all resource validators. Run as a CI soak step.
+- **Soak as a CI step.** `make soak` exists but requires a live target. Wiring it into the QEMU VM CI job as a short (~60s) read-only sweep that tracks RSS / fd / child counts would catch leaks pre-release.
 
-- **Coverage measurement.** Instrumented ucode load that surfaces never-executed validate paths. Would have caught the `apk info --installed` regression (no test ever called `list_installed()` against a real apk-tools 3.x install).
+- **Performance benchmark gate.** `make bench` reports per-endpoint latency. Storing a baseline per release and failing a PR that regresses P99 by >25% would close the perf-regression loop.
 
-- **Soak / torture test.** N=1000 iterations of the full integration suite tracking memory creep, fd leaks, zombie children.
+- **Lock-and-state audit.** Walk every fd-open / lock-acquire site and prove release on every exit including `die()`. Identify any `try` without `finally`-equivalent. Partial audit done alongside the per-package flock work (caught the `create_feed_handler` TOCTOU); a complete sweep is still pending.
 
-- **Performance benchmark suite.** P50/P99 baselines per release for GET singleton / GET list / POST / write-under-load / full reload chain. CI fails a PR that regresses P99 by >25%.
+- **Non-uci resource base library.** `packages/*` and `system/access` duplicate `with_lock` + audit + envelope plumbing. One shared helper would simplify both and any future non-uci addition. Threshold: refactor when the third non-uci resource lands.
 
-- **Per-package flock.** Today a `network` write serializes with a concurrent `firewall` write needlessly. Per-package locks plus a coarse global for cross-package operations. Real throughput win.
+- **Per-resource validate dedup.** Now that `check_schema_types` is the source of truth for shape, resource-level `if (type(json) != "object")` guards and similar are redundant. Sweep them out per resource.
 
-- **Lock-and-state audit.** Walk every fd-open / lock-acquire site and prove release on every exit including `die()`. Identify any `try` without `finally`-equivalent.
-
-- **Non-uci resource base library.** `packages/*` and `system/access` duplicate `with_lock` + audit + envelope plumbing. One shared helper would simplify both and any future non-uci addition.
-
-- **Security headers on every response.** `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+- **Central enum / min / max / pattern checks.** `schema_properties` declares `enum`, `minimum`, `maximum`, `items`, `pattern`, `format`, but only `type` is enforced centrally. Lifting the rest into `check_schema_types` would shrink every resource's `validate()` to cross-field logic only.
 
 ### Out of scope by design
 
