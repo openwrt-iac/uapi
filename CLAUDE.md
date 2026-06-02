@@ -14,6 +14,8 @@ This document captures the v1 design contract. It is comprehensive and authorita
 
 Before adopting any library, daemon, persistence layer, or abstraction, check it against these three. Prefer ucode-native solutions; flag anything requiring a long-running auxiliary process, direct `/etc/config/` writes, or splitting a logical state change across multiple HTTP requests.
 
+**Aim.** Every change should move uapi closer to state-of-the-art for an embedded HTTP control plane: correctness, observability, security posture, test discipline, lock-and-state hygiene, drift detection. Roadmap items in this file are not aspirational backlog; they are the gap between today's posture and that target. Prefer hardening that closes a real gap over a feature that adds wire surface for its own sake.
+
 ---
 
 ## Code and documentation style
@@ -22,6 +24,23 @@ Before adopting any library, daemon, persistence layer, or abstraction, check it
 - **No em-dashes.** Applies to code, comments, docs, commit messages, and design notes.
 - **Comments are rare.** Default to writing none. Naming and structure should carry the meaning.
 - **When a comment is necessary, explain why, not what.** A reader can see what the code does; what they cannot see is the non-obvious constraint, invariant, or workaround that motivated the choice.
+
+### Avoid AI slop (HIGH IMPORTANCE)
+
+Slop is plausible-looking ceremony that adds no signal. It is the single most common failure mode for AI-generated patches and the most expensive to remove in review. Treat every line you write or accept as carrying a justification cost. Apply ruthlessly:
+
+- **No narration headers.** No "What this file does" preambles, no `// ---- section ----` banner comments, no multi-paragraph docstrings explaining the obvious. The filename and the first function are the header.
+- **No what-comments.** Anything a competent reader can read directly off the code (`// Loop over keys`, `// Check if X is null`, `// Cleanup`) is slop. Delete it.
+- **One-call-site helpers are suspect.** A helper that wraps a single-line operation in a function is slop unless naming it adds real meaning. Inline.
+- **Defensive code for cases that cannot happen** (given the rest of the code, not the universe) is slop. Either prove the case is reachable and handle it, or delete the guard.
+- **Tautological assertions** that always pass given how the data was constructed earlier in the test are slop. Delete or replace with a real check.
+- **Ceremonial echoes / printfs** in scripts ("starting X", "finished X") are slop unless the script genuinely needs progress narration for a long-running task.
+- **Variables named to give a name to a value used once** are slop unless the name carries non-obvious meaning.
+- **Phrases like "we intentionally", "this is by design", "for clarity", "in order to"** are usually slop tells. Read those comments again; most should be deleted.
+
+The bar for every comment, helper, variable, and assertion: **a senior engineer reading this asks "why is this here?" and gets a non-obvious answer.** If the answer is obvious, delete.
+
+Load-bearing WHY comments stay: historical bug context, hidden constraints, workarounds for upstream behavior, lock-acquire ordering, the kind of thing that would cost the next reader an hour to rediscover. Be honest about which is which.
 
 ---
 
