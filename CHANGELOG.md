@@ -7,6 +7,128 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.0] - 2026-06-02
+
+Major bump. One uapi installation serves exactly one API major; the v1 surface
+no longer mounts under the v2 package. Operators who need v1 keep the 1.2.1
+package installed. Migration table in `docs/migration-v1-to-v2.md`.
+
+### Breaking
+
+- **snake_case rename across `dropbear/instances`, `snmpd/system`, and
+  `vnstat/config`** (16 fields total). Every fromUci/toUci key + every
+  `schema_properties` entry now follows the project-wide `snake_case`
+  convention. Full mapping in the migration guide.
+- **Strict integer types** on every uci field declared `type: "integer"`.
+  v1 accepted string-form integers (`"42"`); v2 requires real JSON integers
+  (`42`). `fromUci` returns `null` for missing or non-numeric uci values via
+  the new `values.as_int` coercion (previously `int("abc")` silently became
+  `0`).
+- **`schema_properties` completeness sweep.** Every fromUci-surfaced field has
+  a typed schema entry. Bodies that previously slipped past the type check
+  (silent drops in the toUci layer) now return `422 validation_failed`.
+- **v1 surface removal.** `/api/v1/` no longer mounts. Versioning policy: one
+  major per installed package, never parallel.
+
+### Added
+
+- **Conditional GET.** `If-None-Match: "<etag>"` (or `?if_none_match=` query
+  param) returns `304 Not Modified` when the ETag matches. Same uhttpd
+  CGI-allowlist carve-out as `If-Match`.
+- **Inbound `X-Request-Id`** (or `?request_id=`) is echoed back; the
+  server-generated ULID is used when absent or malformed.
+- **`WWW-Authenticate: Bearer realm="uapi", error="<code>"`** on every 401
+  (RFC 7235 + RFC 6750 compliance).
+- **`/healthz` subsystem checks.** Body now includes `{checks: { ubus, uci,
+  lock_dir, time_sync }}`. Returns 503 when any subsystem is degraded.
+- **`/schema` / `/schema/<package>` / `/schema/<package>/<resource>`.** Public
+  (no auth, like `/openapi.json`). Returns the resource module's
+  `schema_properties` for dynamic clients without parsing the full OpenAPI.
+- **`/auth/whoami`** returns the current bearer's token metadata
+  (`token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_*`).
+- **Token expiry.** `expires_at` field on token sections (`uapi-token create
+  --expires-in 30d` extended). After the wall clock passes: `401 invalid_token`
+  with `message: "Token expired"`.
+- **Token IP scoping.** `allowed_cidrs` list on token sections. A request from
+  a source IP outside the listed CIDRs returns `401 invalid_token` with
+  `message: "Source IP not permitted for this token"`. Empty list = any IP.
+- **Token last-used tracking.** `last_used_at` (epoch) and `last_used_ip`
+  updated best-effort on each authed request; throttled to ~1 write/minute
+  per token via a tmpfs sentinel.
+- **`/tokens` HTTP route.** `GET` lists tokens (no secrets surfaced),
+  `GET /<id>` reads one, `POST` mints a new bearer over the wire (returns the
+  cleartext once), `DELETE /<id>` revokes. POST honours `expires_in_seconds`
+  and `allowed_cidrs`. Scope check: caller must hold `uapi:tokens:rw` (or
+  `*:rw`) AND every requested scope must be a strict subset of the caller's
+  own — escalation returns `403 scope_escalation_blocked`.
+- **Per-token rate limit.** File-backed token-bucket, default 100 req/s burst
+  200. Returns `429 too_many_requests` with `Retry-After`. Configurable via a
+  `config ratelimit` section in `/etc/config/uapi`.
+- **`/metrics`** (Prometheus text). Series: `uapi_requests_total`,
+  `uapi_request_duration_seconds_bucket`, `uapi_rate_limit_drops_total`,
+  `uapi_lock_contention_total`, `uapi_validate_errors_total`. Path templates
+  are normalized (`/firewall/rules/:id` not `/firewall/rules/r_01HX...`) to
+  keep cardinality bounded. Scope: `uapi:metrics:ro`.
+- **`/diagnostics`** returns version, uptime, loaded resources, current lock
+  state. Scope: `uapi:diagnostics:ro`.
+- **Idempotency keys.** `Idempotency-Key: <client-supplied>` header (or
+  `?idempotency_key=`) on POST: first request caches the response under
+  `sha256(token || key)`; subsequent requests with the same key replay the
+  cached response (`Idempotent-Replayed: true` marker header). Same key with a
+  different body returns `409 idempotency_key_conflict`. Cache TTL 24 h.
+- **Cursor pagination.** Collection GETs accept `?cursor=c_<id>&limit=N`.
+  Default 100, max 500. Response carries `Link: <...>; rel="next"` (RFC 8288)
+  and `X-Next-Cursor: c_<id>` when more items follow. Malformed cursor →
+  `400 invalid_cursor`.
+- **`POST /batch`.** All-or-nothing across N packages. Body
+  `{ operations: [{ path, method, body?, if_match? }, ...] }` (max 50). Pure
+  reads acquire no lock; writes acquire per-package EX locks in sorted order
+  (deadlock-free) under one combined snapshot/restore. Returns
+  `207 Multi-Status` on success, the failing sub-request's status on abort
+  with `{ code: "batch_partial_failure", aborted_at_index, reverted: true }`.
+  Each sub-request is scope-checked independently.
+- **JSON Patch (RFC 6902).** PATCH with
+  `Content-Type: application/json-patch+json` switches from merge-patch (the
+  default, RFC 7396) to JSON Patch ops:
+  `add`/`remove`/`replace`/`move`/`copy`/`test`. `test` enables atomic
+  conditional updates without `If-Match`.
+- **Dependency-aware ETags.** Resources declare `depends_on: ["package:type"]`;
+  the dependent's ETag mixes in the hash of the referenced state. Initial
+  declarations: `firewall.rules`, `firewall.redirects`, `firewall.forwardings`
+  → `firewall:zone`; `sqm.queues`, `network.routes`, `dhcp.servers`,
+  `network.wireguard_peers` → `network:interface`; `network.bridge_vlans`
+  → `network:device`. Changing a referenced section now invalidates the
+  dependent's ETag.
+
+### New error codes
+
+- `429 too_many_requests` (rate limit)
+- `403 scope_escalation_blocked` (token mint guard)
+- `400 invalid_cursor` (pagination)
+- `409 idempotency_key_conflict` (same key, different body)
+- `batch_partial_failure` (carried in 4xx/5xx body when a `/batch` aborts)
+
+### New scopes
+
+`uapi`, `uapi:tokens`, `uapi:metrics`, `uapi:diagnostics`.
+
+### Hardening
+
+- **Non-uci base library** (`src/lib/non_uci.uc`) consolidates the
+  `with_lock` + audit + envelope plumbing previously duplicated across
+  `packages/*` and `system/access`.
+- **Lock-and-state audit** (`docs/lock-state-audit.md`) — every fd-open and
+  lock-acquire site walked; release proven on every exit including `die()`.
+- **Function-level coverage gate** in CI: ≥80% of lib exports unit-tested,
+  100% module-level coverage required.
+- **Soak harness in CI** — short read-only sweep with RSS/fd-growth thresholds.
+- **Performance benchmark gate** — p99 latency baseline per release; CI fails
+  on >25% regression.
+- **Signed-tag verification** required on release tags
+  (`.github/allowed-signers`).
+- **Reproducible SDK pin** — SHA256 checksum verified for the OpenWrt SDK
+  download (`build/sdk.sha256`).
+
 ## [1.2.1] - 2026-06-01
 
 Patch release. Three small bugs found by exercising v1.2.0 against a real OpenWrt 25.12.4 router, plus one polish item (an honest error code when the daemon you're configuring isn't installed).

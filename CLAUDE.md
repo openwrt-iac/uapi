@@ -247,6 +247,11 @@ v1.1 added:
 - `vnstat`, `vnstat:config`, `vnstat:interfaces`
 - `packages`, `packages:installed`, `packages:feeds`
 
+v2.0 added:
+- `uapi`, `uapi:tokens` (HTTP token-mint endpoint)
+- `uapi:metrics` (`GET /metrics` Prometheus text)
+- `uapi:diagnostics` (`GET /diagnostics`)
+
 The authoritative source is `src/lib/scope.uc`'s `KNOWN_PATHS`.
 
 ### TLS and rate limiting
@@ -254,7 +259,7 @@ The authoritative source is `src/lib/scope.uc`'s `KNOWN_PATHS`.
 - **TLS enforced for non-localhost.** Check uhttpd's `HTTPS=on` env var; if the request is not over TLS and the client is not on `127.0.0.1`/`::1`, return `403 tls_required`. This runs **before** auth.
 - TLS config inherited from uhttpd. Document that the default self-signed cert is not adequate for production; point operators at `acme.sh` / `luci-app-acme`.
 - **Insecure-test bypass.** If the marker file `/etc/uapi.insecure` exists, plain HTTP is accepted from any client. Intended for closed-network testing only; documented as a security hole. Every request that bypasses TLS via the marker emits a syslog `NOTICE` line (`uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>`) so operators can detect drift.
-- **Rate limiting:** not in v1. Operators add a reverse proxy if they need it.
+- **Rate limiting (v2.0+):** per-token token-bucket, file-backed at `/tmp/uapi-ratelimit/`. Defaults 100 req/s burst 200; tunable via a `config ratelimit { option rate; option burst }` section in `/etc/config/uapi`. Returns `429 too_many_requests` with `Retry-After`. Defense in depth, not a security control on its own (a patient attacker stays under the threshold); use `allowed_cidrs` on tokens for actual source-IP enforcement.
 
 ### Audit log
 
@@ -286,23 +291,28 @@ Lean custom shape, RFC 7807-inspired but not strictly conformant. `application/j
 | HTTP | `code`                          |
 |------|----------------------------------|
 | 400  | `bad_request`                    |
+| 400  | `invalid_cursor`                 |
 | 401  | `unauthorized`                   |
 | 401  | `invalid_token`                  |
 | 403  | `insufficient_scope`             |
+| 403  | `scope_escalation_blocked`       |
 | 403  | `tls_required`                   |
 | 404  | `not_found`                      |
 | 405  | `method_not_allowed`             |
 | 409  | `conflict`                       |
 | 409  | `unmanaged_resource`             |
+| 409  | `idempotency_key_conflict`       |
 | 415  | `unsupported_media_type`         |
 | 412  | `precondition_failed`            |
 | 422  | `validation_failed`              |
 | 423  | `locked`                         |
+| 429  | `too_many_requests`              |
 | 500  | `internal_error`                 |
 | 500  | `reload_failed_restored`         |
 | 500  | `reload_failed_unrecovered`      |
 | 503  | `service_unavailable`            |
 | 503  | `init_script_missing`            |
+| 4xx  | `batch_partial_failure` (body only; HTTP status from failing sub) |
 
 The `reload_failed_restored` body carries the underlying ubus error as a `reload_error` extension field.
 
@@ -498,11 +508,11 @@ No default token shipped; would be a security hole.
 
 Package version follows semver, with the major version aligned to the API major:
 
-- **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. `/api/v(x+1)/` mounts alongside `/api/v<x>/` and both run for at least one OpenWrt release cycle (see "API versioning policy" below). Clients have a deprecation window to migrate.
+- **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. A given uapi installation serves exactly one API major; we do NOT mount `/api/v(x+1)/` alongside `/api/v<x>/` in the same binary. Operators who need to keep an old client working keep the previous package version installed (the old APK stays available on the gh-pages feed indefinitely, and the signed git tag is the canonical contract document).
 - **MINOR (`x.(y+1).0`)**: backwards-compatible additions only (the list of allowed changes is in "API versioning policy" below).
 - **PATCH (`x.y.(z+1)`)**: bug fixes only. No surface change.
 
-A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >= y`. `1.0.0` is the v1 launch.
+A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >= y`. `1.0.0` is the v1 launch; `2.0.0` is the v2 consolidation (see `docs/migration-v1-to-v2.md`).
 
 ### Distribution
 
@@ -511,9 +521,12 @@ A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >=
 
 ## API versioning policy
 
-`/api/v1/` is the stable contract.
+`/api/v1/` is the URL prefix. The API major it serves is determined by the
+installed package version: a uapi 2.x package serves the v2 wire contract
+under that prefix. Within a given installed major, additions are
+backwards-compatible.
 
-**Non-breaking (allowed within v1):**
+**Non-breaking (allowed within a major):**
 - New endpoints / resources
 - New optional request fields
 - New response fields (clients must ignore unknown fields)
@@ -521,13 +534,13 @@ A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >=
 - New error codes (clients branch on HTTP status, treat unknown `code` gracefully)
 - New scope names
 
-**Breaking (requires v2):**
+**Breaking (requires the next major):**
 - Removing or renaming any endpoint, field, or error code
 - Changing a field's JSON type or semantic meaning
 - Making a previously-optional request field required
 - Tightening validation to reject previously-accepted payloads
 
-When v2 lands, `/api/v1/` and `/api/v2/` register with uhttpd simultaneously and run side-by-side for at least one major OpenWrt release cycle. v1 removal is announced in advance via release notes and the post-install message.
+One uapi installation, one API major. There is no parallel mount; we don't carry two surface areas in a single binary on resource-constrained hardware. Operators who need to keep a v1 client working keep the v1 package installed (the v1.2.1 APK stays available on the feed; the signed `v1.2.1` git tag is the canonical v1 contract). The migration table for v1 -> v2 lives at `docs/migration-v1-to-v2.md`.
 
 ### `/raw/` stability
 
