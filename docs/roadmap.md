@@ -12,6 +12,8 @@ Things deliberately not yet shipped. Each entry says why and what shape the chan
 - **Soak harness.** `make soak` runs a long read-only load loop with optional SSH-side RSS/fd/child sampling.
 - **Per-package flock.** uci transactions hold SH on `/var/lock/uapi.lock` + EX on `/var/lock/uapi.pkg.<package>.lock`. Different packages run in parallel; same package serializes; non-uci writes (apk, system/access) hold the global EX. Live-verified cross-package POSTs overlap; same-package POSTs return `423 locked` (non-blocking, client retries).
 - **Security headers on every response.** `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`.
+- **Central enum / min / max / pattern / items enforcement.** `check_schema_types` now enforces every constraint declared in `schema_properties` (was previously only `type`). Items recursion propagates type/enum/range to array elements with indexed field paths (`tags[1]`).
+- **Per-resource validate dedup.** 14 resources had their now-redundant enum/min/max/pattern checks removed from `validate()`. Net `-103` lines. The central check is the source of truth; `validate()` now carries only cross-field logic (required/conflict/format checks the schema doesn't yet express).
 
 ## Features (additive, future minor bumps)
 
@@ -30,8 +32,6 @@ Things deliberately not yet shipped. Each entry says why and what shape the chan
 - **Performance benchmark gate.** `make bench` reports per-endpoint latency. Storing a baseline per release and failing a PR that regresses P99 by >25% would close the perf-regression loop.
 - **Lock-and-state audit.** Walk every fd-open / lock-acquire site and prove release on every exit including `die()`. Identify any `try` without `finally`-equivalent. Partial audit done alongside the per-package flock work (caught the `create_feed_handler` TOCTOU); a complete sweep is still pending.
 - **Non-uci resource base library.** `packages/*` and `system/access` duplicate `with_lock` + audit + envelope plumbing. One shared helper would simplify both and any future non-uci addition. Threshold: refactor when the third non-uci resource lands.
-- **Per-resource validate dedup.** Now that `check_schema_types` is the source of truth for shape, resource-level `if (type(json) != "object")` guards and similar are redundant. Sweep them out per resource.
-- **Central enum / min / max / pattern checks.** `schema_properties` declares `enum`, `minimum`, `maximum`, `items`, `pattern`, `format`, but only `type` is enforced centrally. Lifting the rest into `check_schema_types` would shrink every resource's `validate()` to cross-field logic only.
 
 ## Out of scope by design
 
