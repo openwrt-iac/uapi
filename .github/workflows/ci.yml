@@ -23,10 +23,14 @@ permissions:
 
 # Cancel superseded runs for branch / PR pushes to save runner minutes; never
 # cancel a tag-triggered run that may be mid-publish to GitHub release or
-# gh-pages feed.
+# gh-pages feed. workflow_dispatch runs (operator-triggered pre-tag
+# validation, often slow because of verify-arch-build) get their own
+# concurrency group so an unrelated push to main doesn't kill them mid-run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: >-
+    ${{ !startsWith(github.ref, 'refs/tags/')
+        && github.event_name != 'workflow_dispatch' }}
 
 env:
   OPENWRT_VERSION: 25.12.4
