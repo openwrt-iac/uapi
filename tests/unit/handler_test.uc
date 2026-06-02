@@ -681,6 +681,103 @@ let deep = handler.make(deep_mod, {
 	},
 });
 
+let constraints_mod = {
+	package: "constraintest",
+	type: "row",
+	reload: [],
+	fromUci: function(s) { return { id: s['.name'], managed: true }; },
+	toUci: function() { return {}; },
+	validate: function() { return []; },
+	schema_properties: {
+		color:   { type: "string", enum: ["red", "green", "blue"] },
+		port:    { type: "integer", minimum: 1, maximum: 65535 },
+		ratio:   { type: "number", minimum: 0, maximum: 1 },
+		slug:    { type: "string", pattern: "^[a-z0-9_]+$" },
+		tags:    { type: "array", items: { type: "string", enum: ["a", "b", "c"] } },
+		bounded_ints: { type: "array", items: { type: "integer", minimum: 0, maximum: 9 } },
+	},
+};
+let constraints = handler.make(constraints_mod, {
+	tx: {
+		acquire: function() { return {}; },
+		release: function() {},
+		reload: record_reload,
+		check_services: function() { return null; },
+	},
+});
+
+t.describe('handler schema check: enum / min-max / pattern / items', () => {
+	function err_for(r, field, code) {
+		for (let e in r.body.errors)
+			if (e.field == field && e.code == code) return e;
+		return null;
+	}
+
+	t.it('enum violation -> not_in_enum', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { color: "purple" });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "color", "not_in_enum") != null);
+	});
+
+	t.it('integer below minimum -> out_of_range', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { port: 0 });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "port", "out_of_range") != null);
+	});
+
+	t.it('integer above maximum -> out_of_range', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { port: 70000 });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "port", "out_of_range") != null);
+	});
+
+	t.it('number type accepts doubles within bounds', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { ratio: 0.5 });
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('pattern violation -> invalid_format', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { slug: "Has Spaces!" });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "slug", "invalid_format") != null);
+	});
+
+	t.it('items: wrong type per element with indexed path', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { tags: ["a", 2, "b"] });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "tags[1]", "invalid_type") != null);
+	});
+
+	t.it('items: enum check propagates to elements', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { tags: ["a", "x"] });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "tags[1]", "not_in_enum") != null);
+	});
+
+	t.it('items: min/max check propagates to elements', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), { bounded_ints: [3, 99, 1] });
+		t.assert_equal(r.status, 422);
+		t.assert_true(err_for(r, "bounded_ints[1]", "out_of_range") != null);
+	});
+
+	t.it('valid body across all constraints -> 200', () => {
+		let c = ubus.stub({ uci: { constraintest: {} } });
+		let r = constraints.create(c, ctx(), {
+			color: "red", port: 80, ratio: 0.25, slug: "hello_world",
+			tags: ["a", "b"], bounded_ints: [0, 5, 9],
+		});
+		t.assert_equal(r.status, 200);
+	});
+});
+
 t.describe('handler schema-type check recurses past two levels', () => {
 	t.it('leaf type error 3 levels deep surfaces with full dotted path', () => {
 		let c = ubus.stub({ uci: { deeptest: {} } });

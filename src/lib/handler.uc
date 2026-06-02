@@ -127,7 +127,55 @@ function _format_want(want) {
 	return "" + want;
 }
 
-function check_schema_types(schema_properties, body, prefix) {
+// _check_value and check_schema_types are mutually recursive (object specs
+// recurse into properties, array specs recurse into items). ucode `function`
+// declarations do NOT hoist, so we forward-declare with `let` first.
+let _check_value;
+let check_schema_types;
+
+_check_value = function(spec, val, field_path, errs) {
+	let want = spec.type;
+	if (want != null && !_json_type_matches(want, val)) {
+		push(errs, {
+			field: field_path, code: "invalid_type",
+			message: sprintf("must be %s, got %s",
+			                 _format_want(want), _json_type_name(val)),
+		});
+		return;
+	}
+	if (spec.enum != null && type(spec.enum) == "array") {
+		let ok = false;
+		for (let e in spec.enum) if (e == val) ok = true;
+		if (!ok) push(errs, {
+			field: field_path, code: "not_in_enum",
+			message: sprintf("must be one of %J", spec.enum),
+		});
+	}
+	let is_num = (type(val) == "int" || type(val) == "double");
+	if (is_num && spec.minimum != null && val < spec.minimum)
+		push(errs, { field: field_path, code: "out_of_range",
+		             message: sprintf("must be >= %d", spec.minimum) });
+	if (is_num && spec.maximum != null && val > spec.maximum)
+		push(errs, { field: field_path, code: "out_of_range",
+		             message: sprintf("must be <= %d", spec.maximum) });
+	if (type(val) == "string" && spec.pattern != null) {
+		let re = regexp(spec.pattern);
+		if (re != null && !match(val, re))
+			push(errs, { field: field_path, code: "invalid_format",
+			             message: sprintf("must match %s", spec.pattern) });
+	}
+	if (type(val) == "array" && spec.items != null) {
+		for (let i = 0; i < length(val); i++)
+			_check_value(spec.items, val[i],
+			             sprintf("%s[%d]", field_path, i), errs);
+	}
+	if (type(val) == "object" && spec.properties != null) {
+		for (let e in check_schema_types(spec.properties, val, field_path))
+			push(errs, e);
+	}
+};
+
+check_schema_types = function(schema_properties, body, prefix) {
 	let errs = [];
 	if (type(body) != "object" || schema_properties == null) return errs;
 	for (let key in schema_properties) {
@@ -137,23 +185,10 @@ function check_schema_types(schema_properties, body, prefix) {
 		let val = body[key];
 		if (val == null) continue;
 		let field_path = (prefix != null && prefix != "") ? prefix + "." + key : key;
-		let want = spec.type;
-		if (want != null && !_json_type_matches(want, val)) {
-			push(errs, {
-				field: field_path,
-				code: "invalid_type",
-				message: sprintf("must be %s, got %s",
-				                 _format_want(want), _json_type_name(val)),
-			});
-			continue;
-		}
-		if (type(val) == "object" && spec.properties != null) {
-			for (let e in check_schema_types(spec.properties, val, field_path))
-				push(errs, e);
-		}
+		_check_value(spec, val, field_path, errs);
 	}
 	return errs;
-}
+};
 
 // schema_body: type-checked by check_schema_types (the wire delta from the
 // client). validate_body: passed to resource.validate (the FULL post-merge
