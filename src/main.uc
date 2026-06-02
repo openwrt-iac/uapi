@@ -14,49 +14,57 @@ let bus = require("bus");
 let packages = require("packages");
 let system_access = require("system_access");
 
-function load_resource(file) {
-	return loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
+// RESOURCE_SOURCES retains the raw resource modules (with .schema_properties,
+// .package, .type) for the /schema/<...> endpoint. The handler wrappers in
+// RESOURCES/SINGLETONS do not expose these fields, so we keep a parallel map
+// populated by load_resource at construction time.
+const RESOURCE_SOURCES = {};
+
+function load_resource(key, file) {
+	let src = loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
+	RESOURCE_SOURCES[key] = src;
+	return src;
 }
 
 const RESOURCES = {
-	"firewall:rules":        handler.make(load_resource("firewall.rules.uc")),
-	"firewall:zones":        handler.make(load_resource("firewall.zones.uc")),
-	"firewall:redirects":    handler.make(load_resource("firewall.redirects.uc")),
-	"firewall:forwardings":  handler.make(load_resource("firewall.forwardings.uc")),
-	"network:interfaces":    handler.make(load_resource("network.interfaces.uc")),
-	"network:devices":       handler.make(load_resource("network.devices.uc")),
-	"network:routes":        handler.make(load_resource("network.routes.uc")),
-	"network:rules":         handler.make(load_resource("network.rules.uc")),
-	"network:bridge_vlans":  handler.make(load_resource("network.bridge_vlans.uc")),
-	"network:wireguard_peers": handler.make(load_resource("network.wireguard_peers.uc")),
-	"system:timeservers":  handler.make(load_resource("system.timeservers.uc")),
-	"dropbear:instances":  handler.make(load_resource("dropbear.instances.uc")),
-	"uhttpd:instances":    handler.make(load_resource("uhttpd.instances.uc")),
-	"uhttpd:certs":        handler.make(load_resource("uhttpd.certs.uc")),
-	"wireless:devices":    handler.make(load_resource("wireless.devices.uc")),
-	"wireless:interfaces": handler.make(load_resource("wireless.interfaces.uc")),
-	"dhcp:hosts":          handler.make(load_resource("dhcp.hosts.uc")),
-	"dhcp:leases":         handler.make_collection(load_resource("dhcp.leases.uc")),
-	"dhcp:leases6":        handler.make_collection(load_resource("dhcp.leases6.uc")),
-	"dhcp:servers":        handler.make(load_resource("dhcp.servers.uc")),
-	"sqm:queues":          handler.make(load_resource("sqm.queues.uc")),
-	"snmpd:agents":        handler.make(load_resource("snmpd.agents.uc")),
-	"snmpd:com2secs":      handler.make(load_resource("snmpd.com2secs.uc")),
-	"snmpd:groups":        handler.make(load_resource("snmpd.groups.uc")),
-	"snmpd:accesses":      handler.make(load_resource("snmpd.accesses.uc")),
-	"vnstat:interfaces":   handler.make(load_resource("vnstat.interfaces.uc")),
+	"firewall:rules":        handler.make(load_resource("firewall:rules", "firewall.rules.uc")),
+	"firewall:zones":        handler.make(load_resource("firewall:zones", "firewall.zones.uc")),
+	"firewall:redirects":    handler.make(load_resource("firewall:redirects", "firewall.redirects.uc")),
+	"firewall:forwardings":  handler.make(load_resource("firewall:forwardings", "firewall.forwardings.uc")),
+	"network:interfaces":    handler.make(load_resource("network:interfaces", "network.interfaces.uc")),
+	"network:devices":       handler.make(load_resource("network:devices", "network.devices.uc")),
+	"network:routes":        handler.make(load_resource("network:routes", "network.routes.uc")),
+	"network:rules":         handler.make(load_resource("network:rules", "network.rules.uc")),
+	"network:bridge_vlans":  handler.make(load_resource("network:bridge_vlans", "network.bridge_vlans.uc")),
+	"network:wireguard_peers": handler.make(load_resource("network:wireguard_peers", "network.wireguard_peers.uc")),
+	"system:timeservers":  handler.make(load_resource("system:timeservers", "system.timeservers.uc")),
+	"dropbear:instances":  handler.make(load_resource("dropbear:instances", "dropbear.instances.uc")),
+	"uhttpd:instances":    handler.make(load_resource("uhttpd:instances", "uhttpd.instances.uc")),
+	"uhttpd:certs":        handler.make(load_resource("uhttpd:certs", "uhttpd.certs.uc")),
+	"wireless:devices":    handler.make(load_resource("wireless:devices", "wireless.devices.uc")),
+	"wireless:interfaces": handler.make(load_resource("wireless:interfaces", "wireless.interfaces.uc")),
+	"dhcp:hosts":          handler.make(load_resource("dhcp:hosts", "dhcp.hosts.uc")),
+	"dhcp:leases":         handler.make_collection(load_resource("dhcp:leases", "dhcp.leases.uc")),
+	"dhcp:leases6":        handler.make_collection(load_resource("dhcp:leases6", "dhcp.leases6.uc")),
+	"dhcp:servers":        handler.make(load_resource("dhcp:servers", "dhcp.servers.uc")),
+	"sqm:queues":          handler.make(load_resource("sqm:queues", "sqm.queues.uc")),
+	"snmpd:agents":        handler.make(load_resource("snmpd:agents", "snmpd.agents.uc")),
+	"snmpd:com2secs":      handler.make(load_resource("snmpd:com2secs", "snmpd.com2secs.uc")),
+	"snmpd:groups":        handler.make(load_resource("snmpd:groups", "snmpd.groups.uc")),
+	"snmpd:accesses":      handler.make(load_resource("snmpd:accesses", "snmpd.accesses.uc")),
+	"vnstat:interfaces":   handler.make(load_resource("vnstat:interfaces", "vnstat.interfaces.uc")),
 };
 
 const SINGLETONS = {
-	"system":             handler.make_singleton(load_resource("system.uc")),
-	"dhcp:dnsmasq":       handler.make_singleton(load_resource("dhcp.dnsmasq.uc")),
-	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp.odhcpd.uc")),
-	"firewall:defaults":  handler.make_singleton(load_resource("firewall.defaults.uc")),
-	"unbound:server":     handler.make_singleton(load_resource("unbound.server.uc")),
-	"snmpd:system":       handler.make_singleton(load_resource("snmpd.system.uc")),
-	"lldpd:config":       handler.make_singleton(load_resource("lldpd.config.uc")),
-	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua.config.uc")),
-	"vnstat:config":      handler.make_singleton(load_resource("vnstat.config.uc")),
+	"system":             handler.make_singleton(load_resource("system", "system.uc")),
+	"dhcp:dnsmasq":       handler.make_singleton(load_resource("dhcp:dnsmasq", "dhcp.dnsmasq.uc")),
+	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp:odhcpd", "dhcp.odhcpd.uc")),
+	"firewall:defaults":  handler.make_singleton(load_resource("firewall:defaults", "firewall.defaults.uc")),
+	"unbound:server":     handler.make_singleton(load_resource("unbound:server", "unbound.server.uc")),
+	"snmpd:system":       handler.make_singleton(load_resource("snmpd:system", "snmpd.system.uc")),
+	"lldpd:config":       handler.make_singleton(load_resource("lldpd:config", "lldpd.config.uc")),
+	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config", "prometheus_node_exporter_lua.config.uc")),
+	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
 };
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
@@ -219,8 +227,156 @@ function dispatch_resource(h, scopes, ctx, conn, method, domain, sub, id, extra,
 	                    sprintf("Method %J not allowed on %s/%s/<id>", method, domain, sub));
 }
 
+function healthz_response(ctx) {
+	let checks = { ubus: "ok", uci: "ok", lock_dir: "ok", time_sync: "ok" };
+	let errs = [];
+
+	let conn = null;
+	try {
+		conn = bus.connect({ debug: LOGGING.debug });
+		conn.call("system", "info", {});
+	} catch (e) {
+		checks.ubus = "degraded";
+		push(errs, "ubus: " + e);
+	}
+
+	if (conn != null) {
+		try { conn.uci_foreach('system', 'system', function(_) { return true; }); }
+		catch (e) {
+			checks.uci = "degraded";
+			push(errs, "uci: " + e);
+		}
+	} else {
+		checks.uci = "degraded";
+	}
+
+	let st = fs.stat("/var/lock");
+	if (st == null || st.type != "directory") {
+		checks.lock_dir = "degraded";
+		push(errs, "lock_dir: /var/lock missing or not a directory");
+	}
+
+	let uptime_s = 0;
+	let upf = fs.open("/proc/uptime", "r");
+	if (upf) {
+		let line = upf.read("line") ?? "";
+		upf.close();
+		let toks = split(trim(line), " ");
+		if (length(toks) > 0) uptime_s = int(toks[0]);
+	}
+	let now_epoch = 0;
+	try { now_epoch = time(); } catch (_) {}
+	if (uptime_s < 60 || now_epoch < 1700000000) {
+		checks.time_sync = (uptime_s < 60) ? "unknown" : "degraded";
+		if (checks.time_sync == "degraded")
+			push(errs, "time_sync: clock not synced (epoch below sanity floor)");
+	}
+
+	let degraded = false;
+	for (let k in checks) if (checks[k] == "degraded") degraded = true;
+
+	let body = { status: degraded ? "degraded" : "ok", version: VERSION, checks };
+	if (length(errs) > 0) body.errors = errs;
+	return {
+		status: degraded ? 503 : 200,
+		headers: { "Content-Type": "application/json", "X-Request-Id": ctx.request_id },
+		body,
+	};
+}
+
+function schema_response(ctx, parts) {
+	// /schema                           → list of resource keys
+	// /schema/<package>                 → all resources under that package
+	// /schema/<package>/<resource>      → one resource's schema_properties
+	if (length(parts) == 1) {
+		let keys = [];
+		for (let k in RESOURCE_SOURCES) push(keys, k);
+		return errors.ok(ctx, { resources: keys });
+	}
+	if (length(parts) == 2) {
+		let pkg = parts[1];
+		let out = {};
+		for (let k in RESOURCE_SOURCES) {
+			let prefix = pkg + ":";
+			if (k == pkg || substr(k, 0, length(prefix)) == prefix)
+				out[k] = RESOURCE_SOURCES[k].schema_properties ?? null;
+		}
+		if (length(out) == 0)
+			return errors.error(ctx, "not_found",
+			                    sprintf("No schema for package %J", pkg));
+		return errors.ok(ctx, out);
+	}
+	if (length(parts) == 3) {
+		let key = parts[1] + ":" + parts[2];
+		let src = RESOURCE_SOURCES[key];
+		if (src == null)
+			return errors.error(ctx, "not_found",
+			                    sprintf("No schema for %s/%s", parts[1], parts[2]));
+		return errors.ok(ctx, {
+			id: key,
+			package: src.package ?? null,
+			type: src.type ?? null,
+			schema_properties: src.schema_properties ?? null,
+		});
+	}
+	return errors.error(ctx, "not_found", "Unknown schema sub-path");
+}
+
+function whoami_response(ctx, token, env) {
+	return errors.ok(ctx, {
+		token_id: token.name,
+		scopes: token.scopes,
+		source_ip: env.REMOTE_ADDR ?? null,
+		expires_at: null,
+		allowed_cidrs: [],
+		last_used_at: null,
+		last_used_ip: null,
+	});
+}
+
+function strip_etag_quotes(s) {
+	if (s == null) return null;
+	let t = trim(s);
+	if (substr(t, 0, 2) == "W/") t = trim(substr(t, 2));
+	if (length(t) >= 2 && substr(t, 0, 1) == "\"" && substr(t, length(t) - 1, 1) == "\"")
+		t = substr(t, 1, length(t) - 2);
+	return t;
+}
+
+function if_none_match_matches(if_none_match, current_etag) {
+	if (current_etag == null || if_none_match == null) return false;
+	let want = trim(if_none_match);
+	if (want == "*") return true;
+	for (let entry in split(want, ",")) {
+		if (strip_etag_quotes(entry) == current_etag) return true;
+	}
+	return false;
+}
+
+function maybe_304(resp, ctx) {
+	if (ctx == null || ctx.if_none_match == null) return resp;
+	if (resp.status != 200) return resp;
+	if (resp.headers == null) return resp;
+	let etag_header = resp.headers.ETag;
+	if (etag_header == null) return resp;
+	let etag = strip_etag_quotes(etag_header);
+	if (!if_none_match_matches(ctx.if_none_match, etag)) return resp;
+	let h = { "X-Request-Id": ctx.request_id, "ETag": etag_header };
+	if (resp.headers["Cache-Control"] != null)
+		h["Cache-Control"] = resp.headers["Cache-Control"];
+	return { status: 304, headers: h, body: null };
+}
+
 function dispatch(env) {
-	let ctx = errors.new_context();
+	// uhttpd's CGI env has a hard-coded HTTP_* allowlist (see env_strings[]
+	// in uhttpd source): If-Match, If-None-Match, and X-Request-Id are not
+	// in it, so env.HTTP_* is unreliable for these. Each one falls back to
+	// a query parameter (?if_match=, ?if_none_match=, ?request_id=) that
+	// uhttpd forwards verbatim via QUERY_STRING. A reverse proxy in front
+	// of uhttpd that propagates the headers still works via the header path.
+	let qs = parse_query(env.QUERY_STRING);
+	let inbound_rid = env.HTTP_X_REQUEST_ID ?? qs.request_id ?? null;
+	let ctx = errors.new_context(inbound_rid);
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
 
@@ -229,12 +385,8 @@ function dispatch(env) {
 		return { ctx, resp: errors.error(ctx, "tls_required",
 		                                 "HTTPS required for non-localhost requests") };
 	ctx.via_insecure_marker = tls.via_marker;
-	// uhttpd's CGI env has a hard-coded allowlist of HTTP_* headers (see
-	// uhttpd's env_strings[]); If-Match is not in it, so we cannot rely on
-	// env.HTTP_IF_MATCH. Fall back to a ?if_match=<etag> query parameter,
-	// which is uhttpd-agnostic. Both are recognised on incoming requests.
-	let qs = parse_query(env.QUERY_STRING);
 	ctx.if_match = env.HTTP_IF_MATCH ?? qs.if_match ?? null;
+	ctx.if_none_match = env.HTTP_IF_NONE_MATCH ?? qs.if_none_match ?? null;
 
 	if (path == "/openapi.json") {
 		if (method != "GET")
@@ -255,20 +407,15 @@ function dispatch(env) {
 		if (method != "GET")
 			return { ctx, resp: errors.error(ctx, "method_not_allowed",
 			                                 "healthz only supports GET") };
-		let probe_err = null;
-		try {
-			let conn = bus.connect({ debug: LOGGING.debug });
-			conn.call("system", "info", {});
-		} catch (e) { probe_err = "" + e; }
-		if (probe_err != null) {
-			return { ctx, resp: {
-				status: 503,
-				headers: { "Content-Type": "application/json",
-				           "X-Request-Id": ctx.request_id },
-				body: { status: "degraded", errors: [probe_err] },
-			} };
-		}
-		return { ctx, resp: errors.ok(ctx, { status: "ok", version: VERSION }) };
+		let resp = healthz_response(ctx);
+		return { ctx, resp };
+	}
+
+	if (length(split_path(path)) >= 1 && split_path(path)[0] == "schema") {
+		if (method != "GET")
+			return { ctx, resp: errors.error(ctx, "method_not_allowed",
+			                                 "schema only supports GET") };
+		return { ctx, resp: schema_response(ctx, split_path(path)) };
 	}
 
 	let body = null;
@@ -303,6 +450,21 @@ function dispatch(env) {
 	let token = auth_result.token;
 
 	let parts = split_path(path);
+
+	if (length(parts) >= 1 && parts[0] == "auth") {
+		if (length(parts) == 2 && parts[1] == "whoami") {
+			if (method != "GET")
+				return { ctx, token,
+				         resp: errors.error(ctx, "method_not_allowed",
+				                            "auth/whoami only supports GET") };
+			return { ctx, token, resp: whoami_response(ctx, token, env) };
+		}
+		return { ctx, token,
+		         resp: errors.error(ctx, "not_found",
+		                            sprintf("Unknown auth sub-path %J",
+		                                    length(parts) >= 2 ? parts[1] : "")) };
+	}
+
 	if (length(parts) >= 2 && parts[0] == "raw") {
 		let pkg = parts[1];
 		let id = length(parts) >= 3 ? parts[2] : null;
@@ -455,8 +617,8 @@ global.handle_request = function(env) {
 			resp: errors.error(ctx, "internal_error", "An internal error occurred"),
 		};
 	}
-	let resp = result.resp;
 	let ctx = result.ctx;
+	let resp = maybe_304(result.resp, ctx);
 	let token = result.token;
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";

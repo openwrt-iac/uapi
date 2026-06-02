@@ -31,7 +31,13 @@ const FIELD_CODES = {
 	read_only: true,
 };
 
-function new_context() {
+const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
+
+// new_context accepts an optional client-supplied request id (from the
+// X-Request-Id header). Invalid or missing values fall back to a fresh ULID.
+function new_context(inbound_request_id) {
+	if (type(inbound_request_id) == "string" && match(inbound_request_id, REQUEST_ID_RE))
+		return { request_id: inbound_request_id };
 	return { request_id: ids.new_ulid() };
 }
 
@@ -66,7 +72,11 @@ function error(ctx, code, message, extras) {
 	if (extras != null) {
 		for (let k in extras) body[k] = extras[k];
 	}
-	return { status, headers: base_headers(ctx), body };
+	let headers = base_headers(ctx);
+	if (status == 401)
+		headers["WWW-Authenticate"] =
+			sprintf("Bearer realm=\"uapi\", error=\"%s\"", code);
+	return { status, headers, body };
 }
 
 function field_error(field, code, message) {

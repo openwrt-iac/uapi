@@ -9,6 +9,30 @@ t.describe('errors.new_context', () => {
 		t.assert_true(a.request_id != b.request_id);
 		t.assert_equal(length(a.request_id), 26);
 	});
+
+	t.it('accepts a well-formed inbound request id', () => {
+		let id = "req-01HX9876543210ABCDEFGH";
+		let ctx = errors.new_context(id);
+		t.assert_equal(ctx.request_id, id);
+	});
+
+	t.it('falls back to a generated id when inbound is malformed', () => {
+		let ctx = errors.new_context("short");
+		t.assert_true(ctx.request_id != "short");
+		t.assert_equal(length(ctx.request_id), 26);
+	});
+
+	t.it('falls back when inbound contains forbidden characters', () => {
+		let ctx = errors.new_context("bad space and slash/");
+		t.assert_true(ctx.request_id != "bad space and slash/");
+	});
+
+	t.it('falls back when inbound is null or non-string', () => {
+		let a = errors.new_context(null);
+		t.assert_equal(length(a.request_id), 26);
+		let b = errors.new_context(42);
+		t.assert_equal(length(b.request_id), 26);
+	});
 });
 
 t.describe('errors.error', () => {
@@ -49,6 +73,25 @@ t.describe('errors.error', () => {
 		let r = errors.error(ctx, "conflict", "dup", { existing_id: "u_abc" });
 		t.assert_equal(r.body.existing_id, "u_abc");
 		t.assert_equal(r.body.code, "conflict");
+	});
+
+	t.it('adds WWW-Authenticate on 401 unauthorized', () => {
+		let r = errors.error(ctx, "unauthorized", "missing header");
+		t.assert_equal(r.status, 401);
+		t.assert_equal(r.headers["WWW-Authenticate"],
+		               "Bearer realm=\"uapi\", error=\"unauthorized\"");
+	});
+
+	t.it('adds WWW-Authenticate on 401 invalid_token', () => {
+		let r = errors.error(ctx, "invalid_token", "not recognised");
+		t.assert_equal(r.headers["WWW-Authenticate"],
+		               "Bearer realm=\"uapi\", error=\"invalid_token\"");
+	});
+
+	t.it('does not add WWW-Authenticate on non-401 statuses', () => {
+		let r = errors.error(ctx, "insufficient_scope", "nope");
+		t.assert_equal(r.status, 403);
+		t.assert_equal(r.headers["WWW-Authenticate"], null);
 	});
 });
 
