@@ -90,12 +90,12 @@ This affects every field declared with `type: "integer"` in v2's
 `schema_properties` - at v2 launch this is ~80 fields across ~20 resources.
 The most common-to-touch ones:
 
-- `firewall/rules`: `dest_port[]` (already an array of integers in spec; v2
-  rejects the array elements as strings)
 - `network/routes`: `metric`, `mtu`, `table`
 - `dropbear/instances`: `port`
-- `dhcp/servers`: `start`, `limit`, `leasetime` (still a duration string for
-  this field - read the per-field type)
+- `dhcp/servers`: `start`, `limit` (`leasetime` stays a duration string;
+  port specs like `firewall/rules.match.dest_port[]` also stay strings to
+  preserve range syntax `"22-25"` - check `/schema/<pkg>/<res>` for the
+  authoritative type per field)
 - `system`: `log_size`, `log_remote_port`
 
 Run your client through a staging router and capture any 422 responses on
