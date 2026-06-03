@@ -7,5 +7,8 @@ build/sdk/
 build/sdk-*/
 build/sbom.spdx.json
 build/openwrt/uapi/files/
+# CI bundles build/openapi.json into web/api/openapi.json at publish time.
+# Ignore any local copy so a stray `make stage`-style cp doesn't get committed.
+web/api/openapi.json
 .DS_Store
 *.swp
