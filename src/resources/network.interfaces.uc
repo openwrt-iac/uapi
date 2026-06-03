@@ -220,8 +220,11 @@ return {
 		            { required: ["ipaddr"] },
 		            { required: ["ipaddrs"] },
 		          ] } },
+		// private_key is write-only; GET surfaces only has_private_key, so listing
+		// it in `required` would make strict OpenAPI client codegen reject reads.
+		// validate() enforces presence on create.
 		{ if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
-		  then: { required: ["private_key", "addresses"] } },
+		  then: { required: ["addresses"] } },
 	],
 	openapi_runtime: {
 		type: "object",

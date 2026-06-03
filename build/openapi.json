@@ -13849,7 +13849,7 @@
 		"/diagnostics": {
 			"get": {
 				"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-				"description": "Scope: uapi:diagnostics:ro (or *:rw).",
+				"description": "Scope: uapi:diagnostics:ro (or *:ro).",
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -15382,7 +15382,6 @@
 						},
 						"then": {
 							"required": [
-								"private_key",
 								"addresses"
 							]
 						}

@@ -567,7 +567,14 @@ function make(resource, opts) {
 			},
 		}));
 
-		if (result.ok) return errors.no_content(ctx);
+		if (result.ok) {
+			let resp = errors.no_content(ctx);
+			if (result.reload_status != null)
+				resp.headers["X-Reload-Status"] = result.reload_status;
+			if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
+				resp.headers["X-Reload-Services"] = join(",", result.reload_services);
+			return resp;
+		}
 		return translate_tx(ctx, result);
 	}
 

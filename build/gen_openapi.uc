@@ -500,7 +500,7 @@ function build_paths() {
 	paths["/diagnostics"] = {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-			"description": "Scope: uapi:diagnostics:ro (or *:rw).",
+			"description": "Scope: uapi:diagnostics:ro (or *:ro).",
 			"responses": {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },
 				...error_responses(),

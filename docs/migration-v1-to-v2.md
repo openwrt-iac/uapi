@@ -76,6 +76,16 @@ On disk, the uci keys are unchanged (`Port`, `sysLocation`, etc.). The rename
 is purely on the wire: `fromUci` exposes snake_case; `toUci` translates back
 to the upstream uci key.
 
+### `dhcp/servers` runtime block
+
+| v1 field                          | v2 field                              |
+|-----------------------------------|---------------------------------------|
+| `runtime.active_leases_v4_total`  | `runtime.active_leases_v4_box_total`  |
+
+Clarifies the counter is "leases in the box for this server" (one box per
+configured `interface`), not the global lease count. The rest of the
+`runtime` block is unchanged.
+
 ## Strict integer typing (Breaking)
 
 v1.x silently accepted string-form integers (`"42"`) for fields declared
