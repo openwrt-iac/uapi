@@ -104,20 +104,23 @@ function tag_ops(paths_dict, tag) {
 	return paths_dict;
 }
 
-function error_responses() {
-	return {
+function error_responses(verb) {
+	let r = {
 		"400": { "$ref": "#/components/responses/BadRequest" },
 		"401": { "$ref": "#/components/responses/Unauthorized" },
 		"403": { "$ref": "#/components/responses/Forbidden" },
 		"404": { "$ref": "#/components/responses/NotFound" },
-		"409": { "$ref": "#/components/responses/Conflict" },
-		"412": { "$ref": "#/components/responses/PreconditionFailed" },
-		"422": { "$ref": "#/components/responses/ValidationFailed" },
-		"423": { "$ref": "#/components/responses/Locked" },
 		"429": { "$ref": "#/components/responses/TooManyRequests" },
 		"500": { "$ref": "#/components/responses/InternalError" },
 		"503": { "$ref": "#/components/responses/ServiceUnavailable" },
 	};
+	if (verb != "get") {
+		r["409"] = { "$ref": "#/components/responses/Conflict" };
+		r["412"] = { "$ref": "#/components/responses/PreconditionFailed" };
+		r["422"] = { "$ref": "#/components/responses/ValidationFailed" };
+		r["423"] = { "$ref": "#/components/responses/Locked" };
+	}
+	return r;
 }
 
 function make_response(status, description, ref) {
@@ -158,7 +161,7 @@ function build_crud_paths(ep) {
 						}
 					}
 				},
-				...error_responses(),
+				...error_responses("get"),
 			},
 		},
 		"post": {
@@ -173,7 +176,7 @@ function build_crud_paths(ep) {
 			},
 			"responses": {
 				"200": make_response(200, "Created", schema_ref),
-				...error_responses(),
+				...error_responses("post"),
 			},
 		},
 	};
@@ -184,11 +187,11 @@ function build_crud_paths(ep) {
 		            "description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
 		            "responses": { "200": make_response(200, "OK", schema_ref),
 		                           "304": { "description": "If-None-Match matched current ETag" },
-		                           ...error_responses() } },
+		                           ...error_responses("get") } },
 		"put":    { "summary": sprintf("Replace a %s", ep.subresource),
 		            "description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + schema_ref } } } },
-		            "responses": { "200": make_response(200, "Replaced", schema_ref), ...error_responses() } },
+		            "responses": { "200": make_response(200, "Replaced", schema_ref), ...error_responses("put") } },
 		"patch":  { "summary": sprintf("Partially update a %s", ep.subresource),
 		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 		            "requestBody": { "required": true, "content": {
@@ -196,16 +199,16 @@ function build_crud_paths(ep) {
 		                                                            "description": "merge-patch partial body" } },
 		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 		            } },
-		            "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses() } },
+		            "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses("patch") } },
 		"delete": { "summary": sprintf("Delete a %s", ep.subresource),
-		            "responses": { "204": { "description": "Deleted" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Deleted" }, ...error_responses("delete") } },
 	};
 
 	paths[ep.path + "/{id}/adopt"] = {
 		"parameters": [id_param],
 		"post": {
 			"summary": sprintf("Adopt an anonymous %s", ep.subresource),
-			"responses": { "200": make_response(200, "Adopted", schema_ref), ...error_responses() }
+			"responses": { "200": make_response(200, "Adopted", schema_ref), ...error_responses("post") }
 		},
 	};
 
@@ -220,14 +223,14 @@ function build_singleton_paths(ep) {
 			           "description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 			           "responses": { "200": make_response(200, "OK", schema_ref),
 			                          "304": { "description": "If-None-Match matched current ETag" },
-			                          ...error_responses() } },
+			                          ...error_responses("get") } },
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "requestBody": { "required": true, "content": {
 			             "application/json":            { "schema": { "type": "object" } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
-			           "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses() } },
+			           "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses("patch") } },
 		},
 	};
 }
@@ -246,7 +249,7 @@ function build_collection_paths(ep) {
 							            "items": { "$ref": "#/components/schemas/" + schema_ref } }
 						} }
 					},
-					...error_responses(),
+					...error_responses("get"),
 				},
 			},
 		},
@@ -254,7 +257,7 @@ function build_collection_paths(ep) {
 			"parameters": [{ "name": "id", "in": "path", "required": true,
 			                 "schema": { "type": "string" } }],
 			"get": { "summary": sprintf("Get one %s by id", ep.subresource),
-			         "responses": { "200": make_response(200, "OK", schema_ref), ...error_responses() } },
+			         "responses": { "200": make_response(200, "OK", schema_ref), ...error_responses("get") } },
 		},
 	};
 }
@@ -275,12 +278,12 @@ function build_paths() {
 		                 "schema": { "type": "string" } }],
 		"get": {
 			"summary": "List raw uci sections for a package",
-			"responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses() }
+			"responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses("get") }
 		},
 		"post": {
 			"summary": "Create a raw uci section",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
-			"responses": { "200": make_response(200, "Created", "RawWriteResult"), ...error_responses() }
+			"responses": { "200": make_response(200, "Created", "RawWriteResult"), ...error_responses("post") }
 		},
 	};
 	paths["/raw/{package}/{id}"] = {
@@ -289,15 +292,15 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get a raw uci section",
-		            "responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses("get") } },
 		"put":    { "summary": "Replace a raw uci section",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
-		            "responses": { "200": make_response(200, "Replaced", "RawWriteResult"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "Replaced", "RawWriteResult"), ...error_responses("put") } },
 		"patch":  { "summary": "Partially update a raw uci section",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
-		            "responses": { "200": make_response(200, "Updated", "RawWriteResult"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "Updated", "RawWriteResult"), ...error_responses("patch") } },
 		"delete": { "summary": "Delete a raw uci section",
-		            "responses": { "204": { "description": "Deleted" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Deleted" }, ...error_responses("delete") } },
 	};
 
 	paths["/packages/installed"] = {
@@ -308,12 +311,12 @@ function build_paths() {
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/InstalledPackage" } } } },
-			}, ...error_responses() }
+			}, ...error_responses("get") }
 		},
 		"post": {
 			"summary": "Install a package (apk add)",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageInstallRequest" } } } },
-			"responses": { "200": make_response(200, "Installed", "InstalledPackage"), ...error_responses() }
+			"responses": { "200": make_response(200, "Installed", "InstalledPackage"), ...error_responses("post") }
 		},
 	};
 	paths["/packages/installed/{name}"] = {
@@ -321,9 +324,9 @@ function build_paths() {
 			{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get info on an installed package",
-		            "responses": { "200": make_response(200, "OK", "InstalledPackage"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "OK", "InstalledPackage"), ...error_responses("get") } },
 		"delete": { "summary": "Remove a package (apk del)",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
 	};
 	paths["/packages/feeds"] = {
 		"get": {
@@ -333,12 +336,12 @@ function build_paths() {
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/PackageFeed" } } } },
-			}, ...error_responses() }
+			}, ...error_responses("get") }
 		},
 		"post": {
 			"summary": "Create a new apk feed file and run apk update",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageFeedCreateRequest" } } } },
-			"responses": { "200": make_response(200, "Created", "PackageFeed"), ...error_responses() }
+			"responses": { "200": make_response(200, "Created", "PackageFeed"), ...error_responses("post") }
 		},
 	};
 	paths["/packages/feeds/{id}"] = {
@@ -346,9 +349,9 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get one apk feed by id",
-		            "responses": { "200": make_response(200, "OK", "PackageFeed"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "OK", "PackageFeed"), ...error_responses("get") } },
 		"delete": { "summary": "Delete an apk feed and re-run apk update",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
 	};
 
 	paths["/system/password"] = {
@@ -356,7 +359,7 @@ function build_paths() {
 			"summary": "Set the password for a local user (write-only; shells out to passwd)",
 			"requestBody": { "required": true,
 			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SystemPasswordRequest" } } } },
-			"responses": { "204": { "description": "Password set" }, ...error_responses() }
+			"responses": { "204": { "description": "Password set" }, ...error_responses("post") }
 		},
 	};
 	paths["/system/authorized_keys"] = {
@@ -367,13 +370,13 @@ function build_paths() {
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
-			}, ...error_responses() }
+			}, ...error_responses("get") }
 		},
 		"post": {
 			"summary": "Add a single SSH public key",
 			"requestBody": { "required": true,
 			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SSHKeyAddRequest" } } } },
-			"responses": { "200": make_response(200, "Added", "SSHAuthorizedKey"), ...error_responses() }
+			"responses": { "200": make_response(200, "Added", "SSHAuthorizedKey"), ...error_responses("post") }
 		},
 		"put": {
 			"summary": "Replace the authorized_keys list wholesale",
@@ -384,7 +387,7 @@ function build_paths() {
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
-			}, ...error_responses() }
+			}, ...error_responses("put") }
 		},
 	};
 	paths["/system/authorized_keys/{id}"] = {
@@ -392,9 +395,9 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{12}$" } },
 		],
 		"get":    { "summary": "Get a single SSH key by stable id",
-		            "responses": { "200": make_response(200, "OK", "SSHAuthorizedKey"), ...error_responses() } },
+		            "responses": { "200": make_response(200, "OK", "SSHAuthorizedKey"), ...error_responses("get") } },
 		"delete": { "summary": "Remove a single SSH key by stable id",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
 	};
 
 	paths["/healthz"] = {
@@ -452,7 +455,7 @@ function build_paths() {
 			"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
 			"responses": {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WhoamiResponse" } } } },
-				...error_responses(),
+				...error_responses("get"),
 			},
 		},
 	};
@@ -465,7 +468,7 @@ function build_paths() {
 				"200": { "description": "OK", "content": { "application/json": { "schema": {
 				  "type": "object",
 				  "properties": { "tokens": { "type": "array", "items": { "$ref": "#/components/schemas/TokenMetadata" } } } } } } },
-				...error_responses(),
+				...error_responses("get"),
 			},
 		},
 		"post": {
@@ -474,16 +477,16 @@ function build_paths() {
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateRequest" } } } },
 			"responses": {
 				"200": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateResponse" } } } },
-				...error_responses(),
+				...error_responses("post"),
 			},
 		},
 	};
 	paths["/tokens/{id}"] = {
 		"parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
 		"get":    { "summary": "Get one token's metadata",
-		            "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } }, ...error_responses() } },
+		            "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } }, ...error_responses("get") } },
 		"delete": { "summary": "Revoke a token",
-		            "responses": { "204": { "description": "Revoked" }, ...error_responses() } },
+		            "responses": { "204": { "description": "Revoked" }, ...error_responses("delete") } },
 	};
 
 	paths["/metrics"] = {
@@ -492,7 +495,7 @@ function build_paths() {
 			"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
 			"responses": {
 				"200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" }, "example": "uapi_requests_total{method=\"GET\",path=\"/firewall/rules\",status=\"200\"} 42\n" } } },
-				...error_responses(),
+				...error_responses("get"),
 			},
 		},
 	};
@@ -503,7 +506,7 @@ function build_paths() {
 			"description": "Scope: uapi:diagnostics:ro (or *:ro).",
 			"responses": {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },
-				...error_responses(),
+				...error_responses("get"),
 			},
 		},
 	};
@@ -515,7 +518,7 @@ function build_paths() {
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchRequest" } } } },
 			"responses": {
 				"207": { "description": "Multi-Status: every sub-request succeeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchResponse" } } } },
-				...error_responses(),
+				...error_responses("post"),
 			},
 		},
 	};
