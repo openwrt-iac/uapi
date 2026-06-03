@@ -98,6 +98,31 @@ function default_release_pkg(handle) {
 	_release_one(handle._g);
 }
 
+// Shape the post-reload result: success on reload_err == null, otherwise run
+// restore_fn (which performs uci_import + uci_commit + reload) and classify
+// as reload_failed_restored / reload_failed_unrecovered.
+function _finalize_after_reload(reload_err, restore_fn, body, services) {
+	if (reload_err == null) {
+		return { ok: true, body: body,
+		         reload_services: services,
+		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };
+	}
+
+	let restore_err = null;
+	try {
+		let r2 = restore_fn();
+		if (r2 != null) restore_err = "reload during restore failed: " + r2;
+	} catch (e) {
+		restore_err = "" + e;
+	}
+
+	if (restore_err != null)
+		return { ok: false, kind: "reload_failed_unrecovered",
+		         reload_error: reload_err, restore_error: restore_err };
+	return { ok: false, kind: "reload_failed_restored",
+	         reload_error: reload_err };
+}
+
 function run_inner(conn, pkg, services, fn, snapshot, reload) {
 	let result = fn(conn, pkg);
 
@@ -108,38 +133,11 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 
 	conn.uci_commit(pkg);
 
-	let reload_err = reload(services);
-	if (reload_err == null) {
-		return { ok: true, body: result.body,
-		         reload_services: services,
-		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };
-	}
-
-	let restore_err = null;
-	try {
+	return _finalize_after_reload(reload(services), function() {
 		conn.uci_import(pkg, snapshot);
 		conn.uci_commit(pkg);
-		let restore_reload_err = reload(services);
-		if (restore_reload_err != null)
-			restore_err = "reload during restore failed: " + restore_reload_err;
-	} catch (e) {
-		restore_err = "" + e;
-	}
-
-	if (restore_err != null) {
-		return {
-			ok: false,
-			kind: "reload_failed_unrecovered",
-			reload_error: reload_err,
-			restore_error: restore_err,
-		};
-	}
-
-	return {
-		ok: false,
-		kind: "reload_failed_restored",
-		reload_error: reload_err,
-	};
+		return reload(services);
+	}, result.body, services);
 }
 
 function transaction(conn, params) {
@@ -256,28 +254,13 @@ function multi_transaction(conn, params) {
 				}
 			}
 			let reload_err = (commit_err == null) ? reload(services) : commit_err;
-			if (reload_err == null) {
-				result = { ok: true, body: inner.body,
-				           reload_services: services,
-				           reload_status: (length(services) > 0) ? "ok" : "no_reload" };
-			} else {
-				let restore_err = null;
-				try {
-					for (let pkg in sorted) {
-						conn.uci_import(pkg, snapshots[pkg]);
-						conn.uci_commit(pkg);
-					}
-					let r2 = reload(services);
-					if (r2 != null) restore_err = "reload during restore failed: " + r2;
-				} catch (e) { restore_err = "" + e; }
-				if (restore_err != null) {
-					result = { ok: false, kind: "reload_failed_unrecovered",
-					           reload_error: reload_err, restore_error: restore_err };
-				} else {
-					result = { ok: false, kind: "reload_failed_restored",
-					           reload_error: reload_err };
+			result = _finalize_after_reload(reload_err, function() {
+				for (let pkg in sorted) {
+					conn.uci_import(pkg, snapshots[pkg]);
+					conn.uci_commit(pkg);
 				}
-			}
+				return reload(services);
+			}, inner.body, services);
 		}
 	} catch (e) { caught = e; }
 
