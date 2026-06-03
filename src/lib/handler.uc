@@ -344,6 +344,55 @@ function translate_tx(ctx, result) {
 	                    sprintf("transaction returned unknown kind %J", result.kind));
 }
 
+// Replace any uci options not in new_opts; set the rest. The two-loop shape
+// is required because uci_set on an existing key updates; we have to
+// explicitly delete the keys the new body omitted. The leading-dot keys
+// (.name/.type/.anonymous) are pseudo and must not be touched.
+function diff_apply(c, p, id, existing, new_opts) {
+	for (let k in existing) {
+		if (substr(k, 0, 1) == ".") continue;
+		if (exists(new_opts, k)) continue;
+		c.uci_delete(p, id, k);
+	}
+	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+}
+
+// Stamp resp.headers["ETag"] using a depends_on-mixed hash so write-success
+// ETags match the next GET. No-op on non-2xx, missing body, or no depends_on.
+function etag_with_deps(resource, resp, conn, ctx) {
+	if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
+	if (resp.body == null) return resp;
+	if (resource.depends_on == null) return resp;
+	let dh = _deps_hash(ctx, conn, resource.depends_on);
+	if (dh == "") return resp;
+	if (resp.headers == null) resp.headers = {};
+	resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
+	return resp;
+}
+
+// Reduce a PATCH body against existing state to a post-image plus a schema-
+// validation target. JSON Patch (RFC 6902) synthesises the full post-image,
+// so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
+// check only the delta. Returns either { ok: true, merged, schema_body } or
+// an error result that the caller short-circuits with.
+function apply_patch_body(existing, existing_view, body, ctx, merge_fn) {
+	if (ctx != null && ctx.json_patch == true) {
+		let jp = jsonpatch.apply(existing_view, body);
+		if (!jp.ok) {
+			if (jp.code == "precondition_failed")
+				return { ok: false, kind: "precondition_failed",
+				         message: jp.message };
+			return { ok: false, kind: "validation",
+			         errors: [errors.field_error(
+			           sprintf("[%d]", jp.op_index ?? 0),
+			           "invalid_format", jp.message)] };
+		}
+		return { ok: true, merged: jp.value, schema_body: jp.value };
+	}
+	return { ok: true, merged: merge_fn(existing, existing_view, body),
+	         schema_body: body };
+}
+
 function default_merge_for_patch(existing_section, existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) {
@@ -380,21 +429,6 @@ function make(resource, opts) {
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;
-	}
-
-	// Replace the ETag on a write-success response with one that includes the
-	// resource's depends_on hash, so the create/replace/patch ETag matches the
-	// next GET on the same resource. translate_tx can't do this itself (no
-	// conn access).
-	function _etag_with_deps(resp, conn, ctx) {
-		if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
-		if (resp.body == null) return resp;
-		if (resource.depends_on == null) return resp;
-		let dh = _deps_hash(ctx, conn, resource.depends_on);
-		if (dh == "") return resp;
-		if (resp.headers == null) resp.headers = {};
-		resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
-		return resp;
 	}
 
 	function list(conn, ctx, query) {
@@ -440,7 +474,7 @@ function make(resource, opts) {
 		}));
 
 		let resp = translate_tx(ctx, result);
-		return _etag_with_deps(resp, conn, ctx);
+		return etag_with_deps(resource, resp, conn, ctx);
 	}
 
 	function replace(conn, ctx, id, body) {
@@ -463,12 +497,7 @@ function make(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 				let new_opts = resource.toUci(body);
-				for (let k in existing) {
-					if (substr(k, 0, 1) == ".") continue;
-					if (exists(new_opts, k)) continue;
-					c.uci_delete(p, id, k);
-				}
-				for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -478,7 +507,7 @@ function make(resource, opts) {
 		}));
 
 		let resp = translate_tx(ctx, result);
-		return _etag_with_deps(resp, conn, ctx);
+		return etag_with_deps(resource, resp, conn, ctx);
 	}
 
 	function patch(conn, ctx, id, body) {
@@ -498,42 +527,16 @@ function make(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
-				let existing_json = existing_view;
-				let schema_body, merged_json;
-				if (ctx != null && ctx.json_patch == true) {
-					// RFC 6902. Apply ops to a JSON view of existing state; the
-					// result IS the full new body (like PUT). Schema-check the
-					// full result since merge-patch's delta-only check doesn't
-					// apply when we synthesised the post-image ourselves.
-					let jp_result = jsonpatch.apply(existing_json, body);
-					if (!jp_result.ok) {
-						if (jp_result.code == "precondition_failed")
-							return { ok: false, kind: "precondition_failed",
-							         message: jp_result.message };
-						return { ok: false, kind: "validation",
-						         errors: [errors.field_error(
-						           sprintf("[%d]", jp_result.op_index ?? 0),
-						           "invalid_format", jp_result.message)] };
-					}
-					merged_json = jp_result.value;
-					schema_body = merged_json;
-				} else {
-					let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
-					merged_json = merge_fn(existing, existing_json, body);
-					schema_body = body;
-				}
+				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
+				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn);
+				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, schema_body, merged_json, c, id);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
-				let new_opts = resource.toUci(merged_json);
-				for (let k in existing) {
-					if (substr(k, 0, 1) == ".") continue;
-					if (exists(new_opts, k)) continue;
-					c.uci_delete(p, id, k);
-				}
-				for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+				let new_opts = resource.toUci(r.merged);
+				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -543,7 +546,7 @@ function make(resource, opts) {
 		}));
 
 		let resp = translate_tx(ctx, result);
-		return _etag_with_deps(resp, conn, ctx);
+		return etag_with_deps(resource, resp, conn, ctx);
 	}
 
 	function remove(conn, ctx, id) {
@@ -610,17 +613,6 @@ function make_singleton(resource, opts) {
 		return p;
 	}
 
-	function _etag_with_deps(resp, conn, ctx) {
-		if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
-		if (resp.body == null) return resp;
-		if (resource.depends_on == null) return resp;
-		let dh = _deps_hash(ctx, conn, resource.depends_on);
-		if (dh == "") return resp;
-		if (resp.headers == null) resp.headers = {};
-		resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
-		return resp;
-	}
-
 	function find(conn) {
 		let found = null;
 		conn.uci_foreach(pkg, sec_type, function(s) {
@@ -656,37 +648,20 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
-				let merged, schema_body;
-				if (ctx != null && ctx.json_patch == true) {
-					let jp_result = jsonpatch.apply(existing_view, body);
-					if (!jp_result.ok) {
-						if (jp_result.code == "precondition_failed")
-							return { ok: false, kind: "precondition_failed",
-							         message: jp_result.message };
-						return { ok: false, kind: "validation",
-						         errors: [errors.field_error(
-						           sprintf("[%d]", jp_result.op_index ?? 0),
-						           "invalid_format", jp_result.message)] };
-					}
-					merged = jp_result.value;
-					schema_body = merged;
-				} else {
-					merged = { ...existing_view };
-					for (let k in body) merged[k] = body[k];
-					schema_body = body;
-				}
+				let singleton_merge = function(_e, view, b) {
+					let merged = { ...view };
+					for (let k in b) merged[k] = b[k];
+					return merged;
+				};
+				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge);
+				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, schema_body, merged, c, id);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
-				let new_opts = resource.toUci(merged);
-				for (let k in existing) {
-					if (substr(k, 0, 1) == ".") continue;
-					if (exists(new_opts, k)) continue;
-					c.uci_delete(p, id, k);
-				}
-				for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+				let new_opts = resource.toUci(r.merged);
+				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];
@@ -696,7 +671,7 @@ function make_singleton(resource, opts) {
 		}));
 
 		let resp = translate_tx(ctx, result);
-		return _etag_with_deps(resp, conn, ctx);
+		return etag_with_deps(resource, resp, conn, ctx);
 	}
 
 	return { get, patch };
