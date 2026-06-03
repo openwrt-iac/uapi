@@ -111,7 +111,7 @@ function _validate_create_body(body) {
 	let errs = [];
 	if (type(body.name) != "string" || !match(body.name, NAME_RE))
 		push(errs, errors.field_error("name", "invalid_format",
-			"must match [A-Za-z0-9_][A-Za-z0-9_-]{0,62}"));
+			"must match [A-Za-z0-9_]+ (uci section-name charset; use underscores instead of hyphens)"));
 	if (type(body.scopes) != "array" || length(body.scopes) == 0)
 		push(errs, errors.field_error("scopes", "required",
 			"must be a non-empty array of scope strings"));
