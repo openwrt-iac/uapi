@@ -96,7 +96,8 @@ function tag_for(ep) {
 function tag_ops(paths_dict, tag) {
 	for (let p in paths_dict) {
 		for (let verb in paths_dict[p]) {
-			if (verb == "parameters") continue;
+			// `parameters` is an array, not an object, so this filter
+			// excludes it along with any other non-operation path-level keys.
 			if (type(paths_dict[p][verb]) != "object") continue;
 			paths_dict[p][verb].tags = [tag];
 		}
