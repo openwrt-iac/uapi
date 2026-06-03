@@ -7,7 +7,7 @@ name: publish-web
 on:
   push:
     branches: [main]
-    paths: ['web/**']
+    paths: ['web/**', 'build/openapi.json']
   workflow_dispatch:
 
 permissions:
@@ -51,6 +51,15 @@ jobs:
                 -not -path '/tmp/gh-pages/.git*' \
                 -not -path '/tmp/gh-pages/packages*' \
                 -delete 2>/dev/null || true
+          fi
+
+          # Bundle the committed OpenAPI spec into the web tree so
+          # web/api/index.html (Redoc) can fetch it from a same-origin
+          # /api/openapi.json. Done here (not committed under web/) to
+          # avoid carrying a duplicate of build/openapi.json in source.
+          if [ -r build/openapi.json ]; then
+            mkdir -p web/api
+            cp build/openapi.json web/api/openapi.json
           fi
 
           # Copy web/ contents to gh-pages root.

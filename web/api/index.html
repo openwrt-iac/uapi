@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uapi API reference</title>
+<meta name="description" content="Complete OpenAPI 3.1 reference for uapi - the native HTTP REST API for OpenWrt.">
+<link rel="icon" href="data:,">
+<style>
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .topbar {
+    background: #12141a;
+    color: #d4d4d4;
+    padding: 0.8rem 1.5rem;
+    border-bottom: 1px solid #2d313b;
+    display: flex; align-items: baseline; gap: 1.5rem;
+    font-size: 0.95rem;
+  }
+  .topbar a { color: #ff6600; text-decoration: none; }
+  .topbar a:hover { text-decoration: underline; }
+  .topbar .brand {
+    font-family: "SFMono-Regular", Menlo, monospace;
+    color: #ff6600;
+    font-weight: 600;
+  }
+  .topbar .brand::before { content: "$ "; color: #8a8f99; }
+  .topbar .crumb { color: #8a8f99; }
+  .topbar nav { margin-left: auto; display: flex; gap: 1.2rem; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="../" class="brand">uapi</a>
+  <span class="crumb">/ API reference</span>
+  <nav>
+    <a href="../">Home</a>
+    <a href="../install/">Install</a>
+    <a href="openapi.json">openapi.json</a>
+    <a href="https://github.com/raspbeguy/uapi">GitHub</a>
+  </nav>
+</div>
+
+<redoc spec-url="openapi.json"
+       theme='{"colors":{"primary":{"main":"#ff6600"}},"typography":{"fontFamily":"-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif","headings":{"fontFamily":"Georgia, Bitstream Vera Serif, serif"},"code":{"fontFamily":"SFMono-Regular, Menlo, Consolas, monospace"}},"sidebar":{"backgroundColor":"#fafafa"}}'
+       hide-loading
+       expand-responses="200,201,204,207"
+       json-sample-expand-level="2"
+       schema-expansion-level="1"
+       path-in-middle-panel
+       required-props-first
+       sort-props-alphabetically>
+</redoc>
+
+<script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+
+</body>
+</html>
