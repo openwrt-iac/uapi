@@ -98,7 +98,11 @@ function tag_ops(paths_dict, tag) {
 	return paths_dict;
 }
 
+const VALID_VERBS = { get: 1, post: 1, put: 1, patch: 1, delete: 1 };
+
 function error_responses(verb) {
+	if (!VALID_VERBS[verb])
+		die(sprintf("error_responses: unknown verb %J", verb));
 	let r = {
 		"400": { "$ref": "#/components/responses/BadRequest" },
 		"401": { "$ref": "#/components/responses/Unauthorized" },
@@ -127,6 +131,16 @@ function make_response(status, description, ref) {
 	return resp;
 }
 
+// Merge a success-response block with the verb-appropriate error set.
+// `success` is an object like { "200": <response>, ["304": <response>] }.
+function responses(verb, success) {
+	let r = {};
+	for (let k in success) r[k] = success[k];
+	let errs = error_responses(verb);
+	for (let k in errs) r[k] = errs[k];
+	return r;
+}
+
 function build_crud_paths(ep) {
 	let schema_ref = schema_name(ep);
 	let id_param = {
@@ -145,18 +159,15 @@ function build_crud_paths(ep) {
 				  "schema": { "type": "string", "enum": ["true", "false"] },
 				  "description": "Filter by managed flag" },
 			],
-			"responses": {
+			"responses": responses("get", {
 				"200": {
 					"description": "OK",
-					"content": {
-						"application/json": {
-							"schema": { "type": "array",
-							            "items": { "$ref": "#/components/schemas/" + schema_ref } }
-						}
-					}
+					"content": { "application/json": {
+						"schema": { "type": "array",
+						            "items": { "$ref": "#/components/schemas/" + schema_ref } }
+					} }
 				},
-				...error_responses("get"),
-			},
+			}),
 		},
 		"post": {
 			"summary": sprintf("Create a %s", ep.subresource),
@@ -168,10 +179,7 @@ function build_crud_paths(ep) {
 					}
 				}
 			},
-			"responses": {
-				"200": make_response(200, "Created", schema_ref),
-				...error_responses("post"),
-			},
+			"responses": responses("post", { "200": make_response(200, "Created", schema_ref) }),
 		},
 	};
 
@@ -179,13 +187,14 @@ function build_crud_paths(ep) {
 		"parameters": [id_param],
 		"get":    { "summary": sprintf("Get one %s", ep.subresource),
 		            "description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
-		            "responses": { "200": make_response(200, "OK", schema_ref),
-		                           "304": { "description": "If-None-Match matched current ETag" },
-		                           ...error_responses("get") } },
+		            "responses": responses("get", {
+		              "200": make_response(200, "OK", schema_ref),
+		              "304": { "description": "If-None-Match matched current ETag" },
+		            }) },
 		"put":    { "summary": sprintf("Replace a %s", ep.subresource),
 		            "description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + schema_ref } } } },
-		            "responses": { "200": make_response(200, "Replaced", schema_ref), ...error_responses("put") } },
+		            "responses": responses("put", { "200": make_response(200, "Replaced", schema_ref) }) },
 		"patch":  { "summary": sprintf("Partially update a %s", ep.subresource),
 		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 		            "requestBody": { "required": true, "content": {
@@ -193,16 +202,16 @@ function build_crud_paths(ep) {
 		                                                            "description": "merge-patch partial body" } },
 		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 		            } },
-		            "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses("patch") } },
+		            "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }) },
 		"delete": { "summary": sprintf("Delete a %s", ep.subresource),
-		            "responses": { "204": { "description": "Deleted" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Deleted" } }) },
 	};
 
 	paths[ep.path + "/{id}/adopt"] = {
 		"parameters": [id_param],
 		"post": {
 			"summary": sprintf("Adopt an anonymous %s", ep.subresource),
-			"responses": { "200": make_response(200, "Adopted", schema_ref), ...error_responses("post") }
+			"responses": responses("post", { "200": make_response(200, "Adopted", schema_ref) })
 		},
 	};
 
@@ -215,16 +224,17 @@ function build_singleton_paths(ep) {
 		[ep.path]: {
 			"get":   { "summary": sprintf("Get the %s singleton", ep.domain),
 			           "description": "Conditional GET via If-None-Match (or ?if_none_match=).",
-			           "responses": { "200": make_response(200, "OK", schema_ref),
-			                          "304": { "description": "If-None-Match matched current ETag" },
-			                          ...error_responses("get") } },
+			           "responses": responses("get", {
+			             "200": make_response(200, "OK", schema_ref),
+			             "304": { "description": "If-None-Match matched current ETag" },
+			           }) },
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "requestBody": { "required": true, "content": {
 			             "application/json":            { "schema": { "type": "object" } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
-			           "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses("patch") } },
+			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }) },
 		},
 	};
 }
@@ -235,7 +245,7 @@ function build_collection_paths(ep) {
 		[ep.path]: {
 			"get": {
 				"summary": sprintf("List %s (read-only)", ep.subresource),
-				"responses": {
+				"responses": responses("get", {
 					"200": {
 						"description": "OK",
 						"content": { "application/json": {
@@ -243,17 +253,100 @@ function build_collection_paths(ep) {
 							            "items": { "$ref": "#/components/schemas/" + schema_ref } }
 						} }
 					},
-					...error_responses("get"),
-				},
+				}),
 			},
 		},
 		[ep.path + "/{id}"]: {
 			"parameters": [{ "name": "id", "in": "path", "required": true,
 			                 "schema": { "type": "string" } }],
 			"get": { "summary": sprintf("Get one %s by id", ep.subresource),
-			         "responses": { "200": make_response(200, "OK", schema_ref), ...error_responses("get") } },
+			         "responses": responses("get", { "200": make_response(200, "OK", schema_ref) }) },
 		},
 	};
+}
+
+// Single source of truth for tag metadata. Each entry carries a name, the
+// group it belongs to under Redoc's x-tagGroups, a description (shown as the
+// section intro), and an optional path_prefix used by the static-tagging pass
+// for non-curated paths. Order matters: TAGS order drives the emitted tags[]
+// order, and first-seen group order drives the x-tagGroups order.
+const TAGS = [
+	{ name: "Firewall / Zones",            group: "Firewall", description: "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles." },
+	{ name: "Firewall / Rules",            group: "Firewall", description: "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family. Cross-refs `firewall/zones`." },
+	{ name: "Firewall / Redirects",        group: "Firewall", description: "Port forwards and NAT loopback (`config redirect`). Cross-refs `firewall/zones`." },
+	{ name: "Firewall / Forwardings",      group: "Firewall", description: "Zone-to-zone forwarding (`config forwarding`)." },
+	{ name: "Firewall / Defaults",         group: "Firewall", description: "Global firewall defaults singleton: verdicts, syn_flood, tcp_syncookies, flow_offloading." },
+	{ name: "Network / Interfaces",        group: "Network",  description: "Network interfaces (`config interface`). proto static/dhcp/dhcpv6/pppoe/wireguard/etc. `runtime` carries ubus state." },
+	{ name: "Network / Devices",           group: "Network",  description: "Network devices (`config device`): bridges, VLAN (8021q/8021ad), macvlan, veth, tun/tap." },
+	{ name: "Network / Routes",            group: "Network",  description: "Static routes (`config route`)." },
+	{ name: "Network / Rules",             group: "Network",  description: "Policy routing rules (`config rule`)." },
+	{ name: "Network / Bridge Vlans",      group: "Network",  description: "Bridge VLAN tagging (`config bridge-vlan`)." },
+	{ name: "Network / Wireguard Peers",   group: "Network",  description: "WireGuard peers (dynamic uci type `wireguard_<iface>`); preshared_key write-only." },
+	{ name: "Wireless / Devices",          group: "Wireless", description: "Wifi radios (`config wifi-device`): band, channel, htmode, country, txpower." },
+	{ name: "Wireless / Interfaces",       group: "Wireless", description: "SSIDs (`config wifi-iface`). `key` write-only; runtime carries iwinfo state." },
+	{ name: "Dhcp / Hosts",                group: "DHCP",     description: "Static DHCP leases (`config host`)." },
+	{ name: "Dhcp / Servers",              group: "DHCP",     description: "Per-interface DHCP server config (`config dhcp`). runtime carries lease counts." },
+	{ name: "Dhcp / Dnsmasq",              group: "DHCP",     description: "Global dnsmasq tuning singleton." },
+	{ name: "Dhcp / Odhcpd",               group: "DHCP",     description: "odhcpd singleton." },
+	{ name: "Dhcp / Leases",               group: "DHCP",     description: "IPv4 leases parsed from /tmp/dhcp.leases (read-only)." },
+	{ name: "Dhcp / Leases6",              group: "DHCP",     description: "IPv6 leases from odhcpd statefile (read-only)." },
+	{ name: "System",                      group: "System",   description: "Global system config singleton (`config system`): hostname, timezone, log_size, etc." },
+	{ name: "System / Timeservers",        group: "System",   description: "NTP server list (`config timeserver`)." },
+	{ name: "System / Password",           group: "System",   description: "Local Unix password (write-only; shells out to passwd).", path_prefix: "/system/password" },
+	{ name: "System / SSH authorized keys", group: "System",  description: "Manage `/etc/dropbear/authorized_keys` entries by stable id.", path_prefix: "/system/authorized_keys" },
+	{ name: "Dropbear / Instances",        group: "Other daemons", description: "Per-instance SSH config (`config dropbear`)." },
+	{ name: "Uhttpd / Instances",          group: "Other daemons", description: "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`." },
+	{ name: "Uhttpd / Certs",              group: "Other daemons", description: "px5g certificate generation params (`config cert`)." },
+	{ name: "Unbound / Server",            group: "Other daemons", description: "Recursive DNS server singleton (`config unbound`)." },
+	{ name: "Sqm / Queues",                group: "Other daemons", description: "Per-interface SQM shaping (`config queue`)." },
+	{ name: "Snmpd / Agents",              group: "Other daemons", description: "SNMP listen addresses (`config agent`)." },
+	{ name: "Snmpd / Com2secs",            group: "Other daemons", description: "community-to-security mapping (`config com2sec`)." },
+	{ name: "Snmpd / Groups",              group: "Other daemons", description: "SNMP groups (`config group`)." },
+	{ name: "Snmpd / Accesses",            group: "Other daemons", description: "group-to-view ACLs (`config access`)." },
+	{ name: "Snmpd / System",              group: "Other daemons", description: "SNMPv2-MIB system.* singleton (sys_location, sys_contact, etc.)." },
+	{ name: "Lldpd / Config",              group: "Other daemons", description: "LLDP/CDP/etc. toggles singleton." },
+	{ name: "Prometheus Node Exporter Lua / Config", group: "Other daemons", description: "node_exporter listen + per-collector toggles singleton." },
+	{ name: "Vnstat / Config",             group: "Other daemons", description: "Global vnstat singleton." },
+	{ name: "Vnstat / Interfaces",         group: "Other daemons", description: "Per-iface vnstat enable." },
+	{ name: "Raw / Generic uci passthrough", group: "Generic uci passthrough", description: "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target.", path_prefix: "/raw/" },
+	{ name: "Packages / Installed",        group: "Packages", description: "Manage on-router apk packages (shells out to `apk add`/`del`).", path_prefix: "/packages/installed" },
+	{ name: "Packages / Feeds",            group: "Packages", description: "Manage `/etc/apk/repositories.d/*.list` feed files.",          path_prefix: "/packages/feeds" },
+	{ name: "Auth / Whoami",               group: "Auth & tokens", description: "Token introspection: read the calling bearer's own metadata.", path_prefix: "/auth/whoami" },
+	{ name: "Auth / Tokens",               group: "Auth & tokens", description: "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope).", path_prefix: "/tokens" },
+	{ name: "Operational / Healthz",       group: "Operational endpoints", description: "Liveness + subsystem checks. No auth. Treat `version` as the stable version-skew probe.", path_prefix: "/healthz" },
+	{ name: "Operational / OpenAPI spec",  group: "Operational endpoints", description: "Self-describing endpoint serving this OpenAPI document. No auth.", path_prefix: "/openapi.json" },
+	{ name: "Operational / Schema discovery", group: "Operational endpoints", description: "Per-resource schema_properties for dynamic clients without parsing the full spec. No auth.", path_prefix: "/schema" },
+	{ name: "Operational / Metrics",       group: "Operational endpoints", description: "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.", path_prefix: "/metrics" },
+	{ name: "Operational / Diagnostics",   group: "Operational endpoints", description: "Lock state, uptime, loaded resources.",       path_prefix: "/diagnostics" },
+	{ name: "Operational / Batch",         group: "Operational endpoints", description: "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.", path_prefix: "/batch" },
+];
+
+function build_tags() {
+	let out = [];
+	for (let t in TAGS) push(out, { name: t.name, description: t.description });
+	return out;
+}
+
+function build_tag_groups() {
+	let order = [];
+	let groups = {};
+	for (let t in TAGS) {
+		if (groups[t.group] == null) {
+			groups[t.group] = { name: t.group, tags: [] };
+			push(order, t.group);
+		}
+		push(groups[t.group].tags, t.name);
+	}
+	let out = [];
+	for (let g in order) push(out, groups[g]);
+	return out;
+}
+
+function build_static_path_tags() {
+	let out = [];
+	for (let t in TAGS)
+		if (t.path_prefix != null) push(out, [t.path_prefix, t.name]);
+	return out;
 }
 
 function build_paths() {
@@ -272,12 +365,12 @@ function build_paths() {
 		                 "schema": { "type": "string" } }],
 		"get": {
 			"summary": "List raw uci sections for a package",
-			"responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses("get") }
+			"responses": responses("get", { "200": make_response(200, "OK", "RawSection") })
 		},
 		"post": {
 			"summary": "Create a raw uci section",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
-			"responses": { "200": make_response(200, "Created", "RawWriteResult"), ...error_responses("post") }
+			"responses": responses("post", { "200": make_response(200, "Created", "RawWriteResult") })
 		},
 	};
 	paths["/raw/{package}/{id}"] = {
@@ -286,31 +379,31 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get a raw uci section",
-		            "responses": { "200": make_response(200, "OK", "RawSection"), ...error_responses("get") } },
+		            "responses": responses("get", { "200": make_response(200, "OK", "RawSection") }) },
 		"put":    { "summary": "Replace a raw uci section",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
-		            "responses": { "200": make_response(200, "Replaced", "RawWriteResult"), ...error_responses("put") } },
+		            "responses": responses("put", { "200": make_response(200, "Replaced", "RawWriteResult") }) },
 		"patch":  { "summary": "Partially update a raw uci section",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
-		            "responses": { "200": make_response(200, "Updated", "RawWriteResult"), ...error_responses("patch") } },
+		            "responses": responses("patch", { "200": make_response(200, "Updated", "RawWriteResult") }) },
 		"delete": { "summary": "Delete a raw uci section",
-		            "responses": { "204": { "description": "Deleted" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Deleted" } }) },
 	};
 
 	paths["/packages/installed"] = {
 		"get": {
 			"summary": "List installed apk packages",
-			"responses": { "200": {
+			"responses": responses("get", { "200": {
 				"description": "OK",
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/InstalledPackage" } } } },
-			}, ...error_responses("get") }
+			} })
 		},
 		"post": {
 			"summary": "Install a package (apk add)",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageInstallRequest" } } } },
-			"responses": { "200": make_response(200, "Installed", "InstalledPackage"), ...error_responses("post") }
+			"responses": responses("post", { "200": make_response(200, "Installed", "InstalledPackage") })
 		},
 	};
 	paths["/packages/installed/{name}"] = {
@@ -318,24 +411,24 @@ function build_paths() {
 			{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get info on an installed package",
-		            "responses": { "200": make_response(200, "OK", "InstalledPackage"), ...error_responses("get") } },
+		            "responses": responses("get", { "200": make_response(200, "OK", "InstalledPackage") }) },
 		"delete": { "summary": "Remove a package (apk del)",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Removed" } }) },
 	};
 	paths["/packages/feeds"] = {
 		"get": {
 			"summary": "List apk feeds under /etc/apk/repositories.d",
-			"responses": { "200": {
+			"responses": responses("get", { "200": {
 				"description": "OK",
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/PackageFeed" } } } },
-			}, ...error_responses("get") }
+			} })
 		},
 		"post": {
 			"summary": "Create a new apk feed file and run apk update",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageFeedCreateRequest" } } } },
-			"responses": { "200": make_response(200, "Created", "PackageFeed"), ...error_responses("post") }
+			"responses": responses("post", { "200": make_response(200, "Created", "PackageFeed") })
 		},
 	};
 	paths["/packages/feeds/{id}"] = {
@@ -343,9 +436,9 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
 		],
 		"get":    { "summary": "Get one apk feed by id",
-		            "responses": { "200": make_response(200, "OK", "PackageFeed"), ...error_responses("get") } },
+		            "responses": responses("get", { "200": make_response(200, "OK", "PackageFeed") }) },
 		"delete": { "summary": "Delete an apk feed and re-run apk update",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Removed" } }) },
 	};
 
 	paths["/system/password"] = {
@@ -353,35 +446,35 @@ function build_paths() {
 			"summary": "Set the password for a local user (write-only; shells out to passwd)",
 			"requestBody": { "required": true,
 			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SystemPasswordRequest" } } } },
-			"responses": { "204": { "description": "Password set" }, ...error_responses("post") }
+			"responses": responses("post", { "204": { "description": "Password set" } })
 		},
 	};
 	paths["/system/authorized_keys"] = {
 		"get": {
 			"summary": "List installed SSH public keys",
-			"responses": { "200": {
+			"responses": responses("get", { "200": {
 				"description": "OK",
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
-			}, ...error_responses("get") }
+			} })
 		},
 		"post": {
 			"summary": "Add a single SSH public key",
 			"requestBody": { "required": true,
 			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SSHKeyAddRequest" } } } },
-			"responses": { "200": make_response(200, "Added", "SSHAuthorizedKey"), ...error_responses("post") }
+			"responses": responses("post", { "200": make_response(200, "Added", "SSHAuthorizedKey") })
 		},
 		"put": {
 			"summary": "Replace the authorized_keys list wholesale",
 			"requestBody": { "required": true,
 			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SSHKeyReplaceRequest" } } } },
-			"responses": { "200": {
+			"responses": responses("put", { "200": {
 				"description": "Replaced",
 				"content": { "application/json": { "schema": {
 					"type": "array",
 					"items": { "$ref": "#/components/schemas/SSHAuthorizedKey" } } } },
-			}, ...error_responses("put") }
+			} })
 		},
 	};
 	paths["/system/authorized_keys/{id}"] = {
@@ -389,9 +482,9 @@ function build_paths() {
 			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{12}$" } },
 		],
 		"get":    { "summary": "Get a single SSH key by stable id",
-		            "responses": { "200": make_response(200, "OK", "SSHAuthorizedKey"), ...error_responses("get") } },
+		            "responses": responses("get", { "200": make_response(200, "OK", "SSHAuthorizedKey") }) },
 		"delete": { "summary": "Remove a single SSH key by stable id",
-		            "responses": { "204": { "description": "Removed" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Removed" } }) },
 	};
 
 	paths["/healthz"] = {
@@ -447,10 +540,9 @@ function build_paths() {
 		"get": {
 			"summary": "Introspection: the calling token's own metadata",
 			"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
-			"responses": {
+			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WhoamiResponse" } } } },
-				...error_responses("get"),
-			},
+			}),
 		},
 	};
 
@@ -458,39 +550,36 @@ function build_paths() {
 		"get": {
 			"summary": "List all tokens (no secrets surfaced)",
 			"description": "Scope: uapi:tokens:ro (or *:ro). Each entry omits salt and hash.",
-			"responses": {
+			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "application/json": { "schema": {
 				  "type": "object",
 				  "properties": { "tokens": { "type": "array", "items": { "$ref": "#/components/schemas/TokenMetadata" } } } } } } },
-				...error_responses("get"),
-			},
+			}),
 		},
 		"post": {
 			"summary": "Mint a new token over HTTP",
 			"description": "Scope: uapi:tokens:rw (or *:rw). Requested scopes MUST be a strict subset of the caller's own; escalation returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateRequest" } } } },
-			"responses": {
+			"responses": responses("post", {
 				"200": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateResponse" } } } },
-				...error_responses("post"),
-			},
+			}),
 		},
 	};
 	paths["/tokens/{id}"] = {
 		"parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
 		"get":    { "summary": "Get one token's metadata",
-		            "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } }, ...error_responses("get") } },
+		            "responses": responses("get", { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } } }) },
 		"delete": { "summary": "Revoke a token",
-		            "responses": { "204": { "description": "Revoked" }, ...error_responses("delete") } },
+		            "responses": responses("delete", { "204": { "description": "Revoked" } }) },
 	};
 
 	paths["/metrics"] = {
 		"get": {
 			"summary": "Prometheus 0.0.4 text exposition",
 			"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
-			"responses": {
+			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" }, "example": "uapi_requests_total{method=\"GET\",path=\"/firewall/rules\",status=\"200\"} 42\n" } } },
-				...error_responses("get"),
-			},
+			}),
 		},
 	};
 
@@ -498,10 +587,9 @@ function build_paths() {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
 			"description": "Scope: uapi:diagnostics:ro (or *:ro).",
-			"responses": {
+			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },
-				...error_responses("get"),
-			},
+			}),
 		},
 	};
 
@@ -510,31 +598,15 @@ function build_paths() {
 			"summary": "Multi-package atomic transaction",
 			"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchRequest" } } } },
-			"responses": {
+			"responses": responses("post", {
 				"207": { "description": "Multi-Status: every sub-request succeeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchResponse" } } } },
-				...error_responses("post"),
-			},
+			}),
 		},
 	};
 
-	// Tag every static (non-curated) endpoint so it groups cleanly in the
-	// rendered docs. Path-prefix → tag mapping; the longest matching prefix
-	// wins so /system/password doesn't get the bare "System" tag.
-	let STATIC_PATH_TAGS = [
-		["/raw/",        "Raw / Generic uci passthrough"],
-		["/packages/installed", "Packages / Installed"],
-		["/packages/feeds",     "Packages / Feeds"],
-		["/system/password",         "System / Password"],
-		["/system/authorized_keys",  "System / SSH authorized keys"],
-		["/healthz",     "Operational / Healthz"],
-		["/openapi.json","Operational / OpenAPI spec"],
-		["/schema",      "Operational / Schema discovery"],
-		["/diagnostics", "Operational / Diagnostics"],
-		["/metrics",     "Operational / Metrics"],
-		["/batch",       "Operational / Batch"],
-		["/auth/whoami", "Auth / Whoami"],
-		["/tokens",      "Auth / Tokens"],
-	];
+	// Tag non-curated paths. Longest-prefix-wins so /system/password doesn't
+	// get the bare "System" tag.
+	let static_path_tags = build_static_path_tags();
 	for (let p in paths) {
 		if (type(paths[p]) != "object") continue;
 		let any_op = null;
@@ -544,7 +616,7 @@ function build_paths() {
 		}
 		if (any_op == null || type(any_op.tags) == "array") continue;
 		let best_tag = null, best_len = -1;
-		for (let pair in STATIC_PATH_TAGS) {
+		for (let pair in static_path_tags) {
 			let prefix = pair[0], tag = pair[1];
 			if (substr(p, 0, length(prefix)) == prefix && length(prefix) > best_len) {
 				best_tag = tag;
@@ -901,85 +973,6 @@ function build_schemas() {
 	return schemas;
 }
 
-// Tag descriptions are emitted as a top-level `tags[]` array. Redoc uses
-// them to label each section's intro. Order here also influences nav order
-// (Redoc respects tag order within an x-tagGroup).
-const TAG_DESCRIPTIONS = {
-	"Firewall / Zones":        "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles.",
-	"Firewall / Rules":        "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family. Cross-refs `firewall/zones`.",
-	"Firewall / Redirects":    "Port forwards and NAT loopback (`config redirect`). Cross-refs `firewall/zones`.",
-	"Firewall / Forwardings":  "Zone-to-zone forwarding (`config forwarding`).",
-	"Firewall / Defaults":     "Global firewall defaults singleton: verdicts, syn_flood, tcp_syncookies, flow_offloading.",
-	"Network / Interfaces":    "Network interfaces (`config interface`). proto static/dhcp/dhcpv6/pppoe/wireguard/etc. `runtime` carries ubus state.",
-	"Network / Devices":       "Network devices (`config device`): bridges, VLAN (8021q/8021ad), macvlan, veth, tun/tap.",
-	"Network / Routes":        "Static routes (`config route`).",
-	"Network / Rules":         "Policy routing rules (`config rule`).",
-	"Network / Bridge Vlans":  "Bridge VLAN tagging (`config bridge-vlan`).",
-	"Network / Wireguard Peers": "WireGuard peers (dynamic uci type `wireguard_<iface>`); preshared_key write-only.",
-	"Wireless / Devices":      "Wifi radios (`config wifi-device`): band, channel, htmode, country, txpower.",
-	"Wireless / Interfaces":   "SSIDs (`config wifi-iface`). `key` write-only; runtime carries iwinfo state.",
-	"Dhcp / Hosts":            "Static DHCP leases (`config host`).",
-	"Dhcp / Servers":          "Per-interface DHCP server config (`config dhcp`). runtime carries lease counts.",
-	"Dhcp / Dnsmasq":          "Global dnsmasq tuning singleton.",
-	"Dhcp / Odhcpd":           "odhcpd singleton.",
-	"Dhcp / Leases":           "IPv4 leases parsed from /tmp/dhcp.leases (read-only).",
-	"Dhcp / Leases6":          "IPv6 leases from odhcpd statefile (read-only).",
-	"System":                  "Global system config singleton (`config system`): hostname, timezone, log_size, etc.",
-	"System / Timeservers":    "NTP server list (`config timeserver`).",
-	"System / Password":       "Local Unix password (write-only; shells out to passwd).",
-	"System / SSH authorized keys": "Manage `/etc/dropbear/authorized_keys` entries by stable id.",
-	"Dropbear / Instances":    "Per-instance SSH config (`config dropbear`).",
-	"Uhttpd / Instances":      "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`.",
-	"Uhttpd / Certs":          "px5g certificate generation params (`config cert`).",
-	"Unbound / Server":        "Recursive DNS server singleton (`config unbound`).",
-	"Sqm / Queues":            "Per-interface SQM shaping (`config queue`).",
-	"Snmpd / Agents":          "SNMP listen addresses (`config agent`).",
-	"Snmpd / Com2secs":        "community-to-security mapping (`config com2sec`).",
-	"Snmpd / Groups":          "SNMP groups (`config group`).",
-	"Snmpd / Accesses":        "group-to-view ACLs (`config access`).",
-	"Snmpd / System":          "SNMPv2-MIB system.* singleton (sys_location, sys_contact, etc.).",
-	"Lldpd / Config":          "LLDP/CDP/etc. toggles singleton.",
-	"Prometheus Node Exporter Lua / Config": "node_exporter listen + per-collector toggles singleton.",
-	"Vnstat / Config":         "Global vnstat singleton.",
-	"Vnstat / Interfaces":     "Per-iface vnstat enable.",
-	"Raw / Generic uci passthrough": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target.",
-	"Packages / Installed":    "Manage on-router apk packages (shells out to `apk add`/`del`).",
-	"Packages / Feeds":        "Manage `/etc/apk/repositories.d/*.list` feed files.",
-	"Auth / Whoami":           "Token introspection: read the calling bearer's own metadata.",
-	"Auth / Tokens":           "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope).",
-	"Operational / Healthz":   "Liveness + subsystem checks. No auth. Treat `version` as the stable version-skew probe.",
-	"Operational / OpenAPI spec":   "Self-describing endpoint serving this OpenAPI document. No auth.",
-	"Operational / Schema discovery": "Per-resource schema_properties for dynamic clients without parsing the full spec. No auth.",
-	"Operational / Metrics":   "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.",
-	"Operational / Diagnostics": "Lock state, uptime, loaded resources.",
-	"Operational / Batch":     "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.",
-};
-
-function build_tags() {
-	let out = [];
-	for (let name in TAG_DESCRIPTIONS) {
-		push(out, { name, description: TAG_DESCRIPTIONS[name] });
-	}
-	return out;
-}
-
-// Redoc-specific super-grouping: a 2-level nav (group -> tag -> operations).
-const X_TAG_GROUPS = [
-	{ name: "Firewall",        tags: ["Firewall / Zones", "Firewall / Rules", "Firewall / Redirects", "Firewall / Forwardings", "Firewall / Defaults"] },
-	{ name: "Network",         tags: ["Network / Interfaces", "Network / Devices", "Network / Routes", "Network / Rules", "Network / Bridge Vlans", "Network / Wireguard Peers"] },
-	{ name: "Wireless",        tags: ["Wireless / Devices", "Wireless / Interfaces"] },
-	{ name: "DHCP",            tags: ["Dhcp / Hosts", "Dhcp / Servers", "Dhcp / Dnsmasq", "Dhcp / Odhcpd", "Dhcp / Leases", "Dhcp / Leases6"] },
-	{ name: "System",          tags: ["System", "System / Timeservers", "System / Password", "System / SSH authorized keys"] },
-	{ name: "Other daemons",   tags: ["Dropbear / Instances", "Uhttpd / Instances", "Uhttpd / Certs", "Unbound / Server", "Sqm / Queues",
-	                                  "Snmpd / Agents", "Snmpd / Com2secs", "Snmpd / Groups", "Snmpd / Accesses", "Snmpd / System",
-	                                  "Lldpd / Config", "Prometheus Node Exporter Lua / Config",
-	                                  "Vnstat / Config", "Vnstat / Interfaces"] },
-	{ name: "Generic uci passthrough", tags: ["Raw / Generic uci passthrough"] },
-	{ name: "Packages",        tags: ["Packages / Installed", "Packages / Feeds"] },
-	{ name: "Auth & tokens",   tags: ["Auth / Whoami", "Auth / Tokens"] },
-	{ name: "Operational endpoints", tags: ["Operational / Healthz", "Operational / OpenAPI spec", "Operational / Schema discovery",
-	                                         "Operational / Metrics", "Operational / Diagnostics", "Operational / Batch"] },
-];
 
 function build_doc() {
 	return {
@@ -996,7 +989,7 @@ function build_doc() {
 			  "variables": { "host": { "default": "192.168.1.1" } } },
 		],
 		"tags": build_tags(),
-		"x-tagGroups": X_TAG_GROUPS,
+		"x-tagGroups": build_tag_groups(),
 		"security": [{ "bearerAuth": [] }],
 		"paths": build_paths(),
 		"components": {
