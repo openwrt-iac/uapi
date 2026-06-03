@@ -115,7 +115,7 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 		// from "reload service ran and exited 0". The init script's exit
 		// code is the only convergence signal available; clients should
 		// not treat `ok` as "device converged" (see docs/operations.md).
-		return { ok: true, body: result.body ?? result,
+		return { ok: true, body: result.body,
 		         reload_services: services,
 		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };
 	}
@@ -262,7 +262,7 @@ function multi_transaction(conn, params) {
 			}
 			let reload_err = (commit_err == null) ? reload(services) : commit_err;
 			if (reload_err == null) {
-				result = { ok: true, body: inner.body ?? inner,
+				result = { ok: true, body: inner.body,
 				           reload_services: services,
 				           reload_status: (length(services) > 0) ? "ok" : "no_reload" };
 			} else {
