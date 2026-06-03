@@ -73,6 +73,37 @@ function schema_name(endpoint) {
 	return pascal(endpoint.domain) + pascal(endpoint.subresource ?? "");
 }
 
+// Human-readable tag for an endpoint. Used to group operations in the
+// generated docs (Redoc honors tags + x-tagGroups). Pattern:
+//   curated CRUD/collection/singleton with subresource -> "Domain / Sub"
+//   bare singleton (/system)                            -> "Domain"
+function pretty(s) {
+	let parts = split(s, /[._-]/);
+	let out = [];
+	for (let p in parts) {
+		if (length(p) > 0) push(out, uc(substr(p, 0, 1)) + substr(p, 1));
+	}
+	return join(" ", out);
+}
+
+function tag_for(ep) {
+	if (ep.subresource != null && ep.subresource != "")
+		return pretty(ep.domain) + " / " + pretty(ep.subresource);
+	return pretty(ep.domain);
+}
+
+// Attach `tags: [<tag>]` to every operation in a path-dict, in place.
+function tag_ops(paths_dict, tag) {
+	for (let p in paths_dict) {
+		for (let verb in paths_dict[p]) {
+			if (verb == "parameters") continue;
+			if (type(paths_dict[p][verb]) != "object") continue;
+			paths_dict[p][verb].tags = [tag];
+		}
+	}
+	return paths_dict;
+}
+
 function error_responses() {
 	return {
 		"400": { "$ref": "#/components/responses/BadRequest" },
@@ -235,6 +266,7 @@ function build_paths() {
 		if (ep.kind == "crud") p = build_crud_paths(ep);
 		else if (ep.kind == "singleton") p = build_singleton_paths(ep);
 		else if (ep.kind == "collection") p = build_collection_paths(ep);
+		tag_ops(p, tag_for(ep));
 		for (let k in p) paths[k] = p[k];
 	}
 
@@ -487,6 +519,50 @@ function build_paths() {
 			},
 		},
 	};
+
+	// Tag every static (non-curated) endpoint so it groups cleanly in the
+	// rendered docs. Path-prefix → tag mapping; the longest matching prefix
+	// wins so /system/password doesn't get the bare "System" tag.
+	let STATIC_PATH_TAGS = [
+		["/raw/",        "Raw / Generic uci passthrough"],
+		["/packages/installed", "Packages / Installed"],
+		["/packages/feeds",     "Packages / Feeds"],
+		["/system/password",         "System / Password"],
+		["/system/authorized_keys",  "System / SSH authorized keys"],
+		["/healthz",     "Operational / Healthz"],
+		["/openapi.json","Operational / OpenAPI spec"],
+		["/schema",      "Operational / Schema discovery"],
+		["/diagnostics", "Operational / Diagnostics"],
+		["/metrics",     "Operational / Metrics"],
+		["/batch",       "Operational / Batch"],
+		["/auth/whoami", "Auth / Whoami"],
+		["/tokens",      "Auth / Tokens"],
+	];
+	for (let p in paths) {
+		if (type(paths[p]) != "object") continue;
+		// Skip already-tagged (curated) operations.
+		let any_op = null;
+		for (let v in paths[p]) {
+			if (v == "parameters") continue;
+			if (type(paths[p][v]) == "object") { any_op = paths[p][v]; break; }
+		}
+		if (any_op == null || type(any_op.tags) == "array") continue;
+		// Pick the longest prefix match.
+		let best_tag = null, best_len = -1;
+		for (let pair in STATIC_PATH_TAGS) {
+			let prefix = pair[0], tag = pair[1];
+			if (substr(p, 0, length(prefix)) == prefix && length(prefix) > best_len) {
+				best_tag = tag;
+				best_len = length(prefix);
+			}
+		}
+		if (best_tag != null) {
+			for (let v in paths[p]) {
+				if (v == "parameters") continue;
+				if (type(paths[p][v]) == "object") paths[p][v].tags = [best_tag];
+			}
+		}
+	}
 
 	return paths;
 }
@@ -840,18 +916,102 @@ function build_schemas() {
 	return schemas;
 }
 
+// Tag descriptions are emitted as a top-level `tags[]` array. Redoc uses
+// them to label each section's intro. Order here also influences nav order
+// (Redoc respects tag order within an x-tagGroup).
+const TAG_DESCRIPTIONS = {
+	"Firewall / Zones":        "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles.",
+	"Firewall / Rules":        "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family. Cross-refs `firewall/zones`.",
+	"Firewall / Redirects":    "Port forwards and NAT loopback (`config redirect`). Cross-refs `firewall/zones`.",
+	"Firewall / Forwardings":  "Zone-to-zone forwarding (`config forwarding`).",
+	"Firewall / Defaults":     "Global firewall defaults singleton: verdicts, syn_flood, tcp_syncookies, flow_offloading.",
+	"Network / Interfaces":    "Network interfaces (`config interface`). proto static/dhcp/dhcpv6/pppoe/wireguard/etc. `runtime` carries ubus state.",
+	"Network / Devices":       "Network devices (`config device`): bridges, VLAN (8021q/8021ad), macvlan, veth, tun/tap.",
+	"Network / Routes":        "Static routes (`config route`).",
+	"Network / Rules":         "Policy routing rules (`config rule`).",
+	"Network / Bridge Vlans":  "Bridge VLAN tagging (`config bridge-vlan`).",
+	"Network / Wireguard Peers": "WireGuard peers (dynamic uci type `wireguard_<iface>`); preshared_key write-only.",
+	"Wireless / Devices":      "Wifi radios (`config wifi-device`): band, channel, htmode, country, txpower.",
+	"Wireless / Interfaces":   "SSIDs (`config wifi-iface`). `key` write-only; runtime carries iwinfo state.",
+	"Dhcp / Hosts":            "Static DHCP leases (`config host`).",
+	"Dhcp / Servers":          "Per-interface DHCP server config (`config dhcp`). runtime carries lease counts.",
+	"Dhcp / Dnsmasq":          "Global dnsmasq tuning singleton.",
+	"Dhcp / Odhcpd":           "odhcpd singleton.",
+	"Dhcp / Leases":           "IPv4 leases parsed from /tmp/dhcp.leases (read-only).",
+	"Dhcp / Leases6":          "IPv6 leases from odhcpd statefile (read-only).",
+	"System":                  "Global system config singleton (`config system`): hostname, timezone, log_size, etc.",
+	"System / Timeservers":    "NTP server list (`config timeserver`).",
+	"System / Password":       "Local Unix password (write-only; shells out to passwd).",
+	"System / SSH authorized keys": "Manage `/etc/dropbear/authorized_keys` entries by stable id.",
+	"Dropbear / Instances":    "Per-instance SSH config (`config dropbear`).",
+	"Uhttpd / Instances":      "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`.",
+	"Uhttpd / Certs":          "px5g certificate generation params (`config cert`).",
+	"Unbound / Server":        "Recursive DNS server singleton (`config unbound`).",
+	"Sqm / Queues":            "Per-interface SQM shaping (`config queue`).",
+	"Snmpd / Agents":          "SNMP listen addresses (`config agent`).",
+	"Snmpd / Com2secs":        "community-to-security mapping (`config com2sec`).",
+	"Snmpd / Groups":          "SNMP groups (`config group`).",
+	"Snmpd / Accesses":        "group-to-view ACLs (`config access`).",
+	"Snmpd / System":          "SNMPv2-MIB system.* singleton (sys_location, sys_contact, etc.).",
+	"Lldpd / Config":          "LLDP/CDP/etc. toggles singleton.",
+	"Prometheus Node Exporter Lua / Config": "node_exporter listen + per-collector toggles singleton.",
+	"Vnstat / Config":         "Global vnstat singleton.",
+	"Vnstat / Interfaces":     "Per-iface vnstat enable.",
+	"Raw / Generic uci passthrough": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target.",
+	"Packages / Installed":    "Manage on-router apk packages (shells out to `apk add`/`del`).",
+	"Packages / Feeds":        "Manage `/etc/apk/repositories.d/*.list` feed files.",
+	"Auth / Whoami":           "Token introspection: read the calling bearer's own metadata.",
+	"Auth / Tokens":           "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope).",
+	"Operational / Healthz":   "Liveness + subsystem checks. No auth. Treat `version` as the stable version-skew probe.",
+	"Operational / OpenAPI spec":   "Self-describing endpoint serving this OpenAPI document. No auth.",
+	"Operational / Schema discovery": "Per-resource schema_properties for dynamic clients without parsing the full spec. No auth.",
+	"Operational / Metrics":   "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.",
+	"Operational / Diagnostics": "Lock state, uptime, loaded resources.",
+	"Operational / Batch":     "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.",
+};
+
+function build_tags() {
+	let out = [];
+	for (let name in TAG_DESCRIPTIONS) {
+		push(out, { name, description: TAG_DESCRIPTIONS[name] });
+	}
+	return out;
+}
+
+// Redoc-specific super-grouping: a 2-level nav (group -> tag -> operations).
+const X_TAG_GROUPS = [
+	{ name: "Firewall",        tags: ["Firewall / Zones", "Firewall / Rules", "Firewall / Redirects", "Firewall / Forwardings", "Firewall / Defaults"] },
+	{ name: "Network",         tags: ["Network / Interfaces", "Network / Devices", "Network / Routes", "Network / Rules", "Network / Bridge Vlans", "Network / Wireguard Peers"] },
+	{ name: "Wireless",        tags: ["Wireless / Devices", "Wireless / Interfaces"] },
+	{ name: "DHCP",            tags: ["Dhcp / Hosts", "Dhcp / Servers", "Dhcp / Dnsmasq", "Dhcp / Odhcpd", "Dhcp / Leases", "Dhcp / Leases6"] },
+	{ name: "System",          tags: ["System", "System / Timeservers", "System / Password", "System / SSH authorized keys"] },
+	{ name: "Other daemons",   tags: ["Dropbear / Instances", "Uhttpd / Instances", "Uhttpd / Certs", "Unbound / Server", "Sqm / Queues",
+	                                  "Snmpd / Agents", "Snmpd / Com2secs", "Snmpd / Groups", "Snmpd / Accesses", "Snmpd / System",
+	                                  "Lldpd / Config", "Prometheus Node Exporter Lua / Config",
+	                                  "Vnstat / Config", "Vnstat / Interfaces"] },
+	{ name: "Generic uci passthrough", tags: ["Raw / Generic uci passthrough"] },
+	{ name: "Packages",        tags: ["Packages / Installed", "Packages / Feeds"] },
+	{ name: "Auth & tokens",   tags: ["Auth / Whoami", "Auth / Tokens"] },
+	{ name: "Operational endpoints", tags: ["Operational / Healthz", "Operational / OpenAPI spec", "Operational / Schema discovery",
+	                                         "Operational / Metrics", "Operational / Diagnostics", "Operational / Batch"] },
+];
+
 function build_doc() {
 	return {
 		"openapi": "3.1.0",
 		"info": {
 			"title": "uapi",
-			"description": "Native HTTP REST API for OpenWrt (curated + raw uci passthrough).\n\nIMPORTANT: a 2xx response to a write means the init script's reload action exited 0, NOT that the daemon has finished re-converging. Clients should not treat 200 OK as a runtime-convergence promise. See docs/operations.md `Success != converged` and the `X-Reload-Status` response header.",
 			"version": VERSION,
+			"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform-prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery resource GET and write returns an `ETag` header (mixes in `depends_on` state for resources that declare it). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). Conditional GET via `If-None-Match` returns 304 when matching.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+			"contact": { "name": "uapi", "url": "https://github.com/raspbeguy/uapi" },
+			"license": { "name": "MIT", "identifier": "MIT" },
 		},
 		"servers": [
 			{ "url": "https://{host}/api/v2",
 			  "variables": { "host": { "default": "192.168.1.1" } } },
 		],
+		"tags": build_tags(),
+		"x-tagGroups": X_TAG_GROUPS,
 		"security": [{ "bearerAuth": [] }],
 		"paths": build_paths(),
 		"components": {

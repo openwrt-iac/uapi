@@ -2,8 +2,16 @@
 	"openapi": "3.1.0",
 	"info": {
 		"title": "uapi",
-		"description": "Native HTTP REST API for OpenWrt (curated + raw uci passthrough).\n\nIMPORTANT: a 2xx response to a write means the init script's reload action exited 0, NOT that the daemon has finished re-converging. Clients should not treat 200 OK as a runtime-convergence promise. See docs/operations.md `Success != converged` and the `X-Reload-Status` response header.",
-		"version": "2.0.0"
+		"version": "2.0.0",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform-prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery resource GET and write returns an `ETag` header (mixes in `depends_on` state for resources that declare it). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). Conditional GET via `If-None-Match` returns 304 when matching.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+		"contact": {
+			"name": "uapi",
+			"url": "https://github.com/raspbeguy/uapi"
+		},
+		"license": {
+			"name": "MIT",
+			"identifier": "MIT"
+		}
 	},
 	"servers": [
 		{
@@ -13,6 +21,300 @@
 					"default": "192.168.1.1"
 				}
 			}
+		}
+	],
+	"tags": [
+		{
+			"name": "Firewall / Zones",
+			"description": "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles."
+		},
+		{
+			"name": "Firewall / Rules",
+			"description": "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family. Cross-refs `firewall/zones`."
+		},
+		{
+			"name": "Firewall / Redirects",
+			"description": "Port forwards and NAT loopback (`config redirect`). Cross-refs `firewall/zones`."
+		},
+		{
+			"name": "Firewall / Forwardings",
+			"description": "Zone-to-zone forwarding (`config forwarding`)."
+		},
+		{
+			"name": "Firewall / Defaults",
+			"description": "Global firewall defaults singleton: verdicts, syn_flood, tcp_syncookies, flow_offloading."
+		},
+		{
+			"name": "Network / Interfaces",
+			"description": "Network interfaces (`config interface`). proto static/dhcp/dhcpv6/pppoe/wireguard/etc. `runtime` carries ubus state."
+		},
+		{
+			"name": "Network / Devices",
+			"description": "Network devices (`config device`): bridges, VLAN (8021q/8021ad), macvlan, veth, tun/tap."
+		},
+		{
+			"name": "Network / Routes",
+			"description": "Static routes (`config route`)."
+		},
+		{
+			"name": "Network / Rules",
+			"description": "Policy routing rules (`config rule`)."
+		},
+		{
+			"name": "Network / Bridge Vlans",
+			"description": "Bridge VLAN tagging (`config bridge-vlan`)."
+		},
+		{
+			"name": "Network / Wireguard Peers",
+			"description": "WireGuard peers (dynamic uci type `wireguard_<iface>`); preshared_key write-only."
+		},
+		{
+			"name": "Wireless / Devices",
+			"description": "Wifi radios (`config wifi-device`): band, channel, htmode, country, txpower."
+		},
+		{
+			"name": "Wireless / Interfaces",
+			"description": "SSIDs (`config wifi-iface`). `key` write-only; runtime carries iwinfo state."
+		},
+		{
+			"name": "Dhcp / Hosts",
+			"description": "Static DHCP leases (`config host`)."
+		},
+		{
+			"name": "Dhcp / Servers",
+			"description": "Per-interface DHCP server config (`config dhcp`). runtime carries lease counts."
+		},
+		{
+			"name": "Dhcp / Dnsmasq",
+			"description": "Global dnsmasq tuning singleton."
+		},
+		{
+			"name": "Dhcp / Odhcpd",
+			"description": "odhcpd singleton."
+		},
+		{
+			"name": "Dhcp / Leases",
+			"description": "IPv4 leases parsed from /tmp/dhcp.leases (read-only)."
+		},
+		{
+			"name": "Dhcp / Leases6",
+			"description": "IPv6 leases from odhcpd statefile (read-only)."
+		},
+		{
+			"name": "System",
+			"description": "Global system config singleton (`config system`): hostname, timezone, log_size, etc."
+		},
+		{
+			"name": "System / Timeservers",
+			"description": "NTP server list (`config timeserver`)."
+		},
+		{
+			"name": "System / Password",
+			"description": "Local Unix password (write-only; shells out to passwd)."
+		},
+		{
+			"name": "System / SSH authorized keys",
+			"description": "Manage `/etc/dropbear/authorized_keys` entries by stable id."
+		},
+		{
+			"name": "Dropbear / Instances",
+			"description": "Per-instance SSH config (`config dropbear`)."
+		},
+		{
+			"name": "Uhttpd / Instances",
+			"description": "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`."
+		},
+		{
+			"name": "Uhttpd / Certs",
+			"description": "px5g certificate generation params (`config cert`)."
+		},
+		{
+			"name": "Unbound / Server",
+			"description": "Recursive DNS server singleton (`config unbound`)."
+		},
+		{
+			"name": "Sqm / Queues",
+			"description": "Per-interface SQM shaping (`config queue`)."
+		},
+		{
+			"name": "Snmpd / Agents",
+			"description": "SNMP listen addresses (`config agent`)."
+		},
+		{
+			"name": "Snmpd / Com2secs",
+			"description": "community-to-security mapping (`config com2sec`)."
+		},
+		{
+			"name": "Snmpd / Groups",
+			"description": "SNMP groups (`config group`)."
+		},
+		{
+			"name": "Snmpd / Accesses",
+			"description": "group-to-view ACLs (`config access`)."
+		},
+		{
+			"name": "Snmpd / System",
+			"description": "SNMPv2-MIB system.* singleton (sys_location, sys_contact, etc.)."
+		},
+		{
+			"name": "Lldpd / Config",
+			"description": "LLDP/CDP/etc. toggles singleton."
+		},
+		{
+			"name": "Prometheus Node Exporter Lua / Config",
+			"description": "node_exporter listen + per-collector toggles singleton."
+		},
+		{
+			"name": "Vnstat / Config",
+			"description": "Global vnstat singleton."
+		},
+		{
+			"name": "Vnstat / Interfaces",
+			"description": "Per-iface vnstat enable."
+		},
+		{
+			"name": "Raw / Generic uci passthrough",
+			"description": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target."
+		},
+		{
+			"name": "Packages / Installed",
+			"description": "Manage on-router apk packages (shells out to `apk add`/`del`)."
+		},
+		{
+			"name": "Packages / Feeds",
+			"description": "Manage `/etc/apk/repositories.d/*.list` feed files."
+		},
+		{
+			"name": "Auth / Whoami",
+			"description": "Token introspection: read the calling bearer's own metadata."
+		},
+		{
+			"name": "Auth / Tokens",
+			"description": "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope)."
+		},
+		{
+			"name": "Operational / Healthz",
+			"description": "Liveness + subsystem checks. No auth. Treat `version` as the stable version-skew probe."
+		},
+		{
+			"name": "Operational / OpenAPI spec",
+			"description": "Self-describing endpoint serving this OpenAPI document. No auth."
+		},
+		{
+			"name": "Operational / Schema discovery",
+			"description": "Per-resource schema_properties for dynamic clients without parsing the full spec. No auth."
+		},
+		{
+			"name": "Operational / Metrics",
+			"description": "Prometheus 0.0.4 text. Path-template labels normalize concrete ids."
+		},
+		{
+			"name": "Operational / Diagnostics",
+			"description": "Lock state, uptime, loaded resources."
+		},
+		{
+			"name": "Operational / Batch",
+			"description": "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success."
+		}
+	],
+	"x-tagGroups": [
+		{
+			"name": "Firewall",
+			"tags": [
+				"Firewall / Zones",
+				"Firewall / Rules",
+				"Firewall / Redirects",
+				"Firewall / Forwardings",
+				"Firewall / Defaults"
+			]
+		},
+		{
+			"name": "Network",
+			"tags": [
+				"Network / Interfaces",
+				"Network / Devices",
+				"Network / Routes",
+				"Network / Rules",
+				"Network / Bridge Vlans",
+				"Network / Wireguard Peers"
+			]
+		},
+		{
+			"name": "Wireless",
+			"tags": [
+				"Wireless / Devices",
+				"Wireless / Interfaces"
+			]
+		},
+		{
+			"name": "DHCP",
+			"tags": [
+				"Dhcp / Hosts",
+				"Dhcp / Servers",
+				"Dhcp / Dnsmasq",
+				"Dhcp / Odhcpd",
+				"Dhcp / Leases",
+				"Dhcp / Leases6"
+			]
+		},
+		{
+			"name": "System",
+			"tags": [
+				"System",
+				"System / Timeservers",
+				"System / Password",
+				"System / SSH authorized keys"
+			]
+		},
+		{
+			"name": "Other daemons",
+			"tags": [
+				"Dropbear / Instances",
+				"Uhttpd / Instances",
+				"Uhttpd / Certs",
+				"Unbound / Server",
+				"Sqm / Queues",
+				"Snmpd / Agents",
+				"Snmpd / Com2secs",
+				"Snmpd / Groups",
+				"Snmpd / Accesses",
+				"Snmpd / System",
+				"Lldpd / Config",
+				"Prometheus Node Exporter Lua / Config",
+				"Vnstat / Config",
+				"Vnstat / Interfaces"
+			]
+		},
+		{
+			"name": "Generic uci passthrough",
+			"tags": [
+				"Raw / Generic uci passthrough"
+			]
+		},
+		{
+			"name": "Packages",
+			"tags": [
+				"Packages / Installed",
+				"Packages / Feeds"
+			]
+		},
+		{
+			"name": "Auth & tokens",
+			"tags": [
+				"Auth / Whoami",
+				"Auth / Tokens"
+			]
+		},
+		{
+			"name": "Operational endpoints",
+			"tags": [
+				"Operational / Healthz",
+				"Operational / OpenAPI spec",
+				"Operational / Schema discovery",
+				"Operational / Metrics",
+				"Operational / Diagnostics",
+				"Operational / Batch"
+			]
 		}
 	],
 	"security": [
@@ -87,7 +389,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			},
 			"post": {
 				"summary": "Create a rules",
@@ -145,7 +450,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			}
 		},
 		"/firewall/rules/{id}": {
@@ -210,7 +518,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			},
 			"put": {
 				"summary": "Replace a rules",
@@ -269,7 +580,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a rules",
@@ -334,7 +648,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			},
 			"delete": {
 				"summary": "Delete a rules",
@@ -375,7 +692,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			}
 		},
 		"/firewall/rules/{id}/adopt": {
@@ -436,7 +756,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Rules"
+				]
 			}
 		},
 		"/firewall/zones": {
@@ -504,7 +827,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			},
 			"post": {
 				"summary": "Create a zones",
@@ -562,7 +888,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			}
 		},
 		"/firewall/zones/{id}": {
@@ -627,7 +956,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			},
 			"put": {
 				"summary": "Replace a zones",
@@ -686,7 +1018,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a zones",
@@ -751,7 +1086,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			},
 			"delete": {
 				"summary": "Delete a zones",
@@ -792,7 +1130,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			}
 		},
 		"/firewall/zones/{id}/adopt": {
@@ -853,7 +1194,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Zones"
+				]
 			}
 		},
 		"/firewall/redirects": {
@@ -921,7 +1265,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			},
 			"post": {
 				"summary": "Create a redirects",
@@ -979,7 +1326,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			}
 		},
 		"/firewall/redirects/{id}": {
@@ -1044,7 +1394,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			},
 			"put": {
 				"summary": "Replace a redirects",
@@ -1103,7 +1456,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a redirects",
@@ -1168,7 +1524,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			},
 			"delete": {
 				"summary": "Delete a redirects",
@@ -1209,7 +1568,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			}
 		},
 		"/firewall/redirects/{id}/adopt": {
@@ -1270,7 +1632,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				]
 			}
 		},
 		"/firewall/forwardings": {
@@ -1338,7 +1703,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			},
 			"post": {
 				"summary": "Create a forwardings",
@@ -1396,7 +1764,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			}
 		},
 		"/firewall/forwardings/{id}": {
@@ -1461,7 +1832,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			},
 			"put": {
 				"summary": "Replace a forwardings",
@@ -1520,7 +1894,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a forwardings",
@@ -1585,7 +1962,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			},
 			"delete": {
 				"summary": "Delete a forwardings",
@@ -1626,7 +2006,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			}
 		},
 		"/firewall/forwardings/{id}/adopt": {
@@ -1687,7 +2070,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				]
 			}
 		},
 		"/firewall/defaults": {
@@ -1741,7 +2127,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Defaults"
+				]
 			},
 			"patch": {
 				"summary": "Update the firewall singleton",
@@ -1805,7 +2194,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Firewall / Defaults"
+				]
 			}
 		},
 		"/network/interfaces": {
@@ -1873,7 +2265,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			},
 			"post": {
 				"summary": "Create a interfaces",
@@ -1931,7 +2326,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			}
 		},
 		"/network/interfaces/{id}": {
@@ -1996,7 +2394,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			},
 			"put": {
 				"summary": "Replace a interfaces",
@@ -2055,7 +2456,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
@@ -2120,7 +2524,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
@@ -2161,7 +2568,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			}
 		},
 		"/network/interfaces/{id}/adopt": {
@@ -2222,7 +2632,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Interfaces"
+				]
 			}
 		},
 		"/network/devices": {
@@ -2290,7 +2703,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			},
 			"post": {
 				"summary": "Create a devices",
@@ -2348,7 +2764,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			}
 		},
 		"/network/devices/{id}": {
@@ -2413,7 +2832,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			},
 			"put": {
 				"summary": "Replace a devices",
@@ -2472,7 +2894,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a devices",
@@ -2537,7 +2962,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			},
 			"delete": {
 				"summary": "Delete a devices",
@@ -2578,7 +3006,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			}
 		},
 		"/network/devices/{id}/adopt": {
@@ -2639,7 +3070,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Devices"
+				]
 			}
 		},
 		"/network/routes": {
@@ -2707,7 +3141,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			},
 			"post": {
 				"summary": "Create a routes",
@@ -2765,7 +3202,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			}
 		},
 		"/network/routes/{id}": {
@@ -2830,7 +3270,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			},
 			"put": {
 				"summary": "Replace a routes",
@@ -2889,7 +3332,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a routes",
@@ -2954,7 +3400,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			},
 			"delete": {
 				"summary": "Delete a routes",
@@ -2995,7 +3444,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			}
 		},
 		"/network/routes/{id}/adopt": {
@@ -3056,7 +3508,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Routes"
+				]
 			}
 		},
 		"/network/rules": {
@@ -3124,7 +3579,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			},
 			"post": {
 				"summary": "Create a rules",
@@ -3182,7 +3640,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			}
 		},
 		"/network/rules/{id}": {
@@ -3247,7 +3708,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			},
 			"put": {
 				"summary": "Replace a rules",
@@ -3306,7 +3770,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a rules",
@@ -3371,7 +3838,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			},
 			"delete": {
 				"summary": "Delete a rules",
@@ -3412,7 +3882,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			}
 		},
 		"/network/rules/{id}/adopt": {
@@ -3473,7 +3946,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Rules"
+				]
 			}
 		},
 		"/network/bridge_vlans": {
@@ -3541,7 +4017,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			},
 			"post": {
 				"summary": "Create a bridge_vlans",
@@ -3599,7 +4078,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			}
 		},
 		"/network/bridge_vlans/{id}": {
@@ -3664,7 +4146,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			},
 			"put": {
 				"summary": "Replace a bridge_vlans",
@@ -3723,7 +4208,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a bridge_vlans",
@@ -3788,7 +4276,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			},
 			"delete": {
 				"summary": "Delete a bridge_vlans",
@@ -3829,7 +4320,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			}
 		},
 		"/network/bridge_vlans/{id}/adopt": {
@@ -3890,7 +4384,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				]
 			}
 		},
 		"/network/wireguard_peers": {
@@ -3958,7 +4455,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			},
 			"post": {
 				"summary": "Create a wireguard_peers",
@@ -4016,7 +4516,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			}
 		},
 		"/network/wireguard_peers/{id}": {
@@ -4081,7 +4584,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			},
 			"put": {
 				"summary": "Replace a wireguard_peers",
@@ -4140,7 +4646,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a wireguard_peers",
@@ -4205,7 +4714,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			},
 			"delete": {
 				"summary": "Delete a wireguard_peers",
@@ -4246,7 +4758,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			}
 		},
 		"/network/wireguard_peers/{id}/adopt": {
@@ -4307,7 +4822,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				]
 			}
 		},
 		"/wireless/devices": {
@@ -4375,7 +4893,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			},
 			"post": {
 				"summary": "Create a devices",
@@ -4433,7 +4954,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			}
 		},
 		"/wireless/devices/{id}": {
@@ -4498,7 +5022,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			},
 			"put": {
 				"summary": "Replace a devices",
@@ -4557,7 +5084,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a devices",
@@ -4622,7 +5152,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			},
 			"delete": {
 				"summary": "Delete a devices",
@@ -4663,7 +5196,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			}
 		},
 		"/wireless/devices/{id}/adopt": {
@@ -4724,7 +5260,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Devices"
+				]
 			}
 		},
 		"/wireless/interfaces": {
@@ -4792,7 +5331,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			},
 			"post": {
 				"summary": "Create a interfaces",
@@ -4850,7 +5392,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			}
 		},
 		"/wireless/interfaces/{id}": {
@@ -4915,7 +5460,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			},
 			"put": {
 				"summary": "Replace a interfaces",
@@ -4974,7 +5522,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
@@ -5039,7 +5590,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
@@ -5080,7 +5634,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			}
 		},
 		"/wireless/interfaces/{id}/adopt": {
@@ -5141,7 +5698,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				]
 			}
 		},
 		"/dhcp/hosts": {
@@ -5209,7 +5769,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			},
 			"post": {
 				"summary": "Create a hosts",
@@ -5267,7 +5830,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			}
 		},
 		"/dhcp/hosts/{id}": {
@@ -5332,7 +5898,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			},
 			"put": {
 				"summary": "Replace a hosts",
@@ -5391,7 +5960,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a hosts",
@@ -5456,7 +6028,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			},
 			"delete": {
 				"summary": "Delete a hosts",
@@ -5497,7 +6072,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			}
 		},
 		"/dhcp/hosts/{id}/adopt": {
@@ -5558,7 +6136,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				]
 			}
 		},
 		"/dhcp/leases": {
@@ -5611,7 +6192,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Leases"
+				]
 			}
 		},
 		"/dhcp/leases/{id}": {
@@ -5671,7 +6255,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Leases"
+				]
 			}
 		},
 		"/dhcp/leases6": {
@@ -5724,7 +6311,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Leases6"
+				]
 			}
 		},
 		"/dhcp/leases6/{id}": {
@@ -5784,7 +6374,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Leases6"
+				]
 			}
 		},
 		"/dhcp/servers": {
@@ -5852,7 +6445,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			},
 			"post": {
 				"summary": "Create a servers",
@@ -5910,7 +6506,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			}
 		},
 		"/dhcp/servers/{id}": {
@@ -5975,7 +6574,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			},
 			"put": {
 				"summary": "Replace a servers",
@@ -6034,7 +6636,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a servers",
@@ -6099,7 +6704,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			},
 			"delete": {
 				"summary": "Delete a servers",
@@ -6140,7 +6748,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			}
 		},
 		"/dhcp/servers/{id}/adopt": {
@@ -6201,7 +6812,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				]
 			}
 		},
 		"/dhcp/dnsmasq": {
@@ -6255,7 +6869,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Dnsmasq"
+				]
 			},
 			"patch": {
 				"summary": "Update the dhcp singleton",
@@ -6319,7 +6936,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Dnsmasq"
+				]
 			}
 		},
 		"/dhcp/odhcpd": {
@@ -6373,7 +6993,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Odhcpd"
+				]
 			},
 			"patch": {
 				"summary": "Update the dhcp singleton",
@@ -6437,7 +7060,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dhcp / Odhcpd"
+				]
 			}
 		},
 		"/system": {
@@ -6491,7 +7117,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System"
+				]
 			},
 			"patch": {
 				"summary": "Update the system singleton",
@@ -6555,7 +7184,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System"
+				]
 			}
 		},
 		"/system/timeservers": {
@@ -6623,7 +7255,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			},
 			"post": {
 				"summary": "Create a timeservers",
@@ -6681,7 +7316,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			}
 		},
 		"/system/timeservers/{id}": {
@@ -6746,7 +7384,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			},
 			"put": {
 				"summary": "Replace a timeservers",
@@ -6805,7 +7446,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a timeservers",
@@ -6870,7 +7514,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			},
 			"delete": {
 				"summary": "Delete a timeservers",
@@ -6911,7 +7558,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			}
 		},
 		"/system/timeservers/{id}/adopt": {
@@ -6972,7 +7622,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Timeservers"
+				]
 			}
 		},
 		"/dropbear/instances": {
@@ -7040,7 +7693,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			},
 			"post": {
 				"summary": "Create a instances",
@@ -7098,7 +7754,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			}
 		},
 		"/dropbear/instances/{id}": {
@@ -7163,7 +7822,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			},
 			"put": {
 				"summary": "Replace a instances",
@@ -7222,7 +7884,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a instances",
@@ -7287,7 +7952,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			},
 			"delete": {
 				"summary": "Delete a instances",
@@ -7328,7 +7996,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			}
 		},
 		"/dropbear/instances/{id}/adopt": {
@@ -7389,7 +8060,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				]
 			}
 		},
 		"/uhttpd/instances": {
@@ -7457,7 +8131,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			},
 			"post": {
 				"summary": "Create a instances",
@@ -7515,7 +8192,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			}
 		},
 		"/uhttpd/instances/{id}": {
@@ -7580,7 +8260,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			},
 			"put": {
 				"summary": "Replace a instances",
@@ -7639,7 +8322,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a instances",
@@ -7704,7 +8390,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			},
 			"delete": {
 				"summary": "Delete a instances",
@@ -7745,7 +8434,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			}
 		},
 		"/uhttpd/instances/{id}/adopt": {
@@ -7806,7 +8498,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				]
 			}
 		},
 		"/uhttpd/certs": {
@@ -7874,7 +8569,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			},
 			"post": {
 				"summary": "Create a certs",
@@ -7932,7 +8630,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			}
 		},
 		"/uhttpd/certs/{id}": {
@@ -7997,7 +8698,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			},
 			"put": {
 				"summary": "Replace a certs",
@@ -8056,7 +8760,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a certs",
@@ -8121,7 +8828,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			},
 			"delete": {
 				"summary": "Delete a certs",
@@ -8162,7 +8872,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			}
 		},
 		"/uhttpd/certs/{id}/adopt": {
@@ -8223,7 +8936,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				]
 			}
 		},
 		"/unbound/server": {
@@ -8277,7 +8993,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Unbound / Server"
+				]
 			},
 			"patch": {
 				"summary": "Update the unbound singleton",
@@ -8341,7 +9060,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Unbound / Server"
+				]
 			}
 		},
 		"/sqm/queues": {
@@ -8409,7 +9131,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			},
 			"post": {
 				"summary": "Create a queues",
@@ -8467,7 +9192,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			}
 		},
 		"/sqm/queues/{id}": {
@@ -8532,7 +9260,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			},
 			"put": {
 				"summary": "Replace a queues",
@@ -8591,7 +9322,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a queues",
@@ -8656,7 +9390,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			},
 			"delete": {
 				"summary": "Delete a queues",
@@ -8697,7 +9434,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			}
 		},
 		"/sqm/queues/{id}/adopt": {
@@ -8758,7 +9498,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Sqm / Queues"
+				]
 			}
 		},
 		"/snmpd/agents": {
@@ -8826,7 +9569,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			},
 			"post": {
 				"summary": "Create a agents",
@@ -8884,7 +9630,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			}
 		},
 		"/snmpd/agents/{id}": {
@@ -8949,7 +9698,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			},
 			"put": {
 				"summary": "Replace a agents",
@@ -9008,7 +9760,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a agents",
@@ -9073,7 +9828,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			},
 			"delete": {
 				"summary": "Delete a agents",
@@ -9114,7 +9872,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			}
 		},
 		"/snmpd/agents/{id}/adopt": {
@@ -9175,7 +9936,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				]
 			}
 		},
 		"/snmpd/com2secs": {
@@ -9243,7 +10007,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			},
 			"post": {
 				"summary": "Create a com2secs",
@@ -9301,7 +10068,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			}
 		},
 		"/snmpd/com2secs/{id}": {
@@ -9366,7 +10136,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			},
 			"put": {
 				"summary": "Replace a com2secs",
@@ -9425,7 +10198,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a com2secs",
@@ -9490,7 +10266,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			},
 			"delete": {
 				"summary": "Delete a com2secs",
@@ -9531,7 +10310,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			}
 		},
 		"/snmpd/com2secs/{id}/adopt": {
@@ -9592,7 +10374,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				]
 			}
 		},
 		"/snmpd/groups": {
@@ -9660,7 +10445,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			},
 			"post": {
 				"summary": "Create a groups",
@@ -9718,7 +10506,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			}
 		},
 		"/snmpd/groups/{id}": {
@@ -9783,7 +10574,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			},
 			"put": {
 				"summary": "Replace a groups",
@@ -9842,7 +10636,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a groups",
@@ -9907,7 +10704,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			},
 			"delete": {
 				"summary": "Delete a groups",
@@ -9948,7 +10748,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			}
 		},
 		"/snmpd/groups/{id}/adopt": {
@@ -10009,7 +10812,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				]
 			}
 		},
 		"/snmpd/accesses": {
@@ -10077,7 +10883,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			},
 			"post": {
 				"summary": "Create a accesses",
@@ -10135,7 +10944,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			}
 		},
 		"/snmpd/accesses/{id}": {
@@ -10200,7 +11012,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			},
 			"put": {
 				"summary": "Replace a accesses",
@@ -10259,7 +11074,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a accesses",
@@ -10324,7 +11142,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			},
 			"delete": {
 				"summary": "Delete a accesses",
@@ -10365,7 +11186,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			}
 		},
 		"/snmpd/accesses/{id}/adopt": {
@@ -10426,7 +11250,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				]
 			}
 		},
 		"/snmpd/system": {
@@ -10480,7 +11307,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / System"
+				]
 			},
 			"patch": {
 				"summary": "Update the snmpd singleton",
@@ -10544,7 +11374,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Snmpd / System"
+				]
 			}
 		},
 		"/lldpd/config": {
@@ -10598,7 +11431,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Lldpd / Config"
+				]
 			},
 			"patch": {
 				"summary": "Update the lldpd singleton",
@@ -10662,7 +11498,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Lldpd / Config"
+				]
 			}
 		},
 		"/prometheus_node_exporter_lua/config": {
@@ -10716,7 +11555,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Prometheus Node Exporter Lua / Config"
+				]
 			},
 			"patch": {
 				"summary": "Update the prometheus_node_exporter_lua singleton",
@@ -10780,7 +11622,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Prometheus Node Exporter Lua / Config"
+				]
 			}
 		},
 		"/vnstat/config": {
@@ -10834,7 +11679,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Config"
+				]
 			},
 			"patch": {
 				"summary": "Update the vnstat singleton",
@@ -10898,7 +11746,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Config"
+				]
 			}
 		},
 		"/vnstat/interfaces": {
@@ -10966,7 +11817,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			},
 			"post": {
 				"summary": "Create a interfaces",
@@ -11024,7 +11878,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			}
 		},
 		"/vnstat/interfaces/{id}": {
@@ -11089,7 +11946,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			},
 			"put": {
 				"summary": "Replace a interfaces",
@@ -11148,7 +12008,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
@@ -11213,7 +12076,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
@@ -11254,7 +12120,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			}
 		},
 		"/vnstat/interfaces/{id}/adopt": {
@@ -11315,7 +12184,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Vnstat / Interfaces"
+				]
 			}
 		},
 		"/raw/{package}": {
@@ -11375,7 +12247,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			},
 			"post": {
 				"summary": "Create a raw uci section",
@@ -11433,7 +12308,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			}
 		},
 		"/raw/{package}/{id}": {
@@ -11501,7 +12379,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			},
 			"put": {
 				"summary": "Replace a raw uci section",
@@ -11559,7 +12440,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			},
 			"patch": {
 				"summary": "Partially update a raw uci section",
@@ -11617,7 +12501,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			},
 			"delete": {
 				"summary": "Delete a raw uci section",
@@ -11658,7 +12545,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Raw / Generic uci passthrough"
+				]
 			}
 		},
 		"/packages/installed": {
@@ -11711,7 +12601,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Installed"
+				]
 			},
 			"post": {
 				"summary": "Install a package (apk add)",
@@ -11769,7 +12662,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Installed"
+				]
 			}
 		},
 		"/packages/installed/{name}": {
@@ -11829,7 +12725,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Installed"
+				]
 			},
 			"delete": {
 				"summary": "Remove a package (apk del)",
@@ -11870,7 +12769,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Installed"
+				]
 			}
 		},
 		"/packages/feeds": {
@@ -11923,7 +12825,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Feeds"
+				]
 			},
 			"post": {
 				"summary": "Create a new apk feed file and run apk update",
@@ -11981,7 +12886,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Feeds"
+				]
 			}
 		},
 		"/packages/feeds/{id}": {
@@ -12041,7 +12949,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Feeds"
+				]
 			},
 			"delete": {
 				"summary": "Delete an apk feed and re-run apk update",
@@ -12082,7 +12993,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Packages / Feeds"
+				]
 			}
 		},
 		"/system/password": {
@@ -12135,7 +13049,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / Password"
+				]
 			}
 		},
 		"/system/authorized_keys": {
@@ -12188,7 +13105,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / SSH authorized keys"
+				]
 			},
 			"post": {
 				"summary": "Add a single SSH public key",
@@ -12246,7 +13166,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / SSH authorized keys"
+				]
 			},
 			"put": {
 				"summary": "Replace the authorized_keys list wholesale",
@@ -12307,7 +13230,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / SSH authorized keys"
+				]
 			}
 		},
 		"/system/authorized_keys/{id}": {
@@ -12368,7 +13294,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / SSH authorized keys"
+				]
 			},
 			"delete": {
 				"summary": "Remove a single SSH key by stable id",
@@ -12409,7 +13338,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"System / SSH authorized keys"
+				]
 			}
 		},
 		"/healthz": {
@@ -12438,7 +13370,10 @@
 							}
 						}
 					}
-				}
+				},
+				"tags": [
+					"Operational / Healthz"
+				]
 			}
 		},
 		"/openapi.json": {
@@ -12457,7 +13392,10 @@
 							}
 						}
 					}
-				}
+				},
+				"tags": [
+					"Operational / OpenAPI spec"
+				]
 			}
 		},
 		"/schema": {
@@ -12484,7 +13422,10 @@
 							}
 						}
 					}
-				}
+				},
+				"tags": [
+					"Operational / Schema discovery"
+				]
 			}
 		},
 		"/schema/{package}": {
@@ -12516,7 +13457,10 @@
 					"404": {
 						"$ref": "#/components/responses/NotFound"
 					}
-				}
+				},
+				"tags": [
+					"Operational / Schema discovery"
+				]
 			}
 		},
 		"/schema/{package}/{resource}": {
@@ -12556,7 +13500,10 @@
 					"404": {
 						"$ref": "#/components/responses/NotFound"
 					}
-				}
+				},
+				"tags": [
+					"Operational / Schema discovery"
+				]
 			}
 		},
 		"/auth/whoami": {
@@ -12607,7 +13554,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Auth / Whoami"
+				]
 			}
 		},
 		"/tokens": {
@@ -12666,7 +13616,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Auth / Tokens"
+				]
 			},
 			"post": {
 				"summary": "Mint a new token over HTTP",
@@ -12725,7 +13678,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Auth / Tokens"
+				]
 			}
 		},
 		"/tokens/{id}": {
@@ -12785,7 +13741,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Auth / Tokens"
+				]
 			},
 			"delete": {
 				"summary": "Revoke a token",
@@ -12826,7 +13785,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Auth / Tokens"
+				]
 			}
 		},
 		"/metrics": {
@@ -12878,7 +13840,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Operational / Metrics"
+				]
 			}
 		},
 		"/diagnostics": {
@@ -12929,7 +13894,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Operational / Diagnostics"
+				]
 			}
 		},
 		"/batch": {
@@ -12990,7 +13958,10 @@
 					"503": {
 						"$ref": "#/components/responses/ServiceUnavailable"
 					}
-				}
+				},
+				"tags": [
+					"Operational / Batch"
+				]
 			}
 		}
 	},
