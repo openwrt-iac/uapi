@@ -259,3 +259,25 @@ t.describe('scope.subsets', () => {
 		t.assert_true(scope.subsets(["firewall:rw"], []));
 	});
 });
+
+t.describe('scope.require_or_deny', () => {
+	// Pass a thin errors stand-in so we don't need to require the real module
+	// (which pulls in ids/fs); the helper only calls errors_mod.error(...).
+	let stub_errors = { error: (ctx, code, msg) => ({ ctx, code, msg }) };
+
+	t.it('returns null when scope permits', () => {
+		let r = scope.require_or_deny(stub_errors, {req: 1}, ["*:rw"], ["firewall", "rules"], "rw", "test");
+		t.assert_equal(r, null);
+	});
+
+	t.it('returns insufficient_scope envelope when denied', () => {
+		let r = scope.require_or_deny(stub_errors, {req: 1}, ["network:ro"], ["firewall", "rules"], "rw", "writing firewall/rules");
+		t.assert_equal(r.code, "insufficient_scope");
+		t.assert_true(index(r.msg, "writing firewall/rules") >= 0);
+	});
+
+	t.it('falls back to verb-on-segments message when no description given', () => {
+		let r = scope.require_or_deny(stub_errors, {req: 1}, [], ["firewall", "rules"], "rw");
+		t.assert_true(index(r.msg, "rw on firewall:rules") >= 0);
+	});
+});

@@ -185,3 +185,26 @@ t.describe('errors.ok and errors.no_content', () => {
 		t.assert_equal(r.headers["X-Request-Id"], "01hx0000000000000000000000");
 	});
 });
+
+t.describe('errors.STATUS_BY_CODE / FIELD_CODES / ALL_CODES tables', () => {
+	t.it('STATUS_BY_CODE maps validation_failed to 422', () => {
+		t.assert_equal(errors.STATUS_BY_CODE.validation_failed, 422);
+	});
+
+	t.it('STATUS_BY_CODE maps locked to 423 (write flock contention)', () => {
+		t.assert_equal(errors.STATUS_BY_CODE.locked, 423);
+	});
+
+	t.it('FIELD_CODES enumerates the field-level codes', () => {
+		t.assert_true(errors.FIELD_CODES.required);
+		t.assert_true(errors.FIELD_CODES.invalid_format);
+		t.assert_equal(errors.FIELD_CODES.write_only, null);
+	});
+
+	t.it('ALL_CODES is a superset of STATUS_BY_CODE keys plus batch_partial_failure', () => {
+		let in_all = {};
+		for (let c in errors.ALL_CODES) in_all[c] = true;
+		for (let k in errors.STATUS_BY_CODE) t.assert_true(in_all[k]);
+		t.assert_true(in_all.batch_partial_failure);
+	});
+});
