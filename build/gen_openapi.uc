@@ -5,6 +5,7 @@
 push(REQUIRE_SEARCH_PATH, "./src/lib/*.uc");
 
 let fs = require('fs');
+let errors_mod = require('errors');
 
 function read_version() {
 	let f = fs.open("VERSION", "r");
@@ -641,18 +642,7 @@ function build_schemas() {
 			"required": ["code", "message", "request_id"],
 			"properties": {
 				"code": { "type": "string",
-				          "enum": [
-				            "bad_request", "invalid_cursor",
-				            "unauthorized", "invalid_token",
-				            "insufficient_scope", "scope_escalation_blocked", "tls_required",
-				            "not_found", "method_not_allowed",
-				            "conflict", "unmanaged_resource", "idempotency_key_conflict",
-				            "precondition_failed", "unsupported_media_type",
-				            "validation_failed", "locked", "too_many_requests",
-				            "internal_error", "reload_failed_restored", "reload_failed_unrecovered",
-				            "service_unavailable", "init_script_missing",
-				            "batch_partial_failure",
-				          ],
+				          "enum": errors_mod.ALL_CODES,
 				          "description": "Machine-readable error code. Stable within a major. Clients should branch on HTTP status first and treat unknown codes gracefully (the project's additive contract permits new codes within a major)." },
 				"message": { "type": "string", "description": "Human-readable English. Do not parse." },
 				"request_id": { "type": "string", "description": "ULID echoed in the X-Request-Id response header. Pair with audit log for server-side tracing." },
@@ -671,9 +661,7 @@ function build_schemas() {
 			"required": ["field", "code", "message"],
 			"properties": {
 				"field": { "type": "string" },
-				"code": { "type": "string",
-				          "enum": ["required","invalid_type","invalid_format",
-				                  "out_of_range","not_in_enum","conflict","read_only"] },
+				"code": { "type": "string", "enum": keys(errors_mod.FIELD_CODES) },
 				"message": { "type": "string" },
 			},
 		},

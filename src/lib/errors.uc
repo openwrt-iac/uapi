@@ -37,6 +37,22 @@ const FIELD_CODES = {
 	read_only: true,
 };
 
+// All codes the server may emit, including body-only codes that don't have a
+// fixed HTTP status (batch_partial_failure carries the failing sub-request's
+// status). Source for the OpenAPI ErrorEnvelope.code enum.
+const ALL_CODES = [
+	"bad_request", "invalid_cursor",
+	"unauthorized", "invalid_token",
+	"insufficient_scope", "scope_escalation_blocked", "tls_required",
+	"not_found", "method_not_allowed",
+	"conflict", "unmanaged_resource", "idempotency_key_conflict",
+	"precondition_failed", "unsupported_media_type",
+	"validation_failed", "locked", "too_many_requests",
+	"internal_error", "reload_failed_restored", "reload_failed_unrecovered",
+	"service_unavailable", "init_script_missing",
+	"batch_partial_failure",
+];
+
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 // new_context accepts an optional client-supplied request id (from the
@@ -134,4 +150,7 @@ return {
 	reload_failed_unrecovered,
 	ok,
 	no_content,
+	STATUS_BY_CODE,
+	FIELD_CODES,
+	ALL_CODES,
 };
