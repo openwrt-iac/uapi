@@ -2,7 +2,7 @@
 
 This document indexes the 32 curated resources shipped in v2.0. For the full
 schema (every field, its type, enum values, ranges, patterns), read
-`build/openapi.json` (also served at `/api/v1/openapi.json` on a live
+`build/openapi.json` (also served at `/api/v2/openapi.json` on a live
 router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
@@ -99,7 +99,7 @@ Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 
 ## Generic raw passthrough
 
-`/api/v1/raw/<package>/<id>` is the escape hatch for any uci config type
+`/api/v2/raw/<package>/<id>` is the escape hatch for any uci config type
 uapi doesn't curate. See `docs/raw.md` for full semantics, scope
 composition rules, and stability caveat.
 

@@ -218,7 +218,7 @@ t.describe('uhttpd.instances self-lockout protection', () => {
 	t.it("validate(id='main') accepts a body that keeps uapi's ucode_prefix", () => {
 		let errs = uhttpd_inst.validate({
 			listen_http: ['0.0.0.0:80'],
-			ucode_prefix: ['/api/v1=/usr/share/uapi/main.uc', '/foo=/etc/foo.uc'],
+			ucode_prefix: ['/api/v2=/usr/share/uapi/main.uc', '/foo=/etc/foo.uc'],
 		}, null, 'main');
 		for (let e in errs)
 			t.assert_not_equal(e.field + ':' + e.code, 'ucode_prefix:conflict');
@@ -236,7 +236,7 @@ t.describe('uhttpd.instances self-lockout protection', () => {
 	t.it("validate rejects bogus listen entries with invalid_format", () => {
 		let errs = full_validate(uhttpd_inst, {
 			listen_http: ['no-port-here'],
-			ucode_prefix: ['/api/v1=/usr/share/uapi/main.uc'],
+			ucode_prefix: ['/api/v2=/usr/share/uapi/main.uc'],
 		}, null);
 		let found = false;
 		for (let e in errs)

@@ -11,14 +11,14 @@ N="${N:-100}"
 AUTH_HEADER="Authorization: Bearer ${UAPI_TOKEN}"
 
 endpoints="
-/api/v1/healthz
-/api/v1/system
-/api/v1/network/interfaces
-/api/v1/firewall/zones
-/api/v1/firewall/rules
-/api/v1/dhcp/hosts
-/api/v1/dhcp/leases
-/api/v1/wireless/devices
+/api/v2/healthz
+/api/v2/system
+/api/v2/network/interfaces
+/api/v2/firewall/zones
+/api/v2/firewall/rules
+/api/v2/dhcp/hosts
+/api/v2/dhcp/leases
+/api/v2/wireless/devices
 "
 
 # Portable p50/p95/p99 over a list of milliseconds (newline-separated, integer).

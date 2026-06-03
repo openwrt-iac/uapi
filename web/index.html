@@ -96,7 +96,7 @@
 }
 
 provider "uapi" {
-  endpoint = "https://router.example.com/api/v1"
+  endpoint = "https://router.example.com/api/v2"
   token    = var.uapi_token       # mint with `uapi-token create`
 }
 
@@ -131,11 +131,11 @@ resource "uapi_firewall_rule" "ssh_mgmt" {
       <li>
         <strong>Use it</strong> from anywhere with HTTPS:
 <pre><code>curl -H "Authorization: Bearer $TOKEN" \
-  https://router/api/v1/firewall/rules
+  https://router/api/v2/firewall/rules
 
 curl -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
-     -X POST https://router/api/v1/firewall/rules \
+     -X POST https://router/api/v2/firewall/rules \
      -d '{"name":"allow-mgmt","target":"ACCEPT",
           "match":{"src_zone":"lan","dest_port":[22]}}'</code></pre>
       </li>
@@ -165,7 +165,7 @@ curl -H "Authorization: Bearer $TOKEN" \
         <h3>Generic raw passthrough</h3>
         <p>
           The long tail of OpenWrt config under
-          <code>/api/v1/raw/&lt;package&gt;/&lt;section&gt;</code>.
+          <code>/api/v2/raw/&lt;package&gt;/&lt;section&gt;</code>.
           Same atomic-transaction recipe, same auth + scope model,
           payloads pass through uci field names directly.
         </p>

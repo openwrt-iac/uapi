@@ -48,7 +48,7 @@ Load-bearing WHY comments stay: historical bug context, hidden constraints, work
 
 - **Runtime:** `uhttpd` + `uhttpd-mod-ucode`. No daemon of our own; our handler runs inside the existing uhttpd process.
 - **Instance:** Share the default `main` uhttpd instance with LuCI. Both serve configuration use cases; sharing keeps the footprint minimal and inherits the user's TLS config.
-- **Wiring:** A single ucode prefix registration: `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'`. Installed via `/etc/uci-defaults/99-uapi`.
+- **Wiring:** A single ucode prefix registration: `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'`. Installed via `/etc/uci-defaults/99-uapi`.
 - **Handler shape:** Template-mode ucode script (entered with `{%`). The script's top level runs once in the uhttpd parent at startup and must define `global.handle_request(env)`. Each request is a forked child that inherits the parent VM via copy-on-write and invokes `handle_request`. `main.uc` performs internal method/path dispatch to per-resource modules.
 
 ## Concurrency
@@ -64,9 +64,9 @@ Load-bearing WHY comments stay: historical bug context, hidden constraints, work
 
 ## Resource model
 
-Hybrid: two namespaces under `/api/v1/`, with different stability promises.
+Hybrid: two namespaces under `/api/v2/`, with different stability promises.
 
-### Curated (`/api/v1/<domain>/...`)
+### Curated (`/api/v2/<domain>/...`)
 
 Hand-written schemas, domain-friendly field names, semver-stable.
 
@@ -120,7 +120,7 @@ on every write and 422s shape mismatches before `validate()` runs);
 logic that pure JSON Schema can't express (e.g. "src_zone must reference
 an existing zone").
 
-### Generic raw passthrough (`/api/v1/raw/<package>/<section_id>`)
+### Generic raw passthrough (`/api/v2/raw/<package>/<section_id>`)
 
 Thin abstraction over uci itself for the long tail. Same atomic transaction recipe, same auth/scope model, but payloads follow uci's field names directly. The `raw` path is **not** raw ubus; sending arbitrary ubus calls remains off-limits.
 
@@ -224,7 +224,7 @@ Matching algorithm: extract resource path from the URL (e.g., `[firewall, rules]
 
 ### Raw access composition (safer model)
 
-A request to `/api/v1/raw/<package>/<section_id>` requires **both trees to permit, independently**:
+A request to `/api/v2/raw/<package>/<section_id>` requires **both trees to permit, independently**:
 
 1. The **raw tree** permits the verb (`raw` or `raw:<package>` matches; deepest wins).
 2. The **domain tree** permits the verb, evaluated using the section's actual type as the second path segment.
@@ -380,7 +380,7 @@ Plain text over JSON-per-line because `logread` is the primary consumer. Token n
 
 ### Healthz
 
-`GET /api/v1/healthz`:
+`GET /api/v2/healthz`:
 - No auth required (TLS-for-non-localhost still applies; check order is TLS → auth → handler; healthz only skips auth).
 - Minimal info: `{ "status": "ok", "version": "1.0.0" }`.
 - `503` with `{ "status": "degraded", "errors": [...] }` if ubus unreachable.
@@ -482,7 +482,7 @@ No conflicts. Coexists with rpcd, LuCI, anything else on uhttpd.
 ### Install hook (`/etc/uci-defaults/99-uapi`)
 
 1. Check if `uhttpd.main.ucode_prefix` already contains our entry; if so, exit (idempotent).
-2. `uci add_list uhttpd.main.ucode_prefix='/api/v1=/usr/share/uapi/main.uc'`
+2. `uci add_list uhttpd.main.ucode_prefix='/api/v2=/usr/share/uapi/main.uc'`
 3. `uci commit uhttpd`
 4. `/etc/init.d/uhttpd reload`
 
@@ -490,7 +490,7 @@ Wires only to the `main` uhttpd instance. Users with multiple instances who want
 
 ### Pre-remove hook
 
-1. `uci del_list uhttpd.main.ucode_prefix='/api/v1=/usr/share/uapi/main.uc'`
+1. `uci del_list uhttpd.main.ucode_prefix='/api/v2=/usr/share/uapi/main.uc'`
 2. `uci commit uhttpd`
 3. `/etc/init.d/uhttpd reload`
 
@@ -507,7 +507,7 @@ Removes the prefix entry **before** the handler file disappears.
 ```
 uapi installed. To start using it:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
-  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v1/system
+  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v2/system
   3. See docs at:       /usr/share/uapi/openapi.json
 ```
 
@@ -530,10 +530,9 @@ A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >=
 
 ## API versioning policy
 
-`/api/v1/` is the URL prefix. The API major it serves is determined by the
-installed package version: a uapi 2.x package serves the v2 wire contract
-under that prefix. Within a given installed major, additions are
-backwards-compatible.
+The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves
+under `/api/v2/`, a future v3 would mount at `/api/v3/`. Within a given
+installed major, additions are backwards-compatible.
 
 **Non-breaking (allowed within a major):**
 - New endpoints / resources

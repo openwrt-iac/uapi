@@ -12,7 +12,7 @@ modes are.
 no `procd` service definition, no procmon entry.
 
 The code runs inside `uhttpd`'s existing fork-per-request CGI workers via
-`uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'`
+`uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'`
 entry in `/etc/config/uhttpd` is the entire wiring.
 
 ```

@@ -8,10 +8,15 @@ ETags, token expiry / IP scoping / HTTP rotation, conditional GET,
 diagnostics).
 
 A given uapi installation now serves exactly one API major - there is no
-parallel `/api/v2/` mount alongside `/api/v1/`. Operators who need to keep
-a v1 client working keep the `1.2.1` package installed. The 1.2.1 APK is
-preserved indefinitely on the gh-pages feed; the signed `v1.2.1` git tag is
-the canonical v1 contract document.
+parallel `/api/v1/` and `/api/v2/` mount in the same binary. Operators who
+need to keep a v1 client working keep the `1.2.1` package installed. The
+1.2.1 APK is preserved indefinitely on the gh-pages feed; the signed
+`v1.2.1` git tag is the canonical v1 contract document.
+
+**The URL prefix changes from `/api/v1/` to `/api/v2/`.** Update every
+client-side base URL accordingly. The install hook on a fresh `apk add
+uapi` over v1.2.x automatically removes the v1 prefix from uhttpd's
+`ucode_prefix` list and adds the v2 one.
 
 ## Upgrade path
 
@@ -22,12 +27,11 @@ the canonical v1 contract document.
    v2 expectations. Test against a staging router.
 3. `apk upgrade uapi`. The install hook will `uhttpd reload` automatically;
    existing tokens in `/etc/config/uapi` are preserved (the file is a conffile).
-4. Verify `GET /api/v1/healthz` returns `{"status":"ok", ...}` - the path is
-   still `/api/v1/` because semver-major maps to package-major; the API URL
-   path component stays `v1` until a future v3 introduces `/api/v3/`. (No,
-   that is not great. It's pragmatic: rewriting every documented URL on every
-   major bump churns clients more than the consistent path does. The version
-   the client should rely on is `info.version` in the OpenAPI spec.)
+4. Verify `GET /api/v2/healthz` returns `{"status":"ok", "version":"2.0.0", ...}`.
+   The new URL prefix is `/api/v2/`; the install hook handles the uhttpd
+   prefix migration. v1 clients hitting `/api/v1/` get a 404 from uhttpd
+   because the old prefix is no longer registered (this is intentional - the
+   wire contract changed; the URL should not silently lie about that).
 
 If anything looks wrong in production, `apk downgrade uapi=1.2.1` restores v1
 behavior (the v1.2.1 APK stays available on the feed for this exact reason).
@@ -178,7 +182,7 @@ If you were rotating tokens via `uapi-token revoke` + `uapi-token create`,
 you can now do it over HTTP:
 
 ```sh
-curl -H "Authorization: Bearer $OLD" -X POST https://router/api/v1/tokens \
+curl -H "Authorization: Bearer $OLD" -X POST https://router/api/v2/tokens \
   -d '{ "name": "ci-rotated", "scopes": ["firewall:rw"], "expires_in_seconds": 86400 }'
 # response: { "bearer": "<cleartext>", "name": "ci-rotated" }
 ```
@@ -227,6 +231,6 @@ strictly more accurate - no behavior change required.
 - The error envelope shape (`code`, `message`, `request_id`, optional `errors[]`).
 - The bearer-token + scope-tree authn/authz model (scopes are additive; new
   ones added, no existing ones renamed or removed).
-- The `/api/v1/` URL prefix.
+- The `/api/v2/` URL prefix.
 - The fork-per-request CGI execution model.
 - The "no daemon of our own" architectural principle.

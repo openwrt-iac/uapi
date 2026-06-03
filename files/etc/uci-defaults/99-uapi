@@ -1,13 +1,26 @@
 #!/bin/sh
 
-PREFIX='/api/v1=/usr/share/uapi/main.uc'
+# v2 mounts at /api/v2/. On a fresh install we just add it. On an upgrade
+# from v1.x (or from v2.0.0-broken which mistakenly used /api/v1), we also
+# strip the stale /api/v1 entry so uhttpd does not double-mount.
+NEW='/api/v2=/usr/share/uapi/main.uc'
+OLD='/api/v1=/usr/share/uapi/main.uc'
 
-if uci -q show uhttpd.main.ucode_prefix 2>/dev/null | grep -qF "$PREFIX"; then
-	exit 0
+CHANGED=0
+
+if uci -q show uhttpd.main.ucode_prefix 2>/dev/null | grep -qF "$OLD"; then
+	uci -q del_list uhttpd.main.ucode_prefix="$OLD"
+	CHANGED=1
 fi
 
-uci add_list uhttpd.main.ucode_prefix="$PREFIX"
-uci commit uhttpd
-/etc/init.d/uhttpd reload
+if ! uci -q show uhttpd.main.ucode_prefix 2>/dev/null | grep -qF "$NEW"; then
+	uci add_list uhttpd.main.ucode_prefix="$NEW"
+	CHANGED=1
+fi
+
+if [ "$CHANGED" = "1" ]; then
+	uci commit uhttpd
+	/etc/init.d/uhttpd reload
+fi
 
 exit 0

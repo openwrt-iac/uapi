@@ -3,7 +3,7 @@ let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 let as_list = values.as_list;
 
-const UAPI_PREFIX = "/api/v1=/usr/share/uapi/main.uc";
+const UAPI_PREFIX = "/api/v2=/usr/share/uapi/main.uc";
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

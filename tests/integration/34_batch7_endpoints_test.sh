@@ -4,7 +4,7 @@ set -eu
 . tests/integration/lib/install_uapi.sh
 install_uapi
 
-URL=http://127.0.0.1:8080/api/v1
+URL=http://127.0.0.1:8080/api/v2
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"

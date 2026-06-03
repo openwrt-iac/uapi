@@ -27,12 +27,11 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
 - **`schema_properties` completeness sweep.** Every fromUci-surfaced field has
   a typed schema entry. Bodies that previously slipped past the type check
   (silent drops in the toUci layer) now return `422 validation_failed`.
-- **v1 wire contract removed.** The URL prefix stays `/api/v1/` (semver-major
-  maps to package-major, not URL component), but the v1 wire contract
-  (field shapes, string-form integers, missing schema entries) is gone -
-  v2 ships under the same prefix. Versioning policy: one major per
-  installed package, never parallel. Operators who need the v1 contract
-  keep the 1.2.1 APK.
+- **URL prefix bumped to `/api/v2/`** (was `/api/v1/`). The install hook
+  removes the v1 entry from `uhttpd.main.ucode_prefix` and adds the v2
+  one; clients must update their base URL. Versioning policy: one major
+  per installed package, never parallel. Operators who need the v1 wire
+  contract keep the 1.2.1 APK.
 
 ### Added
 
@@ -285,7 +284,7 @@ Patch release driven by a structured review of v1.1.0. No on-the-wire breaking c
 
 ## [1.1.0] - 2026-05-30
 
-Comprehensive curation pass. Every additional uci section type a typical edge-router configuration relies on now has a curated CRUD or singleton endpoint, and uapi can manage its own runtime package set (apk install/remove and apk feeds). An orchestrator built on this release can drive `/api/v1/...` exclusively without falling through to `/raw/`. Purely additive: every endpoint, field, scope, and response shape from 1.0.x continues to work unchanged.
+Comprehensive curation pass. Every additional uci section type a typical edge-router configuration relies on now has a curated CRUD or singleton endpoint, and uapi can manage its own runtime package set (apk install/remove and apk feeds). An orchestrator built on this release can drive `/api/v2/...` exclusively without falling through to `/raw/`. Purely additive: every endpoint, field, scope, and response shape from 1.0.x continues to work unchanged.
 
 ### Added
 
@@ -402,7 +401,7 @@ Major release-candidate iteration driven by an exhaustive code review of rc1 and
 
 ## [1.0.0-rc1] - 2026-05-28
 
-First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a single `.apk`. The on-the-wire API contract (`/api/v1/...`) is what 1.0.0 will ship; the package version stays `rc` until real-world deployments shake out the install path on a variety of router configurations.
+First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a single `.apk`. The on-the-wire API contract (`/api/v2/...`) is what 1.0.0 will ship; the package version stays `rc` until real-world deployments shake out the install path on a variety of router configurations.
 
 ### Surface
 

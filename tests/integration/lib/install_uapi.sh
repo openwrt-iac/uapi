@@ -1,5 +1,5 @@
 SSH="tests/vm/ssh.sh"
-UAPI_PREFIX_ENTRY="/api/v1=/usr/share/uapi/main.uc"
+UAPI_PREFIX_ENTRY="/api/v2=/usr/share/uapi/main.uc"
 
 push_file_to_vm() {
 	$SSH "cat > $2" < "$1"
@@ -20,7 +20,7 @@ ensure_wireless_radio() {
 
 # One-time bootstrap: install deps, push every source file in a single tar
 # stream, wire the uhttpd prefix, restart. Guarded by a tmpfs sentinel so a
-# second call is a no-op. Each request to /api/v1 forks a fresh ucode child
+# second call is a no-op. Each request to /api/v2 forks a fresh ucode child
 # that reads the on-disk source, so per-test isolation only needs a clean
 # token store, not a re-copy of the source tree.
 bootstrap_uapi() {

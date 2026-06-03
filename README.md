@@ -7,7 +7,7 @@ Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates stan
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side rotation (`POST /tokens`).
 - 32 curated resources plus a generic `/raw/<package>/<id>` passthrough for the long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, dependency-aware ETags, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
-- OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v1/openapi.json`.
+- OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v2/openapi.json`.
 
 ## Why this approach
 
@@ -42,7 +42,7 @@ Or a local APK file:
 apk add /tmp/uapi-<version>-r1.apk
 ```
 
-The package's `uci-defaults` hook adds `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and restarts uhttpd. After that, `/api/v1/healthz` is reachable on the same ports as LuCI.
+The package's `uci-defaults` hook adds `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and restarts uhttpd. After that, `/api/v2/healthz` is reachable on the same ports as LuCI.
 
 ## First token
 
@@ -57,7 +57,7 @@ After the first admin token exists, subsequent tokens can be minted over the wir
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v1/tokens \
+     -X POST https://<router>/api/v2/tokens \
      -d '{ "name": "ci-bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
 ```
 
@@ -67,8 +67,8 @@ Requested scopes must be a strict subset of the caller's (escalation returns `40
 
 ```sh
 TOKEN=<value-from-above>
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v1/system
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v1/auth/whoami
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v2/system
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v2/auth/whoami
 ```
 
 ## Quick demo: add a firewall rule
@@ -76,7 +76,7 @@ curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v1/auth/whoami
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v1/firewall/rules \
+     -X POST https://<router>/api/v2/firewall/rules \
      -d '{
        "target": "ACCEPT",
        "match": { "src_zone": "wan", "dest_port": [22], "proto": ["tcp"] }
@@ -105,13 +105,13 @@ The response carries the rule's stable `id` (a ULID with a one-character type pr
 - `examples/curl/`: one shell script per resource demonstrating CRUD.
 - `CLAUDE.md`: the project's design contract (architectural principles, schema, lock layout, error envelope).
 - `CHANGELOG.md`: per-release notes.
-- `build/openapi.json` (also `/api/v1/openapi.json` on a live router): the API contract.
+- `build/openapi.json` (also `/api/v2/openapi.json` on a live router): the API contract.
 
 ## Versioning
 
 uapi follows [semver](https://semver.org/), with the major version aligned to the API major:
 
-- **MAJOR**: breaking on-the-wire change. A given uapi installation serves exactly one API major - we do NOT mount `/api/v(x+1)/` alongside `/api/v<x>/` in the same binary. Operators who need to keep an old client working keep the previous package version installed. The URL prefix stays `/api/v1/` across the v1 and v2 majors (the path component is part of the resource layout, not the version negotiator); a future major bump that needed a different URL would introduce `/api/v3/` then.
+- **MAJOR**: breaking on-the-wire change. The URL prefix bumps to `/api/v<x+1>/` to match the wire contract major (standard HTTP idiom). A given uapi installation serves exactly one API major - we do NOT mount `/api/v(x+1)/` alongside `/api/v<x>/` in the same binary; operators who need to keep an old client working keep the previous package version installed. The install hook handles uhttpd prefix migration automatically on `apk upgrade`.
 - **MINOR**: backwards-compatible additions. New endpoints, new optional request/response fields, new error codes, new scopes.
 - **PATCH**: bug fixes only. No surface change.
 

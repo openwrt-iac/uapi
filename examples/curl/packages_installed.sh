@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v1}"
+: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v2}"
 : "${UAPI_TOKEN:?set UAPI_TOKEN to a bearer with packages:installed:rw}"
 
 H_AUTH="Authorization: Bearer $UAPI_TOKEN"

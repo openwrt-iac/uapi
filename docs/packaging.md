@@ -94,10 +94,10 @@ The CLI prints the cleartext bearer to stdout exactly once. Save it.
 
 The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live installs (not chroots/INSTROOT builds) and then deletes the script. That single run:
 
-1. Checks if `uhttpd.main.ucode_prefix` already lists `/api/v1=/usr/share/uapi/main.uc`. If so, exits cleanly.
+1. Checks if `uhttpd.main.ucode_prefix` already lists `/api/v2=/usr/share/uapi/main.uc`. If so, exits cleanly.
 2. Otherwise adds the entry, commits the uhttpd config, and reloads uhttpd.
 
-After that, `https://<router>/api/v1/healthz` is reachable.
+After that, `https://<router>/api/v2/healthz` is reachable.
 
 ## Removal
 

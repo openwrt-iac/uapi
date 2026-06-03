@@ -4,7 +4,7 @@ set -eu
 . tests/integration/lib/install_uapi.sh
 install_uapi
 
-URL=http://127.0.0.1:8080/api/v1
+URL=http://127.0.0.1:8080/api/v2
 fail() { echo "FAIL: $*"; exit 1; }
 
 echo "--- uapi-token create mints a bearer + records the token under its name ---"

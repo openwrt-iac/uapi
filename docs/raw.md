@@ -1,4 +1,4 @@
-# `/api/v1/raw/<package>/<id>`: generic uci passthrough
+# `/api/v2/raw/<package>/<id>`: generic uci passthrough
 
 The curated endpoints (`/firewall/rules`, `/network/interfaces`, etc.) wrap a small set of OpenWrt config types with stable schemas and Terraform-friendly JSON. For everything else, `/raw/` gives you the underlying uci surface with the same atomic-transaction guarantees and the same auth model.
 
@@ -21,7 +21,7 @@ for that resource if one exists, or open an issue to add one.
 
 ## Shape
 
-`GET /api/v1/raw/<package>` lists every section in the package as an array. Each item has:
+`GET /api/v2/raw/<package>` lists every section in the package as an array. Each item has:
 
 ```json
 {
@@ -36,9 +36,9 @@ for that resource if one exists, or open an issue to add one.
 
 `managed: true` means the section has a real `.name` (named at creation by uapi or by another tool); `managed: false` means it is anonymous (`cfg012345`-style). uapi does not distinguish between writes to anonymous and named sections via `/raw/`. If you want adoption (rename an anonymous section to a uapi-style ULID), the curated endpoints for that type provide `POST .../adopt`.
 
-`GET /api/v1/raw/<package>/<id>` returns one section in the same shape.
+`GET /api/v2/raw/<package>/<id>` returns one section in the same shape.
 
-`POST /api/v1/raw/<package>` creates a section. The request body must include `.type`. If `id` is supplied, it must match `/^[A-Za-z0-9_]+$/` (uci's section-name charset) and must not collide with an existing section; otherwise uapi returns `422 validation_failed` with field `id` and code `invalid_format`, or `409 conflict` respectively. If `id` is omitted, uapi generates a ULID-style id with a type-derived single-char prefix.
+`POST /api/v2/raw/<package>` creates a section. The request body must include `.type`. If `id` is supplied, it must match `/^[A-Za-z0-9_]+$/` (uci's section-name charset) and must not collide with an existing section; otherwise uapi returns `422 validation_failed` with field `id` and code `invalid_format`, or `409 conflict` respectively. If `id` is omitted, uapi generates a ULID-style id with a type-derived single-char prefix.
 
 ```json
 {

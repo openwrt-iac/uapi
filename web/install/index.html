@@ -49,7 +49,7 @@ apk update</code></pre>
     <h2>What just happened</h2>
     <p>
       uapi installed under <code>/usr/share/uapi/</code>, registered
-      <code>/api/v1=/usr/share/uapi/main.uc</code> with uhttpd's
+      <code>/api/v2=/usr/share/uapi/main.uc</code> with uhttpd's
       <code>main</code> instance, and restarted uhttpd. The token store
       lives at <code>/etc/config/uapi</code> (a conffile - preserved across
       upgrades).
@@ -61,7 +61,7 @@ apk update</code></pre>
 # (the cleartext token is printed once - copy it)
 
 curl -H "Authorization: Bearer &lt;token&gt;" \
-     https://&lt;router&gt;/api/v1/system</code></pre>
+     https://&lt;router&gt;/api/v2/system</code></pre>
   </div>
 </section>
 

@@ -4,7 +4,7 @@ set -eu
 . tests/integration/lib/install_uapi.sh
 install_uapi
 
-URL=http://127.0.0.1:8080/api/v1
+URL=http://127.0.0.1:8080/api/v2
 fail() { echo "FAIL: $*"; exit 1; }
 
 # install_uapi creates /etc/uapi.insecure so the rest of the suite can use plain
@@ -35,7 +35,7 @@ status=$(echo "$bad" | tail -1)
 
 echo "--- loopback bypass still works inside the VM (REMOTE_ADDR=127.0.0.1) ---"
 # busybox wget on OpenWrt does plain HTTP fine; healthz needs no token.
-healthz=$($SSH "wget -qO- http://127.0.0.1/api/v1/healthz")
+healthz=$($SSH "wget -qO- http://127.0.0.1/api/v2/healthz")
 echo "$healthz"
 echo "$healthz" | grep -q '"status": "ok"' || fail "loopback healthz did not respond ok"
 

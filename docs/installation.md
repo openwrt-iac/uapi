@@ -14,14 +14,14 @@ apk add /path/to/uapi-<version>-r1.apk
 
 The post-install hook will:
 
-1. Run `/etc/uci-defaults/99-uapi` which adds `list ucode_prefix '/api/v1=/usr/share/uapi/main.uc'` to `uhttpd.main` and restarts uhttpd.
+1. Run `/etc/uci-defaults/99-uapi` which adds `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'` to `uhttpd.main` and restarts uhttpd.
 2. Delete itself.
 3. Print the bootstrap message (first install only; suppressed on upgrade or reinstall).
 
 Verify:
 
 ```sh
-curl -k https://localhost/api/v1/healthz
+curl -k https://localhost/api/v2/healthz
 # { "status": "ok", "version": "<version>",
 #   "checks": { "ubus": "ok", "uci": "ok",
 #               "lock_dir": "ok", "time_sync": "ok" } }
@@ -86,7 +86,7 @@ That **is** a security hole; don't leave it on a production router.
 The package wires only the `uhttpd.main` instance. If you run additional instances (e.g. a separate admin port), add the prefix manually:
 
 ```sh
-uci add_list uhttpd.<instance>.ucode_prefix='/api/v1=/usr/share/uapi/main.uc'
+uci add_list uhttpd.<instance>.ucode_prefix='/api/v2=/usr/share/uapi/main.uc'
 uci commit uhttpd
 /etc/init.d/uhttpd reload
 ```

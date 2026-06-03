@@ -554,7 +554,7 @@ function build_doc() {
 			"version": VERSION,
 		},
 		"servers": [
-			{ "url": "https://{host}/api/v1",
+			{ "url": "https://{host}/api/v2",
 			  "variables": { "host": { "default": "192.168.1.1" } } },
 		],
 		"security": [{ "bearerAuth": [] }],
