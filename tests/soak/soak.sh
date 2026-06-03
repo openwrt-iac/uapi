@@ -51,13 +51,21 @@ sampler() {
 		printf '# t  rss_kb  fd_count  child_count\n'
 		while [ "$(date +%s)" -lt "$deadline" ]; do
 			t=$(date +%s)
-			# uhttpd's main pid: read from /var/run.
+			# Stock OpenWrt does not write /var/run/uhttpd.pid and busybox
+			# pgrep lacks -c. Multiple uhttpd instances are common (main +
+			# LuCI bridge); pick the one whose cmdline references the uapi
+			# handler script.
 			out=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$ROUTER_SSH" '
-				pid=$(cat /var/run/uhttpd.pid 2>/dev/null || pgrep -x uhttpd | head -1)
+				pid=""
+				for p in $(pidof uhttpd 2>/dev/null); do
+					grep -q /usr/share/uapi/main.uc /proc/$p/cmdline 2>/dev/null \
+						&& { pid=$p; break; }
+				done
+				[ -z "$pid" ] && pid=$(pidof uhttpd 2>/dev/null | awk "{print \$1}")
 				if [ -z "$pid" ]; then echo "0 0 0"; exit; fi
 				rss=$(awk "/^VmRSS:/{print \$2}" /proc/$pid/status 2>/dev/null || echo 0)
 				fds=$(ls /proc/$pid/fd 2>/dev/null | wc -l)
-				kids=$(pgrep -c -P $pid 2>/dev/null || echo 0)
+				kids=$(pgrep -P $pid 2>/dev/null | wc -l)
 				echo "$rss $fds $kids"
 			' 2>/dev/null || echo "0 0 0")
 			printf '%d  %s\n' "$t" "$out"
@@ -105,8 +113,10 @@ if [ -f "$tmpdir/leak.dat" ]; then
 	printf '\nleak watch (uhttpd main process):\n'
 	cat "$tmpdir/leak.dat"
 	# crude verdict: compare first valid sample to last
-	first=$(awk '$2 > 0 {print $2; exit}' "$tmpdir/leak.dat" || echo 0)
-	last=$(awk '$2 > 0 {l=$2} END{print l+0}' "$tmpdir/leak.dat")
+	# Force numeric compare so the "# t rss_kb ..." header (where $2 == "t")
+	# doesn't satisfy the awk truthiness check and pollute $first with "t".
+	first=$(awk '$2+0 > 0 {print $2+0; exit}' "$tmpdir/leak.dat" || echo 0)
+	last=$(awk '$2+0 > 0 {l=$2+0} END{print l+0}' "$tmpdir/leak.dat")
 	if [ "$first" -gt 0 ] && [ "$last" -gt 0 ]; then
 		grew=$(awk -v a="$first" -v b="$last" 'BEGIN{printf("%d", (b-a)*100/a)}')
 		printf '\nRSS first=%dkB last=%dkB (%d%% change)\n' "$first" "$last" "$grew"
