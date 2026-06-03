@@ -87,8 +87,8 @@ The response carries the rule's stable `id` (a ULID with a one-character type pr
 
 ## Docs
 
-- `docs/architecture.md`: fork-per-request model, lock layout, transaction recipe, ETag derivation, where state lives.
-- `docs/security.md`: threat model, scope tree, TLS posture, token storage, rate-limit guarantees, audit shape.
+Operator-facing:
+
 - `docs/installation.md`: production install, TLS hardening pointers.
 - `docs/tokens.md`: scope tree, CLI reference, HTTP token mint, expiry + IP scoping + per-token rate.
 - `docs/errors.md`: error envelope, response codes, field-level error codes, response headers.
@@ -96,16 +96,24 @@ The response carries the rule's stable `id` (a ULID with a one-character type pr
 - `docs/raw.md`: `/raw/<package>/<id>` semantics and stability disclaimer.
 - `docs/resources.md`: curated resource catalog.
 - `docs/non-uci-state.md`: resources whose source of truth is not `/etc/config/`.
-- `docs/adding-a-resource.md`: how to write a new curated resource module.
 - `docs/migration-v1-to-v2.md`: v1 -> v2 field renames, strict typing, new endpoints, new errors.
+- `examples/curl/`: one shell script per resource demonstrating CRUD.
+- `build/openapi.json` (also `/api/v2/openapi.json` on a live router): the API contract.
+
+Contributor-facing:
+
+- `CONTRIBUTING.md`: dev environment, dev loop, PR style, codebase tour.
+- `docs/architecture.md`: fork-per-request model, lock layout, transaction recipe, ETag derivation, where state lives.
+- `docs/concurrency.md`: rules and anti-patterns for adding code that survives the fork-per-request model.
+- `docs/ucode-quirks.md`: language and runtime gotchas that have each cost a CI iteration on this project.
+- `docs/security.md`: threat model, scope tree, TLS posture, token storage, rate-limit guarantees, audit shape.
+- `docs/adding-a-resource.md`: how to write a new curated resource module.
 - `docs/packaging.md`: building the APK from source against the OpenWrt SDK.
 - `docs/release-process.md`: signed tags, reproducible builds, SBOM, multi-arch verification.
 - `docs/roadmap.md`: what shipped, what's next, what's intentionally out of scope.
 - `docs/lock-state-audit.md`: every fd-open / lock site, release proven on every exit.
-- `examples/curl/`: one shell script per resource demonstrating CRUD.
 - `CLAUDE.md`: the project's design contract (architectural principles, schema, lock layout, error envelope).
 - `CHANGELOG.md`: per-release notes.
-- `build/openapi.json` (also `/api/v2/openapi.json` on a live router): the API contract.
 
 ## Versioning
 

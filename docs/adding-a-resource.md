@@ -154,4 +154,4 @@ If the new resource introduces a new scope path (e.g. a new package), add it to 
 - ucode-mod-uci has no `cursor.export`/`cursor.import`. Snapshot/restore is file IO via `bus.uci_export`/`uci_import`.
 - Resources are loaded with `{raw_mode: true}` from the template-mode main.uc handler. They should be raw-script (`.uc` files starting with code, not `{%`).
 
-See `memory/project_ucode_quirks.md` (auto-loaded into Claude Code sessions on this project) for the full running list of gotchas.
+See [`docs/ucode-quirks.md`](ucode-quirks.md) for the full running list of language and runtime gotchas.
