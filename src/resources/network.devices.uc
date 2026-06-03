@@ -70,6 +70,13 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["name", "type"],
+	openapi_conditional: [
+		{ if:   { properties: { type: { const: "bridge" } }, required: ["type"] },
+		  then: { required: ["ports"] } },
+		{ if:   { properties: { type: { const: "8021q" } }, required: ["type"] },
+		  then: { required: ["vid"] } },
+	],
 	schema_properties: {
 		name:    { type: "string",
 		           description: "Device name as seen by netifd / the kernel" },

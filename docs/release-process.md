@@ -57,6 +57,24 @@ Bump `VERSION`, regenerate `build/openapi.json` via `make openapi`, commit.
 
 ## Release flow
 
+### Major versions ship as `-rc` first
+
+For any MAJOR bump, tag `vX.0.0-rc1` (or `-rc2`, etc.) BEFORE the final
+`vX.0.0`. The release-apk workflow auto-detects `-rc/-alpha/-beta/-pre`
+and marks the GitHub release as a prerelease (its
+`case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
+
+Announce the RC explicitly to known downstream consumers - the
+`raspbeguy/uapi` Terraform provider author, anyone with a published
+client - and give them a ~1-2 week window to file wire-surface
+feedback. Promote `rc<N>` to the final `vX.0.0` only after the window
+closes with no fundamental issues outstanding. v2.0.0 went straight to
+stable and immediately surfaced material provider-side feedback; this
+rule exists to convert that "post-release scramble" into "pre-release
+polish".
+
+Skip RCs for MINOR or PATCH unless the change set is unusually large.
+
 Per-release steps (operator does these in order):
 
 1. **Cut a release candidate branch** if the release is substantive

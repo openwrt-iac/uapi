@@ -213,6 +213,31 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["proto"],
+	openapi_conditional: [
+		{ if:   { properties: { proto: { const: "static" } }, required: ["proto"] },
+		  then: { anyOf: [
+		            { required: ["ipaddr"] },
+		            { required: ["ipaddrs"] },
+		          ] } },
+		{ if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
+		  then: { required: ["private_key", "addresses"] } },
+	],
+	openapi_runtime: {
+		type: "object",
+		description: "Populated from ubus network.interface.<name> status; empty {} when the interface has no runtime state.",
+		properties: {
+			up:               { type: "boolean" },
+			pending:          { type: "boolean" },
+			available:        { type: "boolean" },
+			l3_device:        { type: ["string", "null"] },
+			uptime:           { type: ["integer", "null"], minimum: 0 },
+			"ipv4-address":   { type: "array", items: { type: "object" } },
+			"ipv6-address":   { type: "array", items: { type: "object" } },
+			"ipv6-prefix":    { type: "array", items: { type: "object" } },
+			route:            { type: "array", items: { type: "object" } },
+		},
+	},
 	merge_for_patch: function(existing_section, existing_json, body) {
 		let merged = { ...existing_json };
 		for (let k in body) {

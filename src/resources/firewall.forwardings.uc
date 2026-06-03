@@ -75,6 +75,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["src", "dest"],
 	schema_properties: {
 		src:     { type: "string", description: "Source zone name" },
 		dest:    { type: "string", description: "Destination zone name" },

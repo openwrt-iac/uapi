@@ -109,6 +109,11 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["target", "match"],
+	openapi_conditional: [
+		{ if:   { type: "object", required: ["match"] },
+		  then: { properties: { match: { type: "object", required: ["src_zone"] } } } },
+	],
 	schema_properties: {
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this rule" },

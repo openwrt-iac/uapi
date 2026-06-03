@@ -110,7 +110,14 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 
 	let reload_err = reload(services);
 	if (reload_err == null) {
-		return { ok: true, body: result.body ?? result };
+		// reload_result is surfaced as a response header by translate_tx so
+		// clients can distinguish "no reload service for this resource"
+		// from "reload service ran and exited 0". The init script's exit
+		// code is the only convergence signal available; clients should
+		// not treat `ok` as "device converged" (see docs/operations.md).
+		return { ok: true, body: result.body ?? result,
+		         reload_services: services,
+		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };
 	}
 
 	let restore_err = null;
@@ -255,7 +262,9 @@ function multi_transaction(conn, params) {
 			}
 			let reload_err = (commit_err == null) ? reload(services) : commit_err;
 			if (reload_err == null) {
-				result = { ok: true, body: inner.body ?? inner };
+				result = { ok: true, body: inner.body ?? inner,
+				           reload_services: services,
+				           reload_status: (length(services) > 0) ? "ok" : "no_reload" };
 			} else {
 				let restore_err = null;
 				try {

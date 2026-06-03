@@ -53,6 +53,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_conditional: [
+		{ if:   { properties: { use_dhcp: { const: false } }, required: ["use_dhcp"] },
+		  then: { required: ["server"] } },
+	],
 	schema_properties: {
 		enabled:       { type: "boolean",
 		                 description: "Whether sysntpd runs at all" },

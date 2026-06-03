@@ -50,6 +50,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	id_prefix: "c",
+	openapi_required: ["commonname"],
 	schema_properties: {
 		days:         { type: "integer", minimum: 1, maximum: 36500,
 		                description: "Certificate validity in days" },

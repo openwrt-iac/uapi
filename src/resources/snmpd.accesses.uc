@@ -64,6 +64,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["group"],
 	schema_properties: {
 		group:   { type: "string",
 		           description: "snmpd group this access entry binds to (must exist in snmpd/groups)" },

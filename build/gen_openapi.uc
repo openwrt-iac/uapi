@@ -80,9 +80,12 @@ function error_responses() {
 		"403": { "$ref": "#/components/responses/Forbidden" },
 		"404": { "$ref": "#/components/responses/NotFound" },
 		"409": { "$ref": "#/components/responses/Conflict" },
+		"412": { "$ref": "#/components/responses/PreconditionFailed" },
 		"422": { "$ref": "#/components/responses/ValidationFailed" },
 		"423": { "$ref": "#/components/responses/Locked" },
+		"429": { "$ref": "#/components/responses/TooManyRequests" },
 		"500": { "$ref": "#/components/responses/InternalError" },
+		"503": { "$ref": "#/components/responses/ServiceUnavailable" },
 	};
 }
 
@@ -147,12 +150,21 @@ function build_crud_paths(ep) {
 	paths[ep.path + "/{id}"] = {
 		"parameters": [id_param],
 		"get":    { "summary": sprintf("Get one %s", ep.subresource),
-		            "responses": { "200": make_response(200, "OK", schema_ref), ...error_responses() } },
+		            "description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+		            "responses": { "200": make_response(200, "OK", schema_ref),
+		                           "304": { "description": "If-None-Match matched current ETag" },
+		                           ...error_responses() } },
 		"put":    { "summary": sprintf("Replace a %s", ep.subresource),
+		            "description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + schema_ref } } } },
 		            "responses": { "200": make_response(200, "Replaced", schema_ref), ...error_responses() } },
 		"patch":  { "summary": sprintf("Partially update a %s", ep.subresource),
-		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+		            "requestBody": { "required": true, "content": {
+		              "application/json":            { "schema": { "type": "object",
+		                                                            "description": "merge-patch partial body" } },
+		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
+		            } },
 		            "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses() } },
 		"delete": { "summary": sprintf("Delete a %s", ep.subresource),
 		            "responses": { "204": { "description": "Deleted" }, ...error_responses() } },
@@ -174,9 +186,16 @@ function build_singleton_paths(ep) {
 	return {
 		[ep.path]: {
 			"get":   { "summary": sprintf("Get the %s singleton", ep.domain),
-			           "responses": { "200": make_response(200, "OK", schema_ref), ...error_responses() } },
+			           "description": "Conditional GET via If-None-Match (or ?if_none_match=).",
+			           "responses": { "200": make_response(200, "OK", schema_ref),
+			                          "304": { "description": "If-None-Match matched current ETag" },
+			                          ...error_responses() } },
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
-			           "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+			           "requestBody": { "required": true, "content": {
+			             "application/json":            { "schema": { "type": "object" } },
+			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
+			           } },
 			           "responses": { "200": make_response(200, "Updated", schema_ref), ...error_responses() } },
 		},
 	};
@@ -351,17 +370,120 @@ function build_paths() {
 			"summary": "Liveness check (no auth required)",
 			"security": [],
 			"responses": {
-				"200": {
-					"description": "OK",
-					"content": { "application/json": { "schema": {
-						"type": "object",
-						"properties": {
-							"status": { "type": "string", "enum": ["ok"] },
-							"version": { "type": "string" },
-						},
-					} } }
-				},
-				"503": { "description": "ubus unreachable" },
+				"200": { "description": "All subsystems ok",
+				          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Healthz" } } } },
+				"503": { "description": "At least one subsystem degraded",
+				          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Healthz" } } } },
+			},
+		},
+	};
+
+	paths["/openapi.json"] = {
+		"get": {
+			"summary": "Retrieve this OpenAPI document (no auth required)",
+			"security": [],
+			"responses": {
+				"200": { "description": "OK",
+				          "content": { "application/json": { "schema": { "type": "object" } } } },
+			},
+		},
+	};
+
+	paths["/schema"] = {
+		"get": {
+			"summary": "List every curated resource key (no auth)",
+			"security": [],
+			"responses": {
+				"200": { "description": "OK",
+				          "content": { "application/json": { "schema": {
+				            "type": "object", "properties": { "resources": { "type": "array", "items": { "type": "string" } } } } } } },
+			},
+		},
+	};
+	paths["/schema/{package}"] = {
+		"parameters": [{ "name": "package", "in": "path", "required": true, "schema": { "type": "string" } }],
+		"get": { "summary": "Schemas for every resource in one package (no auth)", "security": [],
+		         "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+	};
+	paths["/schema/{package}/{resource}"] = {
+		"parameters": [
+			{ "name": "package", "in": "path", "required": true, "schema": { "type": "string" } },
+			{ "name": "resource", "in": "path", "required": true, "schema": { "type": "string" } },
+		],
+		"get": { "summary": "Schema for one curated resource (no auth)", "security": [],
+		         "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResourceSchema" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+	};
+
+	paths["/auth/whoami"] = {
+		"get": {
+			"summary": "Introspection: the calling token's own metadata",
+			"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
+			"responses": {
+				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WhoamiResponse" } } } },
+				...error_responses(),
+			},
+		},
+	};
+
+	paths["/tokens"] = {
+		"get": {
+			"summary": "List all tokens (no secrets surfaced)",
+			"description": "Scope: uapi:tokens:ro (or *:ro). Each entry omits salt and hash.",
+			"responses": {
+				"200": { "description": "OK", "content": { "application/json": { "schema": {
+				  "type": "object",
+				  "properties": { "tokens": { "type": "array", "items": { "$ref": "#/components/schemas/TokenMetadata" } } } } } } },
+				...error_responses(),
+			},
+		},
+		"post": {
+			"summary": "Mint a new token over HTTP",
+			"description": "Scope: uapi:tokens:rw (or *:rw). Requested scopes MUST be a strict subset of the caller's own; escalation returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
+			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateRequest" } } } },
+			"responses": {
+				"200": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateResponse" } } } },
+				...error_responses(),
+			},
+		},
+	};
+	paths["/tokens/{id}"] = {
+		"parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+		"get":    { "summary": "Get one token's metadata",
+		            "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } }, ...error_responses() } },
+		"delete": { "summary": "Revoke a token",
+		            "responses": { "204": { "description": "Revoked" }, ...error_responses() } },
+	};
+
+	paths["/metrics"] = {
+		"get": {
+			"summary": "Prometheus 0.0.4 text exposition",
+			"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
+			"responses": {
+				"200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" }, "example": "uapi_requests_total{method=\"GET\",path=\"/firewall/rules\",status=\"200\"} 42\n" } } },
+				...error_responses(),
+			},
+		},
+	};
+
+	paths["/diagnostics"] = {
+		"get": {
+			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
+			"description": "Scope: uapi:diagnostics:ro (or *:rw).",
+			"responses": {
+				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },
+				...error_responses(),
+			},
+		},
+	};
+
+	paths["/batch"] = {
+		"post": {
+			"summary": "Multi-package atomic transaction",
+			"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
+			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchRequest" } } } },
+			"responses": {
+				"207": { "description": "Multi-Status: every sub-request succeeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchResponse" } } } },
+				...error_responses(),
 			},
 		},
 	};
@@ -375,13 +497,30 @@ function build_schemas() {
 			"type": "object",
 			"required": ["code", "message", "request_id"],
 			"properties": {
-				"code": { "type": "string" },
-				"message": { "type": "string" },
-				"request_id": { "type": "string" },
+				"code": { "type": "string",
+				          "enum": [
+				            "bad_request", "invalid_cursor",
+				            "unauthorized", "invalid_token",
+				            "insufficient_scope", "scope_escalation_blocked", "tls_required",
+				            "not_found", "method_not_allowed",
+				            "conflict", "unmanaged_resource", "idempotency_key_conflict",
+				            "precondition_failed", "unsupported_media_type",
+				            "validation_failed", "locked", "too_many_requests",
+				            "internal_error", "reload_failed_restored", "reload_failed_unrecovered",
+				            "service_unavailable", "init_script_missing",
+				            "batch_partial_failure",
+				          ],
+				          "description": "Machine-readable error code. Stable within a major. Clients should branch on HTTP status first and treat unknown codes gracefully (the project's additive contract permits new codes within a major)." },
+				"message": { "type": "string", "description": "Human-readable English. Do not parse." },
+				"request_id": { "type": "string", "description": "ULID echoed in the X-Request-Id response header. Pair with audit log for server-side tracing." },
 				"errors": { "type": "array",
-				            "items": { "$ref": "#/components/schemas/FieldError" } },
-				"reload_error": { "type": "string" },
-				"restore_error": { "type": "string" },
+				            "items": { "$ref": "#/components/schemas/FieldError" },
+				            "description": "Per-field error list (validation_failed only)." },
+				"reload_error":  { "type": "string", "description": "reload_failed_restored / reload_failed_unrecovered only." },
+				"restore_error": { "type": "string", "description": "reload_failed_unrecovered only." },
+				"aborted_at_index": { "type": "integer", "description": "batch_partial_failure only: 0-based index of the sub-request that failed." },
+				"reverted": { "type": "boolean", "description": "batch_partial_failure only: true if all packages were restored." },
+				"error": { "$ref": "#/components/schemas/ErrorEnvelope", "description": "batch_partial_failure only: the failing sub-request's envelope." },
 			},
 		},
 		"FieldError": {
@@ -498,6 +637,141 @@ function build_schemas() {
 				          "description": "Full key lines; replaces /etc/dropbear/authorized_keys wholesale" },
 			},
 		},
+
+		"Healthz": {
+			"type": "object",
+			"required": ["status", "version", "checks"],
+			"properties": {
+				"status":  { "type": "string", "enum": ["ok", "degraded"] },
+				"version": { "type": "string",
+				             "description": "Package version. STABLE: clients may rely on this for version-skew detection." },
+				"checks":  { "type": "object",
+				             "required": ["ubus", "uci", "lock_dir", "time_sync"],
+				             "properties": {
+				               "ubus":      { "type": "string", "enum": ["ok", "degraded"] },
+				               "uci":       { "type": "string", "enum": ["ok", "degraded"] },
+				               "lock_dir":  { "type": "string", "enum": ["ok", "degraded"] },
+				               "time_sync": { "type": "string", "enum": ["ok", "degraded", "unknown"],
+				                              "description": "unknown for first 60s after boot; degraded if wall-clock epoch < 2023-11-15 sanity floor" },
+				             } },
+				"errors":  { "type": "array", "items": { "type": "string" },
+				             "description": "Present when status=degraded; one human-readable line per failing subsystem." },
+			},
+		},
+		"ResourceSchema": {
+			"type": "object",
+			"required": ["id", "package", "type", "schema_properties"],
+			"properties": {
+				"id":      { "type": "string", "description": "<package>:<resource> key" },
+				"package": { "type": "string" },
+				"type":    { "type": "string", "description": "uci section type" },
+				"schema_properties": { "type": "object", "description": "JSON-Schema fragment for the resource body" },
+			},
+		},
+		"WhoamiResponse": {
+			"type": "object",
+			"required": ["token_id", "scopes", "source_ip", "expires_at", "allowed_cidrs", "last_used_at", "last_used_ip"],
+			"properties": {
+				"token_id":    { "type": "string" },
+				"scopes":      { "type": "array", "items": { "type": "string" } },
+				"source_ip":   { "type": ["string", "null"] },
+				"expires_at":  { "type": ["integer", "null"], "description": "Unix epoch seconds; null if never expires" },
+				"allowed_cidrs": { "type": "array", "items": { "type": "string" } },
+				"last_used_at": { "type": ["integer", "null"], "description": "Unix epoch seconds of last authed request; throttled to ~1/minute" },
+				"last_used_ip": { "type": ["string", "null"] },
+				"rate":  { "type": ["integer", "null"], "description": "Per-token rate-limit override (req/s); null means use global" },
+				"burst": { "type": ["integer", "null"], "description": "Per-token burst override; null means use global" },
+			},
+		},
+		"TokenMetadata": {
+			"allOf": [
+				{ "$ref": "#/components/schemas/WhoamiResponse" },
+				{ "type": "object", "required": ["name"], "properties": {
+				  "name": { "type": "string", "description": "Same as token_id; field name varies by endpoint" } } },
+			],
+		},
+		"TokenCreateRequest": {
+			"type": "object",
+			"required": ["name", "scopes"],
+			"properties": {
+				"name":   { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$" },
+				"scopes": { "type": "array", "items": { "type": "string" }, "minItems": 1,
+				            "description": "MUST be a strict subset of the caller's own scopes; escalation returns 403 scope_escalation_blocked" },
+				"expires_in_seconds": { "type": ["integer", "null"], "minimum": 1 },
+				"allowed_cidrs":      { "type": "array", "items": { "type": "string", "description": "IPv4 CIDR" } },
+			},
+		},
+		"TokenCreateResponse": {
+			"type": "object",
+			"required": ["bearer", "name"],
+			"properties": {
+				"bearer": { "type": "string", "writeOnly": true,
+				            "description": "Cleartext bearer; returned exactly once. Store securely." },
+				"name":   { "type": "string" },
+			},
+		},
+		"DiagnosticsResponse": {
+			"type": "object",
+			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "request_id"],
+			"properties": {
+				"version":          { "type": "string" },
+				"uptime_seconds":   { "type": "integer" },
+				"resources_loaded": { "type": "array", "items": { "type": "string" } },
+				"lock_state": { "type": "object",
+				                "required": ["global_held", "per_package"],
+				                "properties": {
+				                  "global_held": { "type": "boolean" },
+				                  "per_package": { "type": "object", "additionalProperties": { "type": "boolean" } },
+				                } },
+				"request_id":       { "type": "string" },
+			},
+		},
+		"BatchRequest": {
+			"type": "object",
+			"required": ["operations"],
+			"properties": {
+				"operations": { "type": "array", "minItems": 1, "maxItems": 50,
+				                "items": { "$ref": "#/components/schemas/BatchOperation" } },
+			},
+		},
+		"BatchOperation": {
+			"type": "object",
+			"required": ["path", "method"],
+			"properties": {
+				"path":     { "type": "string", "description": "Resource path (e.g. /firewall/rules)" },
+				"method":   { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+				"body":     { "description": "Request body for POST/PUT/PATCH; omit for GET/DELETE" },
+				"if_match": { "type": "string", "description": "Optional per-sub-request If-Match ETag" },
+			},
+		},
+		"BatchResponse": {
+			"type": "object",
+			"required": ["results", "request_id"],
+			"properties": {
+				"results": { "type": "array",
+				             "items": { "type": "object",
+				                        "required": ["status"],
+				                        "properties": {
+				                          "status": { "type": "integer" },
+				                          "body": {},
+				                        } } },
+				"request_id": { "type": "string" },
+			},
+		},
+		"JsonPatch": {
+			"type": "array",
+			"description": "RFC 6902 JSON Patch document. Sent with Content-Type: application/json-patch+json on PATCH. Supports ops: add, remove, replace, move, copy, test.",
+			"items": {
+				"type": "object",
+				"required": ["op", "path"],
+				"properties": {
+				  "op":    { "type": "string", "enum": ["add", "remove", "replace", "move", "copy", "test"] },
+				  "path":  { "type": "string", "description": "RFC 6901 JSON Pointer" },
+				  "value": { "description": "Required for add, replace, test" },
+				  "from":  { "type": "string", "description": "Required for move, copy" },
+				},
+			},
+		},
 	};
 
 	for (let ep in ENDPOINTS) {
@@ -535,11 +809,32 @@ function build_schemas() {
 			}
 		}
 
-		schemas[schema_name(ep)] = {
+		// Resource-declared runtime sub-shape: replaces the opaque
+		// `runtime: {"type": "object"}` placeholder so clients can see
+		// which keys a populated runtime block actually carries.
+		if (type(mod.openapi_runtime) == "object" && type(properties.runtime) == "object")
+			properties.runtime = mod.openapi_runtime;
+
+		let s = {
 			"type": "object",
 			"description": sprintf("uapi resource backed by uci %s.%s", mod.package, mod.type),
 			"properties": properties,
 		};
+
+		// Resource-declared unconditional requireds. The OpenAPI generator
+		// previously emitted no `required` arrays on curated schemas,
+		// forcing every client (Terraform provider, etc.) to re-derive
+		// requireds by reading validate(). Module-side declaration lets
+		// the spec carry the contract directly.
+		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
+			s.required = mod.openapi_required;
+
+		// Resource-declared conditional requireds (if/then/required). Models
+		// proto/type discriminators like "ipaddr required when proto=static".
+		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
+			s.allOf = mod.openapi_conditional;
+
+		schemas[schema_name(ep)] = s;
 	}
 
 	return schemas;
@@ -550,7 +845,7 @@ function build_doc() {
 		"openapi": "3.1.0",
 		"info": {
 			"title": "uapi",
-			"description": "Native HTTP REST API for OpenWrt (curated + raw uci passthrough)",
+			"description": "Native HTTP REST API for OpenWrt (curated + raw uci passthrough).\n\nIMPORTANT: a 2xx response to a write means the init script's reload action exited 0, NOT that the daemon has finished re-converging. Clients should not treat 200 OK as a runtime-convergence promise. See docs/operations.md `Success != converged` and the `X-Reload-Status` response header.",
 			"version": VERSION,
 		},
 		"servers": [
@@ -568,15 +863,56 @@ function build_doc() {
 					"description": "Token created via uapi-token on the router. Hashed (salted sha256) at rest.",
 				},
 			},
+			"headers": {
+				"WWWAuthenticateBearer": {
+					"description": "RFC 7235 challenge on 401 responses",
+					"schema": { "type": "string", "example": "Bearer realm=\"uapi\", error=\"invalid_token\"" },
+				},
+				"RetryAfter": {
+					"description": "Seconds the client should wait before retrying (RFC 7231 6.6.4)",
+					"schema": { "type": "integer", "minimum": 1 },
+				},
+				"ETag": {
+					"description": "Quoted body hash. Mix dependency state via depends_on. Use with If-Match for optimistic concurrency.",
+					"schema": { "type": "string", "example": "\"a8a93ccd3144\"" },
+				},
+				"XRequestId": {
+					"description": "ULID echoing the request_id from request (or generated server-side).",
+					"schema": { "type": "string" },
+				},
+				"Link": {
+					"description": "RFC 8288 link relations; rel=\"next\" present when more paginated items exist.",
+					"schema": { "type": "string", "example": "<?cursor=c_r_01HX&limit=100>; rel=\"next\"" },
+				},
+				"XNextCursor": {
+					"description": "Convenience companion to Link rel=next: the bare next-cursor token.",
+					"schema": { "type": "string", "pattern": "^c_[A-Za-z0-9_-]+$" },
+				},
+				"IdempotentReplayed": {
+					"description": "Set to true when a POST response was served from the Idempotency-Key cache instead of being re-applied.",
+					"schema": { "type": "string", "enum": ["true"] },
+				},
+				"XReloadStatus": {
+					"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise; see docs/operations.md). `no_reload` = the resource has no reload services. Absent on non-write 2xx responses.",
+					"schema": { "type": "string", "enum": ["ok", "no_reload"] },
+				},
+				"XReloadServices": {
+					"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload.",
+					"schema": { "type": "string", "example": "firewall,dnsmasq" },
+				},
+			},
 			"responses": {
-				"BadRequest":       { "description": "Malformed request",      "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"Unauthorized":     { "description": "Missing or invalid bearer", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"Forbidden":        { "description": "Scope or TLS check failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"NotFound":         { "description": "Resource not found",     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"Conflict":         { "description": "Conflict (unmanaged, already exists, etc.)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"ValidationFailed": { "description": "Request body failed validation",      "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"Locked":           { "description": "Another write transaction holds the global lock", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"InternalError":    { "description": "Server error",           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"BadRequest":         { "description": "Malformed request (codes: bad_request, invalid_cursor)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "WWW-Authenticate": { "$ref": "#/components/headers/WWWAuthenticateBearer" } } },
+				"Unauthorized":       { "description": "Missing/invalid bearer (codes: unauthorized, invalid_token; the latter also covers expired tokens and source-IP-not-permitted)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "WWW-Authenticate": { "$ref": "#/components/headers/WWWAuthenticateBearer" } } },
+				"Forbidden":          { "description": "Scope or TLS check failed (codes: insufficient_scope, tls_required, scope_escalation_blocked)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"NotFound":           { "description": "Resource not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"Conflict":           { "description": "Conflict (codes: conflict, unmanaged_resource, idempotency_key_conflict)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"PreconditionFailed": { "description": "If-Match did not match current ETag, or JSON-Patch test op failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"ValidationFailed":   { "description": "Request body failed validation (per-field errors in `errors[]`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"Locked":             { "description": "Another write holds the same per-package lock; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
+				"TooManyRequests":    { "description": "Per-token rate limit exceeded; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
+				"InternalError":      { "description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"ServiceUnavailable": { "description": "Service unavailable (codes: service_unavailable, init_script_missing)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 			},
 		},
 	};

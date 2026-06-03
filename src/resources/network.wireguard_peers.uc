@@ -120,6 +120,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	merge_for_patch: merge_for_patch,
+	openapi_required: ["interface", "public_key", "allowed_ips"],
 	schema_properties: {
 		interface:            { type: "string",
 		                        description: "Parent WireGuard interface (network/interfaces name with proto=wireguard)" },

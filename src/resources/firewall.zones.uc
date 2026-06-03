@@ -56,6 +56,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["name"],
 	schema_properties: {
 		name:    { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+$",
 		           description: "Zone name; alphanumerics, dashes, underscores" },

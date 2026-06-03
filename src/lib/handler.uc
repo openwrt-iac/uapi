@@ -310,6 +310,14 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
 function translate_tx(ctx, result) {
 	if (result.ok) {
 		let resp = errors.ok(ctx, result.body);
+		// Surface the reload outcome as a header so clients can distinguish
+		// "no reload service for this resource" from "init script returned
+		// 0 (but the daemon may not have converged yet)". See
+		// docs/operations.md "Success != converged" for the contract.
+		if (result.reload_status != null)
+			resp.headers["X-Reload-Status"] = result.reload_status;
+		if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
+			resp.headers["X-Reload-Services"] = join(",", result.reload_services);
 		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
 	}
 	if (result.kind == "locked") return errors.locked(ctx);

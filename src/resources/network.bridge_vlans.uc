@@ -63,6 +63,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["device", "vlan"],
 	schema_properties: {
 		device: { type: "string",
 		          description: "Parent bridge device name (must exist in network/devices type=bridge)" },

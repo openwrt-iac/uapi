@@ -121,6 +121,26 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["device"],
+	openapi_conditional: [
+		{ if:   { properties: { encryption: { enum: ["psk", "psk2", "psk-mixed", "sae", "sae-mixed", "wpa", "wpa2", "wpa3", "wpa3-mixed"] } },
+		          required: ["encryption"] },
+		  then: { required: ["key"] } },
+	],
+	openapi_runtime: {
+		type: "object",
+		description: "Populated from ubus iwinfo info/assoclist for the runtime interface that backs this uci section; empty {} when the iface has not been provisioned yet.",
+		properties: {
+			ifname:          { type: "string" },
+			bssid:           { type: ["string", "null"] },
+			channel:         { type: ["integer", "null"] },
+			frequency:       { type: ["integer", "null"] },
+			signal:          { type: ["integer", "null"] },
+			noise:           { type: ["integer", "null"] },
+			txpower_actual:  { type: ["integer", "null"] },
+			assoclist_count: { type: "integer", minimum: 0 },
+		},
+	},
 	schema_properties: {
 		device:     { type: "string",
 		              description: "Parent radio (wireless/devices id)" },

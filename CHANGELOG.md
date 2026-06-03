@@ -156,6 +156,61 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
   reproducible builds, arch-neutrality rationale, pre-release checklist,
   rollback.
 
+### Post-feedback amendments (v2.0.0 retag)
+
+Acted on a structured review from the Terraform-provider author before
+the announcement. v2.0.0 was retagged with these in place.
+
+- **OpenAPI spec is now a complete machine-readable contract.** Every
+  curated resource carries `required: [...]` derived from `validate()`'s
+  unconditional requireds. Resources with proto/type discriminators
+  (network/interfaces, network/devices, network/rules, dhcp/hosts,
+  system/timeservers, wireless/interfaces) gain `allOf: [{if/then/required}]`
+  blocks. The 3 resources that populate a runtime block
+  (network/interfaces, wireless/interfaces, dhcp/servers) get typed
+  `runtime` sub-shapes instead of an opaque `{type: object}`. Generator
+  reads three new optional fields per resource module (`openapi_required`,
+  `openapi_conditional`, `openapi_runtime`).
+- **System endpoints now in the spec.** `/batch`, `/metrics`,
+  `/diagnostics`, `/tokens` (GET / GET-by-id / POST / DELETE),
+  `/auth/whoami`, `/schema`, `/schema/{package}`,
+  `/schema/{package}/{resource}`, `/openapi.json`. The PATCH operations
+  declare both content types (`application/json` for merge-patch,
+  `application/json-patch+json` for RFC 6902).
+- **Error envelope `code` is an explicit enum** in the spec. Includes
+  every code uapi can emit (the full list now lives in the
+  `ErrorEnvelope.properties.code.enum` array).
+- **Response headers documented as components**: `WWW-Authenticate`,
+  `Retry-After`, `ETag`, `X-Request-Id`, `Link` (RFC 8288),
+  `X-Next-Cursor`, `Idempotent-Replayed`, `X-Reload-Status`,
+  `X-Reload-Services`.
+- **`X-Reload-Status` + `X-Reload-Services`** response headers on every
+  write. `X-Reload-Status: ok` = init script exited 0 (NOT a runtime-
+  convergence promise); `X-Reload-Status: no_reload` = the resource has
+  no reload services. Documented loudly: convergence is out-of-band.
+- **`dhcp/servers.runtime.active_leases_v4_total` renamed to
+  `active_leases_v4_box_total`**. The old name was misleading - it sits
+  on a per-server resource but counts box-wide (dnsmasq's lease file
+  isn't interface-tagged). Breaking but in-window since v2.0.0 hadn't
+  been announced. The v1.2.0 entry has been annotated with a forward
+  pointer.
+- **`/healthz` `version` field documented as the stable version-skew
+  probe.** Clients should read it from there rather than inferring from
+  the URL or installed package.
+- **`dhcp/leases6.ia_type`** declares its enum (`IA_NA`/`IA_TA`/`IA_PD`)
+  instead of being a bare string.
+- **`docs/operations.md`** gains a "Success != converged" leading
+  section and a "version is a stable contract field" note under
+  `/healthz`.
+- **Verified per-package lock granularity on a live router**: two
+  concurrent writes against different uci packages both succeed in
+  parallel (~280 ms each, no 423); same-package writes serialize
+  correctly. The "single global write lock" concern in the review
+  doesn't reflect current code - it's confusion with the
+  `transaction.with_lock` path used by non-uci writes (apk,
+  system/access), which DOES hold the global EX (correctly, because
+  apk's own DB doesn't tolerate parallel installs).
+
 ## [1.2.1] - 2026-06-01
 
 Patch release. Three small bugs found by exercising v1.2.0 against a real OpenWrt 25.12.4 router, plus one polish item (an honest error code when the daemon you're configuring isn't installed).
@@ -209,7 +264,7 @@ Purely additive: every endpoint, field, scope, response shape, and error code fr
 - **`unbound/server` parity audit.** New fields: `manual_conf`, `extended_stats`, `interface_auto`, `localservice`, `hide_binddata`, `rebind_protection`, `num_threads`, `ttl_min`, `domain`, `domain_type`. Listen-address binding deliberately not added; documented in `docs/non-uci-state.md` (no clean uci option exists upstream; use `/etc/unbound/unbound_srv.conf`).
 - **`dhcp/leases6` (NEW read-only collection).** Parses `/tmp/(hosts/odhcpd|odhcpd.leases)` to surface odhcpd IPv6 lease state. Per-IA-address entries with `duid`, `iaid`, `hostname`, `interface`, `ia_type`, `ip`, `prefix_length`, `expires_at`. Forgiving parser fails soft on odhcpd format drift across versions.
 - **`network/interfaces` runtime block.** Populated from `ubus call network.interface.<name> status`: `up`, `pending`, `available`, `l3_device`, `uptime`, `ipv4-address[]`, `ipv6-address[]`, `ipv6-prefix[]`, `route[]`. Drift-safe for Terraform (field already declared computed).
-- **`dhcp/servers` runtime block.** Surfaces `active_leases_v4_total` (box-wide; dnsmasq doesn't tag leases by interface) and `active_leases_v6_iface` (per-interface; odhcpd does).
+- **`dhcp/servers` runtime block.** Surfaces `active_leases_v4_total` (box-wide; dnsmasq doesn't tag leases by interface) and `active_leases_v6_iface` (per-interface; odhcpd does). *(renamed to `active_leases_v4_box_total` in v2.0.0; see the v2.0.0 entry below.)*
 - **`wireless/interfaces` runtime block.** Looks up the kernel ifname via `network.wireless status`, then queries `iwinfo info`/`assoclist` via ubus. Surfaces `ifname`, `bssid`, `channel`, `frequency`, `signal`, `noise`, `txpower_actual`, `assoclist_count`. Requires new dep `rpcd-mod-iwinfo`.
 - **`system/password` (non-uci, write-only).** `POST {user, password}` → 204. Shells out to `/bin/busybox passwd <user>` with the password piped twice via stdin (LuCI's recipe). Validates user as `^(root|[a-z][a-z0-9_-]*)$` and password as `>= 8` characters with no control bytes. Under `transaction.with_lock`. Audit log line carries the user name, never the password.
 - **`system/authorized_keys` (non-uci).** `GET` lists; `POST` adds one; `PUT` replaces wholesale; `DELETE /<id>` removes one. File ops on `/etc/dropbear/authorized_keys` (mode 0600, atomic tmp+rename, symlink-safe). Server-side key validation against the allowed type set (`ssh-rsa`, `ssh-ed25519`, three ECDSA curves, two SK variants). Rejects newline/NUL injection in any key field. Stable id = sha256 prefix of the public-key blob (with a 48-bit dual-djb2 fallback in test environments without ucode-mod-digest).

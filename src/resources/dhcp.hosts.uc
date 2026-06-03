@@ -130,6 +130,13 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["ip"],
+	openapi_conditional: [
+		{ anyOf: [
+		    { required: ["mac"] },
+		    { required: ["duid"] },
+		  ] },
+	],
 	schema_properties: {
 		mac:         { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
 		               description: "Primary MAC address for IPv4 reservation" },

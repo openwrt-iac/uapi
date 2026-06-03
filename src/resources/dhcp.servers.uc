@@ -60,7 +60,7 @@ function count_v6_leases_for(iface) {
 
 function lease_counts_for_interface(iface) {
 	return {
-		active_leases_v4_total:   count_v4_leases_total(),
+		active_leases_v4_box_total:   count_v4_leases_total(),
 		active_leases_v6_iface:   count_v6_leases_for(iface),
 	};
 }
@@ -159,6 +159,17 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["interface"],
+	openapi_runtime: {
+		type: "object",
+		description: "Lease counters derived from /tmp/dhcp.leases (v4 box-total) and odhcpd statefile (v6 per-interface). Empty {} when no interface is bound.",
+		properties: {
+			active_leases_v4_box_total: { type: "integer", minimum: 0,
+			                          description: "Total IPv4 leases box-wide; dnsmasq leases are not interface-tagged" },
+			active_leases_v6_iface: { type: "integer", minimum: 0,
+			                          description: "IPv6 leases issued on this section's interface" },
+		},
+	},
 	schema_properties: {
 		interface:   { type: "string" },
 		start:       { type: "integer", minimum: 0, maximum: 254 },

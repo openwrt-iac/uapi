@@ -1,5 +1,37 @@
 # Operations
 
+## "Success" means exit 0, not runtime convergence
+
+A 2xx response to a write means: snapshot OK, validate OK, uci commit
+OK, and the init script's reload action exited 0. It does NOT mean the
+daemon has finished re-converging.
+
+The most dangerous case is `network/interfaces`: a write that produces a
+config netifd later rejects (bad proto, missing dep, conflicting
+addresses) can drop the management connection. uapi only sees the init
+script's exit code; netifd's runtime convergence happens after, in the
+background.
+
+Two signals worth wiring into your automation:
+
+- **`X-Reload-Status`** response header on writes: `ok` means the init
+  script ran and exited 0; `no_reload` means the resource has no reload
+  services (e.g. `system`). The header is intentionally not a
+  "converged" promise.
+- **`X-Reload-Services`**: comma-separated list of init scripts that
+  ran. Useful for audit/log correlation.
+
+For high-stakes writes (the management interface, firewall defaults,
+uhttpd itself) verify convergence out-of-band: poll the `runtime` block
+on the resource you just modified, check ubus state, or simply ping the
+box and confirm reachability. uapi cannot do this for you; the init
+script doesn't know either.
+
+A future `commit-confirmed` mode (apply, wait N seconds, auto-revert
+unless client acks) would close the gap but conflicts with the
+fork-per-request model. Tracked in `docs/roadmap.md` under "Needs more
+reflection".
+
 ## NTP
 
 Audit logs and request IDs both encode timestamps. If the router's clock is wrong, those timestamps are wrong, and correlating events across machines breaks.
@@ -195,6 +227,16 @@ poll healthz (not a real endpoint) to avoid burning audit-log noise.
 `time_sync` returns `unknown` for the first 60 seconds after boot
 (uptime too short to tell), `degraded` if the wall clock is below 2023,
 otherwise `ok`.
+
+### `version` is a stable contract field
+
+The `version` field returned by `/healthz` is the canonical
+version-skew probe. It carries the installed uapi package version (same
+string as `/usr/share/uapi/VERSION`) and is guaranteed to be present
+across every release within and across majors. Clients that need to
+detect API-skew before issuing real requests should read it from
+`/healthz` rather than parsing it from the URL or assuming it from the
+package they installed.
 
 ## Insecure-test bypass
 

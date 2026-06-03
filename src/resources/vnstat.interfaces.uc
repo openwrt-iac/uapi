@@ -52,6 +52,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["interface"],
 	schema_properties: {
 		interface: { type: "string",
 		             description: "Network interface to track (must exist in network/interfaces)" },

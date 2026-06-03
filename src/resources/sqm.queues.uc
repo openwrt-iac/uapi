@@ -71,6 +71,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	id_prefix: "q",
+	openapi_required: ["interface"],
 	schema_properties: {
 		enabled:   { type: "boolean",
 		             description: "Whether SQM is active on this interface" },

@@ -42,6 +42,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_required: ["secname", "source", "community"],
 	schema_properties: {
 		secname:   { type: "string", description: "security name this community maps to" },
 		source:    { type: "string",

@@ -84,6 +84,18 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_conditional: [
+		{ anyOf: [
+		    { required: ["in"] },
+		    { required: ["out"] },
+		    { required: ["src"] },
+		    { required: ["dest"] },
+		  ] },
+		{ if:   { properties: { action: { const: "lookup" } }, required: ["action"] },
+		  then: { required: ["lookup"] } },
+		{ if:   { properties: { action: { const: "goto" } }, required: ["action"] },
+		  then: { required: ["goto"] } },
+	],
 	schema_properties: {
 		in:       { type: ["string", "null"],
 		            description: "Match traffic arriving on this interface" },
