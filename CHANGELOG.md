@@ -7,11 +7,87 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.0-rc2] - 2026-06-03
+
+Second release candidate for v2.0. No wire-protocol changes vs rc1; the wire
+surface is still locked at the rc1 contract. Fixes one real bug found by the
+post-rc1 live-router smoke, twelve internal refactors from a structural code
+review, and three new contributor docs.
+
+### Fixed
+
+- **`uapi-token create` no longer produces ghost tokens on hyphenated `--name`.**
+  libuci rejects hyphens in section names with "Invalid argument", but
+  ucode-mod-uci's `cursor.set` silently returns true on the rejection. The
+  CLI would print a cleartext bearer that was never persisted; the operator
+  got no signal until auth failed on every request. Both the CLI and the
+  HTTP `POST /tokens` path now validate `--name`/`body.name` against
+  `^[A-Za-z0-9_]+$` and fail loudly with a message that points the operator
+  at the charset. All hyphenated example token names in `README.md`,
+  `docs/tokens.md`, `web/`, and the OpenAPI intro now use underscores.
+
+### Refactor (internal, no wire change)
+
+Acted on a structural code review from a follow-up pass. Touches ~600 LOC
+across handler, transaction, openapi generator, dispatcher, and resource
+modules; spec output is byte-identical to rc1 throughout.
+
+- `handler.uc` - extracted `diff_apply`, `etag_with_deps`, `apply_patch_body`
+  from the make/make_singleton factories; `attach_reload_headers` shared by
+  `translate_tx` and the DELETE 204 path. Both `patch()` functions are now
+  linear: precondition check, apply_patch_body, validate, diff_apply,
+  response.
+- `transaction.uc` - `_finalize_after_reload(reload_err, restore_fn, body,
+  services)` shared between single-package and multi-package paths. Removed
+  the latent `result.body ?? result` fallback in favour of explicit null
+  propagation.
+- `gen_openapi.uc` - `responses(verb, success)` helper collapses 38 hand-
+  spelled response blocks. `error_responses(verb)` gates write-only codes
+  (409/412/422/423) off GETs and validates the verb at parse time.
+  TAG_DESCRIPTIONS / X_TAG_GROUPS / STATIC_PATH_TAGS collapsed into one
+  ordered `TAGS` list with derived builders.
+- `errors.uc` - exported `STATUS_BY_CODE` / `FIELD_CODES` / `ALL_CODES`;
+  gen_openapi now reads the error-code enum from there rather than
+  hand-transcribing.
+- `scope.uc` - `require_or_deny(...)` and a raw-tree variant
+  `require_raw_scope(...)` collapse 20 hand-rolled scope-check sites
+  in `main.uc` + `raw.uc`. Tightening the deny message format is now a
+  one-helper edit.
+- `src/lib/openapi_hints.uc` - new module holding cross-resource conditional
+  fragments (`match_requires_src_zone`) imported by firewall.rules and
+  firewall.redirects.
+- `web/api/index.html` - uses the shared `web/style.css` instead of inline
+  topbar CSS.
+
+### Hardened
+
+- **Redoc pinned to v2.5.3 with SRI integrity hash.** Was loading `latest`
+  from a third-party CDN. The docs site sits next to the APK signing key
+  on gh-pages, so a CDN-side compromise mattered. Browser now refuses any
+  byte stream that doesn't match the committed sha384.
+
+### Docs
+
+- **New: `CONTRIBUTING.md`** - dev environment, `make` loop, what kinds of
+  changes are welcome, commit/PR style, codebase tour.
+- **New: `docs/ucode-quirks.md`** - language and OpenWrt-runtime gotchas
+  that have each cost a debug round-trip on this project. First time these
+  live in the public tree.
+- **New: `docs/concurrency.md`** - fork-per-request rules, lock layout, the
+  "would this require state to survive fork().exit()?" mental test.
+- README docs list reshaped into operator-facing vs contributor-facing groups.
+- `docs/migration-v1-to-v2.md` rename-note for `active_leases_v4_box_total`
+  now describes the correct semantics (was previously inverted).
+
+### Removed (slop / inverted-text cleanup)
+
+- Stripped narrator preambles and stale field-name references from
+  `transaction.uc`, `gen_openapi.uc`, CHANGELOG (rc1 retag intro removed),
+  migration guide; 31 lines deleted, 4 added.
+
 ## [2.0.0-rc1] - 2026-06-03
 
-Release candidate for v2.0. The wire surface is locked at this tag; final
-v2.0.0 will be tagged from this same commit (or a small set of cherry-picked
-fixes on top) once downstream consumers have had time to file feedback.
+First release candidate for v2.0. The wire surface is locked at this tag.
 
 Major bump. One uapi installation serves exactly one API major; the v1 surface
 no longer mounts under the v2 package. Operators who need v1 keep the 1.2.1
@@ -67,7 +143,7 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
   cleartext once), `DELETE /<id>` revokes. POST honours `expires_in_seconds`
   and `allowed_cidrs`. Scope check: caller must hold `uapi:tokens:rw` (or
   `*:rw`) AND every requested scope must be a strict subset of the caller's
-  own — escalation returns `403 scope_escalation_blocked`.
+  own - escalation returns `403 scope_escalation_blocked`.
 - **Per-token rate limit.** File-backed token-bucket, default 100 req/s burst
   200. Returns `429 too_many_requests` with `Retry-After`. Configurable via a
   `config ratelimit` section in `/etc/config/uapi`.
@@ -124,12 +200,12 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
 - **Non-uci base library** (`src/lib/non_uci.uc`) consolidates the
   `with_lock` + audit + envelope plumbing previously duplicated across
   `packages/*` and `system/access`.
-- **Lock-and-state audit** (`docs/lock-state-audit.md`) — every fd-open and
+- **Lock-and-state audit** (`docs/lock-state-audit.md`) - every fd-open and
   lock-acquire site walked; release proven on every exit including `die()`.
 - **Function-level coverage gate** in CI: ≥80% of lib exports unit-tested,
   100% module-level coverage required.
-- **Soak harness in CI** — short read-only sweep with RSS/fd-growth thresholds.
-- **Performance benchmark gate** — p99 latency baseline per release; CI fails
+- **Soak harness in CI** - short read-only sweep with RSS/fd-growth thresholds.
+- **Performance benchmark gate** - p99 latency baseline per release; CI fails
   on >25% regression.
 - **Signed-tag verification** required on release tags
   (`.github/allowed-signers`).
@@ -224,7 +300,7 @@ Patch release. Three small bugs found by exercising v1.2.0 against a real OpenWr
 
 ### Added
 
-- **New error code `503 init_script_missing` with a pre-flight check.** Before any uci write, `transaction()` now confirms each `/etc/init.d/<svc>` listed in `reload_services` actually exists; missing → fail-fast with a 503 carrying the missing path in `message`, no uci change. Motivates this: live-router testing of v1.2.0 showed that POST `/sqm/queues` on a box without sqm-scripts produced `500 reload_failed_unrecovered`. The cause: step-5 reload returned exit 127 (script not found); the snapshot-restore worked but the SECOND reload attempt also returned 127 (same missing script), so uapi recorded both errors and surfaced "unrecovered" — misleading: uci IS in a known state, only the daemon reload couldn't run because the daemon isn't installed. The new pre-flight makes the two scenarios distinct on the wire:
+- **New error code `503 init_script_missing` with a pre-flight check.** Before any uci write, `transaction()` now confirms each `/etc/init.d/<svc>` listed in `reload_services` actually exists; missing → fail-fast with a 503 carrying the missing path in `message`, no uci change. Motivates this: live-router testing of v1.2.0 showed that POST `/sqm/queues` on a box without sqm-scripts produced `500 reload_failed_unrecovered`. The cause: step-5 reload returned exit 127 (script not found); the snapshot-restore worked but the SECOND reload attempt also returned 127 (same missing script), so uapi recorded both errors and surfaced "unrecovered" - misleading: uci IS in a known state, only the daemon reload couldn't run because the daemon isn't installed. The new pre-flight makes the two scenarios distinct on the wire:
   - `503 init_script_missing`: daemon not installed; uci state unchanged.
   - `500 reload_failed_restored`: daemon installed but reload exited non-zero; uci state restored from snapshot.
   - `500 reload_failed_unrecovered`: as before, only for the genuinely unrecoverable case (snapshot import / restore-reload both threw or returned errors).
@@ -298,7 +374,7 @@ Purely additive: every endpoint, field, scope, response shape, and error code fr
 ### Tests
 
 - Unit: 350 (v1.1.1) → 422 (+72).
-- Integration: 27 (v1.1.1) → 30 (+24_uhttpd_self_lockout, 25_dropbear_instances, 26_packages, 27_runtime_and_leases6, 28_system_access, 29_etags — already partly in v1.1.x; net +3 new files in v1.2).
+- Integration: 27 (v1.1.1) → 30 (+24_uhttpd_self_lockout, 25_dropbear_instances, 26_packages, 27_runtime_and_leases6, 28_system_access, 29_etags - already partly in v1.1.x; net +3 new files in v1.2).
 
 ### Notes
 
@@ -426,7 +502,7 @@ Major release-candidate iteration driven by an exhaustive code review of rc1 and
 - **Observability knobs.** `/etc/config/uapi`'s `config logging` section enables `option access '1'` (every request emits an `ACCESS` INFO line) and `option debug '1'` (per-ubus-call trace at `LOG_DEBUG`). Both default off.
 - **`/etc/uapi.insecure` marker now leaves an audit trail.** Every request that bypasses TLS via the marker emits a `uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>` syslog NOTICE.
 - **Mutual TLS docs.** `docs/installation.md` covers the `tls_client_cert_file` / `tls_require_client_cert` route for service-account-as-cert auth.
-- **`lib/values.uc` shared helpers.** `normalize_bool`, `as_list`, `is_valid_ipv4`, `is_valid_ipv6`, `is_valid_ip`, `is_valid_cidr` — dedupes 9 modules of inline copies (one of which had drifted).
+- **`lib/values.uc` shared helpers.** `normalize_bool`, `as_list`, `is_valid_ipv4`, `is_valid_ipv6`, `is_valid_ip`, `is_valid_cidr` - dedupes 9 modules of inline copies (one of which had drifted).
 - **Sample syslog output.** `docs/operations.md` includes example lines for every audit category plus the insecure-bypass and internal-error formats.
 - **README "Why this approach" section** framing how uapi differs from prior REST-for-OpenWrt attempts.
 
