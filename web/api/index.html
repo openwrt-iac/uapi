@@ -52,10 +52,13 @@
        sort-props-alphabetically>
 </redoc>
 
-<!-- Pinned to the v2 major line on jsdelivr to avoid a "latest"-driven
-     break or supply-chain compromise. SRI hash deferred until a release-pinned
-     version is selected; see web/api/README on that follow-up. -->
-<script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"></script>
+<!-- Pinned to redoc@2.5.3 with an SRI hash so the browser refuses to execute
+     any byte stream other than the one we verified. To upgrade: download
+     https://cdn.jsdelivr.net/npm/redoc@<new>/bundles/redoc.standalone.js,
+     recompute the sha384 SRI, replace both version and integrity below. -->
+<script src="https://cdn.jsdelivr.net/npm/redoc@2.5.3/bundles/redoc.standalone.js"
+        integrity="sha384-xiEssMQFSpSfLbzRZCGfxxIM5QDb2DTrU6vyoZdp2sV1L6pmOMy6MpTtUoLbpC96"
+        crossorigin="anonymous"></script>
 
 </body>
 </html>
