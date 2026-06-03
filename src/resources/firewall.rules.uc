@@ -1,4 +1,5 @@
 let values = require('values');
+let hints = require('openapi_hints');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 
@@ -110,10 +111,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	openapi_required: ["target", "match"],
-	openapi_conditional: [
-		{ if:   { type: "object", required: ["match"] },
-		  then: { properties: { match: { type: "object", required: ["src_zone"] } } } },
-	],
+	openapi_conditional: [hints.match_requires_src_zone],
 	schema_properties: {
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this rule" },

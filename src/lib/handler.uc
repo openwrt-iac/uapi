@@ -307,17 +307,17 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
 	return merged;
 }
 
+function attach_reload_headers(resp, result) {
+	if (result.reload_status != null)
+		resp.headers["X-Reload-Status"] = result.reload_status;
+	if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
+		resp.headers["X-Reload-Services"] = join(",", result.reload_services);
+	return resp;
+}
+
 function translate_tx(ctx, result) {
 	if (result.ok) {
-		let resp = errors.ok(ctx, result.body);
-		// Surface the reload outcome as a header so clients can distinguish
-		// "no reload service for this resource" from "init script returned
-		// 0 (but the daemon may not have converged yet)". See
-		// docs/operations.md "Success != converged" for the contract.
-		if (result.reload_status != null)
-			resp.headers["X-Reload-Status"] = result.reload_status;
-		if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
-			resp.headers["X-Reload-Services"] = join(",", result.reload_services);
+		let resp = attach_reload_headers(errors.ok(ctx, result.body), result);
 		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
 	}
 	if (result.kind == "locked") return errors.locked(ctx);
@@ -567,14 +567,8 @@ function make(resource, opts) {
 			},
 		}));
 
-		if (result.ok) {
-			let resp = errors.no_content(ctx);
-			if (result.reload_status != null)
-				resp.headers["X-Reload-Status"] = result.reload_status;
-			if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
-				resp.headers["X-Reload-Services"] = join(",", result.reload_services);
-			return resp;
-		}
+		if (result.ok)
+			return attach_reload_headers(errors.no_content(ctx), result);
 		return translate_tx(ctx, result);
 	}
 

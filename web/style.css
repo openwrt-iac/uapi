@@ -237,3 +237,27 @@ footer a:hover { color: var(--accent); }
     section { padding: 2.5rem 0; }
     h2 { font-size: 1.5rem; }
 }
+
+/* ---------- topbar (used by /api/ Redoc page) ---------- */
+
+.topbar {
+    background: var(--bg-deep);
+    color: var(--fg);
+    padding: 0.8rem 1.5rem;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    font-size: 0.95rem;
+}
+.topbar a { color: var(--accent); text-decoration: none; }
+.topbar a:hover { text-decoration: underline; }
+.topbar .brand {
+    font-family: "SFMono-Regular", Menlo, monospace;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0;
+}
+.topbar .brand::before { content: "$ "; color: var(--fg-dim); }
+.topbar .crumb { color: var(--fg-dim); }
+.topbar nav { margin-left: auto; display: flex; gap: 1.2rem; }
