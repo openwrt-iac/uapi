@@ -59,6 +59,7 @@ const ENDPOINTS = [
 	{ path: "/mwan3/members",      file: "mwan3.members.uc",      kind: "crud",      domain: "mwan3",    subresource: "members" },
 	{ path: "/mwan3/policies",     file: "mwan3.policies.uc",     kind: "crud",      domain: "mwan3",    subresource: "policies" },
 	{ path: "/mwan3/rules",        file: "mwan3.rules.uc",        kind: "crud",      domain: "mwan3",    subresource: "rules" },
+	{ path: "/usteer/config",      file: "usteer.config.uc",      kind: "singleton", domain: "usteer",   subresource: "config" },
 ];
 
 function load_resource(file) {
@@ -319,6 +320,7 @@ const TAGS = [
 	{ name: "Mwan3 / Members",             group: "Other daemons", description: "(interface, metric, weight) tuples consumed by policies." },
 	{ name: "Mwan3 / Policies",            group: "Other daemons", description: "Member groups with a last-resort fallback. Cross-refs `mwan3:members`." },
 	{ name: "Mwan3 / Rules",               group: "Other daemons", description: "Traffic-match -> policy bindings. Cross-refs `mwan3:policies`." },
+	{ name: "Usteer / Config",             group: "Other daemons", description: "Passive band-steering daemon singleton (signal thresholds, roam scan intervals, SSID filter)." },
 	{ name: "Raw / Generic uci passthrough", group: "Generic uci passthrough", description: "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target.", path_prefix: "/raw/" },
 	{ name: "Packages / Installed",        group: "Packages", description: "Manage on-router apk packages (shells out to `apk add`/`del`).", path_prefix: "/packages/installed" },
 	{ name: "Packages / Feeds",            group: "Packages", description: "Manage `/etc/apk/repositories.d/*.list` feed files.",          path_prefix: "/packages/feeds" },

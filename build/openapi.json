@@ -193,6 +193,10 @@
 			"description": "Traffic-match -> policy bindings. Cross-refs `mwan3:policies`."
 		},
 		{
+			"name": "Usteer / Config",
+			"description": "Passive band-steering daemon singleton (signal thresholds, roam scan intervals, SSID filter)."
+		},
+		{
 			"name": "Raw / Generic uci passthrough",
 			"description": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target."
 		},
@@ -307,7 +311,8 @@
 				"Mwan3 / Interfaces",
 				"Mwan3 / Members",
 				"Mwan3 / Policies",
-				"Mwan3 / Rules"
+				"Mwan3 / Rules",
+				"Usteer / Config"
 			]
 		},
 		{
@@ -13251,6 +13256,118 @@
 				]
 			}
 		},
+		"/usteer/config": {
+			"get": {
+				"summary": "Get the usteer singleton",
+				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UsteerConfig"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Usteer / Config"
+				]
+			},
+			"patch": {
+				"summary": "Update the usteer singleton",
+				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UsteerConfig"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Usteer / Config"
+				]
+			}
+		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -18843,6 +18960,233 @@
 				"required": [
 					"use_policy"
 				]
+			},
+			"UsteerConfig": {
+				"type": "object",
+				"description": "uapi resource backed by uci usteer.usteer",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"network": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Network interface usteer listens on for peer announcements."
+					},
+					"syslog": {
+						"type": "boolean"
+					},
+					"debug_level": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 3
+					},
+					"ipv6": {
+						"type": "boolean"
+					},
+					"sta_block_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"local_sta_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"local_sta_update": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"max_neighbor_reports": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"max_retry_band": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"seen_policy_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"measurement_report_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"load_balancing_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"band_steering_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"remote_update_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"remote_node_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"assoc_steering": {
+						"type": "boolean"
+					},
+					"max_assoc_sta": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"min_connect_snr": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Refuse association below this SNR (dBm)."
+					},
+					"min_snr": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Disconnect clients below this SNR (dBm)."
+					},
+					"min_snr_kick_delay": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_kick_delay": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_process_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_scan_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"roam_scan_tries": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_scan_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_trigger_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"roam_trigger_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"signal_diff_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"node_up_script": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to a hook script run on peer changes."
+					},
+					"event_log_types": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Log categories: probe_req, beacon, auth, assoc, load_kick, signal_kick, etc."
+					},
+					"ssid_list": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Filter usteer's action to these SSIDs (empty = all)."
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
 			}
 		},
 		"securitySchemes": {

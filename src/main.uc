@@ -73,6 +73,7 @@ const SINGLETONS = {
 	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config", "prometheus_node_exporter_lua.config.uc")),
 	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
 	"mwan3:globals":      handler.make_singleton(load_resource("mwan3:globals", "mwan3.globals.uc")),
+	"usteer:config":      handler.make_singleton(load_resource("usteer:config", "usteer.config.uc")),
 };
 
 // BARE variants run inside /batch's outer multi_transaction (skip own lock,

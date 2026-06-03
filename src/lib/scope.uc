@@ -55,6 +55,8 @@ const KNOWN_PATHS = {
 	"mwan3:members": true,
 	"mwan3:policies": true,
 	"mwan3:rules": true,
+	"usteer": true,
+	"usteer:config": true,
 	"packages": true,
 	"packages:installed": true,
 	"packages:feeds": true,
