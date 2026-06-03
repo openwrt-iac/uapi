@@ -204,6 +204,19 @@ function subsets(outer_scopes, requested_scopes) {
 	return true;
 }
 
+// Convenience: scope-check + structured envelope. Returns null on pass,
+// or an error response (insufficient_scope) on deny. `description` is a
+// short noun phrase ("this operation on firewall:rules", "minting a
+// token") that fills in "Token does not permit <description>".
+function require_or_deny(errors_mod, ctx, scopes, path_segments, verb, description) {
+	if (permits(scopes, path_segments, verb)) return null;
+	let what = description != null
+		? description
+		: sprintf("%s on %s", verb, join(":", path_segments));
+	return errors_mod.error(ctx, "insufficient_scope",
+	                        sprintf("Token does not permit %s", what));
+}
+
 return {
 	parse,
 	permits,
@@ -211,4 +224,5 @@ return {
 	validate_against_known_tree,
 	subsumes,
 	subsets,
+	require_or_deny,
 };

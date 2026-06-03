@@ -61,6 +61,18 @@ function permits_domain(scopes, pkg, sec_type, verb) {
 	return scope.permits(scopes, inferred_domain_path(pkg, sec_type), verb);
 }
 
+// Composite raw check: both the raw tree and the domain tree must permit
+// the verb. sec_type may be null for list (uses bare-pkg domain). Returns
+// null on pass or an insufficient_scope envelope.
+function require_raw_scope(ctx, scopes, pkg, sec_type, verb, action) {
+	let domain_ok = (sec_type == null)
+		? scope.permits(scopes, [pkg], verb)
+		: permits_domain(scopes, pkg, sec_type, verb);
+	if (permits_raw(scopes, pkg, verb) && domain_ok) return null;
+	return errors.error(ctx, "insufficient_scope",
+	                    sprintf("Token does not permit %s", action));
+}
+
 function normalize_section(s) {
 	let out = {
 		id: s['.name'],
@@ -112,9 +124,9 @@ function reject_dotted_options(body) {
 }
 
 function list(conn, ctx, scopes, pkg) {
-	if (!permits_raw(scopes, pkg, "ro") || !scope.permits(scopes, [pkg], "ro"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit listing %s via /raw/", pkg));
+	let denied = require_raw_scope(ctx, scopes, pkg, null, "ro",
+		sprintf("listing %s via /raw/", pkg));
+	if (denied != null) return denied;
 
 	let sections = [];
 	conn.uci_foreach(pkg, null, function(s) {
@@ -130,9 +142,9 @@ function get_one(conn, ctx, scopes, pkg, id) {
 		                    sprintf("No section %s.%s", pkg, id));
 
 	let sec_type = s['.type'];
-	if (!permits_raw(scopes, pkg, "ro") || !permits_domain(scopes, pkg, sec_type, "ro"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit reading %s.%s (type %s)", pkg, id, sec_type));
+	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "ro",
+		sprintf("reading %s.%s (type %s)", pkg, id, sec_type));
+	if (denied != null) return denied;
 
 	return errors.ok(ctx, normalize_section(s));
 }
@@ -149,9 +161,9 @@ function create(conn, ctx, scopes, pkg, body) {
 	if (dotted_err)
 		return errors.validation_failed(ctx, [dotted_err]);
 
-	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
+	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
+		sprintf("creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
+	if (denied != null) return denied;
 
 	let client_supplied_id = body.id != null && body.id != "";
 	let new_id;
@@ -202,9 +214,9 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
 	let sec_type = preview['.type'];
-	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
+	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
+		sprintf("writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
+	if (denied != null) return denied;
 
 	let dotted_err = reject_dotted_options(body);
 	if (dotted_err)
@@ -249,9 +261,9 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
 	let sec_type = preview['.type'];
-	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit writing %s.%s via /raw/", pkg, id));
+	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
+		sprintf("writing %s.%s via /raw/", pkg, id));
+	if (denied != null) return denied;
 
 	let dotted_err = reject_dotted_options(body);
 	if (dotted_err)
@@ -288,9 +300,9 @@ function remove(conn, ctx, scopes, pkg, id) {
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
 	let sec_type = preview['.type'];
-	if (!permits_raw(scopes, pkg, "rw") || !permits_domain(scopes, pkg, sec_type, "rw"))
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit deleting %s.%s via /raw/", pkg, id));
+	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
+		sprintf("deleting %s.%s via /raw/", pkg, id));
+	if (denied != null) return denied;
 
 	let reload = ucitrack.reload_services(conn, pkg);
 	let result = transaction.transaction(conn, {

@@ -204,10 +204,9 @@ function method_verb(method) {
 }
 
 function dispatch_resource(h, scopes, ctx, conn, method, domain, sub, id, extra, body, query) {
-	if (!scope.permits(scopes, [domain, sub], method_verb(method))) {
-		return errors.error(ctx, "insufficient_scope",
-		                    sprintf("Token does not permit this operation on %s:%s", domain, sub));
-	}
+	let denied = scope.require_or_deny(errors, ctx, scopes, [domain, sub], method_verb(method),
+		sprintf("this operation on %s:%s", domain, sub));
+	if (denied != null) return denied;
 
 	if (id == null) {
 		if (method == "GET")  return h.list(conn, ctx, query);
@@ -454,9 +453,9 @@ function batch_run_one(conn, sub_ctx, scopes, op) {
 	let sub = length(parts) >= 2 ? parts[1] : null;
 	let m = op.method;
 	let scope_path = sub != null ? [domain, sub] : [domain];
-	if (!scope.permits(scopes, scope_path, method_verb(m)))
-		return errors.error(sub_ctx, "insufficient_scope",
-			sprintf("Token does not permit %s on %s", m, op.path));
+	let denied = scope.require_or_deny(errors, sub_ctx, scopes, scope_path, method_verb(m),
+		sprintf("%s on %s", m, op.path));
+	if (denied != null) return denied;
 
 	let tgt = batch_resolve_target(parts);
 	if (tgt == null)
@@ -783,10 +782,9 @@ function dispatch(env) {
 			return { ctx, token,
 			         resp: errors.error(ctx, "method_not_allowed",
 			                            "metrics only supports GET") };
-		if (!scope.permits(token.scopes, ["uapi", "metrics"], "ro"))
-			return { ctx, token,
-			         resp: errors.error(ctx, "insufficient_scope",
-			                            "Token does not permit reading uapi/metrics") };
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "metrics"], "ro",
+			"reading uapi/metrics");
+		if (denied != null) return { ctx, token, resp: denied };
 		let text;
 		try { text = metrics.format_prometheus(); }
 		catch (e) { text = ""; }
@@ -807,10 +805,9 @@ function dispatch(env) {
 			return { ctx, token,
 			         resp: errors.error(ctx, "method_not_allowed",
 			                            "diagnostics only supports GET") };
-		if (!scope.permits(token.scopes, ["uapi", "diagnostics"], "ro"))
-			return { ctx, token,
-			         resp: errors.error(ctx, "insufficient_scope",
-			                            "Token does not permit reading uapi/diagnostics") };
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "diagnostics"], "ro",
+			"reading uapi/diagnostics");
+		if (denied != null) return { ctx, token, resp: denied };
 		return { ctx, token, resp: diagnostics_response(ctx) };
 	}
 
@@ -833,12 +830,10 @@ function dispatch(env) {
 		if (length(parts) > 2)
 			return { ctx, token,
 			         resp: errors.error(ctx, "not_found", "Unknown tokens sub-path") };
-		let scope_path = ["uapi", "tokens"];
 		let verb = method_verb(method);
-		if (!scope.permits(token.scopes, scope_path, verb))
-			return { ctx, token,
-			         resp: errors.error(ctx, "insufficient_scope",
-			                            "Token does not permit this operation on uapi/tokens") };
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "tokens"], verb,
+			"this operation on uapi/tokens");
+		if (denied != null) return { ctx, token, resp: denied };
 		let resp;
 		if (method == "GET" && id == null) {
 			resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
@@ -893,12 +888,10 @@ function dispatch(env) {
 	if (singleton_key != null) {
 		let h = SINGLETONS[singleton_key];
 		if (h != null) {
-			if (!scope.permits(token.scopes, singleton_scope_path, method_verb(method))) {
-				return { ctx, token,
-				         resp: errors.error(ctx, "insufficient_scope",
-				                            sprintf("Token does not permit this operation on %s",
-				                                    join("/", singleton_scope_path))) };
-			}
+			let denied = scope.require_or_deny(errors, ctx, token.scopes, singleton_scope_path,
+				method_verb(method),
+				sprintf("this operation on %s", join("/", singleton_scope_path)));
+			if (denied != null) return { ctx, token, resp: denied };
 			let resp;
 			if (method == "GET") resp = h.get(conn, ctx);
 			else if (method == "PATCH") resp = h.patch(conn, ctx, body);
@@ -921,13 +914,10 @@ function dispatch(env) {
 			                            sprintf("Unknown sub-path under packages/%s", sub)) };
 		}
 		let id  = length(parts) >= 3 ? parts[2] : null;
-		let scope_path = ["packages", sub];
 		let verb = method_verb(method);
-		if (!scope.permits(token.scopes, scope_path, verb)) {
-			return { ctx, token,
-			         resp: errors.error(ctx, "insufficient_scope",
-			                            sprintf("Token does not permit this operation on packages/%s", sub)) };
-		}
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["packages", sub], verb,
+			sprintf("this operation on packages/%s", sub));
+		if (denied != null) return { ctx, token, resp: denied };
 		let resp;
 		if (sub == "installed") {
 			if (method == "GET" && id == null)        resp = packages.list_installed(ctx);
@@ -958,13 +948,10 @@ function dispatch(env) {
 			                            sprintf("Unknown sub-path under system/%s", sub)) };
 		}
 		let id  = length(parts) >= 3 ? parts[2] : null;
-		let scope_path = ["system", sub];
 		let verb = method_verb(method);
-		if (!scope.permits(token.scopes, scope_path, verb)) {
-			return { ctx, token,
-			         resp: errors.error(ctx, "insufficient_scope",
-			                            sprintf("Token does not permit this operation on system/%s", sub)) };
-		}
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["system", sub], verb,
+			sprintf("this operation on system/%s", sub));
+		if (denied != null) return { ctx, token, resp: denied };
 		let resp;
 		if (sub == "password") {
 			if (method == "POST" && id == null) resp = system_access.set_password(ctx, body);
