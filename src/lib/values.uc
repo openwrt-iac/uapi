@@ -89,8 +89,23 @@ function ipv4_in_any_cidr(addr, cidr_list) {
 	return false;
 }
 
+// Byte-XOR-accumulate compare; runtime depends on the shorter length only,
+// not on where the first mismatching byte sits. Length difference folds into
+// the accumulator so unequal-length inputs always differ. Required for
+// closing the timing channel in auth's hash compare (see docs/security.md).
+function constant_time_equals(a, b) {
+	if (type(a) != "string" || type(b) != "string") return false;
+	let la = length(a), lb = length(b);
+	let n = (la < lb) ? la : lb;
+	let acc = la ^ lb;
+	for (let i = 0; i < n; i++)
+		acc |= ord(substr(a, i, 1)) ^ ord(substr(b, i, 1));
+	return acc == 0;
+}
+
 return {
 	normalize_bool, as_list, as_int,
 	is_valid_ipv4, is_valid_ip, is_valid_cidr,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
+	constant_time_equals,
 };

@@ -62,10 +62,15 @@ What uapi defends against, what it doesn't, and what the operator should do.
    An attacker with root on the box already has uci access; the API is a
    wrapper. We do not defend against in-process attacks once the workload
    ID is admin.
-2. **Side channels on the router.** Timing-correlated token guessing via
-   hash comparison is not constant-time. Mitigation: tokens are 128 random
-   bits - a per-request timing attack would need >2^60 requests to recover
-   the first hash byte, which the rate limit + audit log make impractical.
+2. **Fine-grained side channels.** The hash compare in auth is
+   constant-time (byte-XOR-accumulate via `values.constant_time_equals`)
+   and the authorize loop iterates every token regardless of where the
+   match occurs, so the dominant timing channel is closed. Pre-match work
+   (`type(t.salt) == "string"` checks, hash-function runtime itself) and
+   downstream paths (expiry check, CIDR match, scope lookup) are not
+   constant-time. A determined attacker with low-latency local access
+   could in principle still extract bits, but tokens are 128 random bits
+   and the rate limit + audit log make recovery infeasible in practice.
 3. **DoS by sustained legitimate traffic.** The rate limit guards per
    token; the request budget is per uhttpd worker / kernel limits. A
    determined operator who hands out 10,000 tokens at 100/s each can

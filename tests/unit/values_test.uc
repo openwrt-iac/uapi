@@ -112,3 +112,34 @@ t.describe('values.ipv4_in_any_cidr', () => {
 		t.assert_false(v.ipv4_in_any_cidr("1.2.3.4", "1.2.3.4/32"));
 	});
 });
+
+t.describe('values.constant_time_equals', () => {
+	t.it('returns true for identical strings', () => {
+		t.assert_true(v.constant_time_equals("abc", "abc"));
+		t.assert_true(v.constant_time_equals("", ""));
+		t.assert_true(v.constant_time_equals(
+			"5f495b0384f3cfbd8ca838fc3721d7e0acd00ff7b54e5d9a583af2b4e322f1c8",
+			"5f495b0384f3cfbd8ca838fc3721d7e0acd00ff7b54e5d9a583af2b4e322f1c8"));
+	});
+
+	t.it('returns false for strings of equal length differing in any byte', () => {
+		t.assert_false(v.constant_time_equals("abc", "abd"));
+		t.assert_false(v.constant_time_equals("abc", "Xbc"));
+		// last-byte difference must be caught (sanity check that the loop runs)
+		t.assert_false(v.constant_time_equals(
+			"5f495b0384f3cfbd8ca838fc3721d7e0acd00ff7b54e5d9a583af2b4e322f1c8",
+			"5f495b0384f3cfbd8ca838fc3721d7e0acd00ff7b54e5d9a583af2b4e322f1c9"));
+	});
+
+	t.it('returns false for different-length strings', () => {
+		t.assert_false(v.constant_time_equals("abc", "abcd"));
+		t.assert_false(v.constant_time_equals("abcd", "abc"));
+		t.assert_false(v.constant_time_equals("", "a"));
+	});
+
+	t.it('returns false for non-string inputs', () => {
+		t.assert_false(v.constant_time_equals(null, "abc"));
+		t.assert_false(v.constant_time_equals("abc", null));
+		t.assert_false(v.constant_time_equals(123, "123"));
+	});
+});
