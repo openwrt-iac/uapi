@@ -56,6 +56,10 @@ const RESOURCES = {
 	"snmpd:groups":        handler.make(load_resource("snmpd:groups", "snmpd.groups.uc")),
 	"snmpd:accesses":      handler.make(load_resource("snmpd:accesses", "snmpd.accesses.uc")),
 	"vnstat:interfaces":   handler.make(load_resource("vnstat:interfaces", "vnstat.interfaces.uc")),
+	"mwan3:interfaces":   handler.make(load_resource("mwan3:interfaces", "mwan3.interfaces.uc")),
+	"mwan3:members":      handler.make(load_resource("mwan3:members", "mwan3.members.uc")),
+	"mwan3:policies":     handler.make(load_resource("mwan3:policies", "mwan3.policies.uc")),
+	"mwan3:rules":        handler.make(load_resource("mwan3:rules", "mwan3.rules.uc")),
 };
 
 const SINGLETONS = {
@@ -68,6 +72,7 @@ const SINGLETONS = {
 	"lldpd:config":       handler.make_singleton(load_resource("lldpd:config", "lldpd.config.uc")),
 	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config", "prometheus_node_exporter_lua.config.uc")),
 	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
+	"mwan3:globals":      handler.make_singleton(load_resource("mwan3:globals", "mwan3.globals.uc")),
 };
 
 // BARE variants run inside /batch's outer multi_transaction (skip own lock,

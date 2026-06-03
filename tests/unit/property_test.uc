@@ -35,6 +35,11 @@ const RESOURCES = [
 	{ name: "prometheus_node_exporter_lua.config", file: "prometheus_node_exporter_lua.config.uc" },
 	{ name: "vnstat.config",        file: "vnstat.config.uc" },
 	{ name: "vnstat.interfaces",    file: "vnstat.interfaces.uc" },
+	{ name: "mwan3.globals",        file: "mwan3.globals.uc" },
+	{ name: "mwan3.interfaces",     file: "mwan3.interfaces.uc" },
+	{ name: "mwan3.members",        file: "mwan3.members.uc" },
+	{ name: "mwan3.policies",       file: "mwan3.policies.uc" },
+	{ name: "mwan3.rules",          file: "mwan3.rules.uc" },
 ];
 
 // PROPERTY_ITERS lets CI dial up coverage without slowing local `make test`.

@@ -173,6 +173,26 @@
 			"description": "Per-iface vnstat enable."
 		},
 		{
+			"name": "Mwan3 / Globals",
+			"description": "mwan3 multi-WAN tuning singleton (mark mask, logging, route-monitor interval)."
+		},
+		{
+			"name": "Mwan3 / Interfaces",
+			"description": "Per-WAN tracking config: track_ip probes, failure/recovery thresholds, family."
+		},
+		{
+			"name": "Mwan3 / Members",
+			"description": "(interface, metric, weight) tuples consumed by policies."
+		},
+		{
+			"name": "Mwan3 / Policies",
+			"description": "Member groups with a last-resort fallback. Cross-refs `mwan3:members`."
+		},
+		{
+			"name": "Mwan3 / Rules",
+			"description": "Traffic-match -> policy bindings. Cross-refs `mwan3:policies`."
+		},
+		{
 			"name": "Raw / Generic uci passthrough",
 			"description": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target."
 		},
@@ -282,7 +302,12 @@
 				"Lldpd / Config",
 				"Prometheus Node Exporter Lua / Config",
 				"Vnstat / Config",
-				"Vnstat / Interfaces"
+				"Vnstat / Interfaces",
+				"Mwan3 / Globals",
+				"Mwan3 / Interfaces",
+				"Mwan3 / Members",
+				"Mwan3 / Policies",
+				"Mwan3 / Rules"
 			]
 		},
 		{
@@ -11458,6 +11483,1774 @@
 				]
 			}
 		},
+		"/mwan3/globals": {
+			"get": {
+				"summary": "Get the mwan3 singleton",
+				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Globals"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Globals"
+				]
+			},
+			"patch": {
+				"summary": "Update the mwan3 singleton",
+				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Globals"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Globals"
+				]
+			}
+		},
+		"/mwan3/interfaces": {
+			"get": {
+				"summary": "List interfaces",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/Mwan3Interfaces"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			},
+			"post": {
+				"summary": "Create a interfaces",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Interfaces"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Interfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			}
+		},
+		"/mwan3/interfaces/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one interfaces",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Interfaces"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			},
+			"put": {
+				"summary": "Replace a interfaces",
+				"description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Interfaces"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Interfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a interfaces",
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "merge-patch partial body"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Interfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			},
+			"delete": {
+				"summary": "Delete a interfaces",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			}
+		},
+		"/mwan3/interfaces/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous interfaces",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Interfaces"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				]
+			}
+		},
+		"/mwan3/members": {
+			"get": {
+				"summary": "List members",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/Mwan3Members"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			},
+			"post": {
+				"summary": "Create a members",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Members"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Members"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			}
+		},
+		"/mwan3/members/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one members",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Members"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			},
+			"put": {
+				"summary": "Replace a members",
+				"description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Members"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Members"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a members",
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "merge-patch partial body"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Members"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			},
+			"delete": {
+				"summary": "Delete a members",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			}
+		},
+		"/mwan3/members/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous members",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Members"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				]
+			}
+		},
+		"/mwan3/policies": {
+			"get": {
+				"summary": "List policies",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/Mwan3Policies"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			},
+			"post": {
+				"summary": "Create a policies",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Policies"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Policies"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			}
+		},
+		"/mwan3/policies/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one policies",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Policies"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			},
+			"put": {
+				"summary": "Replace a policies",
+				"description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Policies"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Policies"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a policies",
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "merge-patch partial body"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Policies"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			},
+			"delete": {
+				"summary": "Delete a policies",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			}
+		},
+		"/mwan3/policies/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous policies",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Policies"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				]
+			}
+		},
+		"/mwan3/rules": {
+			"get": {
+				"summary": "List rules",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/Mwan3Rules"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			},
+			"post": {
+				"summary": "Create a rules",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Rules"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Rules"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			}
+		},
+		"/mwan3/rules/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one rules",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Rules"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			},
+			"put": {
+				"summary": "Replace a rules",
+				"description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Mwan3Rules"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Rules"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a rules",
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "merge-patch partial body"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Rules"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			},
+			"delete": {
+				"summary": "Delete a rules",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			}
+		},
+		"/mwan3/rules/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous rules",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3Rules"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				]
+			}
+		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -16627,6 +18420,428 @@
 				},
 				"required": [
 					"interface"
+				]
+			},
+			"Mwan3Globals": {
+				"type": "object",
+				"description": "uapi resource backed by uci mwan3.globals",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"mmx_mask": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^0x[0-9A-Fa-f]+$",
+						"description": "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)."
+					},
+					"local_source": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Network interface used as source for locally-generated traffic; 'none' to disable."
+					},
+					"logging": {
+						"type": "boolean",
+						"description": "Enable mwan3 daemon logging via logread."
+					},
+					"loglevel": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"emerg",
+							"alert",
+							"crit",
+							"err",
+							"warn",
+							"notice",
+							"info",
+							"debug"
+						],
+						"description": "syslog facility level (notice/info/debug/etc.)."
+					},
+					"rtmon_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 86400,
+						"description": "Seconds between netlink route-monitor polls."
+					},
+					"runtime": {
+						"type": "object"
+					}
+				}
+			},
+			"Mwan3Interfaces": {
+				"type": "object",
+				"description": "uapi resource backed by uci mwan3.interface",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"family": {
+						"type": "string",
+						"enum": [
+							"ipv4",
+							"ipv6"
+						],
+						"description": "Address family this interface tracks."
+					},
+					"track_ip": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "List of IPs to ping for reachability."
+					},
+					"track_method": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ping",
+							"arping",
+							"httping",
+							"nping-tcp",
+							"nping-udp",
+							null
+						]
+					},
+					"reliability": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Min reachable track_ip count to call this interface up."
+					},
+					"count": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 10,
+						"description": "Probes per cycle per track_ip."
+					},
+					"size": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65507,
+						"description": "Probe payload size in bytes."
+					},
+					"max_ttl": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 255
+					},
+					"check_quality": {
+						"type": "boolean",
+						"description": "Enable failure_latency/failure_loss thresholds."
+					},
+					"failure_latency": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"failure_loss": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 100
+					},
+					"recovery_latency": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"recovery_loss": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 100
+					},
+					"timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 60
+					},
+					"interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"failure_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"recovery_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"keep_failure_interval": {
+						"type": "boolean"
+					},
+					"down": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Consecutive failed probes before marking down."
+					},
+					"up": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Consecutive successful probes before marking up."
+					},
+					"flush_conntrack": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"enum": [
+								"ifup",
+								"ifdown",
+								"connected",
+								"disconnected",
+								"never"
+							]
+						},
+						"description": "Events that flush conntrack table."
+					},
+					"runtime": {
+						"type": "object"
+					}
+				},
+				"required": [
+					"family"
+				]
+			},
+			"Mwan3Members": {
+				"type": "object",
+				"description": "uapi resource backed by uci mwan3.member",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"interface": {
+						"type": "string",
+						"description": "Name of an mwan3:interfaces section."
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000,
+						"description": "Lower wins. Members in the same policy with equal metric share load."
+					},
+					"weight": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000,
+						"description": "Relative load-share weight among equal-metric members."
+					},
+					"runtime": {
+						"type": "object"
+					}
+				},
+				"required": [
+					"interface"
+				]
+			},
+			"Mwan3Policies": {
+				"type": "object",
+				"description": "uapi resource backed by uci mwan3.policy",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"last_resort": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"unreachable",
+							"blackhole",
+							null
+						],
+						"description": "Fallback when no member is reachable."
+					},
+					"use_members": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Member section names. Equal metric balances; lower metric is preferred."
+					},
+					"runtime": {
+						"type": "object"
+					}
+				},
+				"required": [
+					"use_members"
+				]
+			},
+			"Mwan3Rules": {
+				"type": "object",
+				"description": "uapi resource backed by uci mwan3.rule",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"family": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ipv4",
+							"ipv6",
+							null
+						]
+					},
+					"proto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"tcp",
+							"udp",
+							"icmp",
+							"all",
+							null
+						]
+					},
+					"src_ip": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IP address or CIDR."
+					},
+					"src_port": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Single port or 'lo-hi' range."
+					},
+					"dest_ip": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IP address or CIDR."
+					},
+					"dest_port": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Single port or 'lo-hi' range."
+					},
+					"sticky": {
+						"type": "boolean",
+						"description": "Pin matching connections to the same member for `timeout` seconds."
+					},
+					"timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 86400
+					},
+					"ipset": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match destination against an ipset; bypasses src/dest_ip."
+					},
+					"use_policy": {
+						"type": "string",
+						"description": "Name of an mwan3:policies section."
+					},
+					"logging": {
+						"type": "boolean"
+					},
+					"runtime": {
+						"type": "object"
+					}
+				},
+				"required": [
+					"use_policy"
 				]
 			}
 		},
