@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration coverage bench soak lint lint-emdash lint-syntax openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -8,6 +8,7 @@ help:
 	@echo "  test               run unit tests and lint"
 	@echo "  test-unit          run unit tests only"
 	@echo "  test-integration   boot VM, run integration tests, stop VM (sudo required for vm-setup)"
+	@echo "  test-property      high-iteration property fuzz pass (PROPERTY_ITERS=1000 default)"
 	@echo "  coverage           structural test-coverage inventory (one row per module)"
 	@echo "  bench              read-only latency benchmark (UAPI_BASE + UAPI_TOKEN required)"
 	@echo "  soak               long-duration read-only load test (UAPI_BASE + UAPI_TOKEN required)"
@@ -23,6 +24,12 @@ test: lint test-unit
 
 test-unit:
 	@$(UCODE) $(UNIT_PATHS) tests/run_unit.uc
+
+# High-iteration property/fuzz pass. Default 1000/resource (vs 200 in
+# `make test`) so a regression in fuzz coverage shows up as a distinct
+# CI step rather than vanishing into the unit-test output.
+test-property:
+	@PROPERTY_ITERS=$${PROPERTY_ITERS:-1000} $(UCODE) $(UNIT_PATHS) tests/run_unit.uc
 
 coverage:
 	@$(UCODE) $(UNIT_PATHS) tests/coverage.uc

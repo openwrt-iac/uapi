@@ -37,11 +37,17 @@ const RESOURCES = [
 	{ name: "vnstat.interfaces",    file: "vnstat.interfaces.uc" },
 ];
 
-t.describe('property: validate() is total across every resource', () => {
+// PROPERTY_ITERS lets CI dial up coverage without slowing local `make test`.
+// Local default is 200 per resource (sub-second total); CI runs at 1000+ via
+// `make test-property`.
+let ITERS = int(getenv("PROPERTY_ITERS") ?? "200");
+if (ITERS < 1) ITERS = 200;
+
+t.describe(sprintf("property: validate() is total across every resource (%d iter each)", ITERS), () => {
 	for (let entry in RESOURCES) {
-		t.it(sprintf("%s: 200 random bodies -> no throws", entry.name), () => {
+		t.it(sprintf("%s: %d random bodies -> no throws", entry.name, ITERS), () => {
 			let r = loadfile('src/resources/' + entry.file)();
-			let surprises = ph.check_validate_total(r, 200, 0x9e3779b1);
+			let surprises = ph.check_validate_total(r, ITERS, 0x9e3779b1);
 			if (length(surprises) > 0) {
 				t.assert_equal(sprintf("first surprise: %J", surprises[0]),
 				               "(no surprises)");
