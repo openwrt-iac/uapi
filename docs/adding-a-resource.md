@@ -22,6 +22,19 @@ return {
     toUci:   function(json) { ... },          // request JSON -> uci option dict
     validate: function(json, conn, id) { ... return []; }, // {field, code, message}[]
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
+
+    // OpenAPI hints (consumed by build/gen_openapi.uc, not by the runtime):
+    openapi_required:    ["field1", "field2"],    // emitted as `required: [...]` on the JSON Schema
+    openapi_conditional: [                        // emitted as `allOf: [...]`; if/then/required
+        { if:   { properties: { proto: { const: "static" } } },
+          then: { required: ["ipaddr"] } },
+    ],
+    openapi_runtime: {                            // replaces the opaque `runtime: {type: object}`
+        type: "object",
+        properties: { up: { type: "boolean" }, ... },
+        description: "Populated from ubus ...",
+    },
+
     // Optional, less common:
     merge_for_patch: function(existing, existing_json, body) { ... },  // nested-object merge
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
@@ -52,6 +65,16 @@ section into this resource's ETag. Use it when a write to the referenced
 type should invalidate dependent ETags (`firewall.rules` -> `firewall:zone`,
 `sqm.queues` -> `network:interface`, etc.). See `docs/architecture.md`
 "ETag derivation" for the full mechanism.
+
+`openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
+up by `build/gen_openapi.uc` and produce a richer machine-readable
+contract for code generators (Terraform provider, OpenAPI client libs).
+The runtime never reads them. Mirror what `validate()` enforces:
+unconditional `if (json.X == null) push(errs, {required})` goes in
+`openapi_required`; `if (json.proto == "static" && json.ipaddr == null)`
+becomes an `openapi_conditional` `if/then/required` block. For resources
+that populate a non-empty `runtime: {...}`, define its sub-shape in
+`openapi_runtime` so clients can see the keys without reading source.
 
 For cross-reference validation (e.g. "this firewall rule's `src_zone` must be a real zone"), use the `conn` argument. See `firewall.rules.uc`'s `load_zones(conn)` for the pattern.
 

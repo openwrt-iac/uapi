@@ -104,6 +104,8 @@ Every response carries:
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`.                                       |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
+| `X-Reload-Status`            | 2xx on writes                       | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Services`          | 2xx on writes when status=ok        | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
 
 ## Retry-After
 

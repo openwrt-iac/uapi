@@ -109,6 +109,10 @@ return {
     toUci:   function(json) {...},         // request JSON → uci option dict
     validate: function(json, conn, id) {...return [];}, // cross-field / cross-section rules
     merge_for_patch: function(existing, existing_json, body) {...}, // optional, nested-object patches
+    // Optional OpenAPI-only hints (consumed by build/gen_openapi.uc, not by the runtime):
+    openapi_required:    [...],            // unconditional required fields
+    openapi_conditional: [...],            // if/then/required for proto/type discriminators
+    openapi_runtime:     { ... },          // typed sub-shape for resources that populate runtime
 };
 ```
 
