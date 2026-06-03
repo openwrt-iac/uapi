@@ -14,7 +14,10 @@ const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
 const LAST_USED_DIR = "/var/run/uapi-token-update";
 const LAST_USED_THROTTLE_SECONDS = 60;
-const NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$/;
+// uci section-name charset. Hyphens are NOT permitted by libuci; if we let
+// one through, cursor.set returns true but the write silently never persists
+// and the caller gets a fake bearer.
+const NAME_RE = /^[A-Za-z0-9_]{1,63}$/;
 
 function random_hex(n_bytes) {
 	let f = fs.open("/dev/urandom", "r");

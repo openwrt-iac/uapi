@@ -48,7 +48,7 @@ The package's `uci-defaults` hook adds `list ucode_prefix '/api/v2=/usr/share/ua
 
 ```sh
 # On the router (local console or SSH):
-uapi-token create --name terraform-prod --scope '*:rw' --expires-in 90d
+uapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d
 ```
 
 The cleartext bearer is printed exactly once. Save it. The router stores only `salt + sha256(salt:bearer)` going forward. Tokens can also carry `--allowed-cidr` (source-IP pinning) and per-token rate-limit overrides.

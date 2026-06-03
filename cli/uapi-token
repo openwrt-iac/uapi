@@ -12,6 +12,10 @@ let values = require('values');
 
 const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
+// uci section-name charset. Hyphens are NOT permitted; libuci rejects with
+// "Invalid argument" and ucode-mod-uci silently swallows the failure, so we
+// have to catch this at the CLI boundary or the operator gets a fake bearer.
+const NAME_RE = /^[A-Za-z0-9_]+$/;
 
 function random_hex(n_bytes) {
 	let f = fs.open("/dev/urandom", "r");
@@ -79,6 +83,9 @@ function ensure_package() {
 
 function cmd_create(opts) {
 	if (!opts.name) die("uapi-token create: --name required");
+	if (!match(opts.name, NAME_RE))
+		die(sprintf("uapi-token create: --name %J is invalid (must match [A-Za-z0-9_]+; "
+		            + "use underscores instead of hyphens)", opts.name));
 	if (length(opts.scopes) == 0) die("uapi-token create: at least one --scope required");
 
 	if (!opts.force)

@@ -13,7 +13,7 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
                   [--force]
 ```
 
-- `--name`: human-readable label. Must be unique. Surfaces in the audit log on every authed request.
+- `--name`: human-readable label. Must be unique. Must match `[A-Za-z0-9_]+` (uci section-name charset; use underscores instead of hyphens). Surfaces in the audit log on every authed request.
 - `--scope`: at least one. May repeat. Validated against the known scope tree (see below); `--force` bypasses.
 - `--expires-in`: optional duration. Suffix is one of `s`/`m`/`h`/`d`. The token returns `401 invalid_token` with `message: "Token expired"` after the deadline passes.
 - `--allowed-cidr`: optional source-IP allowlist (IPv4 CIDRs only; may repeat). When set, the token returns `401 invalid_token` with `message: "Source IP not permitted for this token"` from any other source. Bad CIDR shape rejected at mint time.
@@ -36,12 +36,12 @@ wire:
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
      -X POST https://router/api/v2/tokens \
      -d '{
-       "name": "ci-bot",
+       "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],
        "expires_in_seconds": 3600,
        "allowed_cidrs": ["10.0.0.0/24"]
      }'
-# response: { "bearer": "<cleartext-once>", "name": "ci-bot" }
+# response: { "bearer": "<cleartext-once>", "name": "ci_bot" }
 ```
 
 The requested scopes must be a strict subset of the caller's. Escalation
@@ -50,8 +50,8 @@ that's already in use returns `409 conflict`.
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" https://router/api/v2/tokens
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v2/tokens/ci-bot
-curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v2/tokens/ci-bot
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v2/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v2/tokens/ci_bot
 ```
 
 GET responses never include `salt` or `hash`.

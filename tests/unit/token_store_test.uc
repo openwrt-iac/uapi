@@ -94,6 +94,19 @@ t.describe('token_store.create validation', () => {
 		t.assert_equal(r.errors[0].field, "name");
 	});
 
+	t.it('rejects hyphenated names (uci section-name charset excludes -)', () => {
+		// Hyphens slip past the wire as valid JSON strings but libuci's section-
+		// name validator rejects them, and ucode-mod-uci's cursor.set silently
+		// returns true on the rejection. Without this guard the caller gets a
+		// fake bearer that never works.
+		let c = bus.stub({});
+		let r = token_store.create(c,
+			{ name: "smoke-rc1", scopes: ["*:ro"] },
+			["*:rw"], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "validation");
+		t.assert_equal(r.errors[0].field, "name");
+	});
+
 	t.it('rejects missing scopes', () => {
 		let c = bus.stub({});
 		let r = token_store.create(c,
