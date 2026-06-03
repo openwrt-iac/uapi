@@ -7,6 +7,60 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.0-rc3] - 2026-06-03
+
+Third release candidate for v2.0. Folds in four hardening items and three
+opportunistic resource curations from `docs/roadmap.md`. All changes are
+additive (new error-envelope field, new metric label, new resource
+endpoints, new scopes); rc2's wire surface is preserved.
+
+### Added
+
+- **mwan3 curation** (5 resources): `mwan3/interfaces` (per-WAN
+  tracking), `mwan3/members`, `mwan3/policies`, `mwan3/rules`, and the
+  `mwan3/globals` singleton. Cross-reference validation enforces
+  `rule.use_policy -> policy`, `policy.use_members[] -> member`, and
+  `member.interface -> interface`. `depends_on` chains those into
+  ETag-aware dependency mixing.
+- **usteer curation** (1 singleton, `usteer/config`): passive band-
+  steering tuning. 33 options including `ssid_list` filter and two log
+  list options. (`ssid_list` is a uci list option on the singleton, not
+  a separate section type as the original roadmap implied.)
+- **openvpn curation** (1 CRUD, `openvpn/instances`): per-tunnel config
+  with ~50 options. `key`/`tls_auth`/`pkcs12` are write-only (read
+  surfaces `has_<field>: bool`); `merge_for_patch` carries values
+  forward so unrelated PATCHes do not wipe credentials. Filesystem path
+  fields are validated against `^/[A-Za-z0-9_.+/-]+$` to reject
+  shell-metacharacters.
+- **Per-token request budget metric**: `uapi_requests_total` now carries
+  a `token_id` label (operator-configured cardinality, bounded). Pre-auth
+  failures (401 before authorize completes) fold to `token_id="-"`.
+- **`/diagnostics` recent_errors ring buffer**: best-effort 20-entry
+  sliding window of error envelopes emitted by the parent uhttpd VM.
+  Each entry carries `{ts, request_id, code, status, method, path,
+  message}`. Surface for post-incident debugging without syslog
+  forwarding.
+
+### Hardened
+
+- **Constant-time hash compare in auth**: `values.constant_time_equals`
+  closes the bulk timing channel previously disclosed under
+  `docs/security.md` "Threat model out of scope". The authorize loop
+  also no longer short-circuits on first match, removing the
+  position-of-token timing leak.
+- **Property-fuzz gate**: new `make test-property` runs at 1000
+  iterations per resource (vs 200 in regular `make test`). Wired into
+  CI as a distinct step so a fuzz regression has its own pass/fail line.
+
+### Internal
+
+- New scope paths: `mwan3`, `mwan3:globals/interfaces/members/policies/
+  rules`, `usteer`, `usteer:config`, `openvpn`, `openvpn:instances`.
+- New module `src/lib/error_ring.uc` (single-file JSON ring at
+  `/tmp/uapi-error-ring/ring.json`; atomic rename pattern shared with
+  ratelimit and idempotency).
+- 37 new unit tests + 8 new property-fuzz subjects. 665/665 tests green.
+
 ## [2.0.0-rc2] - 2026-06-03
 
 Second release candidate for v2.0. No wire-protocol changes vs rc1; the wire
