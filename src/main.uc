@@ -591,6 +591,18 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	};
 }
 
+function metrics_response(ctx) {
+	let text;
+	try { text = metrics.format_prometheus(); }
+	catch (e) { text = ""; }
+	return {
+		status: 200,
+		headers: { "Content-Type": "text/plain; version=0.0.4",
+		           "X-Request-Id": ctx.request_id },
+		body: text,
+	};
+}
+
 function diagnostics_response(ctx) {
 	let resources_loaded = [];
 	for (let k in RESOURCE_SOURCES) push(resources_loaded, k);
@@ -785,15 +797,7 @@ function dispatch(env) {
 		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "metrics"], "ro",
 			"reading uapi/metrics");
 		if (denied != null) return { ctx, token, resp: denied };
-		let text;
-		try { text = metrics.format_prometheus(); }
-		catch (e) { text = ""; }
-		return { ctx, token, resp: {
-			status: 200,
-			headers: { "Content-Type": "text/plain; version=0.0.4",
-			           "X-Request-Id": ctx.request_id },
-			body: text,
-		} };
+		return { ctx, token, resp: metrics_response(ctx) };
 	}
 
 	if (path == "/batch") {
