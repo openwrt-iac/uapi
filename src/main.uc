@@ -415,11 +415,12 @@ function path_template(method, parts) {
 	return join("/", out);
 }
 
-function record_metrics_for(method, path, status, duration_ms) {
+function record_metrics_for(method, path, status, duration_ms, token) {
 	let parts = split_path(path);
 	let tpl = path_template(method, parts);
 	if (tpl == "/healthz" || tpl == "/metrics") return;
-	metrics.record_request(method, tpl, status, duration_ms);
+	let token_id = (token != null) ? token.name : null;
+	metrics.record_request(method, tpl, status, duration_ms, token_id);
 }
 
 // Pull (package, reload_services) from a sub-request path. Returns null if
@@ -1025,7 +1026,7 @@ global.handle_request = function(env) {
 		catch (_) {}
 	}
 
-	try { record_metrics_for(method, path, resp.status, duration_ms); } catch (_) {}
+	try { record_metrics_for(method, path, resp.status, duration_ms, token); } catch (_) {}
 	if (resp.status == 422 && resp.body != null && type(resp.body) == "object"
 	    && type(resp.body.errors) == "array") {
 		let parts = split_path(path);

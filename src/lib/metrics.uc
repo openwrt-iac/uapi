@@ -113,13 +113,17 @@ function observe(series, labels, value) {
 	inc(series + "_count", labels, 1);
 }
 
-// record_request is the high-level entry called from the dispatcher.
-function record_request(method, path_template, status, duration_ms) {
+// token_id is optional: null for pre-auth failures (401 invalid_token before
+// authorize completes) and folds to "-" so the series row still aggregates.
+// Cardinality stays bounded because token_id ranges over operator-configured
+// tokens (a small set), not request paths.
+function record_request(method, path_template, status, duration_ms, token_id) {
 	let m = _safe_label(method);
 	let p = _safe_label(path_template);
 	let s = _safe_label("" + status);
 	if (m == null || p == null || s == null) return;
-	let labels = { method: m, path: p, status: s };
+	let tid = (token_id == null) ? "-" : (_safe_label(token_id) ?? "-");
+	let labels = { method: m, path: p, status: s, token_id: tid };
 	inc("uapi_requests_total", labels, 1);
 	let no_status = { method: m, path: p };
 	observe("uapi_request_duration_seconds", no_status, duration_ms / 1000.0);

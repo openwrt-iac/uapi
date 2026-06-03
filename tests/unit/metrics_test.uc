@@ -67,6 +67,20 @@ t.describe('metrics.record_request', () => {
 		// percent-encoded on disk).
 		t.assert_true(index(out, "path=\"/firewall/rules/:id\"") >= 0);
 	});
+
+	t.it('includes token_id label when supplied', () => {
+		wipe();
+		metrics.record_request("GET", "/firewall/rules", 200, 3, "ci_bot");
+		let out = metrics.format_prometheus();
+		t.assert_true(index(out, "token_id=\"ci_bot\"") >= 0);
+	});
+
+	t.it('folds missing token_id to "-" so pre-auth failures still count', () => {
+		wipe();
+		metrics.record_request("GET", "/firewall/rules", 401, 1, null);
+		let out = metrics.format_prometheus();
+		t.assert_true(index(out, "token_id=\"-\"") >= 0);
+	});
 });
 
 t.describe('metrics.record_validate_error and record_lock_contention', () => {

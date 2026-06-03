@@ -133,7 +133,7 @@ Series:
 
 | Series | Type | Labels |
 |---|---|---|
-| `uapi_requests_total` | counter | `method`, `path` (template, e.g. `/firewall/rules/:id`), `status` |
+| `uapi_requests_total` | counter | `method`, `path` (template, e.g. `/firewall/rules/:id`), `status`, `token_id` (`-` if pre-auth) |
 | `uapi_request_duration_seconds_bucket` | histogram | `method`, `path`, `le` |
 | `uapi_request_duration_seconds_count` | counter | `method`, `path` |
 | `uapi_rate_limit_drops_total` | counter | `token_id` |
@@ -142,7 +142,10 @@ Series:
 
 Path templates are normalized (`/firewall/rules/:id` not the concrete
 ULID) to keep label cardinality bounded as clients create/destroy
-resources.
+resources. The `token_id` label is bounded by the operator-configured
+token count (typically a small set); pre-auth failures (401 before
+authorize completes) carry `token_id="-"` so the series row still
+aggregates.
 
 Sample Prometheus scrape config:
 
