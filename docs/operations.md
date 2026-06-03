@@ -192,21 +192,32 @@ source-IP enforcement.
 
 ## Diagnostics
 
-`GET /api/v2/diagnostics` returns version, uptime, loaded resources, and
-current lock holders. Scope: `uapi:diagnostics:ro`.
+`GET /api/v2/diagnostics` returns version, uptime, loaded resources,
+current lock holders, and the last 20 error envelopes emitted by the
+parent uhttpd VM. Scope: `uapi:diagnostics:ro`.
 
 ```json
 {
   "version": "2.0.0",
   "uptime_seconds": 123456,
-  "resources_loaded": ["firewall:rules", "firewall:zones", ...],
+  "resources_loaded": ["firewall:rules", "firewall:zones", "..."],
   "lock_state": {
     "global_held": false,
     "per_package": {}
   },
+  "recent_errors": [
+    { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
+      "status": 422, "method": "POST", "path": "/api/v2/firewall/rules",
+      "message": "Request body failed validation" }
+  ],
   "request_id": "01HX..."
 }
 ```
+
+The `recent_errors` ring is best-effort: writes to `/tmp/uapi-error-ring/`
+must never disrupt the actual response, so a disk-full or permission
+failure simply produces an empty ring rather than a 5xx on the original
+request. The ring caps at 20 entries (oldest dropped first).
 
 Useful for "is anything stuck holding the global lock?" - a non-empty
 `per_package` map under steady state would point at a wedged write

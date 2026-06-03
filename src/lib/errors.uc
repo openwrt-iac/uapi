@@ -1,4 +1,5 @@
 let ids = require('ids');
+let error_ring = require('error_ring');
 
 const STATUS_BY_CODE = {
 	bad_request: 400,
@@ -93,6 +94,20 @@ function error(ctx, code, message, extras) {
 	if (status == 401)
 		headers["WWW-Authenticate"] =
 			sprintf("Bearer realm=\"uapi\", error=\"%s\"", code);
+	// Record into the diagnostics ring. Best-effort: error response wins
+	// even if logging fails (disk full, permission, etc.). The append helper
+	// already swallows exceptions; the extra null-check guards against
+	// callers that synthesise envelopes without going through new_context.
+	if (ctx != null && ctx.request_id != null)
+		error_ring.append({
+			ts: time(),
+			request_id: ctx.request_id,
+			code: code,
+			status: status,
+			method: ctx.method,
+			path: ctx.path,
+			message: message,
+		});
 	return { status, headers, body };
 }
 

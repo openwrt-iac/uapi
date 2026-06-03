@@ -18,6 +18,7 @@ let token_store = require("token_store");
 let ratelimit = require("ratelimit");
 let metrics = require("metrics");
 let idempotency = require("idempotency");
+let error_ring = require("error_ring");
 
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
@@ -633,6 +634,7 @@ function diagnostics_response(ctx) {
 		uptime_seconds: uptime_s,
 		resources_loaded,
 		lock_state: { global_held, per_package: pkg_held },
+		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
 	});
 }
@@ -660,6 +662,8 @@ function dispatch(env) {
 	let ctx = errors.new_context(inbound_rid);
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
+	ctx.method = method;
+	ctx.path = path;
 
 	let tls = tls_check(env);
 	if (!tls.ok)

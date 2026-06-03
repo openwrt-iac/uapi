@@ -13660,6 +13660,50 @@
 							}
 						}
 					},
+					"recent_errors": {
+						"type": "array",
+						"maxItems": 20,
+						"description": "Best-effort ring of the last 20 error envelopes emitted by this uhttpd parent VM. May be empty (no errors yet, or /tmp ring file unreadable).",
+						"items": {
+							"type": "object",
+							"required": [
+								"ts",
+								"request_id",
+								"code",
+								"status"
+							],
+							"properties": {
+								"ts": {
+									"type": "integer",
+									"description": "Unix epoch seconds when the error was recorded."
+								},
+								"request_id": {
+									"type": "string"
+								},
+								"code": {
+									"type": "string"
+								},
+								"status": {
+									"type": "integer"
+								},
+								"method": {
+									"type": [
+										"string",
+										"null"
+									]
+								},
+								"path": {
+									"type": [
+										"string",
+										"null"
+									]
+								},
+								"message": {
+									"type": "string"
+								}
+							}
+						}
+					},
 					"request_id": {
 						"type": "string"
 					}
