@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=uapi
 PKG_VERSION:=$(shell sed 's/-/_/g' $(CURDIR)/files/VERSION)
-PKG_RELEASE:=3
+PKG_RELEASE:=1
 
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=Guy Godfroy <guy.godfroy@gugod.fr>

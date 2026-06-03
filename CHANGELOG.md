@@ -7,7 +7,11 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
-## [2.0.0] - 2026-06-02
+## [2.0.0-rc1] - 2026-06-03
+
+Release candidate for v2.0. The wire surface is locked at this tag; final
+v2.0.0 will be tagged from this same commit (or a small set of cherry-picked
+fixes on top) once downstream consumers have had time to file feedback.
 
 Major bump. One uapi installation serves exactly one API major; the v1 surface
 no longer mounts under the v2 package. Operators who need v1 keep the 1.2.1
@@ -156,10 +160,11 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
   reproducible builds, arch-neutrality rationale, pre-release checklist,
   rollback.
 
-### Post-feedback amendments (v2.0.0 retag)
+### OpenAPI completeness and contract hardening
 
-Acted on a structured review from the Terraform-provider author before
-the announcement. v2.0.0 was retagged with these in place.
+The wire surface above is the source-of-truth uapi serves at runtime. These
+items make the OpenAPI document a complete machine-readable contract over
+that surface and tighten a few edges that downstream codegen exercises.
 
 - **OpenAPI spec is now a complete machine-readable contract.** Every
   curated resource carries `required: [...]` derived from `validate()`'s
