@@ -197,6 +197,10 @@
 			"description": "Passive band-steering daemon singleton (signal thresholds, roam scan intervals, SSID filter)."
 		},
 		{
+			"name": "Openvpn / Instances",
+			"description": "Per-tunnel OpenVPN config. Filesystem paths for ca/cert/dh; key/tls_auth/pkcs12 are write-only (reads return has_<field>)."
+		},
+		{
 			"name": "Raw / Generic uci passthrough",
 			"description": "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target."
 		},
@@ -312,7 +316,8 @@
 				"Mwan3 / Members",
 				"Mwan3 / Policies",
 				"Mwan3 / Rules",
-				"Usteer / Config"
+				"Usteer / Config",
+				"Openvpn / Instances"
 			]
 		},
 		{
@@ -13368,6 +13373,420 @@
 				]
 			}
 		},
+		"/openvpn/instances": {
+			"get": {
+				"summary": "List instances",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/OpenvpnInstances"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			},
+			"post": {
+				"summary": "Create a instances",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OpenvpnInstances"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			}
+		},
+		"/openvpn/instances/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one instances",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstances"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			},
+			"put": {
+				"summary": "Replace a instances",
+				"description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OpenvpnInstances"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a instances",
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "merge-patch partial body"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			},
+			"delete": {
+				"summary": "Delete a instances",
+				"responses": {
+					"204": {
+						"description": "Deleted"
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			}
+		},
+		"/openvpn/instances/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous instances",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstances"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				]
+			}
+		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -19185,6 +19604,367 @@
 					},
 					"runtime": {
 						"type": "object"
+					}
+				}
+			},
+			"OpenvpnInstances": {
+				"type": "object",
+				"description": "uapi resource backed by uci openvpn.openvpn",
+				"properties": {
+					"id": {
+						"type": "string",
+						"nullable": true
+					},
+					"managed": {
+						"type": "boolean"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"client": {
+						"type": "boolean",
+						"description": "Run this instance as a client (default: server)."
+					},
+					"dev": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Interface name (tun0, tap0, etc.)."
+					},
+					"dev_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": "NaN"
+					},
+					"proto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": "NaN"
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"lport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 65535
+					},
+					"rport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"remote": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "host[:port] entries; client tries them in order."
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Bind to this local IP."
+					},
+					"nobind": {
+						"type": "boolean"
+					},
+					"float": {
+						"type": "boolean"
+					},
+					"topology": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"net30",
+							"p2p",
+							"subnet",
+							null
+						]
+					},
+					"server": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Server-mode subnet (e.g. `10.8.0.0 255.255.255.0`)."
+					},
+					"server_bridge": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"push": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Server-mode directives pushed to clients."
+					},
+					"route": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"route_gateway": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ifconfig": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ifconfig_pool": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"client_to_client": {
+						"type": "boolean"
+					},
+					"duplicate_cn": {
+						"type": "boolean"
+					},
+					"keepalive": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "`interval timeout` pair."
+					},
+					"ping": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"ping_restart": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 86400
+					},
+					"persist_key": {
+						"type": "boolean"
+					},
+					"persist_tun": {
+						"type": "boolean"
+					},
+					"comp_lzo": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"yes",
+							"no",
+							"adaptive",
+							null
+						]
+					},
+					"compress": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"lzo",
+							"lz4",
+							"lz4-v2",
+							"stub",
+							"stub-v2",
+							null
+						]
+					},
+					"cipher": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Legacy data cipher (e.g. AES-256-CBC)."
+					},
+					"auth": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "HMAC digest (SHA256, etc.)."
+					},
+					"ncp_ciphers": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Colon-separated negotiable data ciphers."
+					},
+					"ncp_disable": {
+						"type": "boolean"
+					},
+					"tls_server": {
+						"type": "boolean"
+					},
+					"tls_client": {
+						"type": "boolean"
+					},
+					"tls_crypt": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to tls-crypt key file."
+					},
+					"ca": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to CA cert PEM."
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to local cert PEM."
+					},
+					"dh": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to DH parameters PEM (server-mode)."
+					},
+					"crl_verify": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path to CRL PEM."
+					},
+					"remote_cert_tls": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"client",
+							"server",
+							null
+						]
+					},
+					"verify_x509_name": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"user": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Drop privileges to this user."
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"status": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Status file path."
+					},
+					"log": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log_append": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"verb": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 11
+					},
+					"mute": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"has_key": {
+						"type": "boolean",
+						"readOnly": true
+					},
+					"has_tls_auth": {
+						"type": "boolean",
+						"readOnly": true
+					},
+					"has_pkcs12": {
+						"type": "boolean",
+						"readOnly": true
+					},
+					"runtime": {
+						"type": "object"
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Path to private key PEM. Write-only; reads return has_key."
+					},
+					"tls_auth": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Path to TLS auth key file. Write-only; reads return has_tls_auth."
+					},
+					"pkcs12": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12."
 					}
 				}
 			}

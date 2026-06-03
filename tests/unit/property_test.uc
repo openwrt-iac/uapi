@@ -41,6 +41,7 @@ const RESOURCES = [
 	{ name: "mwan3.policies",       file: "mwan3.policies.uc" },
 	{ name: "mwan3.rules",          file: "mwan3.rules.uc" },
 	{ name: "usteer.config",        file: "usteer.config.uc" },
+	{ name: "openvpn.instances",    file: "openvpn.instances.uc" },
 ];
 
 // PROPERTY_ITERS lets CI dial up coverage without slowing local `make test`.
