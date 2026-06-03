@@ -110,11 +110,6 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 
 	let reload_err = reload(services);
 	if (reload_err == null) {
-		// reload_result is surfaced as a response header by translate_tx so
-		// clients can distinguish "no reload service for this resource"
-		// from "reload service ran and exited 0". The init script's exit
-		// code is the only convergence signal available; clients should
-		// not treat `ok` as "device converged" (see docs/operations.md).
 		return { ok: true, body: result.body,
 		         reload_services: services,
 		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };

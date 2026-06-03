@@ -162,10 +162,6 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
 
 ### OpenAPI completeness and contract hardening
 
-The wire surface above is the source-of-truth uapi serves at runtime. These
-items make the OpenAPI document a complete machine-readable contract over
-that surface and tighten a few edges that downstream codegen exercises.
-
 - **OpenAPI spec is now a complete machine-readable contract.** Every
   curated resource carries `required: [...]` derived from `validate()`'s
   unconditional requireds. Resources with proto/type discriminators

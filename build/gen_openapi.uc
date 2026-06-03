@@ -73,10 +73,6 @@ function schema_name(endpoint) {
 	return pascal(endpoint.domain) + pascal(endpoint.subresource ?? "");
 }
 
-// Human-readable tag for an endpoint. Used to group operations in the
-// generated docs (Redoc honors tags + x-tagGroups). Pattern:
-//   curated CRUD/collection/singleton with subresource -> "Domain / Sub"
-//   bare singleton (/system)                            -> "Domain"
 function pretty(s) {
 	let parts = split(s, /[._-]/);
 	let out = [];
@@ -92,12 +88,9 @@ function tag_for(ep) {
 	return pretty(ep.domain);
 }
 
-// Attach `tags: [<tag>]` to every operation in a path-dict, in place.
 function tag_ops(paths_dict, tag) {
 	for (let p in paths_dict) {
 		for (let verb in paths_dict[p]) {
-			// `parameters` is an array, not an object, so this filter
-			// excludes it along with any other non-operation path-level keys.
 			if (type(paths_dict[p][verb]) != "object") continue;
 			paths_dict[p][verb].tags = [tag];
 		}
@@ -544,14 +537,12 @@ function build_paths() {
 	];
 	for (let p in paths) {
 		if (type(paths[p]) != "object") continue;
-		// Skip already-tagged (curated) operations.
 		let any_op = null;
 		for (let v in paths[p]) {
 			if (v == "parameters") continue;
 			if (type(paths[p][v]) == "object") { any_op = paths[p][v]; break; }
 		}
 		if (any_op == null || type(any_op.tags) == "array") continue;
-		// Pick the longest prefix match.
 		let best_tag = null, best_len = -1;
 		for (let pair in STATIC_PATH_TAGS) {
 			let prefix = pair[0], tag = pair[1];
@@ -889,9 +880,6 @@ function build_schemas() {
 			}
 		}
 
-		// Resource-declared runtime sub-shape: replaces the opaque
-		// `runtime: {"type": "object"}` placeholder so clients can see
-		// which keys a populated runtime block actually carries.
 		if (type(mod.openapi_runtime) == "object" && type(properties.runtime) == "object")
 			properties.runtime = mod.openapi_runtime;
 
@@ -901,16 +889,9 @@ function build_schemas() {
 			"properties": properties,
 		};
 
-		// Resource-declared unconditional requireds. The OpenAPI generator
-		// previously emitted no `required` arrays on curated schemas,
-		// forcing every client (Terraform provider, etc.) to re-derive
-		// requireds by reading validate(). Module-side declaration lets
-		// the spec carry the contract directly.
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			s.required = mod.openapi_required;
 
-		// Resource-declared conditional requireds (if/then/required). Models
-		// proto/type discriminators like "ipaddr required when proto=static".
 		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
 			s.allOf = mod.openapi_conditional;
 

@@ -82,9 +82,10 @@ to the upstream uci key.
 |-----------------------------------|---------------------------------------|
 | `runtime.active_leases_v4_total`  | `runtime.active_leases_v4_box_total`  |
 
-Clarifies the counter is "leases in the box for this server" (one box per
-configured `interface`), not the global lease count. The rest of the
-`runtime` block is unchanged.
+The counter is box-wide, not per-server: dnsmasq's `/tmp/dhcp.leases` does
+not tag entries by interface, so every dhcp/servers section's runtime block
+reports the same total. The new name says so explicitly. The IPv6 counter
+(`active_leases_v6_iface`) is genuinely per-interface and was unaffected.
 
 ## Strict integer typing (Breaking)
 
