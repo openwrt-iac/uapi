@@ -19070,14 +19070,14 @@
 						"minimum": 1,
 						"description": "Min reachable track_ip count to call this interface up."
 					},
-					"count": {
+					"probe_count": {
 						"type": [
 							"integer",
 							"null"
 						],
 						"minimum": 1,
 						"maximum": 10,
-						"description": "Probes per cycle per track_ip."
+						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute."
 					},
 					"size": {
 						"type": [

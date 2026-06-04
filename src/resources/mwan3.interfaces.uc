@@ -16,7 +16,7 @@ function fromUci(section) {
 		track_ip:               as_list(section.track_ip),
 		track_method:           section.track_method ?? null,
 		reliability:            as_int(section.reliability),
-		count:                  as_int(section.count),
+		probe_count:            as_int(section.count),
 		size:                   as_int(section.size),
 		max_ttl:                as_int(section.max_ttl),
 		check_quality:          normalize_bool(section.check_quality, false),
@@ -43,7 +43,7 @@ function toUci(json) {
 	if (json.track_ip != null)              out.track_ip = json.track_ip;
 	if (json.track_method != null)          out.track_method = json.track_method;
 	if (json.reliability != null)           out.reliability = "" + json.reliability;
-	if (json.count != null)                 out.count = "" + json.count;
+	if (json.probe_count != null)           out.count = "" + json.probe_count;
 	if (json.size != null)                  out.size = "" + json.size;
 	if (json.max_ttl != null)               out.max_ttl = "" + json.max_ttl;
 	if (json.check_quality != null)         out.check_quality = json.check_quality ? "1" : "0";
@@ -97,8 +97,8 @@ return {
 		track_method:          { type: ["string", "null"], enum: ["ping", "arping", "httping", "nping-tcp", "nping-udp", null] },
 		reliability:           { type: ["integer", "null"], minimum: 1,
 		                         description: "Min reachable track_ip count to call this interface up." },
-		count:                 { type: ["integer", "null"], minimum: 1, maximum: 10,
-		                         description: "Probes per cycle per track_ip." },
+		probe_count:           { type: ["integer", "null"], minimum: 1, maximum: 10,
+		                         description: "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute." },
 		size:                  { type: ["integer", "null"], minimum: 1, maximum: 65507,
 		                         description: "Probe payload size in bytes." },
 		max_ttl:               { type: ["integer", "null"], minimum: 1, maximum: 255 },

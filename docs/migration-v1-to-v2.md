@@ -87,6 +87,18 @@ not tag entries by interface, so every dhcp/servers section's runtime block
 reports the same total. The new name says so explicitly. The IPv6 counter
 (`active_leases_v6_iface`) is genuinely per-interface and was unaffected.
 
+### `mwan3/interfaces` (rc4 rename)
+
+| v2.0.0-rc3 field | v2.0.0-rc4 field |
+|---|---|
+| `count`          | `probe_count`    |
+
+`count` is a Terraform reserved meta-argument, so the provider could
+not declare it as a top-level attribute. Renamed on the wire to
+`probe_count` which matches the field's description (probes per cycle
+per track_ip). The uci option on disk is still `count`; only the wire
+surface renamed.
+
 ## Strict integer typing (Breaking)
 
 v1.x silently accepted string-form integers (`"42"`) for fields declared
