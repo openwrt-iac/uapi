@@ -89,9 +89,14 @@
         },
       },
       typography: {
+        // API docs are heavy on headings (every endpoint + section is one);
+        // serif breaks visual rhythm with the sans-serif body. Keep both as
+        // the same system stack. The landing page can stay Georgia-serif for
+        // its prose hero.
         fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
         headings: {
-          fontFamily: "Georgia, Bitstream Vera Serif, serif",
+          fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+          fontWeight: "600",
           color: "#ffffff",
         },
         code: {
