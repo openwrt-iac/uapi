@@ -802,7 +802,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous rules",
+				"summary": "Adopt an anonymous firewall rule",
+				"description": "Adopt an anonymous firewall rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -1313,7 +1314,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous zones",
+				"summary": "Adopt an anonymous firewall zone",
+				"description": "Adopt an anonymous firewall zone into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -1824,7 +1826,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous redirects",
+				"summary": "Adopt an anonymous firewall redirect",
+				"description": "Adopt an anonymous firewall redirect into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -2335,7 +2338,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous forwardings",
+				"summary": "Adopt an anonymous firewall forwarding",
+				"description": "Adopt an anonymous firewall forwarding into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -2985,7 +2989,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous interfaces",
+				"summary": "Adopt an anonymous network interface",
+				"description": "Adopt an anonymous network interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -3496,7 +3501,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous devices",
+				"summary": "Adopt an anonymous network device",
+				"description": "Adopt an anonymous network device into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -4007,7 +4013,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous routes",
+				"summary": "Adopt an anonymous network route",
+				"description": "Adopt an anonymous network route into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -4518,7 +4525,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous rules",
+				"summary": "Adopt an anonymous network policy rule",
+				"description": "Adopt an anonymous network policy rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -5029,7 +5037,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous bridge_vlans",
+				"summary": "Adopt an anonymous bridge VLAN",
+				"description": "Adopt an anonymous bridge VLAN into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -5540,7 +5549,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous wireguard_peers",
+				"summary": "Adopt an anonymous wireguard peer",
+				"description": "Adopt an anonymous wireguard peer into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -6051,7 +6061,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous devices",
+				"summary": "Adopt an anonymous wireless device",
+				"description": "Adopt an anonymous wireless device into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -6562,7 +6573,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous interfaces",
+				"summary": "Adopt an anonymous wireless interface",
+				"description": "Adopt an anonymous wireless interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -7073,7 +7085,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous hosts",
+				"summary": "Adopt an anonymous DHCP host",
+				"description": "Adopt an anonymous DHCP host into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -7800,7 +7813,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous servers",
+				"summary": "Adopt an anonymous DHCP server",
+				"description": "Adopt an anonymous DHCP server into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -8728,7 +8742,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous timeservers",
+				"summary": "Adopt an anonymous timeserver",
+				"description": "Adopt an anonymous timeserver into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -9239,7 +9254,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous instances",
+				"summary": "Adopt an anonymous dropbear instance",
+				"description": "Adopt an anonymous dropbear instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -9750,7 +9766,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous instances",
+				"summary": "Adopt an anonymous uhttpd instance",
+				"description": "Adopt an anonymous uhttpd instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -10261,7 +10278,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous certs",
+				"summary": "Adopt an anonymous uhttpd certificate",
+				"description": "Adopt an anonymous uhttpd certificate into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -10911,7 +10929,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous queues",
+				"summary": "Adopt an anonymous SQM queue",
+				"description": "Adopt an anonymous SQM queue into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -11422,7 +11441,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous agents",
+				"summary": "Adopt an anonymous SNMP agent",
+				"description": "Adopt an anonymous SNMP agent into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -11933,7 +11953,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous com2secs",
+				"summary": "Adopt an anonymous SNMP community-to-security mapping",
+				"description": "Adopt an anonymous SNMP community-to-security mapping into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -12444,7 +12465,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous groups",
+				"summary": "Adopt an anonymous SNMP group",
+				"description": "Adopt an anonymous SNMP group into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -12955,7 +12977,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous accesses",
+				"summary": "Adopt an anonymous SNMP access ACL",
+				"description": "Adopt an anonymous SNMP access ACL into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -14022,7 +14045,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous interfaces",
+				"summary": "Adopt an anonymous vnstat interface",
+				"description": "Adopt an anonymous vnstat interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -14672,7 +14696,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous interfaces",
+				"summary": "Adopt an anonymous mwan3 interface",
+				"description": "Adopt an anonymous mwan3 interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -15183,7 +15208,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous members",
+				"summary": "Adopt an anonymous mwan3 member",
+				"description": "Adopt an anonymous mwan3 member into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -15694,7 +15720,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous policies",
+				"summary": "Adopt an anonymous mwan3 policy",
+				"description": "Adopt an anonymous mwan3 policy into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -16205,7 +16232,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous rules",
+				"summary": "Adopt an anonymous mwan3 rule",
+				"description": "Adopt an anonymous mwan3 rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
@@ -16855,7 +16883,8 @@
 				}
 			],
 			"post": {
-				"summary": "Adopt an anonymous instances",
+				"summary": "Adopt an anonymous openvpn instance",
+				"description": "Adopt an anonymous openvpn instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
 				"responses": {
 					"200": {
 						"description": "Adopted",
