@@ -5,14 +5,11 @@
 // HCL block keyword. Reserved names cannot exist as top-level Terraform
 // resource attributes; HCL block keywords work today but render the field
 // quoted in HCL and trip code-gen tools.
-//
-// Allowlist intentionally empty. Anyone adding a reserved name has to
-// either rename or add the field to the allowlist with a comment
-// explaining the policy decision. The point is to make the choice
-// deliberate.
 
 import * as fs from 'fs';
 
+// HARD = Terraform meta-arguments. Source:
+// https://developer.hashicorp.com/terraform/language/meta-arguments
 const HARD = {
 	"count": true,
 	"for_each": true,
@@ -23,6 +20,8 @@ const HARD = {
 	"provisioner": true,
 };
 
+// SOFT = HCL block-type keywords. Source:
+// https://developer.hashicorp.com/terraform/language/syntax/configuration#blocks
 const SOFT = {
 	"output": true,
 	"resource": true,
@@ -54,7 +53,7 @@ let soft_hits = [];
 for (let name in schemas) {
 	let s = schemas[name];
 	let props = s.properties;
-	if (type(props) != "object") continue;
+	if (props == null) continue;
 	for (let prop in props) {
 		let key = name + "." + prop;
 		if (ALLOWLIST[key]) continue;

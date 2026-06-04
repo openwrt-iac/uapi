@@ -139,9 +139,6 @@ function make_response(status, description, ref) {
 	return resp;
 }
 
-// Header components attached to success responses. The wire names are what a
-// client sees on the response. Keys here are the actual HTTP header names; the
-// $refs point at components defined under #/components/headers.
 const SUCCESS_HEADERS_UNIVERSAL = {
 	"X-Request-Id": { "$ref": "#/components/headers/XRequestId" },
 };
@@ -153,7 +150,7 @@ const SUCCESS_HEADERS_POST = {
 	"Idempotent-Replayed": { "$ref": "#/components/headers/IdempotentReplayed" },
 };
 
-function _attach_success_headers(resp, verb, status) {
+function attach_success_headers(resp, verb, status) {
 	let h = {};
 	for (let k in SUCCESS_HEADERS_UNIVERSAL) h[k] = SUCCESS_HEADERS_UNIVERSAL[k];
 	if (status >= 200 && status < 300 && verb != "get") {
@@ -185,13 +182,11 @@ function _attach_success_headers(resp, verb, status) {
 
 // Merge a success-response block with the verb-appropriate error set.
 // `success` is an object like { "200": <response>, ["304": <response>] }.
-// Wire-name response headers (X-Request-Id always; X-Reload-Status/Services on
-// writes; Idempotent-Replayed on POSTs) are injected automatically.
 function responses(verb, success) {
 	let r = {};
 	for (let k in success) {
 		let status = int(k);
-		r[k] = _attach_success_headers(success[k], verb, status);
+		r[k] = attach_success_headers(success[k], verb, status);
 	}
 	let errs = error_responses(verb);
 	for (let k in errs) r[k] = errs[k];
