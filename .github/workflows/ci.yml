@@ -62,7 +62,7 @@ jobs:
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils
       - uses: actions/checkout@v6
-      - name: Lint (em-dash + ucode syntax)
+      - name: Lint (em-dash + ucode syntax + reserved-name guard)
         run: make lint
       - name: OpenAPI contract is up to date
         run: make openapi-check

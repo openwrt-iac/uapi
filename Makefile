@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -15,6 +15,7 @@ help:
 	@echo "  lint               em-dash check + ucode syntax check"
 	@echo "  lint-emdash        forbid em-dashes in tracked sources"
 	@echo "  lint-syntax        ucode -c on all .uc files"
+	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
 	@echo "  sbom               emit SPDX 2.3 SBOM (build/sbom.spdx.json); APK=<path> attaches built APK sha256"
@@ -94,7 +95,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax
+lint: lint-emdash lint-syntax lint-reserved
 
 lint-emdash:
 	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile 2>/dev/null; then \
@@ -109,6 +110,11 @@ lint-syntax:
 			$(UCODE) -c -o /dev/null "$$f"; \
 		fi; \
 	done
+
+# Fails on Terraform-reserved or HCL-keyword schema property names. Catches
+# the next provider-hostile field name before it ships.
+lint-reserved:
+	@$(UCODE) tests/lint_reserved_names.uc
 
 clean:
 	@rm -rf build/sdk build/openapi.json
