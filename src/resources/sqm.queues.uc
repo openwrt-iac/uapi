@@ -70,6 +70,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "SQM queue",
 	id_prefix: "q",
 	openapi_required: ["interface"],
 	schema_properties: {

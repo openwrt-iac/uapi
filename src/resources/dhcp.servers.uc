@@ -159,6 +159,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "DHCP server",
 	openapi_required: ["interface"],
 	openapi_runtime: {
 		type: "object",

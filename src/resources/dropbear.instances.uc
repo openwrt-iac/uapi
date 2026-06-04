@@ -49,6 +49,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "dropbear instance",
 	id_prefix: "d",
 	schema_properties: {
 		enable:             { type: "boolean" },

@@ -62,6 +62,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "wireless device",
 	openapi_required: ["type"],
 	schema_properties: {
 		type:     { type: "string", enum: keys(VALID_TYPES) },

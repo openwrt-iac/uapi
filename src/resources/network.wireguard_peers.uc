@@ -119,6 +119,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "wireguard peer",
 	merge_for_patch: merge_for_patch,
 	openapi_required: ["interface", "public_key", "allowed_ips"],
 	schema_properties: {

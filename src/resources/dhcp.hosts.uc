@@ -130,6 +130,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "DHCP host",
 	openapi_required: ["ip"],
 	openapi_conditional: [
 		{ anyOf: [

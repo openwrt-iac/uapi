@@ -70,6 +70,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "network device",
 	openapi_required: ["name", "type"],
 	openapi_conditional: [
 		{ if:   { properties: { type: { const: "bridge" } }, required: ["type"] },

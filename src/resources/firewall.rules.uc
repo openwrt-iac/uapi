@@ -110,6 +110,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "firewall rule",
 	openapi_required: ["target", "match"],
 	openapi_conditional: [hints.match_requires_src_zone],
 	schema_properties: {

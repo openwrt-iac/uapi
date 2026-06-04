@@ -18,53 +18,49 @@ function read_version() {
 
 const VERSION = read_version();
 
-// `singular` is used in the adopt operation summary + description so the
-// generated text reads naturally ("Adopt an anonymous firewall rule"
-// instead of "Adopt an anonymous rules"). Only CRUD kinds need it because
-// adopt only applies to anonymous-section types.
 const ENDPOINTS = [
-	{ path: "/firewall/rules",        file: "firewall.rules.uc",        kind: "crud", domain: "firewall", subresource: "rules",        singular: "firewall rule" },
-	{ path: "/firewall/zones",        file: "firewall.zones.uc",        kind: "crud", domain: "firewall", subresource: "zones",        singular: "firewall zone" },
-	{ path: "/firewall/redirects",    file: "firewall.redirects.uc",    kind: "crud", domain: "firewall", subresource: "redirects",    singular: "firewall redirect" },
-	{ path: "/firewall/forwardings",  file: "firewall.forwardings.uc",  kind: "crud", domain: "firewall", subresource: "forwardings",  singular: "firewall forwarding" },
+	{ path: "/firewall/rules",        file: "firewall.rules.uc",        kind: "crud", domain: "firewall", subresource: "rules" },
+	{ path: "/firewall/zones",        file: "firewall.zones.uc",        kind: "crud", domain: "firewall", subresource: "zones" },
+	{ path: "/firewall/redirects",    file: "firewall.redirects.uc",    kind: "crud", domain: "firewall", subresource: "redirects" },
+	{ path: "/firewall/forwardings",  file: "firewall.forwardings.uc",  kind: "crud", domain: "firewall", subresource: "forwardings" },
 	{ path: "/firewall/defaults",     file: "firewall.defaults.uc",     kind: "singleton", domain: "firewall", subresource: "defaults" },
-	{ path: "/network/interfaces",       file: "network.interfaces.uc",       kind: "crud", domain: "network", subresource: "interfaces",       singular: "network interface" },
-	{ path: "/network/devices",          file: "network.devices.uc",          kind: "crud", domain: "network", subresource: "devices",          singular: "network device" },
-	{ path: "/network/routes",           file: "network.routes.uc",           kind: "crud", domain: "network", subresource: "routes",           singular: "network route" },
-	{ path: "/network/rules",            file: "network.rules.uc",            kind: "crud", domain: "network", subresource: "rules",            singular: "network policy rule" },
-	{ path: "/network/bridge_vlans",     file: "network.bridge_vlans.uc",     kind: "crud", domain: "network", subresource: "bridge_vlans",     singular: "bridge VLAN" },
-	{ path: "/network/wireguard_peers",  file: "network.wireguard_peers.uc",  kind: "crud", domain: "network", subresource: "wireguard_peers",  singular: "wireguard peer" },
-	{ path: "/wireless/devices",    file: "wireless.devices.uc",    kind: "crud", domain: "wireless", subresource: "devices",    singular: "wireless device" },
-	{ path: "/wireless/interfaces", file: "wireless.interfaces.uc", kind: "crud", domain: "wireless", subresource: "interfaces", singular: "wireless interface" },
-	{ path: "/dhcp/hosts",          file: "dhcp.hosts.uc",          kind: "crud", domain: "dhcp",     subresource: "hosts",      singular: "DHCP host" },
+	{ path: "/network/interfaces",       file: "network.interfaces.uc",       kind: "crud", domain: "network", subresource: "interfaces" },
+	{ path: "/network/devices",          file: "network.devices.uc",          kind: "crud", domain: "network", subresource: "devices" },
+	{ path: "/network/routes",           file: "network.routes.uc",           kind: "crud", domain: "network", subresource: "routes" },
+	{ path: "/network/rules",            file: "network.rules.uc",            kind: "crud", domain: "network", subresource: "rules" },
+	{ path: "/network/bridge_vlans",     file: "network.bridge_vlans.uc",     kind: "crud", domain: "network", subresource: "bridge_vlans" },
+	{ path: "/network/wireguard_peers",  file: "network.wireguard_peers.uc",  kind: "crud", domain: "network", subresource: "wireguard_peers" },
+	{ path: "/wireless/devices",    file: "wireless.devices.uc",    kind: "crud", domain: "wireless", subresource: "devices" },
+	{ path: "/wireless/interfaces", file: "wireless.interfaces.uc", kind: "crud", domain: "wireless", subresource: "interfaces" },
+	{ path: "/dhcp/hosts",          file: "dhcp.hosts.uc",          kind: "crud", domain: "dhcp",     subresource: "hosts" },
 	{ path: "/dhcp/leases",         file: "dhcp.leases.uc",         kind: "collection", domain: "dhcp", subresource: "leases" },
 	{ path: "/dhcp/leases6",        file: "dhcp.leases6.uc",        kind: "collection", domain: "dhcp", subresource: "leases6" },
-	{ path: "/dhcp/servers",        file: "dhcp.servers.uc",        kind: "crud",       domain: "dhcp", subresource: "servers",    singular: "DHCP server" },
+	{ path: "/dhcp/servers",        file: "dhcp.servers.uc",        kind: "crud",       domain: "dhcp", subresource: "servers" },
 	{ path: "/dhcp/dnsmasq",        file: "dhcp.dnsmasq.uc",        kind: "singleton",  domain: "dhcp", subresource: "dnsmasq" },
 	{ path: "/dhcp/odhcpd",         file: "dhcp.odhcpd.uc",         kind: "singleton",  domain: "dhcp", subresource: "odhcpd" },
 	{ path: "/system",              file: "system.uc",              kind: "singleton", domain: "system" },
-	{ path: "/system/timeservers",  file: "system.timeservers.uc",  kind: "crud",      domain: "system",   subresource: "timeservers",  singular: "timeserver" },
-	{ path: "/dropbear/instances",  file: "dropbear.instances.uc",  kind: "crud",      domain: "dropbear", subresource: "instances",    singular: "dropbear instance" },
-	{ path: "/uhttpd/instances",    file: "uhttpd.instances.uc",    kind: "crud",      domain: "uhttpd",   subresource: "instances",    singular: "uhttpd instance" },
-	{ path: "/uhttpd/certs",        file: "uhttpd.certs.uc",        kind: "crud",      domain: "uhttpd",   subresource: "certs",        singular: "uhttpd certificate" },
+	{ path: "/system/timeservers",  file: "system.timeservers.uc",  kind: "crud",      domain: "system",   subresource: "timeservers" },
+	{ path: "/dropbear/instances",  file: "dropbear.instances.uc",  kind: "crud",      domain: "dropbear", subresource: "instances" },
+	{ path: "/uhttpd/instances",    file: "uhttpd.instances.uc",    kind: "crud",      domain: "uhttpd",   subresource: "instances" },
+	{ path: "/uhttpd/certs",        file: "uhttpd.certs.uc",        kind: "crud",      domain: "uhttpd",   subresource: "certs" },
 	{ path: "/unbound/server",      file: "unbound.server.uc",      kind: "singleton", domain: "unbound",  subresource: "server" },
-	{ path: "/sqm/queues",          file: "sqm.queues.uc",          kind: "crud",      domain: "sqm",      subresource: "queues",       singular: "SQM queue" },
-	{ path: "/snmpd/agents",        file: "snmpd.agents.uc",        kind: "crud",      domain: "snmpd",    subresource: "agents",       singular: "SNMP agent" },
-	{ path: "/snmpd/com2secs",      file: "snmpd.com2secs.uc",      kind: "crud",      domain: "snmpd",    subresource: "com2secs",     singular: "SNMP community-to-security mapping" },
-	{ path: "/snmpd/groups",        file: "snmpd.groups.uc",        kind: "crud",      domain: "snmpd",    subresource: "groups",       singular: "SNMP group" },
-	{ path: "/snmpd/accesses",      file: "snmpd.accesses.uc",      kind: "crud",      domain: "snmpd",    subresource: "accesses",     singular: "SNMP access ACL" },
+	{ path: "/sqm/queues",          file: "sqm.queues.uc",          kind: "crud",      domain: "sqm",      subresource: "queues" },
+	{ path: "/snmpd/agents",        file: "snmpd.agents.uc",        kind: "crud",      domain: "snmpd",    subresource: "agents" },
+	{ path: "/snmpd/com2secs",      file: "snmpd.com2secs.uc",      kind: "crud",      domain: "snmpd",    subresource: "com2secs" },
+	{ path: "/snmpd/groups",        file: "snmpd.groups.uc",        kind: "crud",      domain: "snmpd",    subresource: "groups" },
+	{ path: "/snmpd/accesses",      file: "snmpd.accesses.uc",      kind: "crud",      domain: "snmpd",    subresource: "accesses" },
 	{ path: "/snmpd/system",        file: "snmpd.system.uc",        kind: "singleton", domain: "snmpd",    subresource: "system" },
 	{ path: "/lldpd/config",        file: "lldpd.config.uc",        kind: "singleton", domain: "lldpd",    subresource: "config" },
 	{ path: "/prometheus_node_exporter_lua/config", file: "prometheus_node_exporter_lua.config.uc", kind: "singleton", domain: "prometheus_node_exporter_lua", subresource: "config" },
 	{ path: "/vnstat/config",       file: "vnstat.config.uc",       kind: "singleton", domain: "vnstat",   subresource: "config" },
-	{ path: "/vnstat/interfaces",   file: "vnstat.interfaces.uc",   kind: "crud",      domain: "vnstat",   subresource: "interfaces",   singular: "vnstat interface" },
+	{ path: "/vnstat/interfaces",   file: "vnstat.interfaces.uc",   kind: "crud",      domain: "vnstat",   subresource: "interfaces" },
 	{ path: "/mwan3/globals",       file: "mwan3.globals.uc",       kind: "singleton", domain: "mwan3",    subresource: "globals" },
-	{ path: "/mwan3/interfaces",    file: "mwan3.interfaces.uc",    kind: "crud",      domain: "mwan3",    subresource: "interfaces",   singular: "mwan3 interface" },
-	{ path: "/mwan3/members",       file: "mwan3.members.uc",       kind: "crud",      domain: "mwan3",    subresource: "members",      singular: "mwan3 member" },
-	{ path: "/mwan3/policies",      file: "mwan3.policies.uc",      kind: "crud",      domain: "mwan3",    subresource: "policies",     singular: "mwan3 policy" },
-	{ path: "/mwan3/rules",         file: "mwan3.rules.uc",         kind: "crud",      domain: "mwan3",    subresource: "rules",        singular: "mwan3 rule" },
+	{ path: "/mwan3/interfaces",    file: "mwan3.interfaces.uc",    kind: "crud",      domain: "mwan3",    subresource: "interfaces" },
+	{ path: "/mwan3/members",       file: "mwan3.members.uc",       kind: "crud",      domain: "mwan3",    subresource: "members" },
+	{ path: "/mwan3/policies",      file: "mwan3.policies.uc",      kind: "crud",      domain: "mwan3",    subresource: "policies" },
+	{ path: "/mwan3/rules",         file: "mwan3.rules.uc",         kind: "crud",      domain: "mwan3",    subresource: "rules" },
 	{ path: "/usteer/config",       file: "usteer.config.uc",       kind: "singleton", domain: "usteer",   subresource: "config" },
-	{ path: "/openvpn/instances",   file: "openvpn.instances.uc",   kind: "crud",      domain: "openvpn",  subresource: "instances",    singular: "openvpn instance" },
+	{ path: "/openvpn/instances",   file: "openvpn.instances.uc",   kind: "crud",      domain: "openvpn",  subresource: "instances" },
 ];
 
 function load_resource(file) {
@@ -204,6 +200,11 @@ function responses(verb, success) {
 
 function build_crud_paths(ep) {
 	let schema_ref = schema_name(ep);
+	let mod = load_resource(ep.file);
+	if (type(mod.openapi_singular) != "string" || mod.openapi_singular == "")
+		die(sprintf("CRUD resource %s missing required `openapi_singular` declaration "
+		            + "(used by the adopt operation summary)", ep.file));
+	let singular = mod.openapi_singular;
 	let id_param = {
 		"name": "id", "in": "path", "required": true,
 		"schema": { "type": "string" },
@@ -272,7 +273,6 @@ function build_crud_paths(ep) {
 		            "responses": responses("delete", { "204": { "description": "Deleted" } }) },
 	};
 
-	let singular = ep.singular ?? ep.subresource;
 	paths[ep.path + "/{id}/adopt"] = {
 		"parameters": [id_param],
 		"post": {

@@ -121,6 +121,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
 	openapi_conditional: [
 		{ if:   { properties: { encryption: { enum: ["psk", "psk2", "psk-mixed", "sae", "sae-mixed", "wpa", "wpa2", "wpa3", "wpa3-mixed"] } },

@@ -216,6 +216,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "network interface",
 	openapi_required: ["proto"],
 	openapi_conditional: [
 		{ if:   { properties: { proto: { const: "static" } }, required: ["proto"] },

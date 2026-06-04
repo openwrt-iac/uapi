@@ -95,6 +95,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "network route",
 	openapi_required: ["target"],
 	schema_properties: {
 		type:      { type: "string", enum: keys(VALID_TYPES) },

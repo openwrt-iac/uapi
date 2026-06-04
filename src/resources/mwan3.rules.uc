@@ -89,6 +89,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "mwan3 rule",
 	id_prefix: "r",
 	openapi_required: ["use_policy"],
 	schema_properties: {

@@ -123,6 +123,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "firewall redirect",
 	openapi_required: ["match"],
 	openapi_conditional: [hints.match_requires_src_zone],
 	schema_properties: {

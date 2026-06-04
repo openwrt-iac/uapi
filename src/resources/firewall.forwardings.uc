@@ -75,6 +75,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "firewall forwarding",
 	openapi_required: ["src", "dest"],
 	schema_properties: {
 		src:     { type: "string", description: "Source zone name" },

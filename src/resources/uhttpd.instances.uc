@@ -102,6 +102,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "uhttpd instance",
 	merge_for_patch: merge_for_patch,
 	schema_properties: {
 		listen_http:     { type: "array", items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },

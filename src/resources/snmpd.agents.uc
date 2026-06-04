@@ -35,6 +35,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "SNMP agent",
 	schema_properties: {
 		agentaddress: { type: "array", items: { type: "string" } },
 	},

@@ -84,6 +84,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "network policy rule",
 	openapi_conditional: [
 		{ anyOf: [
 		    { required: ["in"] },

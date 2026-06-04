@@ -52,6 +52,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "vnstat interface",
 	openapi_required: ["interface"],
 	schema_properties: {
 		interface: { type: "string",

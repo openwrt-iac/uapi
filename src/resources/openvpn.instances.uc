@@ -190,6 +190,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "openvpn instance",
 	merge_for_patch: merge_for_patch,
 	id_prefix: "o",
 	schema_properties: {

@@ -64,6 +64,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "SNMP access ACL",
 	openapi_required: ["group"],
 	schema_properties: {
 		group:   { type: "string",

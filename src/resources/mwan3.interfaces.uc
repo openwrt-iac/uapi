@@ -86,6 +86,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "mwan3 interface",
 	id_prefix: "i",
 	openapi_required: ["family"],
 	schema_properties: {

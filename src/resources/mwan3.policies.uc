@@ -64,6 +64,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "mwan3 policy",
 	id_prefix: "p",
 	openapi_required: ["use_members"],
 	schema_properties: {

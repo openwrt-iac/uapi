@@ -63,6 +63,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_singular: "bridge VLAN",
 	openapi_required: ["device", "vlan"],
 	schema_properties: {
 		device: { type: "string",
