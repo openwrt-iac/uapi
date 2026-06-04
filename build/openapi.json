@@ -380,6 +380,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -437,6 +448,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallRules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -503,10 +531,23 @@
 									"$ref": "#/components/schemas/FirewallRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -555,6 +596,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallRules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -624,6 +679,20 @@
 									"$ref": "#/components/schemas/FirewallRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -668,7 +737,18 @@
 				"summary": "Delete a rules",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -732,6 +812,23 @@
 									"$ref": "#/components/schemas/FirewallRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -794,6 +891,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -851,6 +959,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallZones"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -917,10 +1042,23 @@
 									"$ref": "#/components/schemas/FirewallZones"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -969,6 +1107,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallZones"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -1038,6 +1190,20 @@
 									"$ref": "#/components/schemas/FirewallZones"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -1082,7 +1248,18 @@
 				"summary": "Delete a zones",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -1146,6 +1323,23 @@
 									"$ref": "#/components/schemas/FirewallZones"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -1208,6 +1402,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1265,6 +1470,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallRedirects"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -1331,10 +1553,23 @@
 									"$ref": "#/components/schemas/FirewallRedirects"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -1383,6 +1618,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallRedirects"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -1452,6 +1701,20 @@
 									"$ref": "#/components/schemas/FirewallRedirects"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -1496,7 +1759,18 @@
 				"summary": "Delete a redirects",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -1560,6 +1834,23 @@
 									"$ref": "#/components/schemas/FirewallRedirects"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -1622,6 +1913,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1679,6 +1981,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallForwardings"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -1745,10 +2064,23 @@
 									"$ref": "#/components/schemas/FirewallForwardings"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -1797,6 +2129,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallForwardings"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -1866,6 +2212,20 @@
 									"$ref": "#/components/schemas/FirewallForwardings"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -1910,7 +2270,18 @@
 				"summary": "Delete a forwardings",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -1974,6 +2345,23 @@
 									"$ref": "#/components/schemas/FirewallForwardings"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -2028,10 +2416,23 @@
 									"$ref": "#/components/schemas/FirewallDefaults"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -2085,6 +2486,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/FirewallDefaults"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -2148,6 +2563,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -2205,6 +2631,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -2271,10 +2714,23 @@
 									"$ref": "#/components/schemas/NetworkInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -2323,6 +2779,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -2392,6 +2862,20 @@
 									"$ref": "#/components/schemas/NetworkInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -2436,7 +2920,18 @@
 				"summary": "Delete a interfaces",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -2500,6 +2995,23 @@
 									"$ref": "#/components/schemas/NetworkInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -2562,6 +3074,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -2619,6 +3142,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkDevices"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -2685,10 +3225,23 @@
 									"$ref": "#/components/schemas/NetworkDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -2737,6 +3290,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkDevices"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -2806,6 +3373,20 @@
 									"$ref": "#/components/schemas/NetworkDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -2850,7 +3431,18 @@
 				"summary": "Delete a devices",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -2914,6 +3506,23 @@
 									"$ref": "#/components/schemas/NetworkDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -2976,6 +3585,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -3033,6 +3653,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkRoutes"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -3099,10 +3736,23 @@
 									"$ref": "#/components/schemas/NetworkRoutes"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -3151,6 +3801,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkRoutes"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -3220,6 +3884,20 @@
 									"$ref": "#/components/schemas/NetworkRoutes"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -3264,7 +3942,18 @@
 				"summary": "Delete a routes",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -3328,6 +4017,23 @@
 									"$ref": "#/components/schemas/NetworkRoutes"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -3390,6 +4096,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -3447,6 +4164,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkRules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -3513,10 +4247,23 @@
 									"$ref": "#/components/schemas/NetworkRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -3565,6 +4312,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkRules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -3634,6 +4395,20 @@
 									"$ref": "#/components/schemas/NetworkRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -3678,7 +4453,18 @@
 				"summary": "Delete a rules",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -3742,6 +4528,23 @@
 									"$ref": "#/components/schemas/NetworkRules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -3804,6 +4607,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -3861,6 +4675,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkBridgeVlans"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -3927,10 +4758,23 @@
 									"$ref": "#/components/schemas/NetworkBridgeVlans"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -3979,6 +4823,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkBridgeVlans"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -4048,6 +4906,20 @@
 									"$ref": "#/components/schemas/NetworkBridgeVlans"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -4092,7 +4964,18 @@
 				"summary": "Delete a bridge_vlans",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -4156,6 +5039,23 @@
 									"$ref": "#/components/schemas/NetworkBridgeVlans"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -4218,6 +5118,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -4275,6 +5186,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkWireguardPeers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -4341,10 +5269,23 @@
 									"$ref": "#/components/schemas/NetworkWireguardPeers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -4393,6 +5334,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/NetworkWireguardPeers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -4462,6 +5417,20 @@
 									"$ref": "#/components/schemas/NetworkWireguardPeers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -4506,7 +5475,18 @@
 				"summary": "Delete a wireguard_peers",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -4570,6 +5550,23 @@
 									"$ref": "#/components/schemas/NetworkWireguardPeers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -4632,6 +5629,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -4689,6 +5697,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/WirelessDevices"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -4755,10 +5780,23 @@
 									"$ref": "#/components/schemas/WirelessDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -4807,6 +5845,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/WirelessDevices"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -4876,6 +5928,20 @@
 									"$ref": "#/components/schemas/WirelessDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -4920,7 +5986,18 @@
 				"summary": "Delete a devices",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -4984,6 +6061,23 @@
 									"$ref": "#/components/schemas/WirelessDevices"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5046,6 +6140,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -5103,6 +6208,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/WirelessInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -5169,10 +6291,23 @@
 									"$ref": "#/components/schemas/WirelessInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -5221,6 +6356,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/WirelessInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -5290,6 +6439,20 @@
 									"$ref": "#/components/schemas/WirelessInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5334,7 +6497,18 @@
 				"summary": "Delete a interfaces",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -5398,6 +6572,23 @@
 									"$ref": "#/components/schemas/WirelessInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5460,6 +6651,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -5517,6 +6719,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpHosts"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -5583,10 +6802,23 @@
 									"$ref": "#/components/schemas/DhcpHosts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -5635,6 +6867,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpHosts"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -5704,6 +6950,20 @@
 									"$ref": "#/components/schemas/DhcpHosts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5748,7 +7008,18 @@
 				"summary": "Delete a hosts",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -5812,6 +7083,23 @@
 									"$ref": "#/components/schemas/DhcpHosts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5868,6 +7156,11 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -5919,6 +7212,14 @@
 									"$ref": "#/components/schemas/DhcpLeases"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -5962,6 +7263,11 @@
 										"$ref": "#/components/schemas/DhcpLeases6"
 									}
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
 							}
 						}
 					},
@@ -6014,6 +7320,14 @@
 									"$ref": "#/components/schemas/DhcpLeases6"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -6064,6 +7378,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -6121,6 +7446,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpServers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6187,10 +7529,23 @@
 									"$ref": "#/components/schemas/DhcpServers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6239,6 +7594,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpServers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6308,6 +7677,20 @@
 									"$ref": "#/components/schemas/DhcpServers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -6352,7 +7735,18 @@
 				"summary": "Delete a servers",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6416,6 +7810,23 @@
 									"$ref": "#/components/schemas/DhcpServers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -6470,10 +7881,23 @@
 									"$ref": "#/components/schemas/DhcpDnsmasq"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6527,6 +7951,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpDnsmasq"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6582,10 +8020,23 @@
 									"$ref": "#/components/schemas/DhcpOdhcpd"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6639,6 +8090,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/DhcpOdhcpd"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6694,10 +8159,23 @@
 									"$ref": "#/components/schemas/System"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6751,6 +8229,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/System"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6814,6 +8306,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -6871,6 +8374,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SystemTimeservers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -6937,10 +8457,23 @@
 									"$ref": "#/components/schemas/SystemTimeservers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -6989,6 +8522,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SystemTimeservers"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -7058,6 +8605,20 @@
 									"$ref": "#/components/schemas/SystemTimeservers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -7102,7 +8663,18 @@
 				"summary": "Delete a timeservers",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -7166,6 +8738,23 @@
 									"$ref": "#/components/schemas/SystemTimeservers"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -7228,6 +8817,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -7285,6 +8885,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/DropbearInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -7351,10 +8968,23 @@
 									"$ref": "#/components/schemas/DropbearInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -7403,6 +9033,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/DropbearInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -7472,6 +9116,20 @@
 									"$ref": "#/components/schemas/DropbearInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -7516,7 +9174,18 @@
 				"summary": "Delete a instances",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -7580,6 +9249,23 @@
 									"$ref": "#/components/schemas/DropbearInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -7642,6 +9328,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -7699,6 +9396,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/UhttpdInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -7765,10 +9479,23 @@
 									"$ref": "#/components/schemas/UhttpdInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -7817,6 +9544,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/UhttpdInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -7886,6 +9627,20 @@
 									"$ref": "#/components/schemas/UhttpdInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -7930,7 +9685,18 @@
 				"summary": "Delete a instances",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -7994,6 +9760,23 @@
 									"$ref": "#/components/schemas/UhttpdInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -8056,6 +9839,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -8113,6 +9907,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/UhttpdCerts"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -8179,10 +9990,23 @@
 									"$ref": "#/components/schemas/UhttpdCerts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -8231,6 +10055,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/UhttpdCerts"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -8300,6 +10138,20 @@
 									"$ref": "#/components/schemas/UhttpdCerts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -8344,7 +10196,18 @@
 				"summary": "Delete a certs",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -8408,6 +10271,23 @@
 									"$ref": "#/components/schemas/UhttpdCerts"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -8462,10 +10342,23 @@
 									"$ref": "#/components/schemas/UnboundServer"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -8519,6 +10412,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/UnboundServer"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -8582,6 +10489,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -8639,6 +10557,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SqmQueues"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -8705,10 +10640,23 @@
 									"$ref": "#/components/schemas/SqmQueues"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -8757,6 +10705,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SqmQueues"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -8826,6 +10788,20 @@
 									"$ref": "#/components/schemas/SqmQueues"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -8870,7 +10846,18 @@
 				"summary": "Delete a queues",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -8934,6 +10921,23 @@
 									"$ref": "#/components/schemas/SqmQueues"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -8996,6 +11000,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -9053,6 +11068,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdAgents"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -9119,10 +11151,23 @@
 									"$ref": "#/components/schemas/SnmpdAgents"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -9171,6 +11216,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdAgents"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -9240,6 +11299,20 @@
 									"$ref": "#/components/schemas/SnmpdAgents"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -9284,7 +11357,18 @@
 				"summary": "Delete a agents",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -9348,6 +11432,23 @@
 									"$ref": "#/components/schemas/SnmpdAgents"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -9410,6 +11511,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -9467,6 +11579,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdCom2secs"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -9533,10 +11662,23 @@
 									"$ref": "#/components/schemas/SnmpdCom2secs"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -9585,6 +11727,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdCom2secs"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -9654,6 +11810,20 @@
 									"$ref": "#/components/schemas/SnmpdCom2secs"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -9698,7 +11868,18 @@
 				"summary": "Delete a com2secs",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -9762,6 +11943,23 @@
 									"$ref": "#/components/schemas/SnmpdCom2secs"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -9824,6 +12022,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -9881,6 +12090,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdGroups"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -9947,10 +12173,23 @@
 									"$ref": "#/components/schemas/SnmpdGroups"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -9999,6 +12238,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdGroups"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10068,6 +12321,20 @@
 									"$ref": "#/components/schemas/SnmpdGroups"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -10112,7 +12379,18 @@
 				"summary": "Delete a groups",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10176,6 +12454,23 @@
 									"$ref": "#/components/schemas/SnmpdGroups"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -10238,6 +12533,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -10295,6 +12601,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdAccesses"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10361,10 +12684,23 @@
 									"$ref": "#/components/schemas/SnmpdAccesses"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10413,6 +12749,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdAccesses"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10482,6 +12832,20 @@
 									"$ref": "#/components/schemas/SnmpdAccesses"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -10526,7 +12890,18 @@
 				"summary": "Delete a accesses",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10590,6 +12965,23 @@
 									"$ref": "#/components/schemas/SnmpdAccesses"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -10644,10 +13036,23 @@
 									"$ref": "#/components/schemas/SnmpdSystem"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10701,6 +13106,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/SnmpdSystem"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10756,10 +13175,23 @@
 									"$ref": "#/components/schemas/LldpdConfig"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10813,6 +13245,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/LldpdConfig"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10868,10 +13314,23 @@
 									"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfig"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -10925,6 +13384,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfig"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -10980,10 +13453,23 @@
 									"$ref": "#/components/schemas/VnstatConfig"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11037,6 +13523,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/VnstatConfig"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11100,6 +13600,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -11157,6 +13668,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/VnstatInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11223,10 +13751,23 @@
 									"$ref": "#/components/schemas/VnstatInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11275,6 +13816,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/VnstatInterfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11344,6 +13899,20 @@
 									"$ref": "#/components/schemas/VnstatInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -11388,7 +13957,18 @@
 				"summary": "Delete a interfaces",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11452,6 +14032,23 @@
 									"$ref": "#/components/schemas/VnstatInterfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -11506,10 +14103,23 @@
 									"$ref": "#/components/schemas/Mwan3Globals"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11563,6 +14173,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Globals"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11626,6 +14250,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -11683,6 +14318,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Interfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11749,10 +14401,23 @@
 									"$ref": "#/components/schemas/Mwan3Interfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11801,6 +14466,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Interfaces"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -11870,6 +14549,20 @@
 									"$ref": "#/components/schemas/Mwan3Interfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -11914,7 +14607,18 @@
 				"summary": "Delete a interfaces",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -11978,6 +14682,23 @@
 									"$ref": "#/components/schemas/Mwan3Interfaces"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -12040,6 +14761,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -12097,6 +14829,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Members"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -12163,10 +14912,23 @@
 									"$ref": "#/components/schemas/Mwan3Members"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -12215,6 +14977,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Members"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -12284,6 +15060,20 @@
 									"$ref": "#/components/schemas/Mwan3Members"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -12328,7 +15118,18 @@
 				"summary": "Delete a members",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -12392,6 +15193,23 @@
 									"$ref": "#/components/schemas/Mwan3Members"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -12454,6 +15272,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -12511,6 +15340,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Policies"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -12577,10 +15423,23 @@
 									"$ref": "#/components/schemas/Mwan3Policies"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -12629,6 +15488,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Policies"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -12698,6 +15571,20 @@
 									"$ref": "#/components/schemas/Mwan3Policies"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -12742,7 +15629,18 @@
 				"summary": "Delete a policies",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -12806,6 +15704,23 @@
 									"$ref": "#/components/schemas/Mwan3Policies"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -12868,6 +15783,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -12925,6 +15851,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Rules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -12991,10 +15934,23 @@
 									"$ref": "#/components/schemas/Mwan3Rules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -13043,6 +15999,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/Mwan3Rules"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13112,6 +16082,20 @@
 									"$ref": "#/components/schemas/Mwan3Rules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -13156,7 +16140,18 @@
 				"summary": "Delete a rules",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -13220,6 +16215,23 @@
 									"$ref": "#/components/schemas/Mwan3Rules"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -13274,10 +16286,23 @@
 									"$ref": "#/components/schemas/UsteerConfig"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -13331,6 +16356,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/UsteerConfig"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13394,6 +16433,17 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -13451,6 +16501,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/OpenvpnInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13517,10 +16584,23 @@
 									"$ref": "#/components/schemas/OpenvpnInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"304": {
-						"description": "If-None-Match matched current ETag"
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -13569,6 +16649,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/OpenvpnInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13638,6 +16732,20 @@
 									"$ref": "#/components/schemas/OpenvpnInstances"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -13682,7 +16790,18 @@
 				"summary": "Delete a instances",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -13745,6 +16864,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/OpenvpnInstances"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13809,6 +16945,14 @@
 									"$ref": "#/components/schemas/RawSection"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -13857,6 +17001,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/RawWriteResult"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -13929,6 +17090,14 @@
 									"$ref": "#/components/schemas/RawSection"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -13977,6 +17146,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/RawWriteResult"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -14039,6 +17222,20 @@
 									"$ref": "#/components/schemas/RawWriteResult"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -14083,7 +17280,18 @@
 				"summary": "Delete a raw uci section",
 				"responses": {
 					"204": {
-						"description": "Deleted"
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -14139,6 +17347,11 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -14187,6 +17400,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/InstalledPackage"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -14251,6 +17481,14 @@
 									"$ref": "#/components/schemas/InstalledPackage"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -14283,7 +17521,18 @@
 				"summary": "Remove a package (apk del)",
 				"responses": {
 					"204": {
-						"description": "Removed"
+						"description": "Removed",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -14339,6 +17588,11 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -14387,6 +17641,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/PackageFeed"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -14451,6 +17722,14 @@
 									"$ref": "#/components/schemas/PackageFeed"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -14483,7 +17762,18 @@
 				"summary": "Delete an apk feed and re-run apk update",
 				"responses": {
 					"204": {
-						"description": "Removed"
+						"description": "Removed",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -14539,7 +17829,21 @@
 				},
 				"responses": {
 					"204": {
-						"description": "Password set"
+						"description": "Password set",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -14595,6 +17899,11 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -14643,6 +17952,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/SSHAuthorizedKey"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -14708,6 +18034,20 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -14772,6 +18112,14 @@
 									"$ref": "#/components/schemas/SSHAuthorizedKey"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -14804,7 +18152,18 @@
 				"summary": "Remove a single SSH key by stable id",
 				"responses": {
 					"204": {
-						"description": "Removed"
+						"description": "Removed",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -15020,6 +18379,14 @@
 									"$ref": "#/components/schemas/WhoamiResponse"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -15070,6 +18437,11 @@
 									}
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -15119,6 +18491,23 @@
 								"schema": {
 									"$ref": "#/components/schemas/TokenCreateResponse"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -15183,6 +18572,14 @@
 									"$ref": "#/components/schemas/TokenMetadata"
 								}
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
 						}
 					},
 					"400": {
@@ -15215,7 +18612,18 @@
 				"summary": "Revoke a token",
 				"responses": {
 					"204": {
-						"description": "Revoked"
+						"description": "Revoked",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							}
+						}
 					},
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
@@ -15270,6 +18678,11 @@
 								},
 								"example": "uapi_requests_total{method=\"GET\",path=\"/firewall/rules\",status=\"200\"} 42\n"
 							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
 						}
 					},
 					"400": {
@@ -15311,6 +18724,14 @@
 								"schema": {
 									"$ref": "#/components/schemas/DiagnosticsResponse"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
 							}
 						}
 					},
@@ -15363,6 +18784,20 @@
 								"schema": {
 									"$ref": "#/components/schemas/BatchResponse"
 								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
 							}
 						}
 					},

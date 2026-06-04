@@ -139,11 +139,60 @@ function make_response(status, description, ref) {
 	return resp;
 }
 
+// Header components attached to success responses. The wire names are what a
+// client sees on the response. Keys here are the actual HTTP header names; the
+// $refs point at components defined under #/components/headers.
+const SUCCESS_HEADERS_UNIVERSAL = {
+	"X-Request-Id": { "$ref": "#/components/headers/XRequestId" },
+};
+const SUCCESS_HEADERS_WRITE = {
+	"X-Reload-Status":   { "$ref": "#/components/headers/XReloadStatus" },
+	"X-Reload-Services": { "$ref": "#/components/headers/XReloadServices" },
+};
+const SUCCESS_HEADERS_POST = {
+	"Idempotent-Replayed": { "$ref": "#/components/headers/IdempotentReplayed" },
+};
+
+function _attach_success_headers(resp, verb, status) {
+	let h = {};
+	for (let k in SUCCESS_HEADERS_UNIVERSAL) h[k] = SUCCESS_HEADERS_UNIVERSAL[k];
+	if (status >= 200 && status < 300 && verb != "get") {
+		for (let k in SUCCESS_HEADERS_WRITE) h[k] = SUCCESS_HEADERS_WRITE[k];
+		if (verb == "post")
+			for (let k in SUCCESS_HEADERS_POST) h[k] = SUCCESS_HEADERS_POST[k];
+		// Writes that return a body (PUT/PATCH/POST 200) carry the refreshed
+		// ETag so clients can chain If-Match without a separate GET. DELETE
+		// 204 has no body and no ETag.
+		if (status == 200)
+			h["ETag"] = { "$ref": "#/components/headers/ETag" };
+	}
+	// Item-level GET 200 also returns an ETag (used as the optimistic-
+	// concurrency anchor for the next write). Distinguish item from
+	// collection by the response body shape: a $ref schema is one object;
+	// a type:array schema is a collection (no ETag).
+	if (verb == "get" && status == 200) {
+		let s = resp?.content?.["application/json"]?.schema;
+		if (s != null && s["$ref"] != null)
+			h["ETag"] = { "$ref": "#/components/headers/ETag" };
+	}
+	// Caller-supplied headers (e.g. Link, X-Next-Cursor on collections)
+	// win; this only fills gaps.
+	if (resp.headers == null) resp.headers = {};
+	for (let k in h)
+		if (resp.headers[k] == null) resp.headers[k] = h[k];
+	return resp;
+}
+
 // Merge a success-response block with the verb-appropriate error set.
 // `success` is an object like { "200": <response>, ["304": <response>] }.
+// Wire-name response headers (X-Request-Id always; X-Reload-Status/Services on
+// writes; Idempotent-Replayed on POSTs) are injected automatically.
 function responses(verb, success) {
 	let r = {};
-	for (let k in success) r[k] = success[k];
+	for (let k in success) {
+		let status = int(k);
+		r[k] = _attach_success_headers(success[k], verb, status);
+	}
 	let errs = error_responses(verb);
 	for (let k in errs) r[k] = errs[k];
 	return r;
@@ -170,6 +219,10 @@ function build_crud_paths(ep) {
 			"responses": responses("get", {
 				"200": {
 					"description": "OK",
+					"headers": {
+						"Link":          { "$ref": "#/components/headers/Link" },
+						"X-Next-Cursor": { "$ref": "#/components/headers/XNextCursor" },
+					},
 					"content": { "application/json": {
 						"schema": { "type": "array",
 						            "items": { "$ref": "#/components/schemas/" + schema_ref } }
