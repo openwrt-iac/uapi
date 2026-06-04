@@ -26,7 +26,7 @@ function fromUci(section) {
 		add_wan_fqdn: as_int(section.add_wan_fqdn),
 		dnssec_enabled: normalize_bool(section.dnssec_enabled, false),
 		recursion: section.recursion ?? null,
-		resource: section.resource ?? null,
+		resource_limits: section.resource ?? null,
 		protocol: section.protocol ?? null,
 		query_minimize: normalize_bool(section.query_minimize, false),
 		prefetch: normalize_bool(section.prefetch, false),
@@ -53,7 +53,7 @@ function toUci(json) {
 	if (json.add_wan_fqdn != null)      out.add_wan_fqdn = "" + json.add_wan_fqdn;
 	if (json.dnssec_enabled != null)    out.dnssec_enabled = json.dnssec_enabled ? "1" : "0";
 	if (json.recursion != null)         out.recursion = json.recursion;
-	if (json.resource != null)          out.resource = json.resource;
+	if (json.resource_limits != null)   out.resource = json.resource_limits;
 	if (json.protocol != null)          out.protocol = json.protocol;
 	if (json.query_minimize != null)    out.query_minimize = json.query_minimize ? "1" : "0";
 	if (json.prefetch != null)          out.prefetch = json.prefetch ? "1" : "0";
@@ -89,8 +89,8 @@ function validate(json) {
 	if (json.recursion != null && !VALID_RECURSION[json.recursion])
 		push(errs, { field: "recursion", code: "not_in_enum",
 		             message: "must be default, passive, or aggressive" });
-	if (json.resource != null && !VALID_RESOURCE[json.resource])
-		push(errs, { field: "resource", code: "not_in_enum",
+	if (json.resource_limits != null && !VALID_RESOURCE[json.resource_limits])
+		push(errs, { field: "resource_limits", code: "not_in_enum",
 		             message: "must be tiny, small, medium, large, big, or huge" });
 	if (json.protocol != null && !VALID_PROTOCOL[json.protocol])
 		push(errs, { field: "protocol", code: "not_in_enum",
@@ -121,7 +121,8 @@ return {
 		                     description: "How aggressively to add WAN FQDNs (0..4)" },
 		dnssec_enabled:    { type: "boolean" },
 		recursion:         { type: "string", enum: keys(VALID_RECURSION) },
-		resource:          { type: "string", enum: keys(VALID_RESOURCE) },
+		resource_limits:   { type: "string", enum: keys(VALID_RESOURCE),
+		                     description: "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)." },
 		protocol:          { type: "string", enum: keys(VALID_PROTOCOL) },
 		query_minimize:    { type: "boolean" },
 		prefetch:          { type: "boolean" },

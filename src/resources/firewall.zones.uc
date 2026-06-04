@@ -12,7 +12,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		input: section.input ?? "REJECT",
-		output: section.output ?? "REJECT",
+		output_policy: section.output ?? "REJECT",
 		forward: section.forward ?? "REJECT",
 		network: as_list(section.network),
 		masq: normalize_bool(section.masq, false),
@@ -26,7 +26,7 @@ function toUci(json) {
 	let out = {};
 	if (json.name != null) out.name = json.name;
 	if (json.input != null) out.input = json.input;
-	if (json.output != null) out.output = json.output;
+	if (json.output_policy != null) out.output = json.output_policy;
 	if (json.forward != null) out.forward = json.forward;
 	if (type(json.network) == "array" && length(json.network) > 0) out.network = json.network;
 	if (json.masq != null) out.masq = json.masq ? "1" : "0";
@@ -60,9 +60,10 @@ return {
 	schema_properties: {
 		name:    { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+$",
 		           description: "Zone name; alphanumerics, dashes, underscores" },
-		input:   { type: "string", enum: keys(VALID_POLICIES) },
-		output:  { type: "string", enum: keys(VALID_POLICIES) },
-		forward: { type: "string", enum: keys(VALID_POLICIES) },
+		input:         { type: "string", enum: keys(VALID_POLICIES) },
+		output_policy: { type: "string", enum: keys(VALID_POLICIES),
+		                 description: "Renamed on the wire from uci's `output` (HCL block keyword)." },
+		forward:       { type: "string", enum: keys(VALID_POLICIES) },
 		family:  { type: "string", enum: keys(VALID_FAMILIES) },
 		network: { type: "array", items: { type: "string" } },
 		masq:    { type: "boolean",

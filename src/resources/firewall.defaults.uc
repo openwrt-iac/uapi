@@ -9,7 +9,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: true,
 		input: section.input ?? null,
-		output: section.output ?? null,
+		output_policy: section.output ?? null,
 		forward: section.forward ?? null,
 		syn_flood: normalize_bool(section.syn_flood, false),
 		drop_invalid: normalize_bool(section.drop_invalid, false),
@@ -25,7 +25,7 @@ function fromUci(section) {
 function toUci(json) {
 	let out = {};
 	if (json.input != null)    out.input = json.input;
-	if (json.output != null)   out.output = json.output;
+	if (json.output_policy != null) out.output = json.output_policy;
 	if (json.forward != null)  out.forward = json.forward;
 	if (json.syn_flood != null)    out.syn_flood = json.syn_flood ? "1" : "0";
 	if (json.drop_invalid != null) out.drop_invalid = json.drop_invalid ? "1" : "0";
@@ -58,7 +58,8 @@ return {
 	validate: validate,
 	schema_properties: {
 		input:              { type: "string", enum: keys(VALID_POLICIES) },
-		output:             { type: "string", enum: keys(VALID_POLICIES) },
+		output_policy:      { type: "string", enum: keys(VALID_POLICIES),
+		                      description: "Renamed on the wire from uci's `output` (HCL block keyword)." },
 		forward:            { type: "string", enum: keys(VALID_POLICIES) },
 		syn_flood:          { type: "boolean",
 		                      description: "Enable SYN flood protection" },

@@ -23,7 +23,7 @@ t.describe('firewall.zones', () => {
 		let r = zones.fromUci({ '.name': 'z_lan', '.anonymous': false, '.type': 'zone',
 		                        name: 'lan', input: 'ACCEPT' });
 		t.assert_equal(r.input, 'ACCEPT');
-		t.assert_equal(r.output, 'REJECT');
+		t.assert_equal(r.output_policy, 'REJECT');
 		t.assert_equal(r.forward, 'REJECT');
 	});
 

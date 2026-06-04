@@ -16299,13 +16299,14 @@
 							"DROP"
 						]
 					},
-					"output": {
+					"output_policy": {
 						"type": "string",
 						"enum": [
 							"ACCEPT",
 							"REJECT",
 							"DROP"
-						]
+						],
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
 					},
 					"forward": {
 						"type": "string",
@@ -16549,13 +16550,14 @@
 							"DROP"
 						]
 					},
-					"output": {
+					"output_policy": {
 						"type": "string",
 						"enum": [
 							"ACCEPT",
 							"REJECT",
 							"DROP"
-						]
+						],
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
 					},
 					"forward": {
 						"type": "string",
@@ -18373,7 +18375,7 @@
 							"aggressive"
 						]
 					},
-					"resource": {
+					"resource_limits": {
 						"type": "string",
 						"enum": [
 							"default",
@@ -18383,7 +18385,8 @@
 							"large",
 							"big",
 							"huge"
-						]
+						],
+						"description": "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)."
 					},
 					"protocol": {
 						"type": "string",
