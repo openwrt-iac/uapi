@@ -7,6 +7,107 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.0-rc4] - 2026-06-04
+
+Fourth release candidate for v2.0. Absorbs the second-pass review from
+the Terraform-provider author against rc3: four wire-surface renames
+the strict code generator flagged, plus six spec/doc correctness items
+and a CI guard against the next provider-hostile field name. Folds in
+operational fixes from the rc3 dogfooding cycle: the APK feed gate
+that keeps RCs off the public feed, a Redoc dark-theme pass on the
+documentation site, and a second test lint for spec integrity.
+
+### Wire-surface renames (breaking vs. rc3)
+
+These rename the JSON field; the underlying uci option stays the same.
+A v1.2.x client never saw any of these fields, so there is no v1-to-v2
+migration impact. The renames are bundled into rc4 so the operator
+pays the migration cost once at the v2.0.0 boundary, not piecemeal.
+
+- `mwan3/interfaces`: `count` -> `probe_count`. `count` collides with
+  Terraform's reserved `count` meta-argument and was breaking the
+  provider's schema validation.
+- `firewall/zones`, `firewall/defaults`: `output` -> `output_policy`.
+  `output` is an HCL block keyword; renders quoted in HCL and trips
+  linters.
+- `unbound/server`: `resource` -> `resource_limits`. Same HCL-keyword
+  smell; also disambiguates from process-resource-limit semantics.
+- `network/interfaces` runtime block: `ipv4-address`, `ipv6-address`,
+  `ipv6-prefix` now emit snake_case (`ipv4_address`, `ipv6_address`,
+  `ipv6_prefix`). ubus returns the hyphenated form; uapi normalizes
+  per the project-wide snake_case-where-it-stops policy.
+
+### Added
+
+- **OpenAPI 3.1.0 nullable shape** throughout the spec
+  (`type: [..., "null"]`), replacing the OpenAPI-3.0 `nullable: true`
+  form. Strict 3.1 validators stop tripping on the legacy form.
+- **`required` on nested `match`** for firewall rules and redirects:
+  the sub-schema now states `required: ["src_zone"]` directly, in
+  addition to the existing `openapi_conditional` form. Spec consumers
+  that don't evaluate conditional schemas get the constraint for free.
+- **Response headers documented under wire names** on every operation
+  that emits them: `X-Request-Id` universally, `ETag` on item GETs and
+  writes, `X-Reload-Status`/`X-Reload-Services` on writes,
+  `Idempotent-Replayed` on POSTs, `Link`/`X-Next-Cursor` on paginated
+  collections, `Retry-After` on 429/423, `WWW-Authenticate` on 401.
+- **`adopt` operations gain a real description** explaining the
+  ULID-rename + stale-id implications. Operation summaries fix the
+  pluralization smell ("Adopt an anonymous firewall **rule**" instead
+  of "rules").
+- **`TokenCreateResponse` field descriptions**: `bearer` and `name`
+  carry one-line explanations.
+- **`has_<field>` convention documented** in `info.description` and
+  `docs/adding-a-resource.md`. The snake_case-where-it-stops policy
+  is now a written paragraph in the same doc.
+
+### Hardening
+
+- **`make lint-reserved`**: walks `build/openapi.json`'s
+  `components.schemas` and fails CI on any top-level property whose
+  name is a Terraform meta-argument (`count`, `for_each`, `depends_on`,
+  `provider`, `lifecycle`, `connection`, `provisioner`) or HCL block
+  keyword (`output`, `resource`, `data`, `module`, `variable`,
+  `locals`, `terraform`). After rc4 the codebase has zero offenders;
+  the guard catches the next provider-hostile name before it ships.
+- **`make lint-refs`**: walks every `$ref` under `#/components/` in the
+  emitted spec and fails on any dangling target. Caught a cross-
+  section header rename that OpenAPI viewers had been rendering as
+  an empty box.
+- **APK feed gated to stable tags only**
+  (`.github/workflows/ci.yml`). The `Publish to APK feed on gh-pages`
+  step now skips any tag containing a hyphen (rc, alpha, beta, pre),
+  so `apk add uapi` against the public feed only ever resolves to a
+  true release. RCs still attach to the GitHub Release (marked
+  `--prerelease`); install them deliberately via
+  `apk add --allow-untrusted /tmp/uapi-<rc>.apk`.
+- **`feed-purge-rc.yml` workflow**: operator-dispatched scrub for
+  any pre-release APKs that landed before the gate existed. Defaults
+  to dry-run, refuses to leave the feed empty, rebuilds the signed
+  index from the remaining stable-only APKs. Used once on 2026-06-04
+  to drop the five legacy RC APKs (1.0.0_rc1/rc2, 2.0.0_rc1/rc2/rc3).
+
+### Documentation
+
+- Redoc API reference at <https://raspbeguy.github.io/uapi/api/> now
+  matches the project's dark palette throughout (sidebar, schema
+  panels, code blocks). Heading typography uses the same sans-serif
+  stack as the body to maintain visual rhythm on a docs page where
+  every endpoint and section title is a heading.
+- `docs/release-process.md` documents the stable-tags-only feed
+  policy and the `feed-purge-rc` recovery workflow.
+- `docs/installation.md` makes the stable-only feed convention
+  explicit; RC install path described as deliberate manual download.
+- `docs/migration-v1-to-v2.md` carries the rc3 -> rc4 wire renames
+  alongside the original v1 -> v2 table.
+
+### Internal
+
+- `openapi_singular` is now a required field on every CRUD resource
+  module (used by the adopt operation summary). The generator fails
+  loudly on a missing declaration rather than silently emitting
+  ungrammatical summaries.
+
 ## [2.0.0-rc3] - 2026-06-03
 
 Third release candidate for v2.0. Folds in four hardening items and three
