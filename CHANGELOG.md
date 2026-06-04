@@ -7,6 +7,51 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.0] - 2026-06-04
+
+First stable v2 release. Promotion of `v2.0.0-rc4` after the dogfooding
+and provider-integration windows closed with no further wire-surface
+issues. No code or spec changes since rc4; only the `VERSION` bump and
+the changelog promotion.
+
+The cumulative v2 changes vs. v1.2.1 are listed across the four RC
+entries below. As a contract summary:
+
+- `/api/v2/` mount; 32 curated resource endpoints + `/raw/` passthrough
+  + `/batch` + ops endpoints (`/healthz`, `/openapi.json`, `/schema`,
+  `/metrics`, `/tokens`, `/auth/whoami`, `/diagnostics`).
+- 665 unit tests, property-fuzz at 1000 iterations per resource per CI
+  run, integration suite against a real OpenWrt 25.12 VM, soak test
+  with RSS/fd-leak watch, perf-regression gate against
+  `bench/baseline.json`.
+- Per-package locking with deadlock-free batch acquisition; global
+  `with_lock` for non-uci writes only.
+- Optimistic concurrency via ETag + If-Match (header path through a
+  reverse proxy; query-param fallback through uhttpd directly).
+- Idempotency-Key support on POSTs; `Idempotent-Replayed` header on
+  replays.
+- Sensitive-field handling: write-only fields (`key`, `private_key`,
+  `preshared_key`, `tls_auth`, `pkcs12`) with `has_<field>: bool`
+  presence flag.
+- Token mint via CLI or HTTP, scope-subset escalation guard, per-token
+  rate limit, per-token request budget metric.
+- OpenAPI 3.1.0 spec is the contract. `make openapi-check` gates spec
+  drift in CI; `make lint-reserved` blocks Terraform-reserved or
+  HCL-keyword schema property names; `make lint-refs` blocks dangling
+  `$ref` strings.
+- Multi-arch byte-identical APK (`PKGARCH:=all`) verified across
+  x86_64 / aarch64 / arm_cortex-a7 / mips_24kc on every release.
+- Signed tag (`git verify-tag` in CI), signed APK feed
+  (`apk mkndx --sign-key`), reproducible SDK pin
+  (`build/sdk.sha256`).
+- gh-pages feed carries stable releases only; RCs publish to GitHub
+  Releases (marked `--prerelease`) but never to the feed.
+
+The v1.2.1 APK stays available on the feed indefinitely for operators
+who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` or
+`apk add uapi=1.2.1-r1` gets you there. v1-to-v2 migration table at
+`docs/migration-v1-to-v2.md`.
+
 ## [2.0.0-rc4] - 2026-06-04
 
 Fourth release candidate for v2.0. Absorbs the second-pass review from
