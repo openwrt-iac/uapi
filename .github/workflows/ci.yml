@@ -285,10 +285,15 @@ jobs:
           [ -r build/sbom.spdx.json ] && \
             gh release upload "$TAG" build/sbom.spdx.json --clobber || true
 
-      # Step-level guard 3b: only publish to the signed gh-pages feed on a real v* tag.
-      # Same defense-in-depth rationale as above.
-      - name: Publish to APK feed on gh-pages (tag pushes only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Step-level guard 3b: only publish to the signed gh-pages feed on a real v* tag,
+      # AND only for stable tags. Pre-release tags (-rc, -alpha, -beta, -pre, anything
+      # carrying a hyphen per semver) are intentionally excluded: the public feed must
+      # carry only true releases, otherwise a fresh `apk add uapi` or `apk upgrade uapi`
+      # resolves to the not-actually-ready RC. RCs still land on the GitHub Release
+      # (marked --prerelease above); operators who want to install one download the APK
+      # from the release page and `apk add --allow-untrusted <file>` deliberately.
+      - name: Publish to APK feed on gh-pages (stable tags only)
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
         env:
           FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
         run: |

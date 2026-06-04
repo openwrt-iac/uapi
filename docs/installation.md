@@ -44,7 +44,9 @@ apk update
 apk add uapi
 ```
 
-The feed currently ships v2.x packages as the stable line. v1.2.1 stays available indefinitely for operators who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` (or `apk add uapi=1.2.1-r1`) gets you there.
+The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`, `-beta`, `-pre`) are intentionally excluded so that `apk add uapi` and `apk upgrade uapi` never resolve to a not-yet-ready build. RC APKs land on the GitHub Release page (marked Pre-release); to install one, download it manually and `apk add --allow-untrusted /tmp/uapi-<rc>.apk`.
+
+The stable line currently is `1.2.x` (`v2.0.0` is in RC at time of writing). `v1.2.1` stays available indefinitely for operators who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` (or `apk add uapi=1.2.1-r1`) gets you there.
 
 ## TLS
 

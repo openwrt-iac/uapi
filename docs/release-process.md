@@ -64,6 +64,22 @@ For any MAJOR bump, tag `vX.0.0-rc1` (or `-rc2`, etc.) BEFORE the final
 and marks the GitHub release as a prerelease (its
 `case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
 
+**RCs do NOT publish to the gh-pages apk feed.** The publish step in
+`.github/workflows/ci.yml` is gated on `!contains(github.ref_name, '-')`
+so only stable tags land in `packages.adb`. The intent is that a
+fresh `apk add uapi` against the public feed must never resolve to a
+not-actually-ready RC. RCs go to the GitHub Release page only, marked
+`--prerelease`; operators who want to install one download the APK and
+`apk add --allow-untrusted /tmp/uapi-<rc>.apk` deliberately. Same path
+the maintainer uses to dogfood the RC on the live router.
+
+If a pre-release APK accidentally lands in the feed (legacy artefact,
+gate bypass, manual push), the `.github/workflows/feed-purge-rc.yml`
+workflow scrubs it. Dispatch with `dry_run=true` first to confirm the
+candidate list; dispatch again with `dry_run=false` to commit. The
+workflow rebuilds the signed index from the remaining (stable-only)
+APKs in the same step.
+
 Announce the RC explicitly to known downstream consumers - the
 `raspbeguy/uapi` Terraform provider author, anyone with a published
 client - and give them a ~1-2 week window to file wire-surface
@@ -116,10 +132,12 @@ Per-release steps (operator does these in order):
    - `make package/uapi/compile` in the SDK
    - APK upload as workflow artifact
    - VM smoke test (`tests/integration/release_apk_smoke.sh`)
-   - GitHub Release create + APK attach
-   - gh-pages feed publish (signed index, `apk mkndx --sign-key`)
-9. **Verify the release** is visible on GitHub Releases and the gh-pages
-   feed.
+   - GitHub Release create + APK attach (always; RCs get `--prerelease`)
+   - gh-pages feed publish (signed index, `apk mkndx --sign-key`).
+     **Stable tags only.** RC/alpha/beta/pre tags skip this step.
+9. **Verify the release** is visible on GitHub Releases (and the
+   gh-pages feed for stable tags). For an RC, the feed should be
+   unchanged.
 
 ## Reproducible builds
 

@@ -1,0 +1,132 @@
+name: feed-purge-rc
+
+# One-off (and reusable) workflow that removes pre-release APKs from the
+# gh-pages feed and re-signs the index. The feed must only carry true
+# releases (see release-process.md); the publish step in ci.yml gates
+# future RCs out, this workflow scrubs the ones that landed before the
+# gate existed.
+#
+# Default behavior: drop every uapi-*.apk whose filename has an OpenWrt
+# pre-release marker (`_rc`, `_alpha`, `_beta`, `_pre`). The OpenWrt
+# packaging system replaces semver's hyphen with an underscore in the
+# APK filename (Make doesn't tolerate `-` in version strings), so
+# `2.0.0-rc3` ships as `uapi-2.0.0_rc3-r1.apk`.
+#
+# operator-triggered only; never fires on push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print what would be removed; do not push'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# Concurrency: one purge at a time. A second dispatch while the first is
+# still pushing would race the index rebuild and leave a torn packages.adb.
+concurrency:
+  group: feed-purge-rc
+  cancel-in-progress: false
+
+env:
+  OPENWRT_VERSION: 25.12.4
+  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl zstd
+
+      # Fetch only the SDK directory tree we need; the `apk` binary it
+      # ships is what signs the index. Reuses the same SHA pin as ci.yml.
+      - name: Cache OpenWrt SDK
+        id: sdk_cache
+        uses: actions/cache@v5
+        with:
+          path: build/sdk
+          key: openwrt-sdk-25.12.4-x86_64
+
+      - name: Download SDK if cache miss
+        if: steps.sdk_cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build/sdk
+          SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
+          curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
+          ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
+          tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" \
+              -C build/sdk --strip-components=1
+          rm -f "/tmp/$SDK_TARBALL"
+
+      - name: Locate SDK apk binary
+        id: apkbin
+        run: |
+          APK_BIN=$(find build/sdk/staging_dir -type f -executable -name apk | head -1)
+          [ -n "$APK_BIN" ] || { echo "no apk binary in SDK staging_dir"; exit 1; }
+          echo "path=$(realpath "$APK_BIN")" >> "$GITHUB_OUTPUT"
+
+      - name: Check out gh-pages worktree
+        run: |
+          git fetch origin gh-pages:gh-pages
+          git worktree add /tmp/gh-pages gh-pages
+
+      - name: List candidates and purge (dry_run=${{ inputs.dry_run }})
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+          APK_BIN: ${{ steps.apkbin.outputs.path }}
+        run: |
+          set -eu
+          FEED_DIR=/tmp/gh-pages/packages/all/uapi
+          cd "$FEED_DIR"
+
+          # The pattern matches the OpenWrt-mangled prerelease forms.
+          # ls is fine here, filenames are controlled by us and have no
+          # spaces.
+          CANDIDATES=$(ls uapi-*_rc*-r*.apk uapi-*_alpha*-r*.apk \
+                          uapi-*_beta*-r*.apk uapi-*_pre*-r*.apk 2>/dev/null || true)
+          if [ -z "$CANDIDATES" ]; then
+            echo "no pre-release APKs in the feed; nothing to do"
+            exit 0
+          fi
+
+          echo "Pre-release APKs that would be purged:"
+          for f in $CANDIDATES; do echo "  - $f"; done
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry_run=true; not removing or pushing"
+            exit 0
+          fi
+
+          for f in $CANDIDATES; do
+            rm -f "$f"
+            echo "removed $f"
+          done
+
+          # Rebuild the signed index against the remaining (stable-only)
+          # APKs. apk mkndx requires at least one input; emit a marker
+          # error if we somehow purged everything.
+          REMAINING=$(ls uapi-*.apk 2>/dev/null || true)
+          [ -n "$REMAINING" ] || { echo "ERROR: would leave the feed empty"; exit 1; }
+
+          SIGN_KEY=$(mktemp)
+          printf '%s' "$FEED_SIGNING_KEY" > "$SIGN_KEY"
+          chmod 600 "$SIGN_KEY"
+          "$APK_BIN" --allow-untrusted mkndx --output packages.adb \
+                     --sign-key "$SIGN_KEY" $REMAINING
+          shred -u "$SIGN_KEY" 2>/dev/null || rm -f "$SIGN_KEY"
+
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          cd /tmp/gh-pages
+          git add -A
+          git commit -m "feed: purge pre-release APKs (operator dispatch)" \
+                  -m "Removed: $(echo $CANDIDATES | tr ' ' ',')"
+          git push origin gh-pages
