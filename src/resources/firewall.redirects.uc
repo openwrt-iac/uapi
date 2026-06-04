@@ -129,6 +129,7 @@ return {
 		target: { type: "string", enum: keys(VALID_TARGETS) },
 		match: {
 			type: "object",
+			required: ["src_zone"],
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },

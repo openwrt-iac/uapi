@@ -119,6 +119,7 @@ return {
 		enabled: { type: "boolean" },
 		match: {
 			type: "object",
+			required: ["src_zone"],
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
