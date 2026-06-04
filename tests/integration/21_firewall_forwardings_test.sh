@@ -11,13 +11,13 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
 echo "--- create two zones first (cross-reference target) ---"
 src_zone=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/zones" -d '{
-	"name": "uapi_fwd_src", "input": "ACCEPT", "output": "ACCEPT", "forward": "ACCEPT"
+	"name": "uapi_fwd_src", "input": "ACCEPT", "output_policy": "ACCEPT", "forward": "ACCEPT"
 }')
 src_zid=$(echo "$src_zone" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "  src zone: $src_zid"
 
 dst_zone=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/zones" -d '{
-	"name": "uapi_fwd_dst", "input": "REJECT", "output": "ACCEPT", "forward": "REJECT"
+	"name": "uapi_fwd_dst", "input": "REJECT", "output_policy": "ACCEPT", "forward": "REJECT"
 }')
 dst_zid=$(echo "$dst_zone" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "  dst zone: $dst_zid"

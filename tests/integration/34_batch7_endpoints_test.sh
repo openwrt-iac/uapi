@@ -115,7 +115,7 @@ zone_resp=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 		"name": "depzone",
 		"network": ["lan"],
 		"input": "ACCEPT",
-		"output": "ACCEPT",
+		"output_policy": "ACCEPT",
 		"forward": "REJECT"
 	}')
 zone_id=$(printf '%s' "$zone_resp" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')

@@ -12,7 +12,7 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
 echo "--- POST /firewall/zones creates a zone ---"
 zone=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/zones" -d '{
-	"name": "uapi_test", "input": "ACCEPT", "output": "ACCEPT", "forward": "REJECT"
+	"name": "uapi_test", "input": "ACCEPT", "output_policy": "ACCEPT", "forward": "REJECT"
 }')
 echo "$zone" | tail -1 | grep -q '^200$' || fail "zone POST expected 200"
 zid=$(echo "$zone" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')

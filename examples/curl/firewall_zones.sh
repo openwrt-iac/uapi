@@ -16,7 +16,7 @@ echo "# Create a zone"
 created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/firewall/zones" -d '{
 	"name": "iot",
 	"input": "REJECT",
-	"output": "ACCEPT",
+	"output_policy": "ACCEPT",
 	"forward": "REJECT",
 	"network": ["iot"]
 }')
