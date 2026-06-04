@@ -21,15 +21,18 @@ function fetch_runtime(conn, name) {
 	try { status = conn.call("network.interface." + name, "status"); }
 	catch (e) { return {}; }
 	if (status == null) return {};
+	// ubus emits hyphenated keys (ipv4-address, ipv6-address, ipv6-prefix).
+	// Hyphenated identifiers are the only ones in our API surface that need
+	// quoting in HCL/Go field tags; remap to snake_case to match the rest.
 	return {
 		up: !!status.up,
 		pending: !!status.pending,
 		available: !!status.available,
 		l3_device: status.l3_device ?? null,
 		uptime: status.uptime ?? null,
-		"ipv4-address": status["ipv4-address"] ?? [],
-		"ipv6-address": status["ipv6-address"] ?? [],
-		"ipv6-prefix": status["ipv6-prefix"] ?? [],
+		ipv4_address: status["ipv4-address"] ?? [],
+		ipv6_address: status["ipv6-address"] ?? [],
+		ipv6_prefix:  status["ipv6-prefix"]  ?? [],
 		route: status.route ?? [],
 	};
 }
@@ -235,9 +238,9 @@ return {
 			available:        { type: "boolean" },
 			l3_device:        { type: ["string", "null"] },
 			uptime:           { type: ["integer", "null"], minimum: 0 },
-			"ipv4-address":   { type: "array", items: { type: "object" } },
-			"ipv6-address":   { type: "array", items: { type: "object" } },
-			"ipv6-prefix":    { type: "array", items: { type: "object" } },
+			ipv4_address:     { type: "array", items: { type: "object" } },
+			ipv6_address:     { type: "array", items: { type: "object" } },
+			ipv6_prefix:      { type: "array", items: { type: "object" } },
 			route:            { type: "array", items: { type: "object" } },
 		},
 	},

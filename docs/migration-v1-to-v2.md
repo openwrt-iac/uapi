@@ -100,6 +100,16 @@ surface renames.
 | `firewall/defaults`   | `output`         | `output_policy`    | Same. |
 | `unbound/server`      | `resource`       | `resource_limits`  | `resource` is an HCL block keyword. `resource_limits` matches the field's semantic (a memory/cache sizing preset). |
 
+### `network/interfaces` runtime address keys (rc4)
+
+ubus emits the address-set keys as hyphenated identifiers
+(`ipv4-address`, `ipv6-address`, `ipv6-prefix`); these were the only
+hyphenated identifiers anywhere in the API surface. Renamed to
+`ipv4_address`, `ipv6_address`, `ipv6_prefix` so every key is a legal
+struct field tag / HCL identifier without quoting. The runtime block
+is computed (clients ignore it for drift detection) so the rename
+costs nothing on disk; only the wire surface changed.
+
 ## Strict integer typing (Breaking)
 
 v1.x silently accepted string-form integers (`"42"`) for fields declared

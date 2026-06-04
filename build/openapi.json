@@ -16728,19 +16728,19 @@
 								],
 								"minimum": 0
 							},
-							"ipv4-address": {
+							"ipv4_address": {
 								"type": "array",
 								"items": {
 									"type": "object"
 								}
 							},
-							"ipv6-address": {
+							"ipv6_address": {
 								"type": "array",
 								"items": {
 									"type": "object"
 								}
 							},
-							"ipv6-prefix": {
+							"ipv6_prefix": {
 								"type": "array",
 								"items": {
 									"type": "object"
