@@ -90,6 +90,66 @@ Per CLAUDE.md:
 - Nest related fields where it improves readability. `firewall.rules` uses `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This pays off in the Terraform mapping.
 - Runtime/computed fields go under `runtime: {...}`. Currently empty for most resources; populate when ubus exposes useful data.
 
+### Where snake_case stops
+
+uapi mirrors uci option names verbatim, EXCEPT for the v2.0 rename
+sweep (`dropbear`, `snmpd`, `vnstat`) and a handful of Terraform-
+collision renames in rc4 (`mwan3.interfaces.count` -> `probe_count`,
+`firewall.{zones,defaults}.output` -> `output_policy`,
+`unbound.server.resource` -> `resource_limits`,
+`network.interfaces.runtime.ipv4-address` -> `ipv4_address`).
+
+Smushed uci names (`dynamicdhcp`, `commonname`, `expandhosts`,
+`boguspriv`, `readethers`, `domainneeded`, `leasefile`, `resolvfile`,
+`defaultroute`, `clientid`, `reqprefix`, `agentaddress`, `localservice`,
+`linklayer`, `zonename`, etc.) are KEPT verbatim. Two reasons:
+
+1. **uci fidelity.** A field named `expandhosts` greps cleanly against
+   `/etc/config/dhcp`; renaming to `expand_hosts` would split the
+   mental model between the API surface and what an operator sees on
+   the router.
+2. **The rename cost is real.** Every wire-surface rename takes a
+   migration-guide entry, breaks downstream clients, and forces an
+   RC cycle. The consistency gain doesn't pay for the disruption when
+   the existing name is already canonical to uci.
+
+Two name shapes WILL be renamed:
+
+- **Terraform reserved or HCL block keywords** (the rc4 batch above).
+  These don't work as Terraform attributes.
+- **Names that mislead** (e.g. `dhcp.servers.runtime.active_leases_v4_total`
+  was renamed to `active_leases_v4_box_total` in rc2 because the
+  original name suggested per-server semantics for a box-wide counter).
+
+If you're curating a new uci option, default to the uci name. If it
+collides with a Terraform/HCL keyword or actively misleads, rename
+and document.
+
+### Write-only fields: `<field>` + `has_<field>` convention
+
+Sensitive fields (passphrases, private keys, PSKs) follow a uniform
+pattern: the field is **write-only** on the wire, and a read-only
+companion `has_<field>: bool` indicates presence on GET responses.
+
+Examples:
+
+- `wireless.interfaces.key` / `has_key`
+- `network.wireguard_peers.private_key` / `has_private_key`
+- `network.wireguard_peers.preshared_key` / `has_preshared_key`
+- `openvpn.instances.key` / `has_key`
+- `openvpn.instances.tls_auth` / `has_tls_auth`
+- `openvpn.instances.pkcs12` / `has_pkcs12`
+
+Implementation: `fromUci` masks the field (`key: null` or omit) and
+sets `has_key: section.key != null && section.key != ""`. `toUci`
+passes the field through when present. `merge_for_patch` carries the
+old value forward so an unrelated PATCH (e.g. changing `verb` on an
+openvpn instance) doesn't wipe the credential when the field is absent
+from the request body.
+
+Mark the field `writeOnly: true` and the companion `readOnly: true` in
+`schema_properties` so a generator can distinguish them statically.
+
 ## 4. Add unit tests
 
 `tests/unit/<package>_<type>_test.uc`. Test `fromUci`, `toUci` (including round-trip), and `validate` for required-missing, enum-violation, and format cases.
