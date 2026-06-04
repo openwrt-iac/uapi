@@ -15572,8 +15572,10 @@
 						"type": "string"
 					},
 					"version": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"installed": {
 						"type": "boolean"
@@ -16152,8 +16154,10 @@
 				"description": "uapi resource backed by uci firewall.rule",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16277,8 +16281,10 @@
 				"description": "uapi resource backed by uci firewall.zone",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16351,8 +16357,10 @@
 				"description": "uapi resource backed by uci firewall.redirect",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16497,8 +16505,10 @@
 				"description": "uapi resource backed by uci firewall.forwarding",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16536,8 +16546,10 @@
 				"description": "uapi resource backed by uci firewall.defaults",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16607,8 +16619,10 @@
 				"description": "uapi resource backed by uci network.interface",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16880,8 +16894,10 @@
 				"description": "uapi resource backed by uci network.device",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -16988,8 +17004,10 @@
 				"description": "uapi resource backed by uci network.route",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17069,8 +17087,10 @@
 				"description": "uapi resource backed by uci network.rule",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17216,8 +17236,10 @@
 				"description": "uapi resource backed by uci network.bridge-vlan",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17253,8 +17275,10 @@
 				"description": "uapi resource backed by uci network.wireguard_peer",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17330,8 +17354,10 @@
 				"description": "uapi resource backed by uci wireless.wifi-device",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17403,8 +17429,10 @@
 				"description": "uapi resource backed by uci wireless.wifi-iface",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17564,15 +17592,19 @@
 				"description": "uapi resource backed by uci dhcp.host",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
 					},
 					"name": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"mac": {
 						"type": [
@@ -17615,8 +17647,10 @@
 						"description": "Duration like '12h', '30m', '1d', or plain seconds"
 					},
 					"tag": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"dns": {
 						"type": "boolean"
@@ -17673,12 +17707,16 @@
 						"description": "Assigned IP address"
 					},
 					"hostname": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"duid": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					}
 				}
 			},
@@ -17738,8 +17776,10 @@
 				"description": "uapi resource backed by uci dhcp.dhcp",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17838,8 +17878,10 @@
 				"description": "uapi resource backed by uci dhcp.dnsmasq",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17928,8 +17970,10 @@
 				"description": "uapi resource backed by uci dhcp.odhcpd",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -17968,8 +18012,10 @@
 				"description": "uapi resource backed by uci system.system",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18044,8 +18090,10 @@
 				"description": "uapi resource backed by uci system.timeserver",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18104,8 +18152,10 @@
 				"description": "uapi resource backed by uci dropbear.dropbear",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18154,8 +18204,10 @@
 				"description": "uapi resource backed by uci uhttpd.uhttpd",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18273,8 +18325,10 @@
 				"description": "uapi resource backed by uci uhttpd.cert",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18324,8 +18378,10 @@
 				"description": "uapi resource backed by uci unbound.unbound",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18473,8 +18529,10 @@
 				"description": "uapi resource backed by uci sqm.queue",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18538,8 +18596,10 @@
 				"description": "uapi resource backed by uci snmpd.agent",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18560,8 +18620,10 @@
 				"description": "uapi resource backed by uci snmpd.com2sec",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18593,8 +18655,10 @@
 				"description": "uapi resource backed by uci snmpd.group",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18631,8 +18695,10 @@
 				"description": "uapi resource backed by uci snmpd.access",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18706,8 +18772,10 @@
 				"description": "uapi resource backed by uci snmpd.system",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18748,8 +18816,10 @@
 				"description": "uapi resource backed by uci lldpd.lldpd",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18810,8 +18880,10 @@
 				"description": "uapi resource backed by uci prometheus-node-exporter-lua.prometheus-node-exporter-lua",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18908,8 +18980,10 @@
 				"description": "uapi resource backed by uci vnstat.vnstat",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18939,8 +19013,10 @@
 				"description": "uapi resource backed by uci vnstat.interface",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -18966,8 +19042,10 @@
 				"description": "uapi resource backed by uci mwan3.globals",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19027,8 +19105,10 @@
 				"description": "uapi resource backed by uci mwan3.interface",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19211,8 +19291,10 @@
 				"description": "uapi resource backed by uci mwan3.member",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19252,8 +19334,10 @@
 				"description": "uapi resource backed by uci mwan3.policy",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19291,8 +19375,10 @@
 				"description": "uapi resource backed by uci mwan3.rule",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19388,8 +19474,10 @@
 				"description": "uapi resource backed by uci usteer.usteer",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"
@@ -19615,8 +19703,10 @@
 				"description": "uapi resource backed by uci openvpn.openvpn",
 				"properties": {
 					"id": {
-						"type": "string",
-						"nullable": true
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"managed": {
 						"type": "boolean"

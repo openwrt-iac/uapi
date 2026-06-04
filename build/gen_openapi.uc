@@ -706,7 +706,7 @@ function build_schemas() {
 				"id": { "type": "string", "description": "Package name (same as name)" },
 				"managed": { "type": "boolean" },
 				"name": { "type": "string" },
-				"version": { "type": "string", "nullable": true },
+				"version": { "type": ["string", "null"] },
 				"installed": { "type": "boolean" },
 				"runtime": { "type": "object" },
 			},
@@ -962,7 +962,7 @@ function build_schemas() {
 				else if (type(v) == "int" || type(v) == "double") prop = { "type": "number" };
 				else if (type(v) == "array") prop = { "type": "array", "items": { "type": "string" } };
 				else if (type(v) == "object") prop = { "type": "object" };
-				else prop = { "type": "string", "nullable": true };
+				else prop = { "type": ["string", "null"] };
 				properties[k] = prop;
 			}
 			if (type(mod.schema_properties) == "object") {

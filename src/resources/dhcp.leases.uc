@@ -43,7 +43,7 @@ return {
 		expires_at: { type: "integer", description: "Unix epoch seconds when the lease expires" },
 		mac: { type: "string", description: "Client MAC address" },
 		ip: { type: "string", description: "Assigned IP address" },
-		hostname: { type: "string", nullable: true },
-		duid: { type: "string", nullable: true },
+		hostname: { type: ["string", "null"] },
+		duid:     { type: ["string", "null"] },
 	},
 };
