@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
 
-# v2.0.2 C1: proto=wireguard interfaces need their uci section name to also
-# be a legal Linux ifname (netifd uses the section name verbatim as the
-# kernel netdev name; IFNAMSIZ caps it at 15 chars). The caller can supply
-# `name`; otherwise the server emits a `wg_<11-char>` fallback. Either way
-# the resulting `ip link show <id>` must show a real netdev. v2.0.0/v2.0.1
-# silently created a config that could never come up.
+# v2.0.2: network/interfaces accepts an optional caller-supplied `name`
+# field on every proto (LuCI parity - `lan`, `wan`, `guest`). When absent,
+# the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux
+# IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. The
+# wireguard subcase exists because v2.0.0/v2.0.1 silently created a config
+# that could never come up; that path is exercised end-to-end here.
 
 . tests/integration/lib/install_uapi.sh
 install_uapi
@@ -100,11 +100,16 @@ else
 fi
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/$id"
 
-echo "--- validation: name on a non-wireguard create -> 422 ---"
+echo "--- name on a non-wireguard create -> 200 (any proto accepts caller-supplied name) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d '{"proto":"dhcp","name":"shouldfail"}')
+	-d '{"proto":"dhcp","name":"namedhcp"}')
 status=$(echo "$resp" | tail -1)
-[ "$status" = "422" ] || fail "name on non-wireguard expected 422, got $status"
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "200" ] || fail "name on dhcp expected 200, got $status: $body"
+id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+[ "$id" = "namedhcp" ] || fail "expected id=namedhcp, got id=$id"
+$SSH "uci get network.namedhcp" >/dev/null || fail "section network.namedhcp not in uci"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/namedhcp"
 
 echo "--- validation: 16-char name on wireguard -> 422 ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
@@ -120,4 +125,4 @@ resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces
 status=$(echo "$resp" | tail -1)
 [ "$status" = "422" ] || fail "hyphenated name expected 422, got $status"
 
-echo "wireguard interface naming honours caller-supplied name AND IFNAMSIZ."
+echo "interface naming: caller-supplied name accepted on every proto; IFNAMSIZ + uci charset enforced."

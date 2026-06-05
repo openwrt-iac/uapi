@@ -125,11 +125,15 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
-	t.it('validate rejects `name` on a non-wireguard create', () => {
-		let errs = interfaces.validate({ proto: 'static', name: 'lan',
+	t.it('validate accepts `name` on any proto (LuCI parity)', () => {
+		let errs_static = interfaces.validate({ proto: 'static', name: 'lan',
 			ipaddr: '192.168.1.1' }, null);
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'invalid_format');
+		let ne_static = filter(errs_static, function(e) { return e.field == "name"; });
+		t.assert_equal(length(ne_static), 0);
+
+		let errs_dhcp = interfaces.validate({ proto: 'dhcp', name: 'wan' }, null);
+		let ne_dhcp = filter(errs_dhcp, function(e) { return e.field == "name"; });
+		t.assert_equal(length(ne_dhcp), 0);
 	});
 
 	t.it('validate rejects `name` that fails the IFNAMSIZ pattern', () => {
@@ -162,18 +166,20 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(ne[0].code, 'read_only');
 	});
 
-	t.it('id_for_create echoes the caller-supplied name for proto=wireguard', () => {
-		let id = interfaces.id_for_create({ proto: 'wireguard', name: 'wgprod' });
-		t.assert_equal(id, 'wgprod');
+	t.it('id_for_create echoes the caller-supplied name regardless of proto', () => {
+		t.assert_equal(interfaces.id_for_create({ proto: 'wireguard', name: 'wgprod' }), 'wgprod');
+		t.assert_equal(interfaces.id_for_create({ proto: 'static',    name: 'lan' }),    'lan');
+		t.assert_equal(interfaces.id_for_create({ proto: 'dhcp',      name: 'wan' }),    'wan');
+		t.assert_equal(interfaces.id_for_create({ proto: 'pppoe',     name: 'isp' }),    'isp');
 	});
 
-	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent', () => {
+	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent and proto=wireguard', () => {
 		let id = interfaces.id_for_create({ proto: 'wireguard' });
 		t.assert_equal(length(id), 14);
 		t.assert_match(id, /^wg_[0-9a-hjkmnp-tv-z]{11}$/);
 	});
 
-	t.it('id_for_create returns null for non-wireguard protos (use the default ULID)', () => {
+	t.it('id_for_create returns null for non-wireguard protos when no name is supplied', () => {
 		t.assert_equal(interfaces.id_for_create({ proto: 'static' }), null);
 		t.assert_equal(interfaces.id_for_create({ proto: 'dhcp' }), null);
 		t.assert_equal(interfaces.id_for_create({}), null);

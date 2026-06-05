@@ -17,7 +17,8 @@ client.
 
 ### Fixed
 
-- **WireGuard tunnels can finally come up.**
+- **Interfaces accept caller-supplied names; the wireguard
+  IFNAMSIZ silent failure goes away in the process.**
   In v2.0.0/v2.0.1, posting `proto=wireguard` to `/network/interfaces`
   silently created a config that could never bring the tunnel up:
   uapi names every managed section with a ~28-char ULID, but netifd's
@@ -28,24 +29,34 @@ client.
   response, no client signal, broken on the box.
 
   The fix introduces an optional `name` field on
-  `POST /network/interfaces` for `proto=wireguard` interfaces:
+  `POST /network/interfaces` for every interface proto — interface
+  section names are first-class semantic handles in OpenWrt
+  (referenced by firewall zones, routes, dhcp servers, sqm queues;
+  visible in `uci show network`; shown by LuCI), so the
+  ULID-everywhere policy was fighting the platform's own
+  convention for this one resource family:
 
   ```json
   { "proto": "wireguard", "name": "wg-prod",
     "private_key": "...", "addresses": ["10.0.0.1/24"] }
+
+  { "proto": "static", "name": "guest",
+    "ipaddr": "192.168.99.1", "netmask": "255.255.255.0" }
   ```
 
   Validation: `^[A-Za-z][A-Za-z0-9_]{0,14}$` (uci section-name
-  charset + Linux IFNAMSIZ), only valid for `proto=wireguard` (other
-  protos reject with `422 invalid_format`), only valid at create
-  time (PUT/PATCH reject with `read_only` - rename via DELETE +
-  POST), must not clash with an existing section. The `name` becomes
-  the uapi `id`; GETs return it under `id` (the field is request-only
-  and does not echo back as `name`).
+  charset, IFNAMSIZ-tight pattern reused across protos because every
+  conventional LuCI/manual name fits comfortably under 15 chars).
+  Only valid at create time; PUT/PATCH reject with `read_only`
+  (rename via DELETE + POST). Must not clash with an existing
+  section in the `network` package. The `name` becomes the uapi `id`;
+  GETs return it under `id` (the field is request-only and does not
+  echo back as `name`).
 
   When `name` is absent, the server emits a 14-char `wg_<11-char>`
-  fallback (`ids.new_id("wg", 11)`, 32^11 entropy) that still fits
-  IFNAMSIZ.
+  fallback for `proto=wireguard` (`ids.new_id("wg", 11)`, 32^11
+  entropy; fits IFNAMSIZ so the kernel netdev creates cleanly) or
+  the standard 28-char ULID for every other proto.
 
   Adoption of anonymous `proto=wireguard` sections also uses the
   short-id format; before this fix, adopting an anonymous wireguard

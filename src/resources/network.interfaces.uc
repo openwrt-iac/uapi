@@ -6,12 +6,13 @@ let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let as_int = values.as_int;
 
-// Linux IFNAMSIZ is 16 bytes including NUL, leaving 15 usable chars. For
-// `proto=wireguard` netifd uses the uci section name verbatim as the kernel
-// netdev name, so the section name must also be a legal ifname AND a legal
-// uci section name (no hyphens). Hyphens are valid ifname chars but uci
-// rejects them in section names, so we drop them from the accepted set.
-const WG_IFNAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,14}$/;
+// 15 chars max + uci section-name charset. The cap is Linux IFNAMSIZ-1,
+// strictly binding only for proto=wireguard (netifd uses the section name
+// as the kernel netdev there); we apply the same pattern to every
+// interface because every conventional LuCI/manual interface name fits
+// comfortably inside 15 chars and one rule beats two. Hyphens are valid
+// ifname chars but uci rejects them in section names, so we drop them.
+const IFNAMSIZ_RE = /^[A-Za-z][A-Za-z0-9_]{0,14}$/;
 
 const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
@@ -161,12 +162,9 @@ function validate(json, conn, id) {
 		if (id != null)
 			push(errs, { field: "name", code: "read_only",
 			             message: "name can only be set at create time; rename via DELETE + POST" });
-		else if (json.proto != "wireguard")
+		else if (type(json.name) != "string" || !match(json.name, IFNAMSIZ_RE))
 			push(errs, { field: "name", code: "invalid_format",
-			             message: "is only valid when proto is wireguard (the section name doubles as the kernel netdev name)" });
-		else if (type(json.name) != "string" || !match(json.name, WG_IFNAME_RE))
-			push(errs, { field: "name", code: "invalid_format",
-			             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (Linux IFNAMSIZ + uci section-name rules)" });
+			             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (uci section name, IFNAMSIZ-tight)" });
 		else if (conn != null) {
 			let existing = null;
 			try { existing = conn.uci_get("network", json.name); } catch (_) {}
@@ -243,12 +241,18 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	// IFNAMSIZ-driven; see the WG_IFNAME_RE block above for the constraint.
-	// Caller-supplied `name` wins; absent that, emit a 14-char wg_<11-rand>.
+	// Interface section names are first-class semantic handles in OpenWrt
+	// (firewall.zones.network, dhcp.servers.interface, routes.interface,
+	// sqm.queues.interface all reference these by name; LuCI shows them;
+	// `uci show network` is the SSH-debug surface). Caller-supplied name
+	// wins; absent, we still need an IFNAMSIZ-fitting fallback for
+	// proto=wireguard (netifd uses the section name as the kernel netdev
+	// there). Other protos fall through to the standard 28-char ULID.
 	id_for_create: function(body) {
-		if (body == null || body.proto != "wireguard") return null;
+		if (body == null) return null;
 		if (body.name != null) return body.name;
-		return ids.new_id("wg", 11);
+		if (body.proto == "wireguard") return ids.new_id("wg", 11);
+		return null;
 	},
 	openapi_singular: "network interface",
 	openapi_required: ["proto"],
@@ -297,7 +301,7 @@ return {
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS) },
 		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-		             description: "Create-time only; only valid when proto is wireguard. Sets the uci section name, which netifd uses verbatim as the kernel netdev name (capped at 15 chars by Linux IFNAMSIZ). When omitted, the server generates a short `wg_<rand>` id." },
+		             description: "Create-time only; picks the uci section name (which becomes the uapi `id`). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],
