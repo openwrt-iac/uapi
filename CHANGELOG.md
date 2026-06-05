@@ -7,6 +7,79 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.1] - 2026-06-05
+
+Bug-fix patch. Fixes a correctness issue in optimistic-concurrency
+behavior reported against v2.0.0: per-resource ETags were polluted by
+sibling-section state in the same uci package, causing legitimate
+`If-Match` writes to fail with `412 precondition_failed` when an
+unrelated sibling section changed.
+
+### Fixed
+
+- **Per-resource ETags are no longer package-global.**
+  In v2.0.0, the `_deps_hash` mechanism walked every section of a
+  resource's declared `depends_on` type via `uci_foreach` and folded
+  the whole set into the ETag. Adding, mutating, or deleting an
+  *unrelated* sibling section shifted every other resource's ETag,
+  including resources the sibling did not reference. Real-world
+  surface: a multi-resource `tofu destroy` left rules behind because
+  deleting a firewall zone shifted the rule's ETag mid-run, and the
+  rule's `DELETE` carried the now-stale `If-Match` from plan time.
+
+  The fix makes the ETag a pure hash of the resource's own normalized
+  body (the `runtime` block is still excluded, as before). Sibling
+  sections in the same uci package no longer influence each other's
+  ETags, so `If-Match` fires only when *this* resource has actually
+  changed. The behavior previously documented and announced as
+  "Dependency-aware ETags" (v2.0.0-rc1 entry, lower in this file) is
+  **removed**: the cross-reference invariants those resources care
+  about (`rule.src_zone -> zone exists`, `member.interface -> interface
+  exists`, etc.) were already enforced at `resource.validate()` time on
+  every write, so the ETag mix added no real protection.
+
+  Touched: `src/lib/handler.uc` (deletes `_deps_hash`, `_canon_section`,
+  `etag_with_deps`; simplifies `compute_etag`/`set_etag_header`/
+  `precondition_check` signatures); 11 resource modules drop their
+  `depends_on` declaration (`firewall.rules`, `firewall.redirects`,
+  `firewall.forwardings`, `dhcp.servers`, `network.routes`,
+  `network.bridge_vlans`, `network.wireguard_peers`, `sqm.queues`,
+  `mwan3.members`, `mwan3.policies`, `mwan3.rules`).
+
+  Regression coverage: a new unit test
+  (`tests/unit/handler_test.uc::ETag is stable across unrelated sibling
+  section churn`) and an inverted integration test
+  (`tests/integration/34_batch7_endpoints_test.sh`) lock the new
+  per-resource semantics in. The unit test fixture declares
+  `depends_on` so it would have failed against v2.0.0 buggy code.
+
+### Operator note: client-held ETags
+
+The fix changes how ETags are computed for the 10 resource families
+that previously declared `depends_on` (firewall rules/redirects/
+forwardings, dhcp servers, network routes/bridge_vlans/wireguard_peers,
+sqm queues, mwan3 members/policies/rules). Clients holding v2.0.0
+ETags for these resources will see a one-shot `412 precondition_failed`
+on their next `If-Match` write; the response carries the current ETag
+in the body and the client picks it up for subsequent writes. ETags
+for the other resources are byte-identical across the upgrade (the
+old code already short-circuited to a pure body hash when
+`depends_on` was absent).
+
+The idempotency cache may serve responses with old ETag headers for
+up to 24 hours after upgrade; a chained "POST then `If-Match` next-write"
+flow against the affected resources may see one extra 412 within that
+window.
+
+### Docs
+
+The CLAUDE.md resource module contract drops the `depends_on` field.
+`docs/architecture.md`, `docs/adding-a-resource.md`, `docs/resources.md`,
+`docs/errors.md`, `docs/roadmap.md`, `docs/migration-v1-to-v2.md`,
+`README.md`, and `web/index.html` are updated to describe per-resource
+ETags. The OpenAPI `info.description` and the `ETag` header component
+description in `build/openapi.json` are updated in lockstep.
+
 ## [2.0.0] - 2026-06-04
 
 First stable v2 release. Promotion of `v2.0.0-rc4` after the dogfooding
