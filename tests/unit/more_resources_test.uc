@@ -1,5 +1,6 @@
 let t = require('harness');
 let handler = require('handler');
+let ubus = require('bus');
 
 let zones = loadfile('src/resources/firewall.zones.uc')();
 let redirects = loadfile('src/resources/firewall.redirects.uc')();
@@ -167,10 +168,12 @@ t.describe('network.interfaces', () => {
 	});
 
 	t.it('id_for_create echoes the caller-supplied name regardless of proto', () => {
-		t.assert_equal(interfaces.id_for_create({ proto: 'wireguard', name: 'wgprod' }), 'wgprod');
-		t.assert_equal(interfaces.id_for_create({ proto: 'static',    name: 'lan' }),    'lan');
-		t.assert_equal(interfaces.id_for_create({ proto: 'dhcp',      name: 'wan' }),    'wan');
-		t.assert_equal(interfaces.id_for_create({ proto: 'pppoe',     name: 'isp' }),    'isp');
+		// Iterates so a future proto-specific normalisation (lowercase,
+		// prefix, etc.) would surface as a divergence between protos.
+		for (let proto in ['wireguard', 'static', 'dhcp', 'pppoe']) {
+			t.assert_equal(interfaces.id_for_create({ proto: proto, name: 'lan' }), 'lan',
+			               sprintf("proto=%s should echo name", proto));
+		}
 	});
 
 	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent and proto=wireguard', () => {
@@ -184,6 +187,27 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(interfaces.id_for_create({ proto: 'dhcp' }), null);
 		t.assert_equal(interfaces.id_for_create({}), null);
 		t.assert_equal(interfaces.id_for_create(null), null);
+	});
+
+	t.it('validate rejects `name` that collides with an existing network section', () => {
+		let c = ubus.stub({ uci: { network: {
+			lan: { '.type': 'interface', proto: 'static', ipaddr: '192.168.1.1' },
+		} } });
+		let errs = interfaces.validate({ proto: 'dhcp', name: 'lan' }, c, null);
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'conflict');
+	});
+
+	t.it('validate does NOT false-conflict against a stub that lacks .type', () => {
+		// Defends against ucode-mod-uci versions whose uci_get returns an
+		// empty dict for a missing section instead of null. The .type-non-null
+		// guard in validate() catches the empty-dict case.
+		let c = ubus.stub({ uci: { network: {
+			nosection: {},
+		} } });
+		let errs = interfaces.validate({ proto: 'dhcp', name: 'nosection' }, c, null);
+		let ne = filter(errs, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(ne), 0);
 	});
 
 	t.it('validate rejects unknown proto', () => {

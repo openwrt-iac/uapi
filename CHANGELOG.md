@@ -15,29 +15,16 @@ migration (a ~127-resource OPNsense -> OpenWrt cutover driven through
 (C1's `name` field is opt-in); compatible with every existing v2.0.x
 client.
 
-### Fixed
+### Added
 
-- **Interfaces accept caller-supplied names; the wireguard
-  IFNAMSIZ silent failure goes away in the process.**
-  In v2.0.0/v2.0.1, posting `proto=wireguard` to `/network/interfaces`
-  silently created a config that could never bring the tunnel up:
-  uapi names every managed section with a ~28-char ULID, but netifd's
-  `wireguard.sh` uses the section name verbatim as the kernel netdev
-  name, and Linux IFNAMSIZ caps interface names at 15 chars. The
-  write returned 200; `logread` carried the actual failure
-  (`Attribute failed policy validation`). Worst kind of bug: 2xx
-  response, no client signal, broken on the box.
-
-  The fix introduces an optional `name` field on
-  `POST /network/interfaces` for every interface proto — interface
-  section names are first-class semantic handles in OpenWrt
+- **Caller-supplied `name` on `POST /network/interfaces` (every proto).**
+  Interface section names are first-class semantic handles in OpenWrt
   (referenced by firewall zones, routes, dhcp servers, sqm queues;
-  visible in `uci show network`; shown by LuCI), so the
-  ULID-everywhere policy was fighting the platform's own
-  convention for this one resource family:
+  visible in `uci show network`; shown by LuCI). uapi now lets the
+  caller pick the section name:
 
   ```json
-  { "proto": "wireguard", "name": "wg-prod",
+  { "proto": "wireguard", "name": "wg_prod",
     "private_key": "...", "addresses": ["10.0.0.1/24"] }
 
   { "proto": "static", "name": "guest",
@@ -45,28 +32,40 @@ client.
   ```
 
   Validation: `^[A-Za-z][A-Za-z0-9_]{0,14}$` (uci section-name
-  charset, IFNAMSIZ-tight pattern reused across protos because every
-  conventional LuCI/manual name fits comfortably under 15 chars).
-  Only valid at create time; PUT/PATCH reject with `read_only`
-  (rename via DELETE + POST). Must not clash with an existing
-  section in the `network` package. The `name` becomes the uapi `id`;
-  GETs return it under `id` (the field is request-only and does not
-  echo back as `name`).
+  charset, IFNAMSIZ-tight; one rule across every proto). Only valid
+  at create time (PUT/PATCH reject with `read_only`; rename via
+  DELETE + POST). Must not clash with an existing section in the
+  `network` package. The `name` becomes the uapi `id`; GETs return it
+  under `id` only (the field is request-only).
 
   When `name` is absent, the server emits a 14-char `wg_<11-char>`
-  fallback for `proto=wireguard` (`ids.new_id("wg", 11)`, 32^11
-  entropy; fits IFNAMSIZ so the kernel netdev creates cleanly) or
-  the standard 28-char ULID for every other proto.
+  fallback for `proto=wireguard` or the standard 28-char ULID
+  otherwise.
 
-  Adoption of anonymous `proto=wireguard` sections also uses the
-  short-id format; before this fix, adopting an anonymous wireguard
-  section also broke the netdev.
-
-  Touched: `src/lib/ids.uc` (length param), `src/lib/handler.uc`
-  (new `id_for_create(body)` resource hook, used by `create()` and
-  `adopt()` to override the standard ULID), and
+  Touched: `src/lib/ids.uc` (length param on `new_id`),
+  `src/lib/handler.uc` (new `id_for_create(body)` resource hook,
+  used by `create()` and `adopt()` to override the standard ULID),
   `src/resources/network.interfaces.uc` (the `name` schema property,
   validation, and the `id_for_create` implementation).
+
+### Fixed
+
+- **WireGuard tunnels can finally come up.**
+  In v2.0.0/v2.0.1, posting `proto=wireguard` to `/network/interfaces`
+  silently created a config that could never bring the tunnel up:
+  uapi named every managed section with a ~28-char ULID, but netifd's
+  `wireguard.sh` uses the section name verbatim as the kernel netdev
+  name, and Linux IFNAMSIZ caps interface names at 15 chars. The
+  write returned 200; `logread` carried the actual failure
+  (`Attribute failed policy validation`). Worst kind of bug: 2xx
+  response, no client signal, broken on the box.
+
+  Fixed by the `name`/`id_for_create` machinery from the Added entry
+  above: wireguard interfaces either get a caller-supplied name or
+  the IFNAMSIZ-fitting `wg_<11-char>` fallback. Adoption of
+  anonymous `proto=wireguard` sections also uses the short-id format;
+  before this fix, adopting an anonymous wireguard section also broke
+  the netdev.
 
 - **`423` message identifies the actual lock under contention.**
   Same-package writes serialise on the per-package EX (the design;

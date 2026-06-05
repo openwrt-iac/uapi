@@ -11,7 +11,7 @@ req() { curl -ksS -H "$H_AUTH" "$@"; }
 
 echo "# 1) Create the parent wireguard interface"
 iface=$(req -H "$H_JSON" -X POST "$UAPI_BASE/network/interfaces" -d '{
-	"device": "wg0",
+	"name": "wg0",
 	"proto": "wireguard",
 	"private_key": "REPLACE_WITH_BASE64_44CHAR_PRIVATE_KEY",
 	"listen_port": 51820,

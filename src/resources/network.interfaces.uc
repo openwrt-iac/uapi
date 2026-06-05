@@ -6,12 +6,11 @@ let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let as_int = values.as_int;
 
-// 15 chars max + uci section-name charset. The cap is Linux IFNAMSIZ-1,
-// strictly binding only for proto=wireguard (netifd uses the section name
-// as the kernel netdev there); we apply the same pattern to every
-// interface because every conventional LuCI/manual interface name fits
-// comfortably inside 15 chars and one rule beats two. Hyphens are valid
-// ifname chars but uci rejects them in section names, so we drop them.
+const PKG = "network";
+
+// Linux IFNAMSIZ-1 caps the wireguard netdev name at 15 chars (netifd uses
+// the section name as the kernel netdev); hyphens are valid in ifnames but
+// uci section names reject them, so they're not in the charset either.
 const IFNAMSIZ_RE = /^[A-Za-z][A-Za-z0-9_]{0,14}$/;
 
 const VALID_PROTOS = {
@@ -166,11 +165,16 @@ function validate(json, conn, id) {
 			push(errs, { field: "name", code: "invalid_format",
 			             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (uci section name, IFNAMSIZ-tight)" });
 		else if (conn != null) {
+			// conn is null only in unit-test fixtures; production always
+			// passes the transactional cursor.
 			let existing = null;
-			try { existing = conn.uci_get("network", json.name); } catch (_) {}
-			if (existing && type(existing) == "object")
+			try { existing = conn.uci_get(PKG, json.name); } catch (_) {}
+			// uci_get can return an opaque dict for a missing section on some
+			// backends; require a `.type` to distinguish a real section from
+			// an empty result.
+			if (existing && type(existing) == "object" && existing['.type'] != null)
 				push(errs, { field: "name", code: "conflict",
-				             message: sprintf("section 'network.%s' already exists", json.name) });
+				             message: sprintf("section '%s.%s' already exists", PKG, json.name) });
 		}
 	}
 
@@ -235,19 +239,15 @@ function validate(json, conn, id) {
 }
 
 return {
-	package: "network",
+	package: PKG,
 	type: "interface",
 	reload: ["network"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	// Interface section names are first-class semantic handles in OpenWrt
-	// (firewall.zones.network, dhcp.servers.interface, routes.interface,
-	// sqm.queues.interface all reference these by name; LuCI shows them;
-	// `uci show network` is the SSH-debug surface). Caller-supplied name
-	// wins; absent, we still need an IFNAMSIZ-fitting fallback for
-	// proto=wireguard (netifd uses the section name as the kernel netdev
-	// there). Other protos fall through to the standard 28-char ULID.
+	// Caller-supplied name wins. proto=wireguard falls back to a 14-char
+	// wg_<rand> (netifd's IFNAMSIZ constraint); other protos return null
+	// so handler.create emits the standard 28-char ULID.
 	id_for_create: function(body) {
 		if (body == null) return null;
 		if (body.name != null) return body.name;
