@@ -7,6 +7,104 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.2] - 2026-06-05
+
+Bug-fix patch addressing two items from a real-world v2.0.0 field
+migration (a ~127-resource OPNsense -> OpenWrt cutover driven through
+`terraform-provider-uapi`). Strictly additive on the wire surface
+(C1's `name` field is opt-in); compatible with every existing v2.0.x
+client.
+
+### Fixed
+
+- **WireGuard tunnels can finally come up.**
+  In v2.0.0/v2.0.1, posting `proto=wireguard` to `/network/interfaces`
+  silently created a config that could never bring the tunnel up:
+  uapi names every managed section with a ~28-char ULID, but netifd's
+  `wireguard.sh` uses the section name verbatim as the kernel netdev
+  name, and Linux IFNAMSIZ caps interface names at 15 chars. The
+  write returned 200; `logread` carried the actual failure
+  (`Attribute failed policy validation`). Worst kind of bug: 2xx
+  response, no client signal, broken on the box.
+
+  The fix introduces an optional `name` field on
+  `POST /network/interfaces` for `proto=wireguard` interfaces:
+
+  ```json
+  { "proto": "wireguard", "name": "wg-prod",
+    "private_key": "...", "addresses": ["10.0.0.1/24"] }
+  ```
+
+  Validation: `^[A-Za-z][A-Za-z0-9_]{0,14}$` (uci section-name
+  charset + Linux IFNAMSIZ), only valid for `proto=wireguard` (other
+  protos reject with `422 invalid_format`), only valid at create
+  time (PUT/PATCH reject with `read_only` - rename via DELETE +
+  POST), must not clash with an existing section. The `name` becomes
+  the uapi `id`; GETs return it under `id` (the field is request-only
+  and does not echo back as `name`).
+
+  When `name` is absent, the server emits a 14-char `wg_<11-char>`
+  fallback (`ids.new_id("wg", 11)`, 32^11 entropy) that still fits
+  IFNAMSIZ.
+
+  Adoption of anonymous `proto=wireguard` sections also uses the
+  short-id format; before this fix, adopting an anonymous wireguard
+  section also broke the netdev.
+
+  Touched: `src/lib/ids.uc` (length param), `src/lib/handler.uc`
+  (new `id_for_create(body)` resource hook, used by `create()` and
+  `adopt()` to override the standard ULID), and
+  `src/resources/network.interfaces.uc` (the `name` schema property,
+  validation, and the `id_for_create` implementation).
+
+- **`423` message identifies the actual lock under contention.**
+  Same-package writes serialise on the per-package EX (the design;
+  cross-package writes still parallelise via SH on the global). The
+  `423 locked` response in v2.0.0/v2.0.1 always said
+  *"Another write transaction holds the global lock"*, which sent
+  operators debugging in the wrong direction when the actual blocker
+  was on the per-package EX. The message now branches:
+
+  - `Another write transaction holds the per-package lock for '<pkg>'`
+    - another uci writer holds the same package's EX. This is the
+    common case under Terraform parallelism for same-package fleets.
+  - `A non-uci writer holds the global write lock` - a `with_lock`
+    path (`apk` install/remove, `system/password`,
+    `system/authorized_keys`) is in flight.
+
+  Touched: `src/lib/transaction.uc` (`default_acquire_pkg` returns
+  `{ contention: "global"|"package" }` so `transaction()` can
+  distinguish; `multi_transaction` and `with_lock` emit the same
+  shape), `src/lib/errors.uc` (`locked(ctx, retry_after, info?)`
+  branches the message), `src/lib/handler.uc` + `src/raw.uc` +
+  `src/main.uc` (locked-translation sites pass the info through).
+
+### Documentation
+
+- `CLAUDE.md` Concurrency section now states the actual two-tier
+  lock model (SH on global + EX on per-package, vs. EX on global for
+  non-uci writes) and the per-package vs. global distinction in the
+  423 message. The previous one-line "Writes acquire a global flock"
+  predated the v1.1 per-package design and was outdated.
+- `CLAUDE.md` resource module contract gains the new optional
+  `id_for_create(body)` field plus a paragraph documenting the
+  `proto=wireguard` ULID exception (the only case in v2.x where the
+  section name is consumed as a kernel object name).
+- `docs/concurrency.md` adds two subsections: "423 message identity"
+  (what the new wording means) and "Terraform parallelism" (when to
+  drop to `-parallelism=1` for same-package fleets).
+- `docs/errors.md` 423 row updated to match.
+
+### Operator note
+
+For clients that drive same-package fleets under default Terraform
+parallelism (`-parallelism=10`): the provider's existing
+retry-with-backoff continues to absorb the 423s. The change here is
+purely the wording of those 423s; no behaviour change. For very
+large same-package fleets (>100 writes), consider
+`-parallelism=1` for that resource type; see
+`docs/concurrency.md` for the trade-off.
+
 ## [2.0.1] - 2026-06-05
 
 Bug-fix patch. Fixes a correctness issue in optimistic-concurrency
