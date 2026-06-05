@@ -16,11 +16,20 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-# OpenWrt's stock x86_64 image used by CI does not ship kmod-wireguard;
-# install it so netifd can actually create the kernel netdev (which is the
-# end-to-end assertion of the v2.0.0 regression).
-$SSH 'apk list -i kmod-wireguard 2>/dev/null | grep -q kmod-wireguard \
-      || apk add kmod-wireguard wireguard-tools 2>&1 | tail -3'
+# OpenWrt's stock x86_64 image used by CI does not ship kmod-wireguard nor
+# auto-load the kernel module. Install + modprobe + verify before exercising
+# the end-to-end netdev assertion (which is the whole point of this test).
+$SSH '
+	if ! apk list -i kmod-wireguard 2>/dev/null | grep -q kmod-wireguard; then
+		echo "[35_wg] installing kmod-wireguard + wireguard-tools"
+		apk add kmod-wireguard wireguard-tools 2>&1 | tail -10
+	fi
+	if ! lsmod | grep -q "^wireguard "; then
+		echo "[35_wg] modprobe wireguard"
+		modprobe wireguard 2>&1
+	fi
+	lsmod | grep "^wireguard " || echo "[35_wg] wireguard module still not loaded"
+' || fail "kmod-wireguard setup failed; cannot exercise the netdev assertion"
 
 # Example WireGuard private key (44 chars, base64). Doesn't have to match a
 # real peer for netifd to accept the config + create the netdev.
