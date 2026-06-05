@@ -515,6 +515,44 @@ t.describe('handler ETag regressions', () => {
 		t.assert_equal(a.headers.ETag, b.headers.ETag);
 	});
 
+	// Regression for the v2.0.0 ETag-pollution bug. ETags must be a function
+	// of THIS resource's body only; mutating a sibling in the same uci package
+	// must not shift the ETag. The fixture declares depends_on so the test is
+	// load-bearing: under the v2.0.0 _deps_hash code path it would have walked
+	// every section of the depended-on type and re-hashed the package, so the
+	// assertion below would have failed. With depends_on stripped from the
+	// resource contract, the field is silently ignored and ETags stay stable.
+	t.it('ETag is stable across unrelated sibling section churn', () => {
+		let res = res_with_runtime();
+		res.depends_on = ["firewall:rule", "firewall:zone"];
+		let h = handler.make(res, {
+			tx: { acquire: function() { return {}; },
+			      release: function() {},
+			      reload: function() { return null; },
+			      check_services: function() { return null; } } });
+		let c = ubus.stub({ uci: { firewall: {
+			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' },
+		}}});
+		let initial = h.get_one(c, ctx(), 'r1').headers.ETag;
+
+		// Add an unrelated sibling of the same type.
+		c._state.uci.firewall.r2 = { '.type': 'rule', '.anonymous': false,
+		                              target: 'REJECT', src: 'lan' };
+		let after_add = h.get_one(c, ctx(), 'r1').headers.ETag;
+		t.assert_equal(initial, after_add);
+
+		// Add an unrelated section of a different (depended-on) type.
+		c._state.uci.firewall.z1 = { '.type': 'zone', '.anonymous': false, name: 'lan' };
+		let after_other_type = h.get_one(c, ctx(), 'r1').headers.ETag;
+		t.assert_equal(initial, after_other_type);
+
+		// Delete both. ETag must still be the original (pure function of r1's body).
+		delete c._state.uci.firewall.r2;
+		delete c._state.uci.firewall.z1;
+		let after_delete = h.get_one(c, ctx(), 'r1').headers.ETag;
+		t.assert_equal(initial, after_delete);
+	});
+
 	t.it('DELETE with stale If-Match returns 412 and does NOT delete', () => {
 		let c = ubus.stub({ uci: { firewall: {
 			z_lan: { '.type': 'zone', name: 'lan' },

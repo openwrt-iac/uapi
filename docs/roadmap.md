@@ -18,7 +18,7 @@ catalog in `CHANGELOG.md`'s v2.0.0 section; migration table in
 - Per-token rate limit (`429 too_many_requests`), Prometheus `/metrics`,
   idempotency keys, cursor pagination, `/diagnostics`.
 - `POST /batch` (multi-package all-or-nothing), JSON Patch (RFC 6902),
-  dependency-aware ETags.
+  per-resource ETags + `If-Match` optimistic concurrency.
 - Non-uci base library, lock-and-state audit, function-level coverage gate,
   soak harness in CI, performance benchmark gate, signed-tag verification,
   reproducible SDK pin.

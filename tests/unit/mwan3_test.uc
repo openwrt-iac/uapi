@@ -79,10 +79,6 @@ t.describe('mwan3.members validates the interface cross-reference', () => {
 		let errs = members.validate({}, c);
 		t.assert_true(length(filter(errs, e => e.field == "interface" && e.code == "required")) > 0);
 	});
-
-	t.it('declares depends_on for ETag mixing', () => {
-		t.assert_deep_equal(members.depends_on, ["mwan3:interface"]);
-	});
 });
 
 t.describe('mwan3.policies validates member cross-references', () => {

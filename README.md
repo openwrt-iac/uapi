@@ -6,7 +6,7 @@ Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates stan
 - Atomic transactions (single AND multi-package via `POST /batch`): snapshot, validate, commit, reload, restore-on-failure in a single request.
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side rotation (`POST /tokens`).
 - 32 curated resources plus a generic `/raw/<package>/<id>` passthrough for the long tail.
-- Conditional GET (304), idempotency keys, cursor pagination, dependency-aware ETags, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
+- Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags + `If-Match`, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
 - OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v2/openapi.json`.
 
 ## Why this approach

@@ -91,7 +91,6 @@ return {
 	package: "network",
 	type: "route",
 	reload: ["network"],
-	depends_on: ["network:interface"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

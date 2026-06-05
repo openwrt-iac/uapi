@@ -155,7 +155,6 @@ return {
 	// reload via ucitrack on the dhcp package, which fans out to both dnsmasq
 	// and odhcpd. Listing them here would double-reload.
 	reload: ["dnsmasq"],
-	depends_on: ["network:interface"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

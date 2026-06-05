@@ -60,7 +60,6 @@ return {
 	package: "mwan3",
 	type: "policy",
 	reload: ["mwan3"],
-	depends_on: ["mwan3:member"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

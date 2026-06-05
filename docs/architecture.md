@@ -180,23 +180,22 @@ full set; clients fix everything in one round trip.
 
 ## ETag derivation
 
-ETag = `sha256(canonical_json(body_without_runtime) + ":" + deps_hash)`,
-truncated to 12 hex chars.
+ETag = `sha256(canonical_json(body_without_runtime))`, truncated to 12 hex
+chars.
 
-- `body_without_runtime`: strips the resource's `runtime` block before
-  hashing. Runtime fields are live ubus/file state (uptime, signal, lease
-  count) that drifts second-to-second on unchanged config; including them
-  would make ETags non-deterministic.
-- `deps_hash`: when the resource declares `depends_on: ["package:type"]`,
-  the per-request `_deps_hash` reads every section of that type, sorts the
-  resulting `%J` lines, and hashes the join. Per-request cache on `ctx`
-  keys by dep path, so a list of N rules each depending on M zones costs
-  O(N+M) reads, not O(N×M).
+`body_without_runtime` strips the resource's `runtime` block before
+hashing. Runtime fields are live ubus/file state (uptime, signal, lease
+count) that drifts second-to-second on unchanged config; including them
+would make ETags non-deterministic and trip spurious 412s.
 
-ETag is body-derived, not last-modified. Two GETs of the same unchanged
-state always return the same ETag. A change to a referenced zone changes
-the dependent rule's ETag - `If-Match` round-trips see the cross-resource
-drift.
+ETag is per-resource: a function of *this* section's content only. Sibling
+sections in the same uci package do not influence each other's ETags, so
+`If-Match` fires only when the resource the client is updating has
+actually changed. (Cross-reference invariants like "rule's src_zone must
+exist" are enforced at `resource.validate()` time on every write, not via
+ETag mixing.)
+
+Two GETs of the same unchanged section always return the same ETag.
 
 ### Conditional GET
 

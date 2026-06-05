@@ -115,7 +115,6 @@ return {
 	create_type: function(body) { return "wireguard_" + body.interface; },
 	id_prefix: "g",
 	reload: ["network"],
-	depends_on: ["network:interface"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

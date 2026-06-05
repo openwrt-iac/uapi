@@ -3,8 +3,8 @@
 v2 is a single, deliberate breaking release. The cost is paid once; the
 payoff is a wire surface that is consistent (snake_case across the board),
 strictly typed (real JSON integers everywhere), and significantly larger
-(rate limit, metrics, idempotency, batch, JSON Patch, dependency-aware
-ETags, token expiry / IP scoping / HTTP rotation, conditional GET,
+(rate limit, metrics, idempotency, batch, JSON Patch, per-resource ETags +
+`If-Match`, token expiry / IP scoping / HTTP rotation, conditional GET,
 diagnostics).
 
 A given uapi installation now serves exactly one API major - there is no

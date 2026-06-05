@@ -24,48 +24,7 @@ function _hash(s) {
 	return substr(hex, 0, 12);
 }
 
-// Mix referenced sections into the dependent's ETag. Per-request cache on
-// ctx._dep_cache keeps a list of N rules depending on M zones at O(N+M).
-// Sort keys so hashes are stable across uci_import/load order changes.
-function _canon_section(s) {
-	if (type(s) != "object") return sprintf("%J", s);
-	let keys = [];
-	for (let k in s) push(keys, k);
-	sort(keys);
-	let pieces = [];
-	for (let k in keys) push(pieces, sprintf("%J:%J", k, s[k]));
-	return "{" + join(",", pieces) + "}";
-}
-
-function _deps_hash(ctx, conn, depends_on) {
-	if (depends_on == null || type(depends_on) != "array" || length(depends_on) == 0)
-		return "";
-	if (ctx == null) ctx = {};
-	if (ctx._dep_cache == null) ctx._dep_cache = {};
-	let cache = ctx._dep_cache;
-	let parts = [];
-	for (let dep in depends_on) {
-		if (type(dep) != "string") continue;
-		if (cache[dep] != null) { push(parts, cache[dep]); continue; }
-		let kv = split(dep, ":");
-		if (length(kv) != 2) { cache[dep] = ""; continue; }
-		let pkg = kv[0], dep_type = kv[1];
-		let body_lines = [];
-		try {
-			conn.uci_foreach(pkg, null, function(s) {
-				if (s['.type'] != dep_type) return;
-				push(body_lines, _canon_section(s));
-			});
-		} catch (_) {}
-		sort(body_lines);
-		let h = _hash(dep + "|" + join("\n", body_lines));
-		cache[dep] = h;
-		push(parts, h);
-	}
-	return _hash(join(",", parts));
-}
-
-function compute_etag(body, deps_hash) {
+function compute_etag(body) {
 	if (body == null) return null;
 	// Strip the `runtime` block before hashing: it carries live ubus/file-derived
 	// state (uptime, signal, lease counts, active addresses) that drifts second-
@@ -76,10 +35,7 @@ function compute_etag(body, deps_hash) {
 		canon = { ...body };
 		delete canon.runtime;
 	}
-	let canonical = sprintf("%J", canon);
-	if (deps_hash != null && deps_hash != "")
-		canonical = canonical + ":" + deps_hash;
-	return _hash(canonical);
+	return _hash(sprintf("%J", canon));
 }
 
 // Cursor pagination for collection GETs. The cursor is `c_<last_seen_id>`;
@@ -128,8 +84,8 @@ function paginate(ctx, items, query) {
 	return resp;
 }
 
-function set_etag_header(resp, body, deps_hash) {
-	let etag = compute_etag(body, deps_hash);
+function set_etag_header(resp, body) {
+	let etag = compute_etag(body);
 	if (etag == null) return resp;
 	if (resp.headers == null) resp.headers = {};
 	resp.headers["ETag"] = "\"" + etag + "\"";
@@ -161,13 +117,13 @@ function parse_if_match(header_value) {
 	return out;
 }
 
-function precondition_check(ctx, existing_body, deps_hash) {
+function precondition_check(ctx, existing_body) {
 	let want = parse_if_match(ctx.if_match);
 	if (want == null) return null;          // no If-Match -> no check
 	if (want == "*" && existing_body != null) return null;  // wildcard ok for any existing
 	if (want == "*") return errors.error(ctx, "precondition_failed",
 		"If-Match: * requires an existing resource");
-	let have = compute_etag(existing_body, deps_hash);
+	let have = compute_etag(existing_body);
 	for (let candidate in want)
 		if (candidate == have) return null;
 	return errors.error(ctx, "precondition_failed",
@@ -357,19 +313,6 @@ function diff_apply(c, p, id, existing, new_opts) {
 	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
 }
 
-// Stamp resp.headers["ETag"] using a depends_on-mixed hash so write-success
-// ETags match the next GET. No-op on non-2xx, missing body, or no depends_on.
-function etag_with_deps(resource, resp, conn, ctx) {
-	if (resp == null || resp.status < 200 || resp.status >= 300) return resp;
-	if (resp.body == null) return resp;
-	if (resource.depends_on == null) return resp;
-	let dh = _deps_hash(ctx, conn, resource.depends_on);
-	if (dh == "") return resp;
-	if (resp.headers == null) resp.headers = {};
-	resp.headers["ETag"] = "\"" + compute_etag(resp.body, dh) + "\"";
-	return resp;
-}
-
 // Reduce a PATCH body against existing state to a post-image plus a schema-
 // validation target. JSON Patch (RFC 6902) synthesises the full post-image,
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
@@ -450,8 +393,7 @@ function make(resource, opts) {
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
 		let body = resource.fromUci(s, conn);
-		let dh = _deps_hash(ctx, conn, resource.depends_on);
-		return set_etag_header(errors.ok(ctx, body), body, dh);
+		return set_etag_header(errors.ok(ctx, body), body);
 	}
 
 	function create(conn, ctx, body) {
@@ -473,8 +415,7 @@ function make(resource, opts) {
 			},
 		}));
 
-		let resp = translate_tx(ctx, result);
-		return etag_with_deps(resource, resp, conn, ctx);
+		return translate_tx(ctx, result);
 	}
 
 	function replace(conn, ctx, id, body) {
@@ -491,8 +432,7 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
-				let pc = precondition_check(ctx, existing_view,
-					_deps_hash(ctx, c, resource.depends_on));
+				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -506,8 +446,7 @@ function make(resource, opts) {
 			},
 		}));
 
-		let resp = translate_tx(ctx, result);
-		return etag_with_deps(resource, resp, conn, ctx);
+		return translate_tx(ctx, result);
 	}
 
 	function patch(conn, ctx, id, body) {
@@ -521,8 +460,7 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
-				let pc = precondition_check(ctx, existing_view,
-					_deps_hash(ctx, c, resource.depends_on));
+				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -545,8 +483,7 @@ function make(resource, opts) {
 			},
 		}));
 
-		let resp = translate_tx(ctx, result);
-		return etag_with_deps(resource, resp, conn, ctx);
+		return translate_tx(ctx, result);
 	}
 
 	function remove(conn, ctx, id) {
@@ -560,8 +497,7 @@ function make(resource, opts) {
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed" };
-				let pc = precondition_check(ctx, existing_view,
-					_deps_hash(ctx, c, resource.depends_on));
+				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -628,8 +564,7 @@ function make_singleton(resource, opts) {
 			return errors.error(ctx, "not_found",
 			                    sprintf("singleton %s.%s missing", pkg, sec_type));
 		let body = resource.fromUci(s, conn);
-		let dh = _deps_hash(ctx, conn, resource.depends_on);
-		return set_etag_header(errors.ok(ctx, body), body, dh);
+		return set_etag_header(errors.ok(ctx, body), body);
 	}
 
 	function patch(conn, ctx, body) {
@@ -642,8 +577,7 @@ function make_singleton(resource, opts) {
 				let id = existing['.name'];
 
 				let existing_view = resource.fromUci(existing, conn);
-				let pc = precondition_check(ctx, existing_view,
-					_deps_hash(ctx, c, resource.depends_on));
+				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
@@ -670,8 +604,7 @@ function make_singleton(resource, opts) {
 			},
 		}));
 
-		let resp = translate_tx(ctx, result);
-		return etag_with_deps(resource, resp, conn, ctx);
+		return translate_tx(ctx, result);
 	}
 
 	return { get, patch };

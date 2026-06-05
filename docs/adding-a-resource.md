@@ -17,7 +17,6 @@ return {
     package: "<package>",              // uci package
     type: "<section-type>",            // uci section type
     reload: ["<service>"],             // ubus services to reload on write
-    depends_on: ["<pkg>:<type>"],      // optional; mix referenced sections into ETag
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
     validate: function(json, conn, id) { ... return []; }, // {field, code, message}[]
@@ -59,12 +58,6 @@ shape checks - the central `handler.check_schema_types` walks this on every
 write and 422s shape mismatches BEFORE `validate()` runs. Per-field
 constraints that fit (type, enum, range, pattern, items recursion) belong
 here; cross-field / cross-section / format-string logic stays in `validate()`.
-
-`depends_on: ["firewall:zone"]` mixes the hash of every `firewall.zone`
-section into this resource's ETag. Use it when a write to the referenced
-type should invalidate dependent ETags (`firewall.rules` -> `firewall:zone`,
-`sqm.queues` -> `network:interface`, etc.). See `docs/architecture.md`
-"ETag derivation" for the full mechanism.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

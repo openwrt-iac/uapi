@@ -59,7 +59,6 @@ return {
 	package: "network",
 	type: "bridge-vlan",
 	reload: ["network"],
-	depends_on: ["network:device"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

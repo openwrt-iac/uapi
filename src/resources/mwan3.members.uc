@@ -52,7 +52,6 @@ return {
 	package: "mwan3",
 	type: "member",
 	reload: ["mwan3"],
-	depends_on: ["mwan3:interface"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

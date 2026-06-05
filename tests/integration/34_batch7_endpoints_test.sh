@@ -108,8 +108,12 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-X POST "$URL/batch" -d '{"operations": []}')
 [ "$status" = "400" ] || fail "empty ops expected 400, got $status"
 
-echo "--- Dep-aware ETag: firewall/rules ETag changes when firewall/zones changes ---"
-# Need an existing firewall zone we can mutate; create a fresh one.
+echo "--- Per-resource ETag: firewall/rules ETag is stable across unrelated firewall/zones writes ---"
+# Regression for the v2.0.0 bug where any sibling-section write in the same
+# uci package shifted every other resource's ETag, tripping spurious 412s on
+# unrelated concurrent writes (e.g. a `tofu destroy` over multiple firewall
+# resources). The fix in v2.0.1 made the ETag a pure function of THIS
+# resource's body; mutating a sibling must leave the ETag unchanged.
 zone_resp=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/firewall/zones" -d '{
 		"name": "depzone",
@@ -120,31 +124,45 @@ zone_resp=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 	}')
 zone_id=$(printf '%s' "$zone_resp" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
 if [ -z "$zone_id" ]; then
-	echo "  could not create zone (response: $zone_resp), skipping dep-etag test"
+	echo "  could not create zone (response: $zone_resp), skipping per-resource-etag test"
 else
-	# Need a rule that references that zone
+	# A rule that does NOT reference the depzone we're about to mutate.
 	rule_resp=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 		-X POST "$URL/firewall/rules" -d '{
-			"name": "dep-test-rule",
+			"name": "etag-stability-rule",
 			"target": "ACCEPT",
-			"match": { "src_zone": "depzone" }
+			"match": { "src_zone": "lan" }
 		}')
 	rule_id=$(printf '%s' "$rule_resp" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
 	CLEANUP_IDS="$CLEANUP_IDS $rule_id"
 
 	etag1=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/firewall/rules/$rule_id" \
 		| tr -d '\r' | sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
-	# Mutate the zone (e.g. flip forward). Per spec, the rule's ETag should change.
+	# Mutate an unrelated zone in the same package.
 	curl -sS -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
 		-X PATCH "$URL/firewall/zones/$zone_id" -d '{"forward": "ACCEPT"}'
 	etag2=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/firewall/rules/$rule_id" \
 		| tr -d '\r' | sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
-	[ -n "$etag1" ] && [ -n "$etag2" ] || fail "dep-etag: missing ETag (e1=$etag1 e2=$etag2)"
-	[ "$etag1" != "$etag2" ] \
-		|| fail "dep-aware ETag did not change after zone mutation (both $etag1)"
-	# Cleanup
+	[ -n "$etag1" ] && [ -n "$etag2" ] || fail "per-resource-etag: missing ETag (e1=$etag1 e2=$etag2)"
+	[ "$etag1" = "$etag2" ] \
+		|| fail "rule ETag shifted after unrelated zone mutation (e1=$etag1 e2=$etag2); the v2.0.0 sibling-pollution bug has regressed"
+
+	# And: a PUT against the rule with the captured If-Match must still succeed,
+	# matching the real client scenario from the bug report.
+	put_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+		-H "$ADMIN" -H 'Content-Type: application/json' \
+		-H "If-Match: $etag1" \
+		-X PUT "$URL/firewall/rules/$rule_id" -d '{
+			"name": "etag-stability-rule",
+			"target": "ACCEPT",
+			"enabled": false,
+			"match": { "src_zone": "lan" }
+		}')
+	[ "$put_status" = "200" ] \
+		|| fail "PUT with captured If-Match after sibling zone mutation expected 200, got $put_status"
+
 	curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/rules/$rule_id"
 	curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/zones/$zone_id"
 fi
 
-echo "Batch 7 endpoints (batch, json-patch, dep-aware ETag) ok."
+echo "Batch 7 endpoints (batch, json-patch, per-resource ETag stability) ok."

@@ -18,7 +18,7 @@ the spec wins.
 | `network/routes` | `config route` | Static routes; cross-refs interface. |
 | `network/rules` | `config rule` | Policy routing. |
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
-| `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. `depends_on: network:interface`. |
+| `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. |
 
 Reload: `network` (netifd).
 
@@ -32,9 +32,9 @@ daemon's runtime convergence.
 | Path | Wraps | Notes |
 |---|---|---|
 | `firewall/zones` | `config zone` | input/output/forward policies, `network` list. |
-| `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family}`. `depends_on: firewall:zone`. |
-| `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. `depends_on: firewall:zone`. |
-| `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. `depends_on: firewall:zone`. |
+| `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family}`. |
+| `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. |
+| `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. |
 | `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. |
 
 Reload: `firewall` (fw4).
@@ -54,7 +54,7 @@ Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 | Path | Wraps | Notes |
 |---|---|---|
 | `dhcp/hosts` | `config host` | Static leases. `mac` (or `mac_aliases` for multi-MAC), `ip`, `name`, `leasetime`, `duid`, `tag`. |
-| `dhcp/servers` | `config dhcp` | Per-interface server config. `depends_on: network:interface`. `runtime` carries active-lease counts. |
+| `dhcp/servers` | `config dhcp` | Per-interface server config. `runtime` carries active-lease counts. |
 | `dhcp/dnsmasq` (singleton) | `config dnsmasq` | Global dnsmasq tuning; forwarders, address overrides, rebind protection. |
 | `dhcp/odhcpd` (singleton) | `config odhcpd` | `maindhcp`, `leasefile`, `loglevel`. |
 | `dhcp/leases` (read-only collection) | `/tmp/dhcp.leases` | IPv4 leases parsed from dnsmasq's lease file. |
@@ -79,7 +79,7 @@ Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 | `uhttpd/instances` | `config uhttpd` | Per-instance HTTP server. Validate refuses to strip uapi's own `ucode_prefix` from `main` (self-lockout protection). |
 | `uhttpd/certs` | `config cert` | px5g cert generation params. |
 | `unbound/server` (singleton) | `config unbound` | Recursive DNS tuning. |
-| `sqm/queues` | `config queue` | Per-interface SQM shaping. `depends_on: network:interface`. |
+| `sqm/queues` | `config queue` | Per-interface SQM shaping. |
 | `snmpd/agents` | `config agent` | SNMP listen addrs. |
 | `snmpd/com2secs` | `config com2sec` | community-to-security mapping. |
 | `snmpd/groups` | `config group` | SNMP group definitions. |

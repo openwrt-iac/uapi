@@ -66,7 +66,6 @@ return {
 	package: "sqm",
 	type: "queue",
 	reload: ["sqm"],
-	depends_on: ["network:interface"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

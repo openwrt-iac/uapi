@@ -98,7 +98,7 @@ Every response carries:
 | `X-Content-Type-Options`     | always                              | `nosniff`.                                                             |
 | `Referrer-Policy`            | always                              | `no-referrer` (request_id appears in URLs).                            |
 | `Cache-Control`              | always                              | `no-store` (token-scoped data).                                        |
-| `ETag`                       | 200/304 on GET, write success       | Quoted; mix dependency-hash for resources with `depends_on`.           |
+| `ETag`                       | 200/304 on GET, write success       | Quoted hash of this resource's own body (runtime block excluded). Sibling sections do not influence the value. |
 | `WWW-Authenticate: Bearer`   | every 401                           | `realm="uapi", error="<code>"` (RFC 7235 + RFC 6750).                  |
 | `Retry-After: <seconds>`     | 423 locked, 429 too_many_requests   | Honor with jittered backoff.                                           |
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |

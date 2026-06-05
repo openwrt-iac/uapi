@@ -103,7 +103,6 @@ return {
     package: "network",                    // uci package
     type: "interface",                     // uci section type
     reload: ["network"],                   // ubus services to reload on write
-    depends_on: ["network:device"],        // optional; mix referenced state into ETag
     schema_properties: { ... },            // type/enum/min/max/pattern/items; enforced centrally
     fromUci: function(section, conn) {...},// uci section → response JSON (conn optional, for runtime block)
     toUci:   function(json) {...},         // request JSON → uci option dict
