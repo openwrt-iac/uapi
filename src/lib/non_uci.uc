@@ -29,7 +29,7 @@ function with_lock_translated(ctx, fn, kind_messages, lock_opts) {
 	let r = transaction.with_lock(params);
 
 	if (r.kind == "locked")
-		return { envelope: errors.locked(ctx) };
+		return { envelope: errors.locked_from(ctx, null, r) };
 	if (r.kind == "lock_unavailable")
 		return { envelope: errors.error(ctx, "internal_error",
 			sprintf("transaction lock file not available: %s", r.error)) };

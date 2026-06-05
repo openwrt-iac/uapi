@@ -78,13 +78,12 @@ function default_release(handle) {
 }
 
 // Per-package uci-transaction lock. Holds SH on the global, EX on the
-// per-package file. Returns an opaque handle (object with both fds) or:
-//   { contention: "global" }  - a non-uci writer holds the global EX
+// per-package file. Returns the fd handle on success, or one of:
+//   { contention: "global" }  - non-uci writer holds the global EX
 //   { contention: "package" } - another uci writer holds this package's EX
-//   { unavailable: <path> }   - file open failed (infrastructure issue)
-// Distinguishing the two contention sources lets the 423 message name the
-// actual blocker (the v2.0.1 bug was reporting per-package contention as
-// "the global lock", sending operator debugging down the wrong path).
+//   { unavailable: <path> }   - file open failed (infrastructure)
+// The contention distinction feeds the 423 message identity so the
+// caller learns which lock blocked them.
 function default_acquire_pkg(global_path, package) {
 	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
@@ -166,11 +165,8 @@ function transaction(conn, params) {
 		return { ok: false, kind: "init_script_missing", message: svc_err };
 
 	let lock = acquire(path);
-	// `acquire` may report:
-	//   null                                 -> generic contention (legacy/test stubs)
-	//   { contention: "global"|"package" }   -> from default_acquire_pkg
-	//   { unavailable: <path> }              -> infrastructure failure
-	//   <fd handle>                          -> success
+	// `null` means a test/legacy stub that pre-dates the contention sentinel;
+	// treat as per-package since that's the production-default flavour.
 	if (lock == null)
 		return { ok: false, kind: "locked", lock_kind: "package", package: pkg };
 	if (type(lock) == "object" && lock.contention != null) {

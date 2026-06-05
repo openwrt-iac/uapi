@@ -50,11 +50,9 @@ function new_ulid() {
 	return encode_time(now_ms(), TIME_LEN) + encode_random(read_random(10), RAND_LEN);
 }
 
-// `rand_len` (optional) substitutes a flat random suffix of that length for
-// the 26-char time+rand ULID. Used by `proto=wireguard` interfaces where the
-// section name doubles as the kernel netdev name and Linux IFNAMSIZ caps it
-// at 15 chars: `new_id("wg", 11)` yields a 14-char name with 32^11 of
-// entropy. Default keeps the time-sortable 26-char ULID.
+// rand_len (optional, 1..26) substitutes a flat random suffix of that length
+// for the standard 26-char time+rand ULID; the caller is responsible for the
+// reason (see network.interfaces for the IFNAMSIZ-bound case).
 function new_id(type_prefix, rand_len) {
 	let prefix = type_prefix ?? "u";
 	if (!match(prefix, /^[a-z]{1,3}$/))
@@ -68,7 +66,10 @@ function new_id(type_prefix, rand_len) {
 }
 
 function is_valid_id(s) {
-	return type(s) == "string" && !!match(s, /^[a-z]_[0-9a-z]{26}$/);
+	// Matches every shape new_id can emit: 1-3 lowercase prefix chars, then
+	// either the 26-char time+rand ULID or a short rand-only suffix (11
+	// chars or longer, capped at 26 to mirror new_id's rand_len max).
+	return type(s) == "string" && !!match(s, /^[a-z]{1,3}_[0-9a-z]{11,26}$/);
 }
 
 return {

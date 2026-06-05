@@ -277,8 +277,7 @@ function translate_tx(ctx, result) {
 		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
 	}
 	if (result.kind == "locked")
-		return errors.locked(ctx, null,
-		                     { lock_kind: result.lock_kind, package: result.package });
+		return errors.locked_from(ctx, null, result);
 	if (result.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 		                    sprintf("transaction lock file not available: %s", result.error));
@@ -368,9 +367,7 @@ function make(resource, opts) {
 	let type_predicate = resource.type_predicate ?? function(t) { return t == sec_type; };
 	let create_type = resource.create_type ?? function(body) { return sec_type; };
 	let id_prefix = resource.id_prefix ?? substr(sec_type, 0, 1);
-	// Optional per-resource id chooser. Returning null falls through to the
-	// standard 28-char ULID. network.interfaces uses this for proto=wireguard,
-	// where the section name doubles as the kernel netdev name (IFNAMSIZ).
+	// Optional per-resource id chooser; null falls through to the default ULID.
 	let id_for_create = resource.id_for_create ?? function(body) { return null; };
 
 	function tx_params(extra) {
@@ -528,10 +525,6 @@ function make(resource, opts) {
 				if (existing_view.managed)
 					return { ok: false, kind: "conflict",
 					         message: "Section is already managed" };
-				// Adoption renames anonymous sections to a uapi-authored id.
-				// For resources whose section name is kernel-bound (proto=wireguard
-				// interfaces), id_for_create picks the appropriate short form;
-				// passing null to it via a non-wireguard body falls through to ULID.
 				let new_id = id_for_create(existing_view) ?? ids.new_id(id_prefix);
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };

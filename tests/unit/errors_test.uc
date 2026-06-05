@@ -165,6 +165,19 @@ t.describe('errors.locked', () => {
 		// Must NOT claim global anymore - the old wording was the bug.
 		t.assert_false(!!match(r.body.message, /global lock/));
 	});
+
+	t.it('locked_from unpacks lock_kind+package from a transaction result', () => {
+		let result = { ok: false, kind: "locked", lock_kind: "package", package: "dhcp" };
+		let r = errors.locked_from(ctx, 1, result);
+		t.assert_equal(r.status, 423);
+		t.assert_match(r.body.message, /per-package lock for 'dhcp'/);
+	});
+
+	t.it('locked_from passes global info through to the global wording', () => {
+		let r = errors.locked_from(ctx, 1,
+			{ ok: false, kind: "locked", lock_kind: "global" });
+		t.assert_match(r.body.message, /global write lock/);
+	});
 });
 
 t.describe('errors.reload_failed_restored', () => {

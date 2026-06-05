@@ -16,6 +16,12 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
+# OpenWrt's stock x86_64 image used by CI does not ship kmod-wireguard;
+# install it so netifd can actually create the kernel netdev (which is the
+# end-to-end assertion of the v2.0.0 regression).
+$SSH 'apk list -i kmod-wireguard 2>/dev/null | grep -q kmod-wireguard \
+      || apk add kmod-wireguard wireguard-tools 2>&1 | tail -3'
+
 # Example WireGuard private key (44 chars, base64). Doesn't have to match a
 # real peer for netifd to accept the config + create the netdev.
 PRIV='yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk='
@@ -34,8 +40,14 @@ echo "--- the uci section is named wgci (not a 28-char ULID) ---"
 $SSH "uci get network.wgci" >/dev/null || fail "section network.wgci not in uci"
 
 echo "--- ip link show wgci returns a real kernel netdev ---"
-sleep 2  # netifd needs a moment to bring it up
-$SSH "ip link show wgci" >/dev/null 2>&1 || fail "ip link show wgci failed (the v2.0.0 bug); netifd could not create the netdev"
+# netifd is async; poll up to 15s for the netdev to appear instead of a
+# bare sleep (flaky on slow CI runners).
+for i in $(seq 1 15); do
+	$SSH "ip link show wgci" >/dev/null 2>&1 && break
+	sleep 1
+done
+$SSH "ip link show wgci" >/dev/null 2>&1 \
+	|| fail "ip link show wgci failed (the v2.0.0 bug); netifd could not create the netdev"
 
 echo "--- DELETE wireguard interface ---"
 del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/interfaces/wgci")
@@ -53,7 +65,10 @@ echo "$id" | grep -qE '^wg_[0-9a-hjkmnp-tv-z]{11}$' \
 	|| fail "expected id=wg_<11-char>, got id=$id"
 test "$(echo -n "$id" | wc -c)" -le 15 \
 	|| fail "id $id exceeds IFNAMSIZ (15 chars)"
-sleep 2
+for i in $(seq 1 15); do
+	$SSH "ip link show $id" >/dev/null 2>&1 && break
+	sleep 1
+done
 $SSH "ip link show $id" >/dev/null 2>&1 \
 	|| fail "ip link show $id failed; netifd could not create the netdev"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/$id"

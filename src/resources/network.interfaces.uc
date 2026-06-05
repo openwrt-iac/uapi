@@ -170,7 +170,7 @@ function validate(json, conn, id) {
 		else if (conn != null) {
 			let existing = null;
 			try { existing = conn.uci_get("network", json.name); } catch (_) {}
-			if (existing != null)
+			if (existing && type(existing) == "object")
 				push(errs, { field: "name", code: "conflict",
 				             message: sprintf("section 'network.%s' already exists", json.name) });
 		}
@@ -243,11 +243,8 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	// Wireguard sections need their uci name to also be a legal Linux ifname
-	// (netifd uses the section name as the kernel netdev), so the standard
-	// 28-char ULID breaks the tunnel silently. Caller may supply `name` to
-	// pick it; otherwise emit a 14-char `wg_<11-char-rand>` that fits IFNAMSIZ.
-	// Other protos keep the default 28-char ULID from handler.create.
+	// IFNAMSIZ-driven; see the WG_IFNAME_RE block above for the constraint.
+	// Caller-supplied `name` wins; absent that, emit a 14-char wg_<11-rand>.
 	id_for_create: function(body) {
 		if (body == null || body.proto != "wireguard") return null;
 		if (body.name != null) return body.name;
@@ -300,7 +297,6 @@ return {
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS) },
 		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-		             maxLength: 15,
 		             description: "Create-time only; only valid when proto is wireguard. Sets the uci section name, which netifd uses verbatim as the kernel netdev name (capped at 15 chars by Linux IFNAMSIZ). When omitted, the server generates a short `wg_<rand>` id." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },

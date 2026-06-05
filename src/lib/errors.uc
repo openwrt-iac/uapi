@@ -124,13 +124,9 @@ function validation_failed(ctx, field_errors) {
 	             { errors: field_errors });
 }
 
-// `info` (optional) carries the lock identity from transaction.uc:
-//   { lock_kind: "package", package: "<pkg>" }  - per-package EX contention
-//   { lock_kind: "global" }                      - global EX (non-uci writer)
-// Omitting info preserves the v2.0.x wording for callers that don't pass it.
-// The wrong wording (calling per-package contention "the global lock") sent
-// at least one operator's debugging down the wrong path; the v2.0.2 fix is
-// to identify exactly which lock the contention is on.
+// `info` identifies which lock is held; pass the result.lock_kind /
+// result.package fields from transaction.uc verbatim. The from-result
+// shortcut is `locked_from(ctx, retry_after, result)`.
 function locked(ctx, retry_after, info) {
 	let msg;
 	if (type(info) == "object" && info.lock_kind == "package" && type(info.package) == "string")
@@ -142,6 +138,16 @@ function locked(ctx, retry_after, info) {
 	let r = error(ctx, "locked", msg);
 	r.headers["Retry-After"] = "" + (retry_after ?? 1);
 	return r;
+}
+
+// Pull the lock-identity fields out of a transaction.transaction() /
+// multi_transaction() / with_lock() result. Centralising the unpack here
+// keeps the four call sites that translate kind="locked" from drifting
+// apart; a missed site in v2.0.2 left non-uci writes emitting the generic
+// wording (the bug this helper exists to make unrepeatable).
+function locked_from(ctx, retry_after, result) {
+	return locked(ctx, retry_after,
+	              { lock_kind: result.lock_kind, package: result.package });
 }
 
 function reload_failed_restored(ctx, reload_error) {
@@ -174,6 +180,7 @@ return {
 	field_error,
 	validation_failed,
 	locked,
+	locked_from,
 	reload_failed_restored,
 	reload_failed_unrecovered,
 	ok,

@@ -76,8 +76,12 @@ client.
   `{ contention: "global"|"package" }` so `transaction()` can
   distinguish; `multi_transaction` and `with_lock` emit the same
   shape), `src/lib/errors.uc` (`locked(ctx, retry_after, info?)`
-  branches the message), `src/lib/handler.uc` + `src/raw.uc` +
-  `src/main.uc` (locked-translation sites pass the info through).
+  branches the message; new `locked_from(ctx, retry_after, result)`
+  helper that pulls `lock_kind`+`package` out of a transaction result
+  so every call site is one line and another miss is unrepeatable),
+  `src/lib/handler.uc` + `src/raw.uc` + `src/main.uc` +
+  `src/lib/non_uci.uc` (all five locked-translation sites pass the
+  info through).
 
 ### Documentation
 

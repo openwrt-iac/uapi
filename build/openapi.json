@@ -20228,7 +20228,6 @@
 					"name": {
 						"type": "string",
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-						"maxLength": 15,
 						"description": "Create-time only; only valid when proto is wireguard. Sets the uci section name, which netifd uses verbatim as the kernel netdev name (capped at 15 chars by Linux IFNAMSIZ). When omitted, the server generates a short `wg_<rand>` id."
 					},
 					"addresses": {
