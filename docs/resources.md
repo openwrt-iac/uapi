@@ -9,6 +9,25 @@ router) or open it in Swagger UI. Per-resource sample curls live in
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.
 
+## The daemon must be installed first
+
+Curated resources that drive a daemon shipped as a separate OpenWrt
+package (`unbound/server`, `sqm/queues`, `snmpd/*`, `openvpn/instances`,
+`mwan3/*`, `vnstat/*`, `lldpd/config`, `prometheus_node_exporter_lua/config`,
+`uhttpd/instances` beyond `main`) need the underlying package installed
+before writes succeed. Writing to a resource whose daemon is absent
+returns `503 init_script_missing` with the missing
+`/etc/init.d/<service>` path in the response body, before any uci
+write. The pre-flight check is part of the atomic transaction recipe;
+no partial state is left behind.
+
+Install the daemon either out of band (`apk add unbound`, etc.) or
+through uapi itself via `POST /api/v2/packages/installed`. The latter
+is what a Terraform configuration would chain via `depends_on` on a
+`uapi_package` resource. The base uapi package's `Depends:` only
+covers what uapi *itself* needs to run (uhttpd, ucode mods); per-daemon
+packages are deliberately not pulled in.
+
 ## Network
 
 | Path | Wraps | Notes |

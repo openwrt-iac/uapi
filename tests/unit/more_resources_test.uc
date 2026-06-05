@@ -117,6 +117,69 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
+	// v2.0.2 C1: caller-supplied `name` for wireguard interfaces.
+	const WG = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";  // example key
+	t.it('validate accepts a wireguard interface with a valid short name', () => {
+		let errs = interfaces.validate({ proto: 'wireguard', name: 'wg_prod',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('validate rejects `name` on a non-wireguard create', () => {
+		let errs = interfaces.validate({ proto: 'static', name: 'lan',
+			ipaddr: '192.168.1.1' }, null);
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects `name` that fails the IFNAMSIZ pattern', () => {
+		let errs = interfaces.validate({ proto: 'wireguard',
+			name: 'this-name-is-way-too-long-and-hyphenated',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects `name` of length 16', () => {
+		let errs = interfaces.validate({ proto: 'wireguard',
+			name: 'wg_16chars_total',  // length 16
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects `name` of length 0 / empty string', () => {
+		let errs = interfaces.validate({ proto: 'wireguard', name: '',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'invalid_format');
+	});
+
+	t.it('validate rejects `name` on PATCH (id != null) - rename via DELETE+POST only', () => {
+		let errs = interfaces.validate({ proto: 'wireguard', name: 'wg1',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null, "wg0");
+		let ne = filter(errs, function(e) { return e.field == "name"; });
+		t.assert_equal(ne[0].code, 'read_only');
+	});
+
+	t.it('id_for_create echoes the caller-supplied name for proto=wireguard', () => {
+		let id = interfaces.id_for_create({ proto: 'wireguard', name: 'wgprod' });
+		t.assert_equal(id, 'wgprod');
+	});
+
+	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent', () => {
+		let id = interfaces.id_for_create({ proto: 'wireguard' });
+		t.assert_equal(length(id), 14);
+		t.assert_match(id, /^wg_[0-9a-hjkmnp-tv-z]{11}$/);
+	});
+
+	t.it('id_for_create returns null for non-wireguard protos (use the default ULID)', () => {
+		t.assert_equal(interfaces.id_for_create({ proto: 'static' }), null);
+		t.assert_equal(interfaces.id_for_create({ proto: 'dhcp' }), null);
+		t.assert_equal(interfaces.id_for_create({}), null);
+		t.assert_equal(interfaces.id_for_create(null), null);
+	});
+
 	t.it('validate rejects unknown proto', () => {
 		let errs = full_validate(interfaces, { proto: 'whatever' }, null);
 		let pe = filter(errs, function(e) { return e.field == "proto"; });

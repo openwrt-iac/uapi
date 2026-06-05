@@ -1,9 +1,17 @@
 let values = require('values');
+let ids = require('ids');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let as_int = values.as_int;
+
+// Linux IFNAMSIZ is 16 bytes including NUL, leaving 15 usable chars. For
+// `proto=wireguard` netifd uses the uci section name verbatim as the kernel
+// netdev name, so the section name must also be a legal ifname AND a legal
+// uci section name (no hyphens). Hyphens are valid ifname chars but uci
+// rejects them in section names, so we drop them from the accepted set.
+const WG_IFNAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,14}$/;
 
 const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
@@ -138,7 +146,7 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id) {
 	let errs = [];
 
 	if (type(json) != "object") {
@@ -148,6 +156,25 @@ function validate(json) {
 
 	if (json.proto == null || json.proto == "")
 		push(errs, { field: "proto", code: "required", message: "is required" });
+
+	if (json.name != null) {
+		if (id != null)
+			push(errs, { field: "name", code: "read_only",
+			             message: "name can only be set at create time; rename via DELETE + POST" });
+		else if (json.proto != "wireguard")
+			push(errs, { field: "name", code: "invalid_format",
+			             message: "is only valid when proto is wireguard (the section name doubles as the kernel netdev name)" });
+		else if (type(json.name) != "string" || !match(json.name, WG_IFNAME_RE))
+			push(errs, { field: "name", code: "invalid_format",
+			             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (Linux IFNAMSIZ + uci section-name rules)" });
+		else if (conn != null) {
+			let existing = null;
+			try { existing = conn.uci_get("network", json.name); } catch (_) {}
+			if (existing != null)
+				push(errs, { field: "name", code: "conflict",
+				             message: sprintf("section 'network.%s' already exists", json.name) });
+		}
+	}
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
@@ -216,6 +243,16 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	// Wireguard sections need their uci name to also be a legal Linux ifname
+	// (netifd uses the section name as the kernel netdev), so the standard
+	// 28-char ULID breaks the tunnel silently. Caller may supply `name` to
+	// pick it; otherwise emit a 14-char `wg_<11-char-rand>` that fits IFNAMSIZ.
+	// Other protos keep the default 28-char ULID from handler.create.
+	id_for_create: function(body) {
+		if (body == null || body.proto != "wireguard") return null;
+		if (body.name != null) return body.name;
+		return ids.new_id("wg", 11);
+	},
 	openapi_singular: "network interface",
 	openapi_required: ["proto"],
 	openapi_conditional: [
@@ -262,6 +299,9 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS) },
+		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
+		             maxLength: 15,
+		             description: "Create-time only; only valid when proto is wireguard. Sets the uci section name, which netifd uses verbatim as the kernel netdev name (capped at 15 chars by Linux IFNAMSIZ). When omitted, the server generates a short `wg_<rand>` id." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],

@@ -78,16 +78,21 @@ function default_release(handle) {
 }
 
 // Per-package uci-transaction lock. Holds SH on the global, EX on the
-// per-package file. Returns an opaque handle (object with both fds) or one
-// of the same null / { unavailable } sentinels.
+// per-package file. Returns an opaque handle (object with both fds) or:
+//   { contention: "global" }  - a non-uci writer holds the global EX
+//   { contention: "package" } - another uci writer holds this package's EX
+//   { unavailable: <path> }   - file open failed (infrastructure issue)
+// Distinguishing the two contention sources lets the 423 message name the
+// actual blocker (the v2.0.1 bug was reporting per-package contention as
+// "the global lock", sending operator debugging down the wrong path).
 function default_acquire_pkg(global_path, package) {
 	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
 	let g = _lock_one(global_path ?? LOCK_PATH, "s");
-	if (g == null) return null;
+	if (g == null) return { contention: "global" };
 	if (type(g) == "object" && g.unavailable != null) return g;
 	let p = _lock_one(PKG_LOCK_PREFIX + package + ".lock", "x");
-	if (p == null) { _release_one(g); return null; }
+	if (p == null) { _release_one(g); return { contention: "package" }; }
 	if (type(p) == "object" && p.unavailable != null) { _release_one(g); return p; }
 	return { _g: g, _p: p };
 }
@@ -161,7 +166,18 @@ function transaction(conn, params) {
 		return { ok: false, kind: "init_script_missing", message: svc_err };
 
 	let lock = acquire(path);
-	if (lock == null) return { ok: false, kind: "locked" };
+	// `acquire` may report:
+	//   null                                 -> generic contention (legacy/test stubs)
+	//   { contention: "global"|"package" }   -> from default_acquire_pkg
+	//   { unavailable: <path> }              -> infrastructure failure
+	//   <fd handle>                          -> success
+	if (lock == null)
+		return { ok: false, kind: "locked", lock_kind: "package", package: pkg };
+	if (type(lock) == "object" && lock.contention != null) {
+		if (lock.contention == "global")
+			return { ok: false, kind: "locked", lock_kind: "global" };
+		return { ok: false, kind: "locked", lock_kind: "package", package: pkg };
+	}
 	if (type(lock) == "object" && lock.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
 
@@ -211,7 +227,10 @@ function multi_transaction(conn, params) {
 	// Acquire global SH + per-package EX in sorted order.
 	let acquired = [];
 	let g = _lock_one(path, "s");
-	if (g == null) return { ok: false, kind: "locked" };
+	// Global SH contention means a non-uci writer holds EX (system/password,
+	// packages/installed, etc.). Report it as such so the client knows the
+	// blocker isn't another uci write.
+	if (g == null) return { ok: false, kind: "locked", lock_kind: "global" };
 	if (type(g) == "object" && g.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: g.unavailable };
 	for (let pkg in sorted) {
@@ -219,7 +238,7 @@ function multi_transaction(conn, params) {
 		if (p == null) {
 			for (let h in acquired) _release_one(h);
 			_release_one(g);
-			return { ok: false, kind: "locked" };
+			return { ok: false, kind: "locked", lock_kind: "package", package: pkg };
 		}
 		if (type(p) == "object" && p.unavailable != null) {
 			for (let h in acquired) _release_one(h);
@@ -277,7 +296,7 @@ function with_lock(params) {
 	let fn = params.fn;
 
 	let lock = acquire(path);
-	if (lock == null) return { ok: false, kind: "locked" };
+	if (lock == null) return { ok: false, kind: "locked", lock_kind: "global" };
 	if (type(lock) == "object" && lock.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
 

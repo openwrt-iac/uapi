@@ -94,6 +94,21 @@ drive the choice.
   surface. Current gap candidates worth opportunistic curation:
   `mwan3/*`, `usteer/*` (passive band-steering daemon for OpenWrt 22+
   multi-AP setups), `openvpn/*` (the daemon is supported by uci natively).
+- **`unbound/server` listen-address / interface binding.** Field
+  feedback (v2.0.0 migration) flagged the inability to bind unbound to
+  a specific address (loopback-only recursive backend behind dnsmasq,
+  `127.0.0.1@5353`). Blocked upstream: OpenWrt's
+  `/usr/lib/unbound/unbound.sh:386` carries an explicit `# TODO: add
+  UCI list for interfaces to bind`. The only knobs the init script
+  reads today are `listen_port`, `interface_auto`, and the per-trigger
+  `interface` (used for reload gating, not bind), so there is no uci
+  surface to curate. Path forward: open a PR against the OpenWrt
+  unbound package adding `list interface_bind '...'` (and likely
+  `list interface_outgoing '...'`), then curate the new options here
+  once a release ships them. Floor option if upstream rejects or
+  takes too long: a non-uci `unbound/extra_server_conf` resource
+  writing `/etc/unbound/unbound_srv.conf` (high bar per
+  `docs/non-uci-state.md`; only if option (a) genuinely stalls).
 
 ## Hardening (next, no new wire surface)
 

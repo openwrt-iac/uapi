@@ -97,7 +97,9 @@ function build_response_body(view, reload_info) {
 
 function translate_raw_tx(ctx, result) {
 	if (result.ok) return errors.ok(ctx, result.body);
-	if (result.kind == "locked") return errors.locked(ctx);
+	if (result.kind == "locked")
+		return errors.locked(ctx, null,
+		                     { lock_kind: result.lock_kind, package: result.package });
 	if (result.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 		                    sprintf("transaction lock file not available: %s", result.error));

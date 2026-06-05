@@ -124,9 +124,22 @@ function validation_failed(ctx, field_errors) {
 	             { errors: field_errors });
 }
 
-function locked(ctx, retry_after) {
-	let r = error(ctx, "locked",
-	              "Another write transaction holds the global lock");
+// `info` (optional) carries the lock identity from transaction.uc:
+//   { lock_kind: "package", package: "<pkg>" }  - per-package EX contention
+//   { lock_kind: "global" }                      - global EX (non-uci writer)
+// Omitting info preserves the v2.0.x wording for callers that don't pass it.
+// The wrong wording (calling per-package contention "the global lock") sent
+// at least one operator's debugging down the wrong path; the v2.0.2 fix is
+// to identify exactly which lock the contention is on.
+function locked(ctx, retry_after, info) {
+	let msg;
+	if (type(info) == "object" && info.lock_kind == "package" && type(info.package) == "string")
+		msg = sprintf("Another write transaction holds the per-package lock for '%s'", info.package);
+	else if (type(info) == "object" && info.lock_kind == "global")
+		msg = "A non-uci writer holds the global write lock";
+	else
+		msg = "Another write transaction holds the lock";
+	let r = error(ctx, "locked", msg);
 	r.headers["Retry-After"] = "" + (retry_after ?? 1);
 	return r;
 }

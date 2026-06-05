@@ -41,8 +41,13 @@ t.describe('ids.new_id', () => {
 		t.assert_match(ids.new_id("i"), /^i_[0-9a-hjkmnp-tv-z]{26}$/);
 	});
 
-	t.it('rejects multi-char prefixes', () => {
-		t.assert_throws(() => ids.new_id("ab"));
+	t.it('accepts a 2- or 3-char prefix (wg, sqm, etc.)', () => {
+		t.assert_match(ids.new_id("wg"), /^wg_[0-9a-hjkmnp-tv-z]{26}$/);
+		t.assert_match(ids.new_id("sqm"), /^sqm_[0-9a-hjkmnp-tv-z]{26}$/);
+	});
+
+	t.it('rejects prefixes longer than 3 chars', () => {
+		t.assert_throws(() => ids.new_id("abcd"));
 	});
 
 	t.it('rejects uppercase or digit prefixes', () => {
@@ -56,6 +61,30 @@ t.describe('ids.new_id', () => {
 			let id = ids.new_id();
 			t.assert_match(id, /^[a-z_]/);
 		}
+	});
+
+	// IFNAMSIZ-fit short form: rand_len suppresses the time prefix.
+	t.it('rand_len=11 produces a 14-char `wg_<11-char>` id', () => {
+		for (let i = 0; i < 50; i++) {
+			let id = ids.new_id("wg", 11);
+			t.assert_equal(length(id), 14);
+			t.assert_match(id, /^wg_[0-9a-hjkmnp-tv-z]{11}$/);
+		}
+	});
+
+	t.it('rand_len short form is unique across many draws', () => {
+		let seen = {};
+		for (let i = 0; i < 1000; i++) {
+			let id = ids.new_id("wg", 11);
+			t.assert_false(exists(seen, id), sprintf("collision on %s", id));
+			seen[id] = true;
+		}
+	});
+
+	t.it('rand_len out of range throws', () => {
+		t.assert_throws(() => ids.new_id("wg", 0));
+		t.assert_throws(() => ids.new_id("wg", 27));
+		t.assert_throws(() => ids.new_id("wg", "11"));
 	});
 });
 

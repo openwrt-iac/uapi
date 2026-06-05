@@ -24,6 +24,10 @@ echo "$resp" | head -30
 echo "$resp" | head -1 | grep -q ' 423 ' || fail "expected 423 status line"
 echo "$resp" | grep -i '^Retry-After:' || fail "expected Retry-After header"
 echo "$resp" | grep -q '"code": "locked"' || fail "expected locked envelope"
+# v2.0.2: the 423 message now names the specific lock under contention. An
+# external `flock -nx` on the global file blocks the uci transaction's SH
+# acquisition, so this is "global write lock", NOT "per-package lock".
+echo "$resp" | grep -q 'global write lock' || fail "expected global-write-lock wording in message (got: $(echo "$resp" | tail -1))"
 
 echo "--- wait for the background lock-holder to release ---"
 sleep 5

@@ -276,7 +276,9 @@ function translate_tx(ctx, result) {
 		let resp = attach_reload_headers(errors.ok(ctx, result.body), result);
 		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
 	}
-	if (result.kind == "locked") return errors.locked(ctx);
+	if (result.kind == "locked")
+		return errors.locked(ctx, null,
+		                     { lock_kind: result.lock_kind, package: result.package });
 	if (result.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 		                    sprintf("transaction lock file not available: %s", result.error));
@@ -366,6 +368,10 @@ function make(resource, opts) {
 	let type_predicate = resource.type_predicate ?? function(t) { return t == sec_type; };
 	let create_type = resource.create_type ?? function(body) { return sec_type; };
 	let id_prefix = resource.id_prefix ?? substr(sec_type, 0, 1);
+	// Optional per-resource id chooser. Returning null falls through to the
+	// standard 28-char ULID. network.interfaces uses this for proto=wireguard,
+	// where the section name doubles as the kernel netdev name (IFNAMSIZ).
+	let id_for_create = resource.id_for_create ?? function(body) { return null; };
 
 	function tx_params(extra) {
 		let p = { package: pkg, reload_services: reload_services };
@@ -399,10 +405,10 @@ function make(resource, opts) {
 	function create(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				let new_id = id_for_create(body) ?? ids.new_id(id_prefix);
 				let errs = _validate_with_schema(resource, body, body, c, null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				let new_id = ids.new_id(id_prefix);
 				let new_opts = resource.toUci(body);
 				let resolved_type = create_type(body);
 				c.uci_create_section(p, new_id, resolved_type);
@@ -518,10 +524,15 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (resource.fromUci(existing, conn).managed)
+				let existing_view = resource.fromUci(existing, conn);
+				if (existing_view.managed)
 					return { ok: false, kind: "conflict",
 					         message: "Section is already managed" };
-				let new_id = ids.new_id(id_prefix);
+				// Adoption renames anonymous sections to a uapi-authored id.
+				// For resources whose section name is kernel-bound (proto=wireguard
+				// interfaces), id_for_create picks the appropriate short form;
+				// passing null to it via a non-wireguard body falls through to ULID.
+				let new_id = id_for_create(existing_view) ?? ids.new_id(id_prefix);
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };
 				view['.name'] = new_id;

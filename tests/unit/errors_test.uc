@@ -144,6 +144,27 @@ t.describe('errors.locked', () => {
 		let r = errors.locked(ctx, 5);
 		t.assert_equal(r.headers["Retry-After"], "5");
 	});
+
+	// v2.0.2: the bare message used to say "global lock" for every locked
+	// response, even when the actual contention was on the per-package EX. The
+	// new info arg lets the caller pin the wording to the truth.
+	t.it('per-package info names the package in the message', () => {
+		let r = errors.locked(ctx, 1, { lock_kind: "package", package: "firewall" });
+		t.assert_equal(r.status, 423);
+		t.assert_match(r.body.message, /per-package lock for 'firewall'/);
+	});
+
+	t.it('global info is reported as the global lock', () => {
+		let r = errors.locked(ctx, 1, { lock_kind: "global" });
+		t.assert_equal(r.status, 423);
+		t.assert_match(r.body.message, /global write lock/);
+	});
+
+	t.it('no info falls through to a neutral message', () => {
+		let r = errors.locked(ctx);
+		// Must NOT claim global anymore - the old wording was the bug.
+		t.assert_false(!!match(r.body.message, /global lock/));
+	});
 });
 
 t.describe('errors.reload_failed_restored', () => {

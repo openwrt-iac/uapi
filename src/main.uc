@@ -355,7 +355,8 @@ function tokens_translate(ctx, r) {
 	if (r.kind == "scope_escalation_blocked")
 		return errors.error(ctx, "scope_escalation_blocked",
 			"Requested scopes are not a subset of the caller's scopes");
-	if (r.kind == "locked") return errors.locked(ctx, 1);
+	if (r.kind == "locked")
+		return errors.locked(ctx, 1, { lock_kind: r.lock_kind, package: r.package });
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);
 	if (r.kind == "reload_failed_restored")
@@ -584,7 +585,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		return errors.reload_failed_restored(ctx, r.reload_error);
 	if (r.kind == "reload_failed_unrecovered")
 		return errors.reload_failed_unrecovered(ctx, r.reload_error, r.restore_error);
-	if (r.kind == "locked") return errors.locked(ctx);
+	if (r.kind == "locked")
+		return errors.locked(ctx, null, { lock_kind: r.lock_kind, package: r.package });
 	if (r.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 			sprintf("batch lock unavailable: %s", r.error));

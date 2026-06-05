@@ -69,6 +69,11 @@ t.describe('transaction, lock acquisition', () => {
 		}));
 		t.assert_false(r.ok);
 		t.assert_equal(r.kind, "locked");
+		// v2.0.2: identify which lock the contention is on. transaction()
+		// always serializes on the per-package EX; report it as such so the
+		// client knows another uci writer (not a non-uci writer) is the cause.
+		t.assert_equal(r.lock_kind, "package");
+		t.assert_equal(r.package, "fw");  // matches build_params default
 		t.assert_equal(locks.acquired, 0);
 		t.assert_equal(locks.released, 0);
 	});

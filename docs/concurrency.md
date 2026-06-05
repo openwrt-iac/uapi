@@ -61,6 +61,51 @@ This is the recipe taken by `transaction.uc`. New write paths should go through 
 
 GETs are lock-free. Reads of uci state run without acquiring any lock.
 
+### 423 message identity
+
+On `EWOULDBLOCK`, the response message names the specific lock under
+contention. The transaction layer reports `lock_kind: "package"` (the
+common case: another uci writer holds the same package's EX) or
+`lock_kind: "global"` (a non-uci writer holds EX on
+`/var/lock/uapi.lock`). The `errors.locked()` helper branches on this:
+
+- `Another write transaction holds the per-package lock for 'firewall'`:
+  uci-vs-uci contention on the same package.
+- `A non-uci writer holds the global write lock`: a `with_lock` path
+  (apk install/remove, system/password, etc.) is in flight.
+
+The pre-2.0.2 wording ("Another write transaction holds the global
+lock") called every contention "global", which sent operator
+debugging down the wrong path when the actual blocker was on the
+per-package EX. Always pass the `info` arg when translating
+`kind: "locked"` results out of `transaction.uc` so the wording stays
+accurate.
+
+### Terraform parallelism
+
+Terraform's default `-parallelism=10` happily fires 10 concurrent
+creates against the provider. For multi-package fleets that's the
+right thing: 10 writes to 10 distinct uci packages hold compatible SH
+on the global and disjoint EX on their packages, and they run in
+parallel.
+
+For SAME-package fleets (10 firewall rules, 10 dhcp hosts, etc.), the
+per-package EX serialises them: only one creates at a time, the other
+nine see `423 locked` and the provider retries with backoff. The
+upper-bound throughput is then the transaction's own latency
+(snapshot + commit + reload + restore-on-failure), not parallelism × N.
+
+Practical guidance for operators driving large same-package fleets:
+
+- Default to `-parallelism=10`; the provider's retry-with-backoff
+  absorbs the 423s, and the wall-clock cost of the retries is usually
+  small relative to the transaction itself.
+- For really large fleets (>100 same-package writes), drop to
+  `-parallelism=1` for that resource type via `depends_on` chains or
+  per-resource `lifecycle` config. Eliminates the 423 churn entirely.
+- Cross-package fleets (mixing firewall + dhcp + network) parallelise
+  cleanly at the default and need no tuning.
+
 ## Lock ordering for `/batch`
 
 `multi_transaction` acquires per-package EX locks in sorted (lexicographic) order. This is the standard deadlock-avoidance pattern: two batches touching the same set of packages will both acquire in the same order, so one waits for the other, neither holds-and-waits.
