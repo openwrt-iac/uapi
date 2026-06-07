@@ -69,6 +69,8 @@ const SINGLETONS = {
 	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp:odhcpd", "dhcp.odhcpd.uc")),
 	"firewall:defaults":  handler.make_singleton(load_resource("firewall:defaults", "firewall.defaults.uc")),
 	"unbound:server":     handler.make_singleton(load_resource("unbound:server", "unbound.server.uc")),
+	"unbound:srv":        handler.make_singleton(load_resource("unbound:srv", "unbound.srv.uc")),
+	"unbound:ext":        handler.make_singleton(load_resource("unbound:ext", "unbound.ext.uc")),
 	"snmpd:system":       handler.make_singleton(load_resource("snmpd:system", "snmpd.system.uc")),
 	"lldpd:config":       handler.make_singleton(load_resource("lldpd:config", "lldpd.config.uc")),
 	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config", "prometheus_node_exporter_lua.config.uc")),

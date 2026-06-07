@@ -29,7 +29,7 @@ curl -k https://localhost/api/v2/healthz
 
 ## Install from the project feed
 
-The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages are RSA-4096 signed; the public key is served from the feed root at <https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The feed aggregates stable releases from every repo under the `openwrt-iac` org (uapi, unbound-uci-ext, ...) — one `apk` repositories line installs any of them.
+The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages are RSA-4096 signed; the public key is served from the feed root at <https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The feed aggregates stable releases from every repo under the `openwrt-iac` org (uapi, unbound-uci-ext, ...), so one `apk` repositories line installs any of them.
 
 ```sh
 # Trust the feed's signing key (one-time)

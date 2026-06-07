@@ -34,6 +34,8 @@ const KNOWN_PATHS = {
 	"uhttpd:certs": true,
 	"unbound": true,
 	"unbound:server": true,
+	"unbound:srv": true,
+	"unbound:ext": true,
 	"sqm": true,
 	"sqm:queues": true,
 	"snmpd": true,

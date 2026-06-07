@@ -86,13 +86,17 @@ v1.1 added (additive, non-breaking):
 - `system/timeservers`
 - `dropbear/instances`
 - `uhttpd/instances`, `uhttpd/certs`
-- `unbound/server` (singleton)
+- `unbound/server` (singleton), `unbound/srv` (singleton), `unbound/ext` (singleton).
+  `unbound/srv` and `unbound/ext` (added in 2.1.0) wrap the
+  `unbound-uci-ext` package's two UCIs, exposing the `server:` clause
+  and outside-server clauses that the main unbound package leaves out
+  of UCI. Install `unbound-uci-ext` from the openwrt-iac feed first.
 - `sqm/queues`
 - `snmpd/agents`, `snmpd/com2secs`, `snmpd/groups`, `snmpd/accesses`, `snmpd/system` (singleton)
 - `lldpd/config` (singleton)
 - `prometheus_node_exporter_lua/config` (singleton)
 - `vnstat/config` (singleton), `vnstat/interfaces`
-- `packages/installed`, `packages/feeds` (non-uci: shells out to `apk`; see "Packages — non-uci writes" below)
+- `packages/installed`, `packages/feeds` (non-uci: shells out to `apk`; see "Packages, non-uci writes" below)
 
 The authoritative current list lives in `build/openapi.json`; when in doubt, regenerate (`make openapi`) and read that.
 
@@ -108,7 +112,7 @@ return {
     toUci:   function(json) {...},         // request JSON → uci option dict
     validate: function(json, conn, id) {...return [];}, // cross-field / cross-section rules
     merge_for_patch: function(existing, existing_json, body) {...}, // optional, nested-object patches
-    id_for_create: function(body) {...return null;}, // optional; pick the section id (caller-supplied name or proto-specific generated id). Used by network.interfaces — see "Interface section names are caller-pickable" below.
+    id_for_create: function(body) {...return null;}, // optional; pick the section id (caller-supplied name or proto-specific generated id). Used by network.interfaces; see "Interface section names are caller-pickable" below.
     // Optional OpenAPI-only hints (consumed by build/gen_openapi.uc, not by the runtime):
     openapi_required:    [...],            // unconditional required fields
     openapi_conditional: [...],            // if/then/required for proto/type discriminators
@@ -147,7 +151,7 @@ Adding a non-uci resource means adding a row here. The bar for additions is high
 
 ### Curation completeness
 
-When adding or extending a curated resource, the test is: *does this resource expose the options that a typical real configuration of this section actually sets?* If a common real-world setup of this section requires uci options the curated resource does not surface, that is a curation gap — close it. Telling users to drop to `/raw/` for a routine field is a smell.
+When adding or extending a curated resource, the test is: *does this resource expose the options that a typical real configuration of this section actually sets?* If a common real-world setup of this section requires uci options the curated resource does not surface, that is a curation gap; close it. Telling users to drop to `/raw/` for a routine field is a smell.
 
 ## JSON conventions (curated layer)
 
@@ -167,7 +171,7 @@ OpenWrt's uci has named sections (stable) and anonymous sections (auto-assigned 
 
 Optional one-character type prefix for grep-ability (`r_01HX...` for rules, `i_01HX...` for interfaces). No `uapi_` namespace prefix; we're just another writer to uci.
 
-**Interface section names are caller-pickable.** `network/interfaces` accepts an optional `name` field at create time; it becomes both the uci section name AND the uapi `id`. This is the one resource family where the section name is a first-class semantic handle in OpenWrt (referenced by `firewall.zones.network`, `network.routes.interface`, `dhcp.servers.interface`, `sqm.queues.interface`, `network.wireguard_peers.interface`; visible in `uci show network`; shown by LuCI). For every other curated resource the section id stays a server-generated ULID, because their section names are internal bookkeeping nobody references by hand. The per-resource `id_for_create(body)` hook on the module picks the format; `network/interfaces` echoes the caller's `name` when supplied, or falls through to the standard ULID. The `proto=wireguard` subcase emits a 14-char `wg_<rand>` fallback because netifd uses the section name as the kernel netdev name and Linux IFNAMSIZ caps it at 15 chars (a 28-char ULID would silently break the tunnel — the v2.0.2 forcing case).
+**Interface section names are caller-pickable.** `network/interfaces` accepts an optional `name` field at create time; it becomes both the uci section name AND the uapi `id`. This is the one resource family where the section name is a first-class semantic handle in OpenWrt (referenced by `firewall.zones.network`, `network.routes.interface`, `dhcp.servers.interface`, `sqm.queues.interface`, `network.wireguard_peers.interface`; visible in `uci show network`; shown by LuCI). For every other curated resource the section id stays a server-generated ULID, because their section names are internal bookkeeping nobody references by hand. The per-resource `id_for_create(body)` hook on the module picks the format; `network/interfaces` echoes the caller's `name` when supplied, or falls through to the standard ULID. The `proto=wireguard` subcase emits a 14-char `wg_<rand>` fallback because netifd uses the section name as the kernel netdev name and Linux IFNAMSIZ caps it at 15 chars (a 28-char ULID would silently break the tunnel, the v2.0.2 forcing case).
 
 ### Pre-existing anonymous sections
 
@@ -254,7 +258,7 @@ v1.1 added:
 - `system:timeservers`
 - `dropbear`, `dropbear:instances`
 - `uhttpd`, `uhttpd:instances`, `uhttpd:certs`
-- `unbound`, `unbound:server`
+- `unbound`, `unbound:server`, `unbound:srv`, `unbound:ext`
 - `sqm`, `sqm:queues`
 - `snmpd`, `snmpd:agents`, `snmpd:com2secs`, `snmpd:groups`, `snmpd:accesses`, `snmpd:system`
 - `lldpd`, `lldpd:config`

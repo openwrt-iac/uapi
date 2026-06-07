@@ -44,6 +44,8 @@ const ENDPOINTS = [
 	{ path: "/uhttpd/instances",    file: "uhttpd.instances.uc",    kind: "crud",      domain: "uhttpd",   subresource: "instances" },
 	{ path: "/uhttpd/certs",        file: "uhttpd.certs.uc",        kind: "crud",      domain: "uhttpd",   subresource: "certs" },
 	{ path: "/unbound/server",      file: "unbound.server.uc",      kind: "singleton", domain: "unbound",  subresource: "server" },
+	{ path: "/unbound/srv",         file: "unbound.srv.uc",         kind: "singleton", domain: "unbound",  subresource: "srv" },
+	{ path: "/unbound/ext",         file: "unbound.ext.uc",         kind: "singleton", domain: "unbound",  subresource: "ext" },
 	{ path: "/sqm/queues",          file: "sqm.queues.uc",          kind: "crud",      domain: "sqm",      subresource: "queues" },
 	{ path: "/snmpd/agents",        file: "snmpd.agents.uc",        kind: "crud",      domain: "snmpd",    subresource: "agents" },
 	{ path: "/snmpd/com2secs",      file: "snmpd.com2secs.uc",      kind: "crud",      domain: "snmpd",    subresource: "com2secs" },

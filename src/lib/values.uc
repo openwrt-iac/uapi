@@ -17,6 +17,27 @@ function as_list(v) {
 	return [v];
 }
 
+// Single-line passthrough validation shared by resources that mirror
+// unbound-uci-ext's seam-file generator. The regex pattern uses a literal
+// newline in the character class because ucode's regex parser treats `\n`
+// inside `[...]` as the two characters `\` and `n`, not as a newline
+// escape (see project memory: project-ucode-quirks). The 256-char ceiling
+// lives in code below because ucode's regex engine rejects `{m,n}` when
+// `n > 255`. MAX_LINE_LEN matches unbound-uci-ext's generator.sh; changing
+// here without changing there desyncs validation.
+const LINE_RE = "^[^\n]+$";
+const MAX_LINE_LEN = 256;
+
+function check_lines(field, value, errs) {
+	if (type(value) != "array") return;
+	for (let i = 0; i < length(value); i++) {
+		if (type(value[i]) == "string" && length(value[i]) > MAX_LINE_LEN)
+			push(errs, { field: sprintf("%s[%d]", field, i),
+			             code: "invalid_format",
+			             message: sprintf("must be 1..%d characters with no newline", MAX_LINE_LEN) });
+	}
+}
+
 // uci stores everything as strings; the curated layer wants real numeric
 // values for fields declared `type: "integer"`. Returns null on missing or
 // non-numeric input to avoid the silent int("abc") = 0 trap.
@@ -108,4 +129,5 @@ return {
 	is_valid_ipv4, is_valid_ip, is_valid_cidr,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 	constant_time_equals,
+	LINE_RE, MAX_LINE_LEN, check_lines,
 };

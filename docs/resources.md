@@ -98,6 +98,8 @@ Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 | `uhttpd/instances` | `config uhttpd` | Per-instance HTTP server. Validate refuses to strip uapi's own `ucode_prefix` from `main` (self-lockout protection). |
 | `uhttpd/certs` | `config cert` | px5g cert generation params. |
 | `unbound/server` (singleton) | `config unbound` | Recursive DNS tuning. |
+| `unbound/srv` (singleton) | `config unbound_srv 'main'` | Server-clause directives (`interface_bind`, `interface_outgoing`, `ip_transparent`, plus a raw `srv_line` passthrough). Requires `apk add unbound-uci-ext` from the openwrt-iac feed; otherwise the first write returns `503 init_script_missing`. |
+| `unbound/ext` (singleton) | `config unbound_ext 'main'` | Outside-server clauses (`forward-zone:`, `view:`, `stub:`, `remote-control:`) expressed as a verbatim `ext_line` list (one entry per rendered line). Same install dependency as `unbound/srv`. |
 | `sqm/queues` | `config queue` | Per-interface SQM shaping. |
 | `snmpd/agents` | `config agent` | SNMP listen addrs. |
 | `snmpd/com2secs` | `config com2sec` | community-to-security mapping. |

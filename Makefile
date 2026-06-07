@@ -99,7 +99,7 @@ test-integration: vm-setup vm-start
 lint: lint-emdash lint-syntax lint-reserved lint-refs
 
 lint-emdash:
-	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile 2>/dev/null; then \
+	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile README.md CHANGELOG.md CLAUDE.md CONTRIBUTING.md 2>/dev/null; then \
 		echo ""; echo "em-dash found in source files (forbidden per CLAUDE.md style)"; exit 1; \
 	fi
 

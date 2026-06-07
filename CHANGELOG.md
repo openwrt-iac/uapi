@@ -7,15 +7,38 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
-## [2.0.3] - 2026-06-07
+## [2.1.0] - 2026-06-07
 
-Infrastructure-only release. The repo moved to the `openwrt-iac`
-GitHub organisation and the public surface (project site + signed
-apk feed) moved with it. **No code changes**; no API surface
-changes. Operators on the previous feed URL need a one-time
-update of `/etc/apk/repositories.d/uapi.list`.
+Two themes in one release: new curated singletons for the
+`unbound-uci-ext` package, plus the infrastructure move to the
+`openwrt-iac` GitHub organisation (originally staged on `main` for a
+2.0.3 tag that was rolled into 2.1.0 instead, since no API change
+had shipped under 2.0.3).
 
-### Notice — feed and site URLs moved
+### Added
+
+- Curated `unbound/srv` + `unbound/ext` singleton resources.
+  Wrap the UCI namespaces provided by the new `unbound-uci-ext`
+  package (separate repo: `openwrt-iac/unbound-uci-ext`), exposing
+  the unbound `server:` clause directives + outside-server clauses
+  that the main unbound package deliberately keeps out of UCI.
+  Install `unbound-uci-ext` from the openwrt-iac feed first; if the
+  daemon is absent, uapi returns `503 init_script_missing` cleanly
+  via the standard pre-flight (no partial state).
+  - `GET` / `PATCH /api/v2/unbound/srv` carries `interface_bind` (list),
+    `interface_outgoing` (list), `ip_transparent` (bool), `srv_line`
+    (list, verbatim passthrough). Plus the standard `enabled`
+    switch. Pair with `unbound.@unbound[0].interface_auto = false`
+    on the existing `unbound/server` singleton for exclusive
+    binding (loopback-only recursive resolvers behind dnsmasq is
+    the canonical case).
+  - `GET` / `PATCH /api/v2/unbound/ext` carries `ext_line` (list, one
+    entry per rendered line; build whole `forward-zone:` / `view:` /
+    `stub:` / `remote-control:` clauses by listing them in order).
+  - New scopes `unbound:srv`, `unbound:ext`. The existing
+    `unbound:*` umbrella covers both alongside `unbound:server`.
+
+### Notice: feed and site URLs moved
 
 The signed apk feed and the project site have moved from
 `raspbeguy.github.io/uapi/...` to `openwrt-iac.github.io/...`. The
@@ -33,17 +56,17 @@ apk update
 ```
 
 The new feed aggregates stable releases from every repo under the
-`openwrt-iac` org (uapi, `unbound-uci-ext`, ...) — one feed line
+`openwrt-iac` org (uapi, `unbound-uci-ext`, ...), so one feed line
 installs any of them. The signing key was rotated as part of the
 move; the new public key is served from the feed root.
 
 ### Repository moves
 
 - `raspbeguy/uapi` → `openwrt-iac/uapi` (this repo).
-- New: `openwrt-iac/unbound-uci-ext` — extension package exposing
+- New: `openwrt-iac/unbound-uci-ext`, the extension package exposing
   unbound `server:` directives that the main unbound package
   deliberately keeps out of UCI.
-- New: `openwrt-iac/openwrt-iac.github.io` — site + feed aggregator
+- New: `openwrt-iac/openwrt-iac.github.io`, the site + feed aggregator
   (signed apk index rebuilt from each source repo's latest stable
   GitHub Release).
 
@@ -53,18 +76,18 @@ commit history are preserved.
 
 ### Removed
 
-- `.github/workflows/publish-web.yml` — the static site is no
+- `.github/workflows/publish-web.yml`: the static site is no
   longer published from this repo; lives in
   `openwrt-iac/openwrt-iac.github.io:web/`.
-- `.github/workflows/feed-purge-rc.yml` — the feed aggregator
+- `.github/workflows/feed-purge-rc.yml`: the feed aggregator
   filters prereleases at the source via
   `gh release list --exclude-pre-releases`, so a scrub workflow is
   no longer needed here.
-- The `Publish to APK feed on gh-pages` step in `ci.yml` —
+- The `Publish to APK feed on gh-pages` step in `ci.yml`:
   release-apk now attaches the APK to the GitHub Release and stops
   there; the aggregator picks it up.
-- `web/` and `keys/` directories — migrated to the org-site repo.
-- `FEED_SIGNING_KEY` repo secret — moved to the org-site repo.
+- `web/` and `keys/` directories, migrated to the org-site repo.
+- `FEED_SIGNING_KEY` repo secret, moved to the org-site repo.
 
 ## [2.0.2] - 2026-06-05
 
