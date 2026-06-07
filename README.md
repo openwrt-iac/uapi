@@ -29,9 +29,9 @@ Target platform: **OpenWrt 25.12+** (apk-based releases).
 Signed APK feed (recommended):
 
 ```sh
-curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem \
+curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem \
     > /etc/apk/keys/uapi-feed.pub.pem
-echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' \
+echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
     > /etc/apk/repositories.d/uapi.list
 apk update && apk add uapi
 ```

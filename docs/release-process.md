@@ -14,8 +14,11 @@ install handles arch-neutral packages directly.
 
 The `release-apk` job builds a single APK (against the x86_64 SDK because
 that's the simplest to host on GitHub runners), smoke-tests it in an x86
-QEMU VM, and publishes that one artifact to both the GitHub Release and
-the gh-pages feed.
+QEMU VM, and attaches that one artifact to the GitHub Release. The apk
+feed itself is rebuilt by
+`openwrt-iac/openwrt-iac.github.io`'s `publish.yml` workflow, which
+pulls the latest stable Release asset from each source repo listed in
+its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
 
 The `verify-arch-build` matrix job cross-compiles against the SDKs for
 `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push to PROVE
@@ -64,21 +67,14 @@ For any MAJOR bump, tag `vX.0.0-rc1` (or `-rc2`, etc.) BEFORE the final
 and marks the GitHub release as a prerelease (its
 `case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
 
-**RCs do NOT publish to the gh-pages apk feed.** The publish step in
-`.github/workflows/ci.yml` is gated on `!contains(github.ref_name, '-')`
-so only stable tags land in `packages.adb`. The intent is that a
-fresh `apk add uapi` against the public feed must never resolve to a
-not-actually-ready RC. RCs go to the GitHub Release page only, marked
-`--prerelease`; operators who want to install one download the APK and
-`apk add --allow-untrusted /tmp/uapi-<rc>.apk` deliberately. Same path
-the maintainer uses to dogfood the RC on the live router.
-
-If a pre-release APK accidentally lands in the feed (legacy artefact,
-gate bypass, manual push), the `.github/workflows/feed-purge-rc.yml`
-workflow scrubs it. Dispatch with `dry_run=true` first to confirm the
-candidate list; dispatch again with `dry_run=false` to commit. The
-workflow rebuilds the signed index from the remaining (stable-only)
-APKs in the same step.
+**RCs do NOT publish to the apk feed.** The feed aggregator at
+`openwrt-iac/openwrt-iac.github.io` pulls each source repo's latest
+*stable* GitHub Release via `gh release list --exclude-pre-releases`;
+prereleases are filtered out at the source. RCs go to the uapi GitHub
+Release page only, marked `--prerelease`; operators who want to
+install one download the APK from the release page and
+`apk add --allow-untrusted /tmp/uapi-<rc>.apk` deliberately. Same
+path the maintainer uses to dogfood the RC on the live router.
 
 Announce the RC explicitly to known downstream consumers - the
 `raspbeguy/uapi` Terraform provider author, anyone with a published
@@ -133,11 +129,10 @@ Per-release steps (operator does these in order):
    - APK upload as workflow artifact
    - VM smoke test (`tests/integration/release_apk_smoke.sh`)
    - GitHub Release create + APK attach (always; RCs get `--prerelease`)
-   - gh-pages feed publish (signed index, `apk mkndx --sign-key`).
-     **Stable tags only.** RC/alpha/beta/pre tags skip this step.
-9. **Verify the release** is visible on GitHub Releases (and the
-   gh-pages feed for stable tags). For an RC, the feed should be
-   unchanged.
+9. **Verify the release** is visible on GitHub Releases. The feed at
+   `openwrt-iac.github.io/feed/` picks up the new asset on its next
+   `publish.yml` run (nightly schedule or manual
+   `gh workflow run publish.yml --repo openwrt-iac/openwrt-iac.github.io`).
 
 ## Reproducible builds
 
@@ -204,7 +199,9 @@ After tagging, before announcing:
 - [ ] release-apk workflow completed.
 - [ ] verify-arch-build matrix completed (all three non-x86 arches green).
 - [ ] APK attached to the GitHub Release.
-- [ ] APK visible in the gh-pages feed; `apk update` finds it.
+- [ ] Trigger `gh workflow run publish.yml --repo openwrt-iac/openwrt-iac.github.io`
+      (or wait for the nightly schedule) and confirm `apk update` against
+      `openwrt-iac.github.io/feed/...` finds the new version.
 - [ ] Smoke install on a real router works.
 - [ ] SBOM attached.
 
@@ -214,14 +211,15 @@ If a tagged release is broken in the field:
 
 1. Identify the breakage; file an issue.
 2. Mark the GitHub Release as "Pre-release" or "Draft" via `gh release
-   edit <tag> --prerelease` to demote it in the UI.
-3. Ship a `vX.Y.(Z+1)` patch with the fix; the gh-pages feed automatically
-   carries the highest version forward.
-4. The broken APK stays in the feed (operators who pinned the broken
-   version aren't auto-downgraded), but new installs and `apk upgrade
-   uapi` resolve to the patched version.
-
-We do not delete published APKs from the gh-pages feed.
+   edit <tag> --prerelease` to demote it in the UI. The aggregator's
+   `--exclude-pre-releases` filter then pulls the next-highest stable
+   on its next run.
+3. Ship a `vX.Y.(Z+1)` patch with the fix; the next aggregator run
+   picks up the higher version and signs a fresh `packages.adb`.
+4. The broken APK doesn't necessarily get re-served (it's only on
+   GitHub Releases at that point); operators who already installed
+   the broken version aren't auto-downgraded, but `apk upgrade uapi`
+   resolves to the patched version once the feed updates.
 
 ## If uapi ever grows compiled code
 

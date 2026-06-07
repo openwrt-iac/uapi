@@ -523,7 +523,7 @@ No default token shipped; would be a security hole.
 
 Package version follows semver, with the major version aligned to the API major:
 
-- **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. A given uapi installation serves exactly one API major; we do NOT mount `/api/v(x+1)/` alongside `/api/v<x>/` in the same binary. Operators who need to keep an old client working keep the previous package version installed (the old APK stays available on the gh-pages feed indefinitely, and the signed git tag is the canonical contract document).
+- **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. A given uapi installation serves exactly one API major; we do NOT mount `/api/v(x+1)/` alongside `/api/v<x>/` in the same binary. Operators who need to keep an old client working keep the previous package version installed (older APKs remain attached to their GitHub Releases at <https://github.com/openwrt-iac/uapi/releases>, and the signed git tag is the canonical contract document).
 - **MINOR (`x.(y+1).0`)**: backwards-compatible additions only (the list of allowed changes is in "API versioning policy" below).
 - **PATCH (`x.y.(z+1)`)**: bug fixes only. No surface change.
 

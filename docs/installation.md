@@ -29,15 +29,15 @@ curl -k https://localhost/api/v2/healthz
 
 ## Install from the project feed
 
-The project hosts an apk feed at <https://raspbeguy.github.io/uapi/>. Packages are RSA-4096 signed; the public key lives in the repo at `keys/uapi-feed.pub.pem` and is also served from the feed itself.
+The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages are RSA-4096 signed; the public key is served from the feed root at <https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The feed aggregates stable releases from every repo under the `openwrt-iac` org (uapi, unbound-uci-ext, ...) — one `apk` repositories line installs any of them.
 
 ```sh
 # Trust the feed's signing key (one-time)
-curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem \
+curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem \
     | tee /etc/apk/keys/uapi-feed.pub.pem > /dev/null
 
 # Register the feed
-echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' \
+echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
     > /etc/apk/repositories.d/uapi.list
 
 apk update

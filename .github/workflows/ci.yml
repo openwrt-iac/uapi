@@ -22,10 +22,10 @@ permissions:
   contents: read
 
 # Cancel superseded runs for branch / PR pushes to save runner minutes; never
-# cancel a tag-triggered run that may be mid-publish to GitHub release or
-# gh-pages feed. workflow_dispatch runs (operator-triggered pre-tag
-# validation, often slow because of verify-arch-build) get their own
-# concurrency group so an unrelated push to main doesn't kill them mid-run.
+# cancel a tag-triggered run that may be mid-publish to the GitHub Release.
+# workflow_dispatch runs (operator-triggered pre-tag validation, often slow
+# because of verify-arch-build) get their own concurrency group so an
+# unrelated push to main doesn't kill them mid-run.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: >-
@@ -121,17 +121,13 @@ jobs:
         if: always()
         run: tests/vm/stop.sh
 
-  # release-apk is gated by THREE independent guards, any one of which is sufficient
-  # to block a release:
-  #   1. needs: [unit, lint, integration] -- GitHub Actions will not start this job
-  #      unless all three completed successfully for the same SHA.
-  #   2. Job-level if: ref must be a v* tag. Blocks the job from running on branch
-  #      pushes, PRs, or a workflow_dispatch against a branch ref.
-  #   3. Step-level if: on every step that mutates a published surface (GitHub
-  #      release, gh-pages feed). Defense in depth if the job-level guard is ever
-  #      loosened.
-  # The smoke test runs BEFORE the two publish steps: if the APK fails in the VM,
-  # nothing reaches the GitHub release or the gh-pages feed.
+  # release-apk attaches the APK to the GitHub Release. The apk feed
+  # itself is rebuilt elsewhere (openwrt-iac/openwrt-iac.github.io's
+  # publish.yml pulls latest stable from each source repo); this job just
+  # makes sure a successful tag has a downloadable asset. Three guards
+  # apply: needs:[unit,lint,integration], job-level v* tag check, and a
+  # step-level if on the release-upload step. Smoke test in QEMU runs
+  # before the upload; a failing smoke keeps the apk off the GitHub Release.
   release-apk:
     runs-on: ubuntu-latest
     needs: [unit, lint, integration]
@@ -285,47 +281,12 @@ jobs:
           [ -r build/sbom.spdx.json ] && \
             gh release upload "$TAG" build/sbom.spdx.json --clobber || true
 
-      # Step-level guard 3b: only publish to the signed gh-pages feed on a real v* tag,
-      # AND only for stable tags. Pre-release tags (-rc, -alpha, -beta, -pre, anything
-      # carrying a hyphen per semver) are intentionally excluded: the public feed must
-      # carry only true releases, otherwise a fresh `apk add uapi` or `apk upgrade uapi`
-      # resolves to the not-actually-ready RC. RCs still land on the GitHub Release
-      # (marked --prerelease above); operators who want to install one download the APK
-      # from the release page and `apk add --allow-untrusted <file>` deliberately.
-      - name: Publish to APK feed on gh-pages (stable tags only)
-        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
-        env:
-          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
-        run: |
-          set -eu
-          TAG="${GITHUB_REF#refs/tags/}"
-          SIGN_KEY=$(mktemp)
-          printf '%s' "$FEED_SIGNING_KEY" > "$SIGN_KEY"
-          chmod 600 "$SIGN_KEY"
-
-          APK_BIN=$(find build/sdk/staging_dir -type f -executable -name apk | head -1)
-          [ -n "$APK_BIN" ] || { echo "could not find SDK apk binary"; exit 1; }
-          APK_BIN=$(realpath "$APK_BIN")
-          APK_FILE=$(realpath "${{ steps.find_apk.outputs.apk }}")
-
-          git fetch origin gh-pages:gh-pages
-          git worktree add /tmp/gh-pages gh-pages
-          FEED_DIR=/tmp/gh-pages/packages/all/uapi
-          mkdir -p "$FEED_DIR"
-          cp "$APK_FILE" "$FEED_DIR/"
-
-          cd "$FEED_DIR"
-          "$APK_BIN" --allow-untrusted mkndx --output packages.adb --sign-key "$SIGN_KEY" *.apk
-
-          git config --global user.email "actions@github.com"
-          git config --global user.name "github-actions[bot]"
-          cd /tmp/gh-pages
-          rm -f packages/all/uapi/.gitkeep
-          git add -A
-          git commit -m "feed: publish $TAG" || echo "(nothing to commit)"
-          git push origin gh-pages
-
-          shred -u "$SIGN_KEY" 2>/dev/null || rm -f "$SIGN_KEY"
+      # The signed APK feed lives at openwrt-iac.github.io/feed/ and is
+      # rebuilt by openwrt-iac/openwrt-iac.github.io's publish.yml workflow,
+      # which pulls the latest stable release asset from every source repo
+      # listed in its feed.yml. uapi no longer pushes to a gh-pages feed
+      # of its own; attaching the APK to this GitHub Release is the whole
+      # job, and the aggregator picks it up on its next run.
 
   # Multi-arch build verification. uapi is PKGARCH:=all (pure ucode + shell;
   # no compiled code), so the resulting APK is byte-identical across host

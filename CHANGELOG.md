@@ -7,6 +7,65 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.0.3] - 2026-06-07
+
+Infrastructure-only release. The repo moved to the `openwrt-iac`
+GitHub organisation and the public surface (project site + signed
+apk feed) moved with it. **No code changes**; no API surface
+changes. Operators on the previous feed URL need a one-time
+update of `/etc/apk/repositories.d/uapi.list`.
+
+### Notice — feed and site URLs moved
+
+The signed apk feed and the project site have moved from
+`raspbeguy.github.io/uapi/...` to `openwrt-iac.github.io/...`. The
+old URLs will stop serving fresh APKs after a 30-day grace period.
+To migrate, replace the contents of
+`/etc/apk/repositories.d/uapi.list` and
+`/etc/apk/keys/uapi-feed.pub.pem` with the new feed:
+
+```sh
+curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem \
+    | tee /etc/apk/keys/uapi-feed.pub.pem > /dev/null
+echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
+    > /etc/apk/repositories.d/uapi.list
+apk update
+```
+
+The new feed aggregates stable releases from every repo under the
+`openwrt-iac` org (uapi, `unbound-uci-ext`, ...) — one feed line
+installs any of them. The signing key was rotated as part of the
+move; the new public key is served from the feed root.
+
+### Repository moves
+
+- `raspbeguy/uapi` → `openwrt-iac/uapi` (this repo).
+- New: `openwrt-iac/unbound-uci-ext` — extension package exposing
+  unbound `server:` directives that the main unbound package
+  deliberately keeps out of UCI.
+- New: `openwrt-iac/openwrt-iac.github.io` — site + feed aggregator
+  (signed apk index rebuilt from each source repo's latest stable
+  GitHub Release).
+
+GitHub redirects `raspbeguy/uapi/...` URLs to the new owner for
+~60 days; bookmarks and git remotes should be updated. Tags and
+commit history are preserved.
+
+### Removed
+
+- `.github/workflows/publish-web.yml` — the static site is no
+  longer published from this repo; lives in
+  `openwrt-iac/openwrt-iac.github.io:web/`.
+- `.github/workflows/feed-purge-rc.yml` — the feed aggregator
+  filters prereleases at the source via
+  `gh release list --exclude-pre-releases`, so a scrub workflow is
+  no longer needed here.
+- The `Publish to APK feed on gh-pages` step in `ci.yml` —
+  release-apk now attaches the APK to the GitHub Release and stops
+  there; the aggregator picks it up.
+- `web/` and `keys/` directories — migrated to the org-site repo.
+- `FEED_SIGNING_KEY` repo secret — moved to the org-site repo.
+
 ## [2.0.2] - 2026-06-05
 
 Bug-fix patch addressing two items from a real-world v2.0.0 field

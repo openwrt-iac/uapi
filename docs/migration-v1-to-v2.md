@@ -10,7 +10,8 @@ diagnostics).
 A given uapi installation now serves exactly one API major - there is no
 parallel `/api/v1/` and `/api/v2/` mount in the same binary. Operators who
 need to keep a v1 client working keep the `1.2.1` package installed. The
-1.2.1 APK is preserved indefinitely on the gh-pages feed; the signed
+1.2.1 APK is preserved on the v1.2.1 GitHub Release at
+<https://github.com/openwrt-iac/uapi/releases/tag/v1.2.1>; the signed
 `v1.2.1` git tag is the canonical v1 contract document.
 
 **The URL prefix changes from `/api/v1/` to `/api/v2/`.** Update every
