@@ -38,6 +38,7 @@ return {
 	package: "unbound_ext",
 	type: "unbound_ext",
 	reload: ["unbound-uci-ext"],
+	create_if_missing: true,
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

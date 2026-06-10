@@ -2,7 +2,7 @@
 	"openapi": "3.1.0",
 	"info": {
 		"title": "uapi",
-		"version": "2.1.0",
+		"version": "2.2.0-rc1",
 		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). Conditional GET via `If-None-Match` returns 304 when matching. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
@@ -19897,10 +19897,9 @@
 				"description": "uapi resource backed by uci firewall.rule",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20027,10 +20026,9 @@
 				"description": "uapi resource backed by uci firewall.zone",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20103,10 +20101,9 @@
 				"description": "uapi resource backed by uci firewall.redirect",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20254,10 +20251,9 @@
 				"description": "uapi resource backed by uci firewall.forwarding",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20368,10 +20364,9 @@
 				"description": "uapi resource backed by uci network.interface",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20506,7 +20501,8 @@
 					"name": {
 						"type": "string",
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-						"description": "Create-time only; picks the uci section name (which becomes the uapi `id`). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references."
+						"deprecated": true,
+						"description": "DEPRECATED in 2.2.0: use `id` instead (the universal section-name input across every resource). Both are accepted during the deprecation window; if both are supplied they must match. `name` is scheduled for removal in v3. See docs/deprecations.md."
 					},
 					"addresses": {
 						"type": "array",
@@ -20648,10 +20644,9 @@
 				"description": "uapi resource backed by uci network.device",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20758,10 +20753,9 @@
 				"description": "uapi resource backed by uci network.route",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20841,10 +20835,9 @@
 				"description": "uapi resource backed by uci network.rule",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -20990,10 +20983,9 @@
 				"description": "uapi resource backed by uci network.bridge-vlan",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21029,10 +21021,9 @@
 				"description": "uapi resource backed by uci network.wireguard_peer",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21108,10 +21099,9 @@
 				"description": "uapi resource backed by uci wireless.wifi-device",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21183,10 +21173,9 @@
 				"description": "uapi resource backed by uci wireless.wifi-iface",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21346,10 +21335,9 @@
 				"description": "uapi resource backed by uci dhcp.host",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21530,10 +21518,9 @@
 				"description": "uapi resource backed by uci dhcp.dhcp",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21844,10 +21831,9 @@
 				"description": "uapi resource backed by uci system.timeserver",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21906,10 +21892,9 @@
 				"description": "uapi resource backed by uci dropbear.dropbear",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -21958,10 +21943,9 @@
 				"description": "uapi resource backed by uci uhttpd.uhttpd",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22079,10 +22063,9 @@
 				"description": "uapi resource backed by uci uhttpd.cert",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22364,10 +22347,9 @@
 				"description": "uapi resource backed by uci sqm.queue",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22431,10 +22413,9 @@
 				"description": "uapi resource backed by uci snmpd.agent",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22455,10 +22436,9 @@
 				"description": "uapi resource backed by uci snmpd.com2sec",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22490,10 +22470,9 @@
 				"description": "uapi resource backed by uci snmpd.group",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22530,10 +22509,9 @@
 				"description": "uapi resource backed by uci snmpd.access",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22848,10 +22826,9 @@
 				"description": "uapi resource backed by uci vnstat.interface",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -22940,10 +22917,9 @@
 				"description": "uapi resource backed by uci mwan3.interface",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -23126,10 +23102,9 @@
 				"description": "uapi resource backed by uci mwan3.member",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -23169,10 +23144,9 @@
 				"description": "uapi resource backed by uci mwan3.policy",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -23210,10 +23184,9 @@
 				"description": "uapi resource backed by uci mwan3.rule",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"
@@ -23538,10 +23511,9 @@
 				"description": "uapi resource backed by uci openvpn.openvpn",
 				"properties": {
 					"id": {
-						"type": [
-							"string",
-							"null"
-						]
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
 					"managed": {
 						"type": "boolean"

@@ -135,4 +135,23 @@ $SSH "awk '/unbound-uci-ext managed \\(do not edit\\)/{f=1; next} /<<< unbound-u
 $SSH "awk '/unbound-uci-ext managed \\(do not edit\\)/{f=1; next} /<<< unbound-uci-ext managed <<</{f=0; next} f' /etc/unbound/unbound_ext.conf | grep -v '^$' | head -3" \
 	&& fail "unbound_ext.conf still has managed-region content after disable" || true
 
+echo "--- 2.2.0 create_if_missing: wipe unbound_srv conffile, PATCH recreates ---"
+# Save a snapshot of the current conffile (which the package shipped) so we
+# can restore it after the test regardless of whether unbound-uci-ext was
+# feed-installed or sideloaded. apk add --force-overwrite isn't a reliable
+# restore: a sideloaded apk may not be in any configured repo's index.
+$SSH "cp /etc/config/unbound_srv /tmp/41_unbound_srv.bak"
+$SSH "rm /etc/config/unbound_srv && touch /etc/config/unbound_srv"
+resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/srv" \
+	-d '{"enabled": false}')
+status=$(echo "$resp" | tail -1)
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "200" ] || fail "PATCH on wiped unbound_srv expected 200 (create_if_missing), got $status: $body"
+echo "$body" | grep -q '"id": "main"' || fail "expected id=main"
+$SSH "uci get unbound_srv.main" >/dev/null || fail "uci section unbound_srv.main not recreated"
+
+# Restore the conffile we saved above so subsequent tests on the same VM
+# see the package-default content.
+$SSH "mv /tmp/41_unbound_srv.bak /etc/config/unbound_srv"
+
 echo "unbound/srv + unbound/ext singletons ok."

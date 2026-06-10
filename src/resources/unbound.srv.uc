@@ -49,6 +49,7 @@ return {
 	package: "unbound_srv",
 	type: "unbound_srv",
 	reload: ["unbound-uci-ext"],
+	create_if_missing: true,
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

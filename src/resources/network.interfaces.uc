@@ -157,26 +157,40 @@ function validate(json, conn, id) {
 	if (json.proto == null || json.proto == "")
 		push(errs, { field: "proto", code: "required", message: "is required" });
 
+	// Both `id` (the universal section-name input, since 2.2.0) and `name`
+	// (the original 2.1.0 wireguard-era field) are accepted at create. If
+	// both are supplied they must match. Charset / IFNAMSIZ-tightness is
+	// enforced here for `name`; `id` goes through the framework's
+	// validate_section_id which applies the broader uci section-name rules.
+	// In-package uniqueness is checked by the framework for either path.
+	let push_ifnamsiz_err = function(field, ctx) {
+		push(errs, { field: field, code: "invalid_format",
+		             message: sprintf("must match [A-Za-z][A-Za-z0-9_]{0,14} (%s)", ctx) });
+	};
 	if (json.name != null) {
 		if (id != null)
 			push(errs, { field: "name", code: "read_only",
 			             message: "name can only be set at create time; rename via DELETE + POST" });
 		else if (type(json.name) != "string" || !match(json.name, IFNAMSIZ_RE))
-			push(errs, { field: "name", code: "invalid_format",
-			             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (uci section name, IFNAMSIZ-tight)" });
-		else if (conn != null) {
-			// conn is null only in unit-test fixtures; production always
-			// passes the transactional cursor.
-			let existing = null;
-			try { existing = conn.uci_get(PKG, json.name); } catch (_) {}
-			// uci_get can return an opaque dict for a missing section on some
-			// backends; require a `.type` to distinguish a real section from
-			// an empty result.
-			if (existing && type(existing) == "object" && existing['.type'] != null)
-				push(errs, { field: "name", code: "conflict",
-				             message: sprintf("section '%s.%s' already exists", PKG, json.name) });
-		}
+			push_ifnamsiz_err("name", "uci section name, IFNAMSIZ-tight");
+		if (id == null && json.id != null && json.name != null && json.id != json.name)
+			push(errs, { field: "name", code: "conflict",
+			             message: sprintf("id (%J) and name (%J) must match when both are supplied",
+			                              json.id, json.name) });
 	}
+	// Reject id at PATCH time (read-only post-create).
+	if (id != null && json.id != null && json.id != id)
+		push(errs, { field: "id", code: "read_only",
+		             message: "id can only be set at create time; rename via DELETE + POST" });
+	// For proto=wireguard, the IFNAMSIZ-tight cap is a kernel constraint:
+	// netifd uses the uci section name as the netdev name and Linux's
+	// IFNAMSIZ limits that to 15 chars. Tighten beyond the framework's
+	// 32-char default when the caller supplied `id` directly on a
+	// wireguard interface.
+	if (id == null && json.id != null && json.proto == "wireguard"
+	    && (type(json.id) != "string" || !match(json.id, IFNAMSIZ_RE)))
+		push_ifnamsiz_err("id",
+			"proto=wireguard binds the uci section name to the kernel netdev name; IFNAMSIZ caps it at 15 chars");
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
@@ -301,7 +315,10 @@ return {
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS) },
 		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-		             description: "Create-time only; picks the uci section name (which becomes the uapi `id`). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references." },
+		             deprecated: true,
+		             description: "DEPRECATED in 2.2.0: use `id` instead (the universal section-name input across every resource). Both are accepted during the deprecation window; if both are supplied they must match. `name` is scheduled for removal in v3. See docs/deprecations.md." },
+		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],

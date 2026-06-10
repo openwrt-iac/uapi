@@ -39,8 +39,25 @@ return {
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
     id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
+    id_for_create:   function(body) { ... return null; },  // runs only when body.id is unset; return a proto-specific name (e.g. wireguard's wg_<rand> short fallback) or null to fall through to ULID
+    create_if_missing: true,           // singletons only; opt-in. PATCH creates the uci section if absent instead of returning 404. See "Singletons that may be wiped" below.
+    singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
 };
 ```
+
+### Section name (`id`) at create time
+
+Every CRUD resource accepts an optional `id` field at create time as of 2.2.0; you do not need to opt in. The framework reads `body.id`, runs section-name validation (charset `^[A-Za-z][A-Za-z0-9_]{0,31}$`, in-package uniqueness across all section types), and uses it as both the uci section name and the response `id`. When the caller omits `id`, the framework falls back to a server-emitted ULID (or the result of your module's `id_for_create` hook if you registered one).
+
+`id_for_create` is the place to inject proto-specific fallbacks. `network/interfaces` uses it to emit a 14-char `wg_<rand>` for `proto=wireguard` because Linux IFNAMSIZ caps netifd's netdev name at 15 chars. Most resources don't need this hook; the default ULID is fine.
+
+If your resource type binds the section name to something kernel- or daemon-constrained beyond the framework's 32-char default cap, tighten in your own `validate()` (per-resource refinement runs after the framework check).
+
+### Singletons that may be wiped (`create_if_missing`)
+
+For resources whose underlying uci package can be deleted by an operator without uapi noticing (typical pattern: an extension package whose conffile is the only source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced), set `create_if_missing: true` on the resource module. `handler.make_singleton.patch` then creates the uci section on the fly instead of returning 404. The created section's name defaults to `main`; override via `singleton_section_name` if the daemon expects a different convention.
+
+Most singletons (`system`, `dhcp/dnsmasq`, `firewall/defaults`, etc.) should NOT opt in: their config sections ship with the package they wrap, and a missing section there is a real problem worth surfacing as 404 so the operator notices.
 
 `fromUci` and `toUci` form a (lossy) bijection: round-tripping a section
 through both should produce the same uci options. `fromUci` may take a

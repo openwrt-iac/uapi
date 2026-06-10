@@ -1037,6 +1037,26 @@ function build_schemas() {
 		if (type(mod.openapi_runtime) == "object" && type(properties.runtime) == "object")
 			properties.runtime = mod.openapi_runtime;
 
+		// 2.2.0: every CRUD resource accepts an optional `id` at create
+		// that becomes both the uci section name and the response id. If
+		// the resource module didn't supply its own id schema entry (only
+		// network.interfaces does, with IFNAMSIZ specifics for wireguard),
+		// inject a standard description so the spec uniformly documents
+		// the universal create-time input. The fromUci sample loop above
+		// populated `properties.id` with `{"type": ["string", "null"]}`
+		// and no description; we detect that case via the missing
+		// description and replace.
+		if (ep.kind == "crud") {
+			let id_entry = properties.id ?? {};
+			if (id_entry.description == null) {
+				properties.id = {
+					"type": "string",
+					"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+					"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars).",
+				};
+			}
+		}
+
 		let s = {
 			"type": "object",
 			"description": sprintf("uapi resource backed by uci %s.%s", mod.package, mod.type),

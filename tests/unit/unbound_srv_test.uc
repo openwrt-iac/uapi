@@ -167,4 +167,20 @@ t.describe('handler.make_singleton(unbound.srv)', () => {
 		let r = srv_h.patch(c, ctx(), { srv_line: ["one\ntwo"] });
 		t.assert_equal(r.status, 422);
 	});
+
+	// 2.2.0: create_if_missing makes the PATCH idempotent against a missing
+	// underlying section (e.g. operator wiped /etc/config/unbound_srv but the
+	// init script is still present). Without the flag the resource would 404.
+	t.it('patch creates the section if absent (create_if_missing)', () => {
+		// No unbound_srv fixture; uci_foreach finds nothing.
+		let c = bus.stub({ uci: {}, ubus: {} });
+		let r = srv_h.patch(c, ctx(), { enabled: true });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, 'main');
+		t.assert_true(r.body.enabled);
+	});
+
+	t.it('declares create_if_missing in the resource contract', () => {
+		t.assert_true(!!srv_resource.create_if_missing);
+	});
 });

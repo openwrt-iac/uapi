@@ -167,6 +167,36 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(ne[0].code, 'read_only');
 	});
 
+	// 2.2.0: `name` is deprecated in favour of `id`. Both accepted during
+	// the deprecation window; must match if both supplied.
+	t.it('validate accepts id alone (the 2.2.0 canonical input)', () => {
+		let errs = interfaces.validate({ proto: 'wireguard', id: 'wg_prod',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('validate accepts matching id and name', () => {
+		let errs = interfaces.validate({ proto: 'static', id: 'lan', name: 'lan',
+			ipaddr: '192.168.1.1' }, null);
+		let ne = filter(errs, function(e) { return e.field == "name" || e.field == "id"; });
+		t.assert_equal(length(ne), 0);
+	});
+
+	t.it('validate rejects mismatched id and name', () => {
+		let errs = interfaces.validate({ proto: 'static', id: 'lan', name: 'wan',
+			ipaddr: '192.168.1.1' }, null);
+		let ne = filter(errs, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(ne), 1);
+	});
+
+	t.it('validate rejects id that exceeds IFNAMSIZ for proto=wireguard', () => {
+		let errs = interfaces.validate({ proto: 'wireguard',
+			id: 'this_is_way_too_long_for_ifnamsiz',
+			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
+		let ie = filter(errs, function(e) { return e.field == "id" && e.code == "invalid_format"; });
+		t.assert_equal(length(ie), 1);
+	});
+
 	t.it('id_for_create echoes the caller-supplied name regardless of proto', () => {
 		// Iterates so a future proto-specific normalisation (lowercase,
 		// prefix, etc.) would surface as a divergence between protos.
@@ -189,26 +219,9 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(interfaces.id_for_create(null), null);
 	});
 
-	t.it('validate rejects `name` that collides with an existing network section', () => {
-		let c = ubus.stub({ uci: { network: {
-			lan: { '.type': 'interface', proto: 'static', ipaddr: '192.168.1.1' },
-		} } });
-		let errs = interfaces.validate({ proto: 'dhcp', name: 'lan' }, c, null);
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'conflict');
-	});
-
-	t.it('validate does NOT false-conflict against a stub that lacks .type', () => {
-		// Defends against ucode-mod-uci versions whose uci_get returns an
-		// empty dict for a missing section instead of null. The .type-non-null
-		// guard in validate() catches the empty-dict case.
-		let c = ubus.stub({ uci: { network: {
-			nosection: {},
-		} } });
-		let errs = interfaces.validate({ proto: 'dhcp', name: 'nosection' }, c, null);
-		let ne = filter(errs, function(e) { return e.field == "name" && e.code == "conflict"; });
-		t.assert_equal(length(ne), 0);
-	});
+	// (Framework owns the in-package section-existence check as of 2.2.0;
+	// the per-resource tests for that behavior moved into the handler-level
+	// create tests.)
 
 	t.it('validate rejects unknown proto', () => {
 		let errs = full_validate(interfaces, { proto: 'whatever' }, null);

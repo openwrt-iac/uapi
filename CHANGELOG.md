@@ -7,6 +7,27 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.2.0-rc1] - 2026-06-08
+
+Three field-feedback items from a real OPNsense-to-OpenWrt migration drove this release. The naming-model items (callers want to keep meaningful section names like `lan` / `wan` instead of getting ULIDs) land here; the apply-with-rollback / commit-confirmed safety net is tracked as an open design question at [openwrt-iac/uapi#3](https://github.com/openwrt-iac/uapi/issues/3) and didn't make this cut.
+
+### Added
+
+- Settable `id` at create on every CRUD resource. `POST /<resource>` now accepts an optional `id` field at top level; when supplied it becomes the uci section name AND the response `id`. When absent the server emits the existing ULID. Validation runs once in the framework: uci section-name charset, 32-char default cap, and in-package uniqueness across all section types (so `POST /firewall/rules` with `id: "lan"` while a zone `lan` already exists returns `422 conflict` cleanly instead of failing on commit). Per-resource modules can tighten further; `network/interfaces` keeps its IFNAMSIZ-tight 15-char cap for `proto=wireguard` since netifd binds the uci section name to the kernel netdev name.
+- `create_if_missing` opt-in flag on singleton resource modules. When set, `PATCH /<singleton>` creates the underlying uci section (named `main`) if absent instead of returning 404. Applied to `/unbound/srv` and `/unbound/ext` because their extension UCI packages can be wiped by an operator without uapi getting any warning; other singletons stay opt-out so a missing section keeps surfacing as a real problem.
+
+### Changed
+
+- `POST /<resource>/<existing-id>/adopt` keeps the existing section name when the target section is already named. Previously adopt always renamed the section to a ULID, which broke uci cross-references where other sections referenced this one by name (e.g. `firewall.zones.lan` referenced by `firewall.rules.src_zone = "lan"`). Anonymous (`cfgXXXXXX`) sections still get renamed to a managed id, since they had no stable name to begin with. Named sections become an idempotent acknowledgement: keep the name, return the existing view.
+
+### Deprecated
+
+- `network/interfaces.name` (request input) in favour of the universal `network/interfaces.id`. Both are accepted during the deprecation window; if both are supplied they must match. The OpenAPI spec marks `name` as `deprecated: true`. Removal is scheduled for v3. See `docs/deprecations.md`.
+
+### Policy
+
+- Field renames within a major release are now allowed when paired with a deprecation window (both old and new accepted, old marked `deprecated: true` in the OpenAPI spec, removal scheduled for the next major). The deprecation log at `docs/deprecations.md` is the operator-facing source of truth.
+
 ## [2.1.0] - 2026-06-07
 
 Two themes in one release: new curated singletons for the

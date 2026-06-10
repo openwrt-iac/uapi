@@ -58,10 +58,14 @@ echo "$put_ok"
 echo "$put_ok" | tail -1 | grep -q '^200$' || fail "PUT on adopted expected 200"
 echo "$put_ok" | grep -q '"target": "ACCEPT"' || fail "PUT did not update target"
 
-echo "--- adopting an already-managed section returns 409 conflict ---"
+echo "--- re-adopting an already-managed section is idempotent (200, id preserved) ---"
+# 2.2.0 behavior change: adopt on a named section returns 200 with the
+# existing view rather than 409. The previous rename-to-ULID on already-
+# managed sections broke uci cross-references; the new path is a no-op ack.
 double_adopt=$(call -X POST "$URL/firewall/rules/$new_id/adopt")
-echo "$double_adopt" | tail -1 | grep -q '^409$' || fail "double adopt expected 409"
-echo "$double_adopt" | grep -q '"code": "conflict"' || fail "missing conflict code"
+echo "$double_adopt" | tail -1 | grep -q '^200$' || fail "double adopt expected 200 (2.2.0 behavior)"
+echo "$double_adopt" | grep -q "\"id\": \"$new_id\"" || fail "id should be preserved on re-adopt"
+echo "$double_adopt" | grep -q '"managed": true' || fail "managed should stay true"
 
 echo "--- managed-filter shows only adopted rule ---"
 managed_list=$(call "$URL/firewall/rules?managed=true")

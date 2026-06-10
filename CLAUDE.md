@@ -112,7 +112,9 @@ return {
     toUci:   function(json) {...},         // request JSON → uci option dict
     validate: function(json, conn, id) {...return [];}, // cross-field / cross-section rules
     merge_for_patch: function(existing, existing_json, body) {...}, // optional, nested-object patches
-    id_for_create: function(body) {...return null;}, // optional; pick the section id (caller-supplied name or proto-specific generated id). Used by network.interfaces; see "Interface section names are caller-pickable" below.
+    id_for_create: function(body) {...return null;}, // optional; runs only when body.id is NOT set. Picks a proto-specific or otherwise-derived section name (e.g. network/interfaces emits a wg_<rand> for proto=wireguard). Returns null to fall through to the default ULID. Called with the request body on create; called with the fromUci view on adopt of an anonymous section (read fields that exist in both, e.g. `proto`; treat `name` as request-only). See "Section names are caller-pickable on every CRUD resource" below.
+    create_if_missing: true,  // singletons only; opt-in. When set, PATCH on a missing uci section creates one (named "main") instead of returning 404. Used by unbound/srv + unbound/ext (their extension UCI packages can be wiped by an operator). Most singletons stay opt-out so a missing section surfaces as a real problem.
+    singleton_section_name: "main",  // singletons only; defaults to "main". Override only when the underlying uci convention names the section differently.
     // Optional OpenAPI-only hints (consumed by build/gen_openapi.uc, not by the runtime):
     openapi_required:    [...],            // unconditional required fields
     openapi_conditional: [...],            // if/then/required for proto/type discriminators
@@ -171,7 +173,11 @@ OpenWrt's uci has named sections (stable) and anonymous sections (auto-assigned 
 
 Optional one-character type prefix for grep-ability (`r_01HX...` for rules, `i_01HX...` for interfaces). No `uapi_` namespace prefix; we're just another writer to uci.
 
-**Interface section names are caller-pickable.** `network/interfaces` accepts an optional `name` field at create time; it becomes both the uci section name AND the uapi `id`. This is the one resource family where the section name is a first-class semantic handle in OpenWrt (referenced by `firewall.zones.network`, `network.routes.interface`, `dhcp.servers.interface`, `sqm.queues.interface`, `network.wireguard_peers.interface`; visible in `uci show network`; shown by LuCI). For every other curated resource the section id stays a server-generated ULID, because their section names are internal bookkeeping nobody references by hand. The per-resource `id_for_create(body)` hook on the module picks the format; `network/interfaces` echoes the caller's `name` when supplied, or falls through to the standard ULID. The `proto=wireguard` subcase emits a 14-char `wg_<rand>` fallback because netifd uses the section name as the kernel netdev name and Linux IFNAMSIZ caps it at 15 chars (a 28-char ULID would silently break the tunnel, the v2.0.2 forcing case).
+**Section names are caller-pickable on every CRUD resource (2.2.0).** Every `POST /<resource>` accepts an optional `id` field at top level. If supplied it becomes the uci section name AND the response `id` (after validation: uci section-name charset, 32-char default cap, no collision with any existing section in the package). If absent the server emits a server-generated ULID, exactly as it did before 2.2.0. The default fallback is registered on `make()` via the `id_prefix` derived from the section type; resources with proto-specific requirements register a per-module `id_for_create(body)` hook that runs when `body.id` is unset (e.g. `network/interfaces` emits a 14-char `wg_<rand>` for `proto=wireguard` because netifd uses the section name as the kernel netdev name and Linux's IFNAMSIZ caps it at 15 chars; a 28-char ULID would silently break the tunnel, the v2.0.2 forcing case).
+
+The uniform rule replaced the per-resource carve-out we accumulated through 2.1.0. The same `id` input works for the resources where the section name is a first-class semantic handle in OpenWrt (`network/interfaces`, `firewall/zones`, `network/devices`, etc., referenced by other resources by name) and for the ones where the section name is internal bookkeeping (`firewall/rules`, `dhcp/hosts`, etc., where operators rarely care).
+
+The 2.1.0-era `network/interfaces.name` input is still accepted but marked deprecated; clients should migrate to `id` per `docs/deprecations.md`. If both `name` and `id` are supplied on `network/interfaces` they must match; otherwise the request is rejected with `422 conflict`.
 
 ### Pre-existing anonymous sections
 
@@ -179,7 +185,8 @@ A router with existing anonymous sections (manual edits, LuCI, other tools) is t
 
 - GET returns existing anonymous sections with a content-derived synthetic ID and `managed: false`.
 - PUT/PATCH/DELETE on a `managed: false` section returns `409 unmanaged_resource`.
-- `POST .../adopt` renames the section under uapi's ULID scheme and flips it to `managed: true`. After adoption it's writable like any other resource.
+- `POST .../adopt` on an **anonymous** section renames it under uapi's ULID scheme and flips it to `managed: true`. After adoption it's writable like any other resource.
+- `POST .../adopt` on a **named** section (e.g. the box's default `lan` zone) is an idempotent acknowledgement: the section keeps its name and the response carries the existing view (`managed: true`). This is the 2.2.0 behavior change; previously adopt always renamed to ULID, which broke uci cross-references where other sections referenced this one by name (`firewall.zones.lan` referenced by `firewall.rules.src_zone = "lan"`, etc.).
 
 ### Named sections written by other tools
 
@@ -551,9 +558,11 @@ installed major, additions are backwards-compatible.
 - New optional query parameters
 - New error codes (clients branch on HTTP status, treat unknown `code` gracefully)
 - New scope names
+- Field rename with both old and new accepted during a deprecation window, the old marked `deprecated: true` in `build/openapi.json`, an entry added to `docs/deprecations.md`, and the actual removal scheduled for the next major. The deprecation log is the canonical place the operator-facing migration lives.
 
 **Breaking (requires the next major):**
-- Removing or renaming any endpoint, field, or error code
+- Removing a field that was never deprecated, or removing one ahead of its scheduled `docs/deprecations.md` removal target
+- Removing or renaming any endpoint or error code (rename of a request field with deprecation pair is non-breaking; see above)
 - Changing a field's JSON type or semantic meaning
 - Making a previously-optional request field required
 - Tightening validation to reject previously-accepted payloads

@@ -263,6 +263,38 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
 	return merged;
 }
 
+// Caller-supplied section ids (body.id) must meet uci section-name rules and
+// must not collide with any existing section in the package. The pattern and
+// default length cap match what uci itself accepts; per-resource modules can
+// tighten further in their own validate() (e.g. network.interfaces enforces
+// the 15-char IFNAMSIZ limit because netifd uses the section name as the
+// kernel netdev name).
+const SECTION_ID_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
+const SECTION_ID_MAX_LEN = 32;
+
+function validate_section_id(conn, pkg, id) {
+	let errs = [];
+	if (type(id) != "string") {
+		push(errs, { field: "id", code: "invalid_type",
+		             message: "must be a string" });
+		return errs;
+	}
+	if (length(id) == 0 || length(id) > SECTION_ID_MAX_LEN || !match(id, SECTION_ID_RE)) {
+		push(errs, { field: "id", code: "invalid_format",
+		             message: sprintf("must be 1 to %d characters, start with a letter, and contain only letters, digits, and underscore (uci section-name rules)",
+		                              SECTION_ID_MAX_LEN) });
+		return errs;
+	}
+	let existing = null;
+	try { existing = conn.uci_get(pkg, id); } catch (_) {}
+	if (existing && type(existing) == "object" && existing['.type'] != null) {
+		push(errs, { field: "id", code: "conflict",
+		             message: sprintf("section '%s.%s' already exists (type=%s)",
+		                              pkg, id, existing['.type']) });
+	}
+	return errs;
+}
+
 function attach_reload_headers(resp, result) {
 	if (result.reload_status != null)
 		resp.headers["X-Reload-Status"] = result.reload_status;
@@ -402,7 +434,26 @@ function make(resource, opts) {
 	function create(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
-				let new_id = id_for_create(body) ?? ids.new_id(id_prefix);
+				// Section-name resolution: caller's body.id wins, else the
+				// per-resource id_for_create hook (e.g. network.interfaces
+				// aliasing body.name; wireguard's wg_<rand> IFNAMSIZ-tight
+				// fallback), else a server-emitted ULID.
+				let caller_id = (type(body) == "object" && body.id != null) ? body.id : null;
+				let hook_id = (caller_id == null) ? id_for_create(body) : null;
+				let new_id = caller_id ?? hook_id ?? ids.new_id(id_prefix);
+
+				// Validate anything that wasn't a server-emitted ULID:
+				// body.id is caller-supplied; hook_id may be caller-derived
+				// (network.interfaces aliases body.name) or server-derived
+				// (wireguard short fallback). Server-derived ids match the
+				// rules by construction; we validate anyway so the cost is
+				// just one extra uci_get per non-ULID create.
+				if (caller_id != null || hook_id != null) {
+					let id_errs = validate_section_id(c, p, new_id);
+					if (length(id_errs) > 0)
+						return { ok: false, kind: "validation", errors: id_errs };
+				}
+
 				let errs = _validate_with_schema(resource, body, body, c, null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
@@ -515,17 +566,38 @@ function make(resource, opts) {
 	}
 
 	function adopt(conn, ctx, id) {
+		// Named sections (the box's default `lan` / `wan` zones, anything
+		// uci-set out-of-band) are addressable as-is; adopt is an idempotent
+		// acknowledgement that doesn't change uci state. Short-circuit
+		// before the transaction so we don't acquire a per-package lock or
+		// fire a service reload for a no-op. The previous transactional
+		// path called reload(services) unconditionally on the success path,
+		// which meant N adopts during a Terraform import triggered N
+		// firewall/network reloads with brief visible glitches each.
+		let preview = load_section(conn, pkg, id);
+		if (!preview || !type_predicate(preview['.type']))
+			return errors.error(ctx, "not_found",
+			                    sprintf("No %s with id %J", sec_type, id));
+		if (!preview['.anonymous']) {
+			let view = resource.fromUci(preview, conn);
+			return set_etag_header(errors.ok(ctx, view), view);
+		}
+		// Anonymous (cfgXXXXXX) section: needs a uci_rename to a stable
+		// name, so we go through the full transaction (snapshot + commit +
+		// reload + restore-on-failure).
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
-				if (existing_view.managed)
-					return { ok: false, kind: "conflict",
-					         message: "Section is already managed" };
-				let new_id = id_for_create(existing_view) ?? ids.new_id(id_prefix);
+				if (!existing['.anonymous']) {
+					// Section was renamed between the preview load and the
+					// transaction; treat as the named-ack path.
+					return { ok: true, body: resource.fromUci(existing, conn) };
+				}
+				let new_id = id_for_create(resource.fromUci(existing, conn))
+				             ?? ids.new_id(id_prefix);
 				c.uci_rename(p, id, new_id);
 				let view = { ...existing };
 				view['.name'] = new_id;
@@ -545,6 +617,13 @@ function make_singleton(resource, opts) {
 	let sec_type = resource.type;
 	let reload_services = resource.reload ?? [];
 	let tx_overrides = (opts != null && opts.tx != null) ? opts.tx : {};
+	// Opt-in upsert for singletons where the underlying uci package can be
+	// absent entirely (e.g. unbound-uci-ext's extension UCIs that ship a
+	// default `main` section the operator could conceivably wipe). Without
+	// the flag, a missing section returns 404 so the operator notices that
+	// the wrapping package isn't installed correctly.
+	let create_if_missing = !!resource.create_if_missing;
+	let singleton_section_name = resource.singleton_section_name ?? "main";
 
 	function tx_params(extra) {
 		let p = { package: pkg, reload_services: reload_services };
@@ -575,9 +654,20 @@ function make_singleton(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = find(c);
-				if (!existing)
-					return { ok: false, kind: "not_found",
-					         message: sprintf("singleton %s.%s missing", pkg, sec_type) };
+				if (!existing) {
+					if (!create_if_missing)
+						return { ok: false, kind: "not_found",
+						         message: sprintf("singleton %s.%s missing", pkg, sec_type) };
+					// Synthesize the section. uci_create_section makes a
+					// named section that subsequent find() calls would see;
+					// we also build a local stub here so the patch logic
+					// below treats it as if it had pre-existed empty.
+					c.uci_create_section(p, singleton_section_name, sec_type);
+					existing = {};
+					existing['.name'] = singleton_section_name;
+					existing['.anonymous'] = false;
+					existing['.type'] = sec_type;
+				}
 				let id = existing['.name'];
 
 				let existing_view = resource.fromUci(existing, conn);

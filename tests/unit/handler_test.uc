@@ -192,6 +192,72 @@ t.describe('handler.create', () => {
 		let conflict_errs = filter(r.body.errors, function(e) { return e.code == "conflict"; });
 		t.assert_equal(length(conflict_errs), 1);
 	});
+
+	// 2.2.0: every CRUD resource accepts optional `id` at create.
+	t.it('accepts caller-supplied id and uses it as the section name', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			id: 'allow_ssh',
+			target: 'ACCEPT',
+			match: { src_zone: 'wan', dest_port: ['22'], proto: ['tcp'] },
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, 'allow_ssh');
+		t.assert_true(!!c._state.uci.firewall.allow_ssh);
+	});
+
+	t.it('rejects caller-supplied id that collides with an existing section in the package', () => {
+		// z_lan already exists as a zone in with_zones(); a rule trying to
+		// take that name should 422 with a clean "conflict" code, not let
+		// uci fail mid-commit.
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			id: 'z_lan',
+			target: 'ACCEPT',
+			match: { src_zone: 'wan' },
+		});
+		t.assert_equal(r.status, 422);
+		let id_errs = filter(r.body.errors, function(e) { return e.field == "id" && e.code == "conflict"; });
+		t.assert_equal(length(id_errs), 1);
+	});
+
+	t.it('rejects caller-supplied id that fails uci section-name charset rules', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			id: '0bad',
+			target: 'ACCEPT',
+			match: { src_zone: 'wan' },
+		});
+		t.assert_equal(r.status, 422);
+		let id_errs = filter(r.body.errors, function(e) { return e.field == "id" && e.code == "invalid_format"; });
+		t.assert_equal(length(id_errs), 1);
+	});
+
+	t.it('rejects empty-string id', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), {
+			id: '',
+			target: 'ACCEPT',
+			match: { src_zone: 'wan' },
+		});
+		t.assert_equal(r.status, 422);
+		let id_errs = filter(r.body.errors, function(e) { return e.field == "id" && e.code == "invalid_format"; });
+		t.assert_equal(length(id_errs), 1);
+	});
+
+	t.it('rejects id longer than the 32-char framework cap', () => {
+		let c = with_zones();
+		let too_long = '';
+		for (let i = 0; i < 33; i++) too_long += 'a';
+		let r = rules.create(c, ctx(), {
+			id: too_long,
+			target: 'ACCEPT',
+			match: { src_zone: 'wan' },
+		});
+		t.assert_equal(r.status, 422);
+		let id_errs = filter(r.body.errors, function(e) { return e.field == "id" && e.code == "invalid_format"; });
+		t.assert_equal(length(id_errs), 1);
+	});
 });
 
 t.describe('handler.replace', () => {
@@ -271,6 +337,18 @@ t.describe('handler.patch', () => {
 		let r = rules.patch(c, ctx(), 'r_nope', { target: 'DROP' });
 		t.assert_equal(r.status, 404);
 	});
+
+	t.it('accepts body.id that echoes the URL path id (idempotent GET-modify-PATCH cycle)', () => {
+		// A client that does GET, mutates, PATCH back to the same URL will
+		// often forward the `id` field verbatim. Framework treats it as a
+		// harmless extra (firewall.rules has no `id` in schema_properties,
+		// so check_schema_types ignores it).
+		let c = with_existing();
+		let r = rules.patch(c, ctx(), 'r_existing', { id: 'r_existing', target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, 'r_existing');
+		t.assert_equal(r.body.target, 'REJECT');
+	});
 });
 
 t.describe('handler.adopt', () => {
@@ -293,11 +371,29 @@ t.describe('handler.adopt', () => {
 		t.assert_equal(r.status, 404);
 	});
 
-	t.it('returns 409 conflict if already managed', () => {
+	t.it('is idempotent on already-named sections (keeps the name, 200)', () => {
+		// 2.2.0 behavior change: adopt no longer 409s on a named section.
+		// The previous rename-to-ULID would have broken uci cross-refs
+		// where other sections reference this one by name (e.g. a default
+		// `lan` zone referenced as firewall.rules.src_zone = "lan").
 		let c = with_anon();
 		let r = rules.adopt(c, ctx(), 'r_named');
-		t.assert_equal(r.status, 409);
-		t.assert_equal(r.body.code, 'conflict');
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, 'r_named');
+		t.assert_true(r.body.managed);
+		t.assert_equal(r.body.target, 'ACCEPT');
+	});
+
+	t.it('named-section adopt does NOT trigger a reload', () => {
+		// Regression guard for the S1 review finding: the previous
+		// transactional path called reload() unconditionally on success,
+		// so N adopts during a Terraform import fired N firewall reloads
+		// with brief visible glitches each. Named adopt now short-circuits
+		// before the transaction.
+		let c = with_anon();
+		let before = length(reload_calls);
+		rules.adopt(c, ctx(), 'r_named');
+		t.assert_equal(length(reload_calls), before);
 	});
 
 	t.it('renames the anonymous section to a ULID id and flips managed=true', () => {
