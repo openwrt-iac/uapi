@@ -217,6 +217,14 @@ This walks the resource modules and emits `build/openapi.json`. Add an entry for
 
 If the new resource introduces a new scope path (e.g. a new package), add it to the scope tree table.
 
+## Validation should not be stricter than the platform
+
+uapi's `validate()` is for catching client mistakes early (typos, missing required fields, cross-resource references that won't resolve) and for surfacing well-formed `422` errors instead of letting uci fail mid-commit. It is NOT a venue for inventing constraints the underlying uci/netifd/daemon doesn't have.
+
+Concrete recurring temptation: "this bridge has no ports / this firewall rule has no match / this static interface has no ipaddrs, surely that's an error?" Sometimes it is, sometimes the operator is staging an incremental configuration (Terraform's create-before-reference ordering, an empty bridge whose members get added later, an interface that's intentionally up but unconfigured). uapi 2.2.0-rc2 fixed exactly this antipattern in `network.devices` (a `type=bridge` without `ports` was being rejected even though uci/netifd accept it without complaint). Don't add a `validate()` check just because something "feels off"; first check whether uci accepts it. If uci does, uapi should too.
+
+If a real protocol-level constraint applies (e.g. `proto=wireguard` genuinely cannot work without a `private_key`, the kernel will reject it), that's worth catching upfront. If it's just "feels incomplete to me", let the platform decide.
+
 ## Things to watch for
 
 - ucode does not hoist function declarations. Define helpers before callers.

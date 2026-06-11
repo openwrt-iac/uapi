@@ -24,10 +24,16 @@ t.describe('network.devices', () => {
 		t.assert_deep_equal(r.ports, ['eth0', 'eth1']);
 	});
 
-	t.it('validate requires ports when type is bridge', () => {
-		let errs = netdev.validate({ name: 'br-lan', type: 'bridge' }, null);
+	t.it('validate accepts a portless bridge (members added later)', () => {
+		let errs = netdev.validate({ name: 'br-tf', type: 'bridge' }, null);
 		let pe = filter(errs, function(e) { return e.field == "ports"; });
-		t.assert_equal(pe[0].code, 'required');
+		t.assert_equal(length(pe), 0);
+	});
+
+	t.it('validate accepts a bridge with an explicit empty ports list', () => {
+		let errs = netdev.validate({ name: 'br-tf', type: 'bridge', ports: [] }, null);
+		let pe = filter(errs, function(e) { return e.field == "ports"; });
+		t.assert_equal(length(pe), 0);
 	});
 
 	t.it('validate requires vid when type is 8021q', () => {

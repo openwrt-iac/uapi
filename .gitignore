@@ -12,3 +12,4 @@ build/openwrt/uapi/files/
 web/api/openapi.json
 .DS_Store
 *.swp
+feedback/

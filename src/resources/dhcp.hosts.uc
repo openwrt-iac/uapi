@@ -103,9 +103,7 @@ function validate(json, conn) {
 		push(errs, { field: "hostid", code: "invalid_format",
 		             message: "must be an IPv6 host id like ::42" });
 
-	if (json.ip == null || json.ip == "")
-		push(errs, { field: "ip", code: "required", message: "is required" });
-	else if (!is_valid_ip(json.ip))
+	if (json.ip != null && json.ip != "" && !is_valid_ip(json.ip))
 		push(errs, { field: "ip", code: "invalid_format",
 		             message: "must be a valid IPv4 or IPv6 address" });
 
@@ -131,7 +129,6 @@ return {
 	toUci: toUci,
 	validate: validate,
 	openapi_singular: "DHCP host",
-	openapi_required: ["ip"],
 	openapi_conditional: [
 		{ anyOf: [
 		    { required: ["mac"] },

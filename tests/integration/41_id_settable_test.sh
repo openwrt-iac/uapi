@@ -116,4 +116,18 @@ status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
 [ "$status" = "422" ] || fail "expected 422 for id/name mismatch, got $status: $body"
 
-echo "id-settable + adopt-keep-name ok."
+echo "--- portless bridge create succeeds ---"
+br_resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/devices" \
+	-d '{"id":"br_tftest","name":"br_tftest","type":"bridge"}')
+br_status=$(echo "$br_resp" | tail -1)
+br_body=$(echo "$br_resp" | sed '$d')
+[ "$br_status" = "200" ] || fail "POST portless bridge expected 200, got $br_status: $br_body"
+echo "$br_body" | grep -q '"id": "br_tftest"' || fail "expected id=br_tftest"
+$SSH "uci get network.br_tftest" >/dev/null || fail "uci section network.br_tftest not created"
+$SSH "uci -q get network.br_tftest.ports" && fail "uci should have no ports on a portless bridge" || true
+br_id="br_tftest"
+
+del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/devices/$br_id")
+[ "$del" = "204" ] || fail "DELETE portless bridge expected 204, got $del"
+
+echo "id-settable + adopt-keep-name + portless-bridge ok."

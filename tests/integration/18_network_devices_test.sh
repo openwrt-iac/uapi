@@ -29,12 +29,12 @@ echo "$got" | tail -1 | grep -q '^200$' || fail "GET expected 200"
 echo "$got" | grep -q '"name": "br-uapi-test"' || fail "GET missing name"
 echo "$got" | grep -q '"type": "bridge"' || fail "GET missing type"
 
-echo "--- validate: bridge without ports is rejected ---"
-bad=$(call -X POST -H 'Content-Type: application/json' "$URL/network/devices" -d '{
-	"name": "br-bad", "type": "bridge"
+echo "--- portless bridge accepted (uapi 2.2.0-rc2 no longer stricter than uci) ---"
+ok_portless=$(call -X POST -H 'Content-Type: application/json' "$URL/network/devices" -d '{
+	"id": "br_portless", "name": "br_portless", "type": "bridge"
 }')
-echo "$bad" | tail -1 | grep -q '^422$' || fail "bridge without ports expected 422"
-echo "$bad" | grep -q '"field": "ports"' || fail "expected error on ports field"
+echo "$ok_portless" | tail -1 | grep -q '^200$' || fail "portless bridge expected 200"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/devices/br_portless"
 
 echo "--- validate: type 8021q without vid is rejected ---"
 bad_vlan=$(call -X POST -H 'Content-Type: application/json' "$URL/network/devices" -d '{

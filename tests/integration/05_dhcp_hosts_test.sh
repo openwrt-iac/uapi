@@ -43,4 +43,12 @@ echo "--- DELETE returns 204 ---"
 deleted=$(call -X DELETE "$URL/dhcp/hosts/$id")
 echo "$deleted" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
 
+echo "--- DNS-only entry: mac + name, no ip ---"
+dns_only=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
+	"name": "noiphost", "mac": "aa:bb:cc:dd:ee:01"
+}')
+echo "$dns_only" | tail -1 | grep -q '^200$' || fail "DNS-only host expected 200"
+dns_id=$(echo "$dns_only" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$dns_id"
+
 echo "dhcp hosts CRUD ok"

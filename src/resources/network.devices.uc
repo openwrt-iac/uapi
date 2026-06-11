@@ -52,10 +52,6 @@ function validate(json) {
 	if (json.type == null || json.type == "")
 		push(errs, { field: "type", code: "required", message: "is required" });
 
-	if (json.type == "bridge" && (type(json.ports) != "array" || length(json.ports) == 0))
-		push(errs, { field: "ports", code: "required",
-		             message: "is required when type is bridge" });
-
 	if (json.type == "8021q" && (json.vid == null || json.vid == ""))
 		push(errs, { field: "vid", code: "required",
 		             message: "is required when type is 8021q" });
@@ -73,8 +69,6 @@ return {
 	openapi_singular: "network device",
 	openapi_required: ["name", "type"],
 	openapi_conditional: [
-		{ if:   { properties: { type: { const: "bridge" } }, required: ["type"] },
-		  then: { required: ["ports"] } },
 		{ if:   { properties: { type: { const: "8021q" } }, required: ["type"] },
 		  then: { required: ["vid"] } },
 	],

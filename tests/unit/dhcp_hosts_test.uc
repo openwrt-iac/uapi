@@ -60,9 +60,15 @@ t.describe('dhcp.hosts.toUci', () => {
 });
 
 t.describe('dhcp.hosts.validate', () => {
-	t.it('rejects missing mac and ip together', () => {
-		let errs = hosts.validate({}, null);
-		t.assert_true(length(errs) >= 2);
+	t.it('rejects an entry with neither mac nor duid (no identifier)', () => {
+		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
+		let me = filter(errs, function(e) { return e.field == "mac" && e.code == "required"; });
+		t.assert_equal(length(me), 1);
+	});
+
+	t.it('accepts a DNS-only entry: mac + name, no ip', () => {
+		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', name: 'host.lan' }, null);
+		t.assert_equal(length(errs), 0);
 	});
 
 	t.it('rejects malformed mac', () => {
