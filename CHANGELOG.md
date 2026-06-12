@@ -7,22 +7,11 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
-## [2.2.0-rc2] - 2026-06-10
-
-Soak fix from rc1 field-testing on hardware (PC Engines APU2, OpenWrt 25.12.4) by the Terraform provider author. The rc1 design changes (settable `id`, adopt-keep-name, singleton `create_if_missing`) were confirmed working end-to-end across a 14-resource Terraform config; the one finding was an over-restriction on `network/devices`.
-
-### Changed
-
-- `network/devices` no longer requires `ports` when `type=bridge`. uci and netifd accept portless bridges; the rc1 validation was stricter than the platform, which inverted Terraform's create-bridge-before-members ordering, blocked incremental bridges, and rejected adoption of pre-existing portless bridges. The validate check and the `openapi_conditional` clause are both removed; `toUci` already handled the empty-list case correctly.
-- `dhcp/hosts` no longer requires `ip`. dnsmasq accepts entries with just `mac` + `name` for DNS-only reservations (hostname-to-MAC mapping without a static lease), and the resource already has a `dns: bool` field reflecting that workflow. The validate check and the `openapi_required: ["ip"]` entry are removed; the existing `openapi_conditional` that requires either `mac` or `duid` (the actual platform constraint: every host entry needs an identifier) stays.
-
-### Documentation
-
-- `docs/adding-a-resource.md` grows a "validation should not be stricter than the platform" section pointing at the bridge antipattern as the canonical example. Catching client mistakes is the point of `validate()`; inventing constraints the underlying uci/netifd doesn't have is not.
-
-## [2.2.0-rc1] - 2026-06-08
+## [2.2.0] - 2026-06-12
 
 Three field-feedback items from a real OPNsense-to-OpenWrt migration drove this release. The naming-model items (callers want to keep meaningful section names like `lan` / `wan` instead of getting ULIDs) land here; the apply-with-rollback / commit-confirmed safety net is tracked as an open design question at [openwrt-iac/uapi#3](https://github.com/openwrt-iac/uapi/issues/3) and didn't make this cut.
+
+Validated end-to-end across two RC cycles: rc1 on a 14-resource Terraform config against a PC Engines APU2 (OpenWrt 25.12.4), rc2 with the over-restriction fixes the rc1 testing surfaced.
 
 ### Added
 
@@ -31,7 +20,9 @@ Three field-feedback items from a real OPNsense-to-OpenWrt migration drove this 
 
 ### Changed
 
-- `POST /<resource>/<existing-id>/adopt` keeps the existing section name when the target section is already named. Previously adopt always renamed the section to a ULID, which broke uci cross-references where other sections referenced this one by name (e.g. `firewall.zones.lan` referenced by `firewall.rules.src_zone = "lan"`). Anonymous (`cfgXXXXXX`) sections still get renamed to a managed id, since they had no stable name to begin with. Named sections become an idempotent acknowledgement: keep the name, return the existing view.
+- `POST /<resource>/<existing-id>/adopt` keeps the existing section name when the target section is already named. Previously adopt always renamed the section to a ULID, which broke uci cross-references where other sections referenced this one by name (e.g. `firewall.zones.lan` referenced by `firewall.rules.src_zone = "lan"`). Anonymous (`cfgXXXXXX`) sections still get renamed to a managed id, since they had no stable name to begin with. Named sections become an idempotent acknowledgement: keep the name, return the existing view, no service reload (the previous path called `reload(services)` unconditionally on the success path; N adopts during a Terraform import fired N firewall/network reloads).
+- `network/devices` no longer requires `ports` when `type=bridge`. uci and netifd accept portless bridges; the 2.1.0 validation was stricter than the platform, which inverted Terraform's create-bridge-before-members ordering, blocked incremental bridges, and rejected adoption of pre-existing portless bridges. The validate check and the `openapi_conditional` clause are both removed; `toUci` already handled the empty-list case correctly.
+- `dhcp/hosts` no longer requires `ip`. dnsmasq accepts entries with just `mac` + `name` for DNS-only reservations (hostname-to-MAC mapping without a static lease), and the resource already has a `dns: bool` field reflecting that workflow. The validate check and the `openapi_required: ["ip"]` entry are removed; the existing `openapi_conditional` that requires either `mac` or `duid` (the actual platform constraint) stays.
 
 ### Deprecated
 
@@ -40,6 +31,10 @@ Three field-feedback items from a real OPNsense-to-OpenWrt migration drove this 
 ### Policy
 
 - Field renames within a major release are now allowed when paired with a deprecation window (both old and new accepted, old marked `deprecated: true` in the OpenAPI spec, removal scheduled for the next major). The deprecation log at `docs/deprecations.md` is the operator-facing source of truth.
+
+### Documentation
+
+- `docs/adding-a-resource.md` grows a "Validation should not be stricter than the platform" section pointing at the bridge and DNS-only-host antipatterns as canonical examples. Catching client mistakes is the point of `validate()`; inventing constraints uci/netifd doesn't have is not.
 
 ## [2.1.0] - 2026-06-07
 
