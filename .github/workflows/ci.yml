@@ -273,7 +273,13 @@ jobs:
               *)
                 PRE= ;;
             esac
-            gh release create "$TAG" $PRE --title "$TAG" --generate-notes
+            chmod +x scripts/release-notes.sh
+            scripts/release-notes.sh "$TAG" > /tmp/release-notes.md
+            if [ -s /tmp/release-notes.md ]; then
+              gh release create "$TAG" $PRE --title "$TAG" --notes-file /tmp/release-notes.md
+            else
+              gh release create "$TAG" $PRE --title "$TAG" --generate-notes
+            fi
           fi
           gh release upload "$TAG" "${{ steps.find_apk.outputs.apk }}" --clobber
           # SBOM lives next to the APK; gh release upload is best-effort on the
