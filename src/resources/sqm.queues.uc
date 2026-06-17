@@ -66,6 +66,7 @@ return {
 	package: "sqm",
 	type: "queue",
 	reload: ["sqm"],
+	unique_field: "interface",
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

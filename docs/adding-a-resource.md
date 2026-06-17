@@ -42,6 +42,7 @@ return {
     id_for_create:   function(body) { ... return null; },  // runs only when body.id is unset; return a proto-specific name (e.g. wireguard's wg_<rand> short fallback) or null to fall through to ULID
     create_if_missing: true,           // singletons only; opt-in. PATCH creates the uci section if absent instead of returning 404. See "Singletons that may be wiped" below.
     singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
+    unique_field: "name",              // optional. Value of this field must be unique among same-type sections in this package. See "Cross-section reference fields" below.
 };
 ```
 
@@ -58,6 +59,29 @@ If your resource type binds the section name to something kernel- or daemon-cons
 For resources whose underlying uci package can be deleted by an operator without uapi noticing (typical pattern: an extension package whose conffile is the only source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced), set `create_if_missing: true` on the resource module. `handler.make_singleton.patch` then creates the uci section on the fly instead of returning 404. The created section's name defaults to `main`; override via `singleton_section_name` if the daemon expects a different convention.
 
 Most singletons (`system`, `dhcp/dnsmasq`, `firewall/defaults`, etc.) should NOT opt in: their config sections ship with the package they wrap, and a missing section there is a real problem worth surfacing as 404 so the operator notices.
+
+### Cross-section reference fields (`unique_field`)
+
+If your resource has a uci option whose VALUE other sections reference (rather than referencing this section by its section id), or whose duplication would break the daemon, declare it with `unique_field`. The framework rejects creates and modifies whose value collides with another section's, returning `422 conflict` with the offending section named in the error message.
+
+Concrete shapes that need this flag:
+
+- `firewall/zones.name`: fw4 keys forwardings, rules, and redirects on this value (`src_zone = "lan"` refers to the zone whose `name` option is `lan`, not its section id).
+- `network/devices.name`: netifd uses this as the kernel netdev name; `network/interfaces.device` references it.
+- `sqm/queues.interface`: tc cannot disambiguate two queues bound to the same interface.
+
+What does NOT need the flag:
+
+- Resources identified by their section id (`network/interfaces`, `wireless/devices`, etc.). The framework's existing section-id uniqueness check already covers them.
+- Fields that are human-readable labels with no semantic meaning to the daemon (`firewall/rules.name`, `firewall/redirects.name`).
+- Singletons (the section name is immutable and the resource is not referenced by value).
+- Fields that an OpenWrt convention DELIBERATELY allows to repeat across sections. Example: `snmpd.config group` sections share `option group` across multiple `(version, secname)` bindings as part of net-snmp's VACM model; that is not a duplicate to reject. Audit the upstream default config before declaring the flag on a new resource.
+
+The flag is scope-correct: same package, same section type. A `firewall.zone` with `name="lan"` does not conflict with a `firewall.rule` with `name="lan"` because different daemons read different fields. The check runs on `POST`, `PUT`, and `PATCH`; PATCH and PUT exclude the section being modified, so updates that keep the value unchanged still pass.
+
+The flag is string-only. The runtime check guards `type(val) == "string"` so non-string fields are silently skipped today; if your resource has a numeric or list-typed cross-reference key, the helper would need extending. Dynamic-type resources (those that declare `type_predicate` to match a family of section types like `wireguard_<iface>`) cannot declare `unique_field`; the framework will refuse to load such a module so the latent footgun does not ship.
+
+Resources that have their own per-validate uniqueness logic (e.g. `dhcp/servers` checks `interface` inside `validate()`) can keep that logic in place; `unique_field` is opt-in.
 
 `fromUci` and `toUci` form a (lossy) bijection: round-tripping a section
 through both should produce the same uci options. `fromUci` may take a

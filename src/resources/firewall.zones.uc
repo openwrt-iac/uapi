@@ -53,6 +53,7 @@ return {
 	package: "firewall",
 	type: "zone",
 	reload: ["firewall"],
+	unique_field: "name",
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

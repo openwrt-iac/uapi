@@ -996,3 +996,84 @@ t.describe('handler schema-type check recurses past two levels', () => {
 			t.assert_true(e.field != "a.b.c.leaf");
 	});
 });
+
+let zones_mod = loadfile('src/resources/firewall.zones.uc')();
+let zones = handler.make(zones_mod, {
+	tx: {
+		acquire: function() { return {}; },
+		release: function() {},
+		reload: record_reload,
+		check_services: function() { return null; },
+	},
+});
+
+t.describe('handler.create unique_field uniqueness', () => {
+	t.it('rejects create whose unique_field value matches another same-type section', () => {
+		let c = with_zones();
+		let r = zones.create(c, ctx(), {
+			id: 'z_lan_dup',
+			name: 'lan',
+			input: 'ACCEPT', output_policy: 'ACCEPT', forward: 'ACCEPT',
+		});
+		t.assert_equal(r.status, 422);
+		let errs = filter(r.body.errors, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(errs), 1);
+		t.assert_true(index(errs[0].message, "z_lan") >= 0);
+	});
+
+	t.it('accepts create whose unique_field value does not collide', () => {
+		let c = with_zones();
+		let r = zones.create(c, ctx(), {
+			id: 'z_dmz',
+			name: 'dmz',
+			input: 'ACCEPT', output_policy: 'ACCEPT', forward: 'ACCEPT',
+		});
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('skips the unique_field check when the field is absent (schema-required path handles it)', () => {
+		let c = with_zones();
+		let r = zones.create(c, ctx(), {
+			id: 'z_noname',
+			input: 'ACCEPT', output_policy: 'ACCEPT', forward: 'ACCEPT',
+		});
+		t.assert_equal(r.status, 422);
+		let conflict_errs = filter(r.body.errors, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(conflict_errs), 0);
+	});
+
+	t.it('PATCH that keeps the same unique_field value passes (ignore_section_id excludes self)', () => {
+		let c = with_zones();
+		let r = zones.patch(c, ctx(), 'z_lan', { input: 'REJECT' });
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('PATCH that changes unique_field to a value held by another section is rejected', () => {
+		let c = with_zones();
+		let r = zones.patch(c, ctx(), 'z_lan', { name: 'wan' });
+		t.assert_equal(r.status, 422);
+		let errs = filter(r.body.errors, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(errs), 1);
+		t.assert_true(index(errs[0].message, "z_wan") >= 0);
+	});
+
+	t.it('PUT (replace) that keeps the same unique_field value passes', () => {
+		let c = with_zones();
+		let r = zones.replace(c, ctx(), 'z_lan', {
+			name: 'lan',
+			input: 'REJECT', output_policy: 'ACCEPT', forward: 'ACCEPT',
+		});
+		t.assert_equal(r.status, 200);
+	});
+
+	t.it('PUT (replace) that changes unique_field to a value held by another section is rejected', () => {
+		let c = with_zones();
+		let r = zones.replace(c, ctx(), 'z_lan', {
+			name: 'wan',
+			input: 'ACCEPT', output_policy: 'ACCEPT', forward: 'ACCEPT',
+		});
+		t.assert_equal(r.status, 422);
+		let errs = filter(r.body.errors, function(e) { return e.field == "name" && e.code == "conflict"; });
+		t.assert_equal(length(errs), 1);
+	});
+});

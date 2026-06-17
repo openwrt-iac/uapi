@@ -63,6 +63,7 @@ return {
 	package: "network",
 	type: "device",
 	reload: ["network"],
+	unique_field: "name",
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

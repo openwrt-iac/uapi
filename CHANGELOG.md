@@ -7,6 +7,22 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.2.1] - 2026-06-18
+
+Bug fix surfaced by a 125-resource Terraform apply on real hardware ([openwrt-iac/uapi#4](https://github.com/openwrt-iac/uapi/issues/4)). The 2.2.0 pre-create uniqueness check guarded the section id but missed the value-collision case for resources whose cross-section reference key is a separate option (e.g. fw4 keys forwardings/rules/redirects on `firewall.zone.name`, not the section id). A managed create with `name="lan"` next to the box's default `lan` zone produced two `firewall.zone` sections with the same `name` value, which fw4 could not disambiguate.
+
+### Changed
+
+- Pre-create and pre-modify (`POST` / `PUT` / `PATCH`) now reject payloads whose value in a resource's cross-section reference field collides with another section of the same type in the same package. The check returns `422 conflict` naming the offending section, which surfaces the correct workflow to callers: use `POST .../adopt` (Terraform: `terraform import`) to take over an existing section rather than creating a duplicate.
+
+  Affected resources: `firewall/zones` (`name`), `network/devices` (`name`), `sqm/queues` (`interface`). `dhcp/servers` was already self-checking; its existing per-resource check is unchanged. All other resources are unaffected.
+
+  Tightening previously-accepted payloads is technically a breaking change under strict semver reading, but the previously-accepted behavior produced broken state no caller can rely on (two same-named zones, two sqm queues on one interface, etc.), so it ships as a patch.
+
+### Internal
+
+- New optional `unique_field` declaration on curated resource modules. Framework reads it in `handler.uc.make()` to drive the new uniqueness check. Documented at `docs/adding-a-resource.md`.
+
 ## [2.2.0] - 2026-06-12
 
 Three field-feedback items from a real OPNsense-to-OpenWrt migration drove this release. The naming-model items (callers want to keep meaningful section names like `lan` / `wan` instead of getting ULIDs) land here; the apply-with-rollback / commit-confirmed safety net is tracked as an open design question at [openwrt-iac/uapi#3](https://github.com/openwrt-iac/uapi/issues/3) and didn't make this cut.

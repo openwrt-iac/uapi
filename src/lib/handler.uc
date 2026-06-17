@@ -295,6 +295,30 @@ function validate_section_id(conn, pkg, id) {
 	return errs;
 }
 
+// Uniqueness for a field whose value other sections key on by value (e.g.
+// firewall.zone.name -> src_zone references) or whose duplication breaks the
+// daemon (e.g. sqm.queue.interface -> only one queue per interface). Scoped
+// to same package, same section type. ignore_section_id excludes the section
+// being patched/replaced so an unchanged value passes.
+function validate_unique_field(conn, pkg, sec_type, field, value, ignore_section_id) {
+	let errs = [];
+	if (value == null) return errs;
+	let conflict = null;
+	conn.uci_foreach(pkg, sec_type, function(s) {
+		if (s['.name'] == ignore_section_id) return;
+		if (s[field] == value) {
+			conflict = s['.name'];
+			return false;
+		}
+	});
+	if (conflict != null) {
+		push(errs, { field: field, code: "conflict",
+		             message: sprintf("section '%s.%s' already uses %s=%J",
+		                              pkg, conflict, field, value) });
+	}
+	return errs;
+}
+
 function attach_reload_headers(resp, result) {
 	if (result.reload_status != null)
 		resp.headers["X-Reload-Status"] = result.reload_status;
@@ -402,6 +426,20 @@ function make(resource, opts) {
 	// Optional per-resource id chooser; null falls through to the default ULID.
 	let id_for_create = resource.id_for_create ?? function(body) { return null; };
 
+	// unique_field on a dynamic-type resource would iterate by the sentinel
+	// sec_type and silently miss every real section. Refuse to load so the
+	// gap surfaces at startup rather than as a quiet runtime no-op.
+	if (resource.unique_field != null && resource.type_predicate != null)
+		die(sprintf("resource %s.%s: unique_field is not supported on dynamic-type resources",
+		            pkg, sec_type));
+
+	function check_unique_field(c, source, ignore_id) {
+		if (resource.unique_field == null) return [];
+		let val = source[resource.unique_field];
+		if (type(val) != "string" || length(val) == 0) return [];
+		return validate_unique_field(c, pkg, sec_type, resource.unique_field, val, ignore_id);
+	}
+
 	function tx_params(extra) {
 		let p = { package: pkg, reload_services: reload_services };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
@@ -457,6 +495,11 @@ function make(resource, opts) {
 				let errs = _validate_with_schema(resource, body, body, c, null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
+
+				let uf_errs = check_unique_field(c, body, null);
+				if (length(uf_errs) > 0)
+					return { ok: false, kind: "validation", errors: uf_errs };
+
 				let new_opts = resource.toUci(body);
 				let resolved_type = create_type(body);
 				c.uci_create_section(p, new_id, resolved_type);
@@ -490,6 +533,11 @@ function make(resource, opts) {
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
+
+				let uf_errs = check_unique_field(c, body, id);
+				if (length(uf_errs) > 0)
+					return { ok: false, kind: "validation", errors: uf_errs };
+
 				let new_opts = resource.toUci(body);
 				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
@@ -526,6 +574,10 @@ function make(resource, opts) {
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
+
+				let uf_errs = check_unique_field(c, r.merged, id);
+				if (length(uf_errs) > 0)
+					return { ok: false, kind: "validation", errors: uf_errs };
 
 				let new_opts = resource.toUci(r.merged);
 				diff_apply(c, p, id, existing, new_opts);
