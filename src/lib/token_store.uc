@@ -136,6 +136,18 @@ function _validate_create_body(body) {
 					"invalid_format", "must be IPv4/N"));
 		}
 	}
+	if (body.rate != null) {
+		let n = values.as_int(body.rate);
+		if (n == null || n <= 0)
+			push(errs, errors.field_error("rate", "out_of_range",
+				"must be a positive integer"));
+	}
+	if (body.burst != null) {
+		let n = values.as_int(body.burst);
+		if (n == null || n <= 0)
+			push(errs, errors.field_error("burst", "out_of_range",
+				"must be a positive integer"));
+	}
 	return errs;
 }
 
@@ -172,6 +184,10 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 			}
 			if (type(body.allowed_cidrs) == "array" && length(body.allowed_cidrs) > 0)
 				c.uci_set(pkg, body.name, "allowed_cidrs", body.allowed_cidrs);
+			// rate / burst: validation above guarantees positive int or
+			// digit-only string; coerce to string directly without re-parsing.
+			if (body.rate != null)  c.uci_set(pkg, body.name, "rate",  "" + body.rate);
+			if (body.burst != null) c.uci_set(pkg, body.name, "burst", "" + body.burst);
 			return { ok: true, body: { bearer, name: body.name } };
 		},
 	};

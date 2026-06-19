@@ -159,12 +159,28 @@ For packages outside the curated set, the domain check uses
 
 ## Per-token rate limit
 
-Tokens may carry uci options `option rate '<N>'` and `option burst '<N>'`
-on their section in `/etc/config/uapi` to override the global rate-limit
-default (100 req/s, burst 200). Per-token override beats global; absent
-options inherit. The `uapi-token` CLI does not yet expose these as flags -
-edit the uci section or set them in the `POST /tokens` body (not yet
-plumbed through; planned for v2.x).
+Tokens carry optional `rate` (requests/second) and `burst` (token-bucket capacity) overrides that beat the global rate-limit default (100 req/s, burst 200). Absent options inherit the global.
+
+Set at mint time via CLI:
+
+```sh
+uapi-token create --name ci_bot --scope '*:rw' --rate 10 --burst 20
+```
+
+Or via HTTP:
+
+```sh
+curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
+     -X POST https://router/api/v2/tokens \
+     -d '{
+       "name": "ci_bot",
+       "scopes": ["firewall:rules:rw"],
+       "rate": 10,
+       "burst": 20
+     }'
+```
+
+Both values must be positive integers; non-positive or non-integer values return `422 validation_failed`. The uci options on the token's section are `option rate '<N>'` and `option burst '<N>'`; setting them directly via `uci set` is also supported and takes effect on the next request.
 
 ## Recommended token shapes
 

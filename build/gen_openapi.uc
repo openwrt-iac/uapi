@@ -887,6 +887,10 @@ function build_schemas() {
 				"allowed_cidrs": { "type": "array", "items": { "type": "string" } },
 				"last_used_at": { "type": ["integer", "null"], "description": "Unix epoch seconds of last authed request; throttled to ~1/minute" },
 				"last_used_ip": { "type": ["string", "null"] },
+				// No minimum on the read shape: it surfaces what is stored in
+				// uci, which may be hand-edited to a non-positive value.
+				// TokenCreateRequest carries minimum: 1 as the policy boundary
+				// on new mints.
 				"rate":  { "type": ["integer", "null"], "description": "Per-token rate-limit override (req/s); null means use global" },
 				"burst": { "type": ["integer", "null"], "description": "Per-token burst override; null means use global" },
 			},
@@ -907,6 +911,10 @@ function build_schemas() {
 				            "description": "MUST be a strict subset of the caller's own scopes; escalation returns 403 scope_escalation_blocked" },
 				"expires_in_seconds": { "type": ["integer", "null"], "minimum": 1 },
 				"allowed_cidrs":      { "type": "array", "items": { "type": "string", "description": "IPv4 CIDR" } },
+				"rate":  { "type": ["integer", "null"], "minimum": 1,
+				           "description": "Per-token rate limit: requests per second. Overrides the global rate (default 100). Absent or null inherits the global." },
+				"burst": { "type": ["integer", "null"], "minimum": 1,
+				           "description": "Per-token burst: token-bucket capacity. Overrides the global burst (default 200). Absent or null inherits the global." },
 			},
 		},
 		"TokenCreateResponse": {

@@ -131,6 +131,30 @@ t.describe('token_store.create validation', () => {
 		t.assert_equal(r.kind, "validation");
 	});
 
+	t.it('rejects rate <= 0', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c,
+			{ name: "ok_name", scopes: ["*:ro"], rate: 0 },
+			["*:rw"], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "validation");
+	});
+
+	t.it('rejects burst <= 0', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c,
+			{ name: "ok_name", scopes: ["*:ro"], burst: -1 },
+			["*:rw"], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "validation");
+	});
+
+	t.it('rejects non-integer rate', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c,
+			{ name: "ok_name", scopes: ["*:ro"], rate: "abc" },
+			["*:rw"], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "validation");
+	});
+
 	t.it('blocks scope escalation', () => {
 		let c = bus.stub({});
 		let r = token_store.create(c,
@@ -161,6 +185,18 @@ t.describe('token_store.create validation', () => {
 		t.assert_equal(stored['.type'], 'token');
 		t.assert_equal(stored.expires_at, "" + (1700000000 + 3600));
 		t.assert_deep_equal(stored.allowed_cidrs, ["10.0.0.0/8"]);
+	});
+
+	t.it('persists per-token rate and burst overrides', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		let r = token_store.create(c,
+			{ name: "ratelimited", scopes: ["firewall:rules:ro"],
+			  rate: 10, burst: 20 },
+			["*:rw"], 1700000000, noop_tx());
+		t.assert_true(r.ok);
+		let stored = c._state.uci.uapi.ratelimited;
+		t.assert_equal(stored.rate, "10");
+		t.assert_equal(stored.burst, "20");
 	});
 });
 

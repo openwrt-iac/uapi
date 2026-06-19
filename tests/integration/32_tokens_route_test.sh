@@ -14,6 +14,9 @@ cleanup_tokens() {
 	$SSH 'uapi-token revoke api_minted 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_shortlived 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_lan_only 2>/dev/null || true'
+	$SSH 'uapi-token revoke api_rate_limited 2>/dev/null || true'
+	$SSH 'uapi-token revoke api_strict_rl 2>/dev/null || true'
+	$SSH 'uapi-token revoke cli_rl 2>/dev/null || true'
 }
 trap cleanup_tokens EXIT INT TERM
 cleanup_tokens
@@ -114,4 +117,65 @@ bad=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 echo "$bad" | grep -q '"code": "validation_failed"' || fail "expected validation_failed"
 echo "$bad" | grep -q '"field": "name"' || fail "expected name field error"
 
-echo "tokens route + expiry + IP scoping ok."
+echo "--- POST /tokens with rate + burst persists per-token overrides ---"
+rate_scoped=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/tokens" -d '{
+		"name": "api_rate_limited", "scopes": ["firewall:rules:ro"],
+		"rate": 7, "burst": 11
+	}')
+echo "$rate_scoped" | grep -q '"bearer"' || fail "rate/burst POST failed: $rate_scoped"
+got_rate=$($SSH "uci get uapi.api_rate_limited.rate")
+got_burst=$($SSH "uci get uapi.api_rate_limited.burst")
+[ "$got_rate" = "7" ] || fail "rate not persisted: got '$got_rate'"
+[ "$got_burst" = "11" ] || fail "burst not persisted: got '$got_burst'"
+
+echo "--- GET /tokens/<name> surfaces rate/burst on the read path ---"
+read_back=$(curl -sS -H "$ADMIN" "$URL/tokens/api_rate_limited")
+echo "$read_back" | grep -q '"rate": 7' \
+	|| fail "GET response missing rate=7: $read_back"
+echo "$read_back" | grep -q '"burst": 11' \
+	|| fail "GET response missing burst=11: $read_back"
+$SSH 'uapi-token revoke api_rate_limited 2>/dev/null || true'
+
+echo "--- POST /tokens rejects rate <= 0 with validation_failed ---"
+bad_rate=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/tokens" -d '{"name": "bad_rate", "scopes": ["*:ro"], "rate": 0}')
+echo "$bad_rate" | grep -q '"code": "validation_failed"' || fail "rate=0 should 422"
+echo "$bad_rate" | grep -q '"field": "rate"' || fail "rate=0 missing field=rate"
+
+echo "--- per-token rate/burst override is actually enforced (burst then 429) ---"
+# burst=2 -> first 2 requests succeed; rate=1/s -> a 3rd or 4th request fired
+# within the same second should 429 because the bucket has not yet refilled.
+strict_bearer=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/tokens" -d '{
+		"name": "api_strict_rl", "scopes": ["firewall:rules:ro"],
+		"rate": 1, "burst": 2
+	}' | sed -n 's/.*"bearer": *"\([^"]*\)".*/\1/p')
+[ -n "$strict_bearer" ] || fail "no bearer for rate-limited token"
+codes=""
+for i in 1 2 3 4; do
+	curl -sS -o /dev/null -D "/tmp/uapi_rl_$i.hdrs" \
+		-H "Authorization: Bearer $strict_bearer" "$URL/firewall/rules" >/dev/null
+	code=$(head -1 "/tmp/uapi_rl_$i.hdrs" | awk '{print $2}')
+	codes="$codes $code"
+done
+echo "  codes:$codes"
+echo "$codes" | grep -q ' 429' \
+	|| fail "expected 429 within a 4-request burst against rate=1/burst=2 token; got:$codes"
+# The first 429 in the sequence must carry Retry-After.
+for i in 1 2 3 4; do
+	if grep -q '^HTTP/[0-9.]* 429' "/tmp/uapi_rl_$i.hdrs"; then
+		grep -qi '^Retry-After:' "/tmp/uapi_rl_$i.hdrs" \
+			|| fail "429 response #$i missing Retry-After header"
+		break
+	fi
+done
+$SSH 'uapi-token revoke api_strict_rl 2>/dev/null || true'
+
+echo "--- uapi-token create --rate / --burst persists overrides via CLI ---"
+$SSH "uapi-token create --name cli_rl --scope '*:ro' --rate 5 --burst 9" >/dev/null
+[ "$($SSH 'uci get uapi.cli_rl.rate')" = "5" ] || fail "CLI --rate not persisted"
+[ "$($SSH 'uci get uapi.cli_rl.burst')" = "9" ] || fail "CLI --burst not persisted"
+$SSH "uapi-token revoke cli_rl 2>/dev/null || true"
+
+echo "tokens route + expiry + IP scoping + per-token rate/burst ok."
