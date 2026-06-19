@@ -51,10 +51,17 @@ function parse_duration_to_seconds(s) {
 	return null;
 }
 
+function parse_positive_int(s, flag) {
+	if (type(s) != "string" || !match(s, /^[1-9][0-9]*$/))
+		die(sprintf("uapi-token: %s needs a positive integer", flag));
+	return int(s);
+}
+
 function parse_args() {
 	let cmd = ARGV[0];
 	let opts = { name: null, scopes: [], force: false, positional: [],
-	             expires_in_seconds: null, allowed_cidrs: [], json: false };
+	             expires_in_seconds: null, allowed_cidrs: [], json: false,
+	             rate: null, burst: null };
 	let i = 1;
 	while (i < length(ARGV)) {
 		let a = ARGV[i];
@@ -67,6 +74,8 @@ function parse_args() {
 			opts.expires_in_seconds = n;
 		}
 		else if (a == "--allowed-cidr") push(opts.allowed_cidrs, ARGV[++i]);
+		else if (a == "--rate") opts.rate = parse_positive_int(ARGV[++i], "--rate");
+		else if (a == "--burst") opts.burst = parse_positive_int(ARGV[++i], "--burst");
 		else if (a == "--json") opts.json = true;
 		else push(opts.positional, a);
 		i++;
@@ -124,6 +133,10 @@ function cmd_create(opts) {
 	}
 	if (length(opts.allowed_cidrs) > 0)
 		cursor.set(PACKAGE, opts.name, "allowed_cidrs", opts.allowed_cidrs);
+	if (opts.rate != null)
+		cursor.set(PACKAGE, opts.name, "rate", "" + opts.rate);
+	if (opts.burst != null)
+		cursor.set(PACKAGE, opts.name, "burst", "" + opts.burst);
 	cursor.commit(PACKAGE);
 
 	printf("%s\n", bearer);
@@ -158,6 +171,8 @@ function cmd_show(opts) {
 		printf("allowed_cidrs:\n");
 		for (let c in as_list(s.allowed_cidrs)) printf("  - %s\n", c);
 	}
+	if (s.rate != null)         printf("rate: %s\n", s.rate);
+	if (s.burst != null)        printf("burst: %s\n", s.burst);
 	if (s.last_used_at != null) printf("last_used_at: %s\n", s.last_used_at);
 	if (s.last_used_ip != null) printf("last_used_ip: %s\n", s.last_used_ip);
 }
@@ -187,7 +202,8 @@ function print_help() {
 	fs.stderr.write(
 "Usage:\n" +
 "  uapi-token create --name <name> --scope <scope> [--scope <scope>...]\n" +
-"                   [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...] [--force]\n" +
+"                   [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...]\n" +
+"                   [--rate <N>] [--burst <N>] [--force]\n" +
 "  uapi-token list\n" +
 "  uapi-token show <name>\n" +
 "  uapi-token revoke <name>\n" +

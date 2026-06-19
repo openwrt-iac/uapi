@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [2.3.0] - 2026-06-19
 
-Surfaces the known scope tree through a sanctioned interface so external consumers (the upcoming `luci-app-uapi` LuCI frontend, fleet inventory tools, anything that wants to render a scope picker) can enumerate valid scopes without parsing `src/lib/scope.uc` or hardcoding a copy. Closes [openwrt-iac/uapi#5](https://github.com/openwrt-iac/uapi/issues/5).
+Surfaces the known scope tree through a sanctioned interface so external consumers (the upcoming `luci-app-uapi` LuCI frontend, fleet inventory tools, anything that wants to render a scope picker) can enumerate valid scopes without parsing `src/lib/scope.uc` or hardcoding a copy. Closes [openwrt-iac/uapi#5](https://github.com/openwrt-iac/uapi/issues/5). Also plumbs per-token `rate` / `burst` overrides through the mint surfaces, closing a "planned for v2.x" gap that has been carried in `docs/tokens.md` since 2.0.
 
 ### Added
 
@@ -18,6 +18,8 @@ Surfaces the known scope tree through a sanctioned interface so external consume
 - New `scope.known_paths()` module export returning a sorted array of scope paths. ucode consumers on the same box (the LuCI frontend in particular) `require('scope')` and call this directly, matching how `uapi-token` itself imports the module.
 
 Both surfaces enumerate the same internal `KNOWN_PATHS` const; the accessor (rather than a direct const export) lets the underlying representation change without breaking consumers.
+
+- `POST /tokens` accepts optional `rate` and `burst` integer fields; `uapi-token create` accepts `--rate <N>` and `--burst <N>`. Both write `option rate '<N>'` / `option burst '<N>'` on the token's uci section. The request-path rate limiter (`src/lib/ratelimit.uc`'s `effective_limits()`) has been reading these uci options since 2.0.0; only the mint side was missing. `uapi-token show <name>` also now surfaces the configured rate/burst when set.
 
 The OpenAPI vendor-extension option from the issue thread is deferred until a code-generated client surfaces with a concrete need; premature spec annotations without consumer evidence is what 2.2.2 / 2.2.3 corrected.
 

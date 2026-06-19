@@ -19673,6 +19673,22 @@
 							"type": "string",
 							"description": "IPv4 CIDR"
 						}
+					},
+					"rate": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Per-token rate limit: requests per second. Overrides the global rate (default 100). Absent or null inherits the global."
+					},
+					"burst": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Per-token burst: token-bucket capacity. Overrides the global burst (default 200). Absent or null inherits the global."
 					}
 				}
 			},
