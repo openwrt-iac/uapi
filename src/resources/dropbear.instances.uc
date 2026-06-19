@@ -52,13 +52,13 @@ return {
 	openapi_singular: "dropbear instance",
 	id_prefix: "d",
 	schema_properties: {
-		enable:             { type: "boolean" },
+		enable:             { type: "boolean", default: true },
 		port:               { type: "integer", minimum: 1, maximum: 65535 },
-		password_auth:      { type: "boolean" },
-		root_password_auth: { type: "boolean" },
-		root_login:         { type: "boolean" },
+		password_auth:      { type: "boolean", default: true },
+		root_password_auth: { type: "boolean", default: true },
+		root_login:         { type: "boolean", default: true },
 		banner_file:        { type: ["string", "null"] },
 		interface:          { type: ["string", "null"], description: "Listen interface or IP" },
-		gateway_ports:      { type: "boolean", description: "Allow remote port forwarding" },
+		gateway_ports:      { type: "boolean", default: false, description: "Allow remote port forwarding" },
 	},
 };

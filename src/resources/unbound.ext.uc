@@ -43,7 +43,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		enabled:  { type: "boolean" },
+		enabled:  { type: "boolean", default: false },
 		ext_line: { type: "array", items: LINE_ITEM,
 		            description: "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line; build whole `forward-zone:`, `view:`, `stub:`, or `remote-control:` clauses by listing them in order. `unbound-checkconf` validates grammar after restart." },
 	},

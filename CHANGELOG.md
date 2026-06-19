@@ -7,6 +7,22 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.2.2] - 2026-06-19
+
+OpenAPI spec enrichment to support the terraform-provider-uapi clear-on-omit work. No wire-surface change on any CRUD endpoint; no runtime behavior change; the `/openapi.json` document gains per-property annotations that downstream codegen consumes.
+
+### Added
+
+- `default: <value>` on every `schema_properties` field where uapi's `fromUci` synthesizes an unconditional fallback (`normalize_bool(section.X, true|false)`, `section.X ?? "literal"`). ~88 annotations across ~25 curated resources. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword; clients (Redoc, openapi-codegen, the terraform-provider-uapi spec ingester) surface it natively. Conditional defaults (e.g. `network.interfaces.peerdns` defaults to true under `proto=dhcp` only) are intentionally NOT annotated because the literal value would mislead under other protos.
+
+- `"x-uapi-clear-on-omit": true` vendor extension on caller-owned, non-defaulted fields that are safe for an IaC client to clear when the operator's config omits them. Conservative scope: `network/interfaces` static-proto fields (`ipaddr`, `ipaddrs`, `netmask`, `gateway`, `dns`) surfaced by the 125-resource Terraform apply field report behind [openwrt-iac/uapi#3](https://github.com/openwrt-iac/uapi/issues/3). Other resources can opt in once concrete leftover-prone shapes surface in the field. Mutually exclusive with `default:`; a field cannot be both defaulted and clearable without producing perpetual non-converging diffs.
+
+### Internal
+
+- Load-bearing WHY comment in `src/lib/handler.uc` near `_check_value` declaring that `default:` in `schema_properties` is OpenAPI documentation only; the framework MUST NOT apply it. `fromUci` owns server-side defaults. A future change that silently fills absent fields from `default:` would defeat PATCH delta semantics and break the provider's clear-on-omit work.
+
+- New `make lint-defaults` (folded into `make lint`): shell-grep check that every `normalize_bool(section.X, V)` and `section.X ?? "literal"` pattern in `src/resources/*.uc` has a corresponding `default: V` in the same file's `schema_properties` block. Catches the drift case where a new defaulted field lands without the annotation.
+
 ## [2.2.1] - 2026-06-18
 
 Bug fix surfaced by a 125-resource Terraform apply on real hardware ([openwrt-iac/uapi#4](https://github.com/openwrt-iac/uapi/issues/4)). The 2.2.0 pre-create uniqueness check guarded the section id but missed the value-collision case for resources whose cross-section reference key is a separate option (e.g. fw4 keys forwardings/rules/redirects on `firewall.zone.name`, not the section id). A managed create with `name="lan"` next to the box's default `lan` zone produced two `firewall.zone` sections with the same `name` value, which fw4 could not disambiguate.

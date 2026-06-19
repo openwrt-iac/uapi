@@ -57,6 +57,6 @@ return {
 	schema_properties: {
 		interface: { type: "string",
 		             description: "Network interface to track (must exist in network/interfaces)" },
-		enabled:   { type: "boolean", description: "Whether vnstat tracks this interface" },
+		enabled:   { type: "boolean", default: true, description: "Whether vnstat tracks this interface" },
 	},
 };

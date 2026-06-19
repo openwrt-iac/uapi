@@ -53,7 +53,7 @@ return {
 		                  description: "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)." },
 		local_source:   { type: ["string", "null"],
 		                  description: "Network interface used as source for locally-generated traffic; 'none' to disable." },
-		logging:        { type: "boolean", description: "Enable mwan3 daemon logging via logread." },
+		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
 		loglevel:       { type: ["string", "null"], enum: keys(VALID_LOGLEVEL),
 		                  description: "syslog facility level (notice/info/debug/etc.)." },
 		rtmon_interval: { type: ["integer", "null"], minimum: 1, maximum: 86400,

@@ -83,6 +83,30 @@ The flag is string-only. The runtime check guards `type(val) == "string"` so non
 
 Resources that have their own per-validate uniqueness logic (e.g. `dhcp/servers` checks `interface` inside `validate()`) can keep that logic in place; `unique_field` is opt-in.
 
+### Server-side defaults (`default:`) and clear-on-omit safety (`x-uapi-clear-on-omit:`)
+
+If your `fromUci` synthesizes a value for an absent uci option (via `normalize_bool(section.X, true)`, `section.X ?? "literal"`, or similar), declare the same fallback as `default:` in the field's `schema_properties` entry:
+
+```ucode
+auto: { type: "boolean", default: true,
+        description: "Bring this interface up at boot" },
+```
+
+This is standard OpenAPI 3.1 / JSON Schema 2020-12 documentation. Clients (Redoc, openapi-codegen, Terraform provider) read it to understand which fields the server populates on their behalf. The runtime validator at `handler.uc:_check_value` does NOT apply `default:`; it is purely documentation. fromUci owns server-side defaults; the framework MUST NOT silently fill absent fields from the spec or PATCH-delta semantics break.
+
+Only annotate **unconditional** defaults. Conditional defaults (e.g. `network.interfaces.peerdns` defaults to true only under `proto=dhcp`) stay un-annotated because the literal value misleads under other protos.
+
+For a field that is **caller-owned and safe for an IaC client to clear by omitting it from config**, also add `"x-uapi-clear-on-omit": true`:
+
+```ucode
+ipaddr: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+          description: "Static IPv4 address (single)" },
+```
+
+A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.2 is the static-proto fields on `network/interfaces` (`ipaddr`, `ipaddrs`, `netmask`, `gateway`, `dns`) surfaced by a real Terraform apply.
+
+A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted fields would cause perpetual non-converging diffs if the provider treats them as clearable (apply clears uci, fromUci re-defaults, next plan diffs again). Either the field has a server-side default (sticky) or the operator fully owns it (clearable); never both.
+
 `fromUci` and `toUci` form a (lossy) bijection: round-tripping a section
 through both should produce the same uci options. `fromUci` may take a
 second `conn` arg to read ubus state for the `runtime: {...}` block;

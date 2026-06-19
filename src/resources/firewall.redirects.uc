@@ -126,7 +126,7 @@ return {
 	openapi_required: ["match"],
 	openapi_conditional: [hints.match_requires_src_zone],
 	schema_properties: {
-		target: { type: "string", enum: keys(VALID_TARGETS) },
+		target: { type: "string", enum: keys(VALID_TARGETS), default: "DNAT" },
 		match: {
 			type: "object",
 			required: ["src_zone"],
@@ -139,7 +139,7 @@ return {
 				dest_ip:   { type: "array", items: { type: "string" } },
 				dest_port: { type: "array", items: { type: "string" } },
 				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
-				family:    { type: "string", enum: keys(VALID_FAMILIES) },
+				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 			},
 		},
 		reflection: { type: "boolean",
@@ -150,6 +150,6 @@ return {
 		                   description: "Zones in which NAT reflection is allowed (uci list reflection_zone)" },
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this redirect" },
-		enabled: { type: "boolean" },
+		enabled: { type: "boolean", default: true },
 	},
 };

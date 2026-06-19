@@ -59,14 +59,14 @@ return {
 		  then: { required: ["server"] } },
 	],
 	schema_properties: {
-		enabled:       { type: "boolean",
+		enabled:       { type: "boolean", default: true,
 		                 description: "Whether sysntpd runs at all" },
-		enable_server: { type: "boolean",
+		enable_server: { type: "boolean", default: false,
 		                 description: "Also serve time to LAN clients" },
 		interface:     { type: ["string", "null"],
 		                 description: "Bind sysntpd to a specific network interface" },
 		server:        { type: "array", items: { type: "string" } },
-		use_dhcp:      { type: "boolean",
+		use_dhcp:      { type: "boolean", default: true,
 		                 description: "Accept NTP servers learned via DHCP option 42" },
 	},
 };

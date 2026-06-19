@@ -76,7 +76,7 @@ return {
 		            description: "ISO 3166-1 alpha-2 regulatory country code" },
 		txpower:  { type: ["integer", "null"], minimum: 0, maximum: 30,
 		            description: "TX power in dBm" },
-		disabled: { type: "boolean",
+		disabled: { type: "boolean", default: false,
 		            description: "Disable this radio at boot" },
 	},
 };

@@ -43,7 +43,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		maindhcp:     { type: "boolean",
+		maindhcp:     { type: "boolean", default: false,
 		                description: "Use odhcpd as the IPv4 DHCP server too" },
 		leasefile:    { type: ["string", "null"],
 		                description: "Path where odhcpd persists active leases" },

@@ -97,7 +97,7 @@ return {
 	openapi_singular: "network route",
 	openapi_required: ["target"],
 	schema_properties: {
-		type:      { type: "string", enum: keys(VALID_TYPES) },
+		type:      { type: "string", enum: keys(VALID_TYPES), default: "unicast" },
 		interface: { type: ["string", "null"],
 		             description: "Parent network interface name" },
 		target:    { type: "string",

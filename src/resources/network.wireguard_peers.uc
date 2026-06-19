@@ -135,9 +135,9 @@ return {
 		                        description: "Remote endpoint hostname or IP" },
 		endpoint_port:        { type: "integer", minimum: 1, maximum: 65535 },
 		persistent_keepalive: { type: "integer", minimum: 0, maximum: 65535 },
-		route_allowed_ips:    { type: "boolean",
+		route_allowed_ips:    { type: "boolean", default: false,
 		                        description: "Auto-install routes for allowed_ips" },
-		disabled:             { type: "boolean",
+		disabled:             { type: "boolean", default: false,
 		                        description: "Skip this peer when starting the tunnel" },
 	},
 };

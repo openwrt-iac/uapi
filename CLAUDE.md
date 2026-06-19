@@ -118,6 +118,9 @@ return {
     create_if_missing: true,  // singletons only; opt-in. When set, PATCH on a missing uci section creates one (named "main") instead of returning 404. Used by unbound/srv + unbound/ext (their extension UCI packages can be wiped by an operator). Most singletons stay opt-out so a missing section surfaces as a real problem.
     singleton_section_name: "main",  // singletons only; defaults to "main". Override only when the underlying uci convention names the section differently.
     unique_field: "name",     // optional. The value of this field must be unique among same-type sections in this package (scope: same package, same uci type). Use for fields that other sections reference by value (firewall.zone.name as a cross-reference key for src_zone, network.device.name for the kernel netdev name referenced by network.interfaces.device) or whose duplication breaks the daemon (sqm.queue.interface: only one queue per interface). 2.2.1.
+    // Inside schema_properties entries (per-field, not at the resource level):
+    //   default: <value>             OpenAPI 3.1 documentation. Declare for every fromUci unconditional fallback (normalize_bool(section.X, V), section.X ?? L). Framework MUST NOT read or apply this; fromUci owns server-side defaults. 2.2.2.
+    //   "x-uapi-clear-on-omit": true Caller-owned field safe for an IaC client to clear by sending JSON null on Update. Opt-in; only annotate when there is evidence the field is leftover-prone (the static-proto fields on network/interfaces are the initial set). MUTUALLY EXCLUSIVE with `default:` (a defaulted-and-clearable combination produces perpetual non-converging diffs). 2.2.2.
     // Optional OpenAPI-only hints (consumed by build/gen_openapi.uc, not by the runtime):
     openapi_required:    [...],            // unconditional required fields
     openapi_conditional: [...],            // if/then/required for proto/type discriminators

@@ -174,6 +174,13 @@ function _format_want(want) {
 // _check_value and check_schema_types are mutually recursive (object specs
 // recurse into properties, array specs recurse into items). ucode `function`
 // declarations do NOT hoist, so we forward-declare with `let` first.
+//
+// Keys read from `spec` here: type, enum, minimum, maximum, pattern, items,
+// properties. `default` is intentionally NOT read: it is OpenAPI documentation
+// only. Server-side defaults live in each resource's `fromUci`, and applying
+// `default` here would silently fill absent fields on every write, defeating
+// PATCH-delta semantics and re-creating the perpetual-diff loop the provider's
+// clear-on-omit work depends on `default` NOT having runtime effect.
 let _check_value;
 let check_schema_types;
 

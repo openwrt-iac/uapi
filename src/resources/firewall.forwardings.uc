@@ -79,7 +79,7 @@ return {
 	schema_properties: {
 		src:     { type: "string", description: "Source zone name" },
 		dest:    { type: "string", description: "Destination zone name" },
-		family:  { type: "string", enum: keys(VALID_FAMILIES) },
-		enabled: { type: "boolean" },
+		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
+		enabled: { type: "boolean", default: true },
 	},
 };

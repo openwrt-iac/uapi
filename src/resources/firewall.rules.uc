@@ -116,7 +116,7 @@ return {
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this rule" },
 		target:  { type: "string", enum: keys(VALID_TARGETS) },
-		enabled: { type: "boolean" },
+		enabled: { type: "boolean", default: true },
 		match: {
 			type: "object",
 			required: ["src_zone"],
@@ -128,7 +128,7 @@ return {
 				src_port:  { type: "array", items: { type: "string" } },
 				dest_port: { type: "array", items: { type: "string" } },
 				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
-				family:    { type: "string", enum: keys(VALID_FAMILIES) },
+				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 			},
 		},
 	},

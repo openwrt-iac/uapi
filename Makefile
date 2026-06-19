@@ -17,6 +17,7 @@ help:
 	@echo "  lint-syntax        ucode -c on all .uc files"
 	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
+	@echo "  lint-defaults      verify every fromUci default is annotated in schema_properties"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
 	@echo "  sbom               emit SPDX 2.3 SBOM (build/sbom.spdx.json); APK=<path> attaches built APK sha256"
@@ -96,7 +97,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs
+lint: lint-emdash lint-syntax lint-reserved lint-refs lint-defaults
 
 lint-emdash:
 	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile README.md CHANGELOG.md CLAUDE.md CONTRIBUTING.md 2>/dev/null; then \
@@ -122,6 +123,13 @@ lint-reserved:
 # the dict that references them and the dict that defines them.
 lint-refs:
 	@$(UCODE) tests/lint_ref_integrity.uc
+
+# Verifies every fromUci unconditional default has a matching
+# `default: V` in schema_properties. Catches the drift case where a new
+# defaulted field lands without the OpenAPI annotation that the
+# terraform-provider-uapi clear-on-omit work depends on.
+lint-defaults:
+	@$(UCODE) tests/lint_defaults.uc
 
 clean:
 	@rm -rf build/sdk build/openapi.json

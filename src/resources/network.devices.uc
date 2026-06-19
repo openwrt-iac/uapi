@@ -85,7 +85,7 @@ return {
 		mtu:     { type: "integer", minimum: 0, maximum: 65535 },
 		macaddr: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
 		           description: "MAC address override (colon or dash separated)" },
-		ipv6:    { type: "boolean",
+		ipv6:    { type: "boolean", default: true,
 		           description: "Enable IPv6 on this device" },
 	},
 };

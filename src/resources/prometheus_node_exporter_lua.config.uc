@@ -52,7 +52,7 @@ return {
 	validate: validate,
 	schema_properties: (function() {
 		let props = {
-			listen_ipv6:      { type: "boolean",
+			listen_ipv6:      { type: "boolean", default: false,
 			                    description: "Listen on IPv6 in addition to IPv4" },
 			listen_interface: { type: "string",
 			                    description: "Bind to a specific network interface (uci interface name)" },
@@ -60,7 +60,7 @@ return {
 			                    description: "TCP port for the /metrics endpoint" },
 		};
 		for (let c in COLLECTOR_FIELDS)
-			props[c] = { type: "boolean",
+			props[c] = { type: "boolean", default: false,
 			             description: sprintf("Enable the %s collector", c) };
 		return props;
 	})(),

@@ -54,7 +54,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		enabled:            { type: "boolean" },
+		enabled:            { type: "boolean", default: false },
 		ip_transparent:     { type: ["boolean", "null"],
 		                      description: "Bind to addresses that are not yet up / VIP / alias addresses." },
 		interface_bind:     { type: "array", items: LINE_ITEM,

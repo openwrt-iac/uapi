@@ -69,7 +69,7 @@ return {
 		                description: "Remote syslog collector IP address" },
 		log_proto:    { type: ["string", "null"],
 		                description: "Remote syslog transport (udp or tcp)" },
-		log_remote:   { type: "boolean" },
-		urandom_seed: { type: "boolean" },
+		log_remote:   { type: "boolean", default: false },
+		urandom_seed: { type: "boolean", default: false },
 	},
 };

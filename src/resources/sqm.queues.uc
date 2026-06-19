@@ -74,7 +74,7 @@ return {
 	id_prefix: "q",
 	openapi_required: ["interface"],
 	schema_properties: {
-		enabled:   { type: "boolean",
+		enabled:   { type: "boolean", default: true,
 		             description: "Whether SQM is active on this interface" },
 		interface: { type: "string",
 		             description: "Network interface name SQM applies to" },
