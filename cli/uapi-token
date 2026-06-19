@@ -54,7 +54,7 @@ function parse_duration_to_seconds(s) {
 function parse_args() {
 	let cmd = ARGV[0];
 	let opts = { name: null, scopes: [], force: false, positional: [],
-	             expires_in_seconds: null, allowed_cidrs: [] };
+	             expires_in_seconds: null, allowed_cidrs: [], json: false };
 	let i = 1;
 	while (i < length(ARGV)) {
 		let a = ARGV[i];
@@ -67,6 +67,7 @@ function parse_args() {
 			opts.expires_in_seconds = n;
 		}
 		else if (a == "--allowed-cidr") push(opts.allowed_cidrs, ARGV[++i]);
+		else if (a == "--json") opts.json = true;
 		else push(opts.positional, a);
 		i++;
 	}
@@ -161,6 +162,15 @@ function cmd_show(opts) {
 	if (s.last_used_ip != null) printf("last_used_ip: %s\n", s.last_used_ip);
 }
 
+function cmd_scopes(opts) {
+	let paths = scope.known_paths();
+	if (opts.json) {
+		printf("%J\n", paths);
+		return;
+	}
+	for (let p in paths) printf("%s\n", p);
+}
+
 function cmd_revoke(opts) {
 	let name = opts.positional[0];
 	if (!name) die("uapi-token revoke: name required");
@@ -180,7 +190,8 @@ function print_help() {
 "                   [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...] [--force]\n" +
 "  uapi-token list\n" +
 "  uapi-token show <name>\n" +
-"  uapi-token revoke <name>\n");
+"  uapi-token revoke <name>\n" +
+"  uapi-token scopes [--json]\n");
 }
 
 let parsed = parse_args();
@@ -188,4 +199,5 @@ if (parsed.cmd == "create") cmd_create(parsed.opts);
 else if (parsed.cmd == "list") cmd_list();
 else if (parsed.cmd == "show") cmd_show(parsed.opts);
 else if (parsed.cmd == "revoke") cmd_revoke(parsed.opts);
+else if (parsed.cmd == "scopes") cmd_scopes(parsed.opts);
 else { print_help(); exit(parsed.cmd == null ? 1 : (parsed.cmd == "help" || parsed.cmd == "--help" ? 0 : 1)); }

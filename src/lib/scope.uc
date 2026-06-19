@@ -229,6 +229,19 @@ function require_or_deny(errors_mod, ctx, scopes, path_segments, verb, descripti
 	                        sprintf("Token does not permit %s", what));
 }
 
+// Sorted snapshot of the known scope tree. External consumers (the LuCI
+// frontend, fleet-inventory tooling, openapi-codegen users that want a
+// scope-picker UI) need an enumeration mechanism that doesn't require
+// parsing this file or hardcoding a copy that drifts across releases.
+// Accessor (not direct KNOWN_PATHS export) so the underlying representation
+// can change without breaking consumers.
+function known_paths() {
+	let paths = [];
+	for (let p in KNOWN_PATHS) push(paths, p);
+	sort(paths);
+	return paths;
+}
+
 return {
 	parse,
 	permits,
@@ -237,4 +250,5 @@ return {
 	subsumes,
 	subsets,
 	require_or_deny,
+	known_paths,
 };

@@ -7,6 +7,20 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.3.0] - 2026-06-19
+
+Surfaces the known scope tree through a sanctioned interface so external consumers (the upcoming `luci-app-uapi` LuCI frontend, fleet inventory tools, anything that wants to render a scope picker) can enumerate valid scopes without parsing `src/lib/scope.uc` or hardcoding a copy. Closes [openwrt-iac/uapi#5](https://github.com/openwrt-iac/uapi/issues/5).
+
+### Added
+
+- New CLI subcommand `uapi-token scopes` printing one scope path per line (sorted, greppable). Pair with `--json` for a JSON array suitable for piping into `jq` or any other consumer. The CLI is the durable cross-package interface; it works from any shell, Ansible playbook, or fleet inventory tool that can `ssh` to the router.
+
+- New `scope.known_paths()` module export returning a sorted array of scope paths. ucode consumers on the same box (the LuCI frontend in particular) `require('scope')` and call this directly, matching how `uapi-token` itself imports the module.
+
+Both surfaces enumerate the same internal `KNOWN_PATHS` const; the accessor (rather than a direct const export) lets the underlying representation change without breaking consumers.
+
+The OpenAPI vendor-extension option from the issue thread is deferred until a code-generated client surfaces with a concrete need; premature spec annotations without consumer evidence is what 2.2.2 / 2.2.3 corrected.
+
 ## [2.2.3] - 2026-06-19
 
 OpenAPI spec correctness fix on the `x-uapi-clear-on-omit` annotation introduced in 2.2.2. Caught by the terraform-provider-uapi agent before any consumer built against it.

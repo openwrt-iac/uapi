@@ -281,3 +281,36 @@ t.describe('scope.require_or_deny', () => {
 		t.assert_true(index(r.msg, "rw on firewall:rules") >= 0);
 	});
 });
+
+t.describe('scope.known_paths', () => {
+	t.it('returns a non-empty array', () => {
+		let paths = scope.known_paths();
+		t.assert_equal(type(paths), "array");
+		t.assert_true(length(paths) > 0);
+	});
+
+	t.it('returns the array sorted', () => {
+		let paths = scope.known_paths();
+		for (let i = 1; i < length(paths); i++)
+			t.assert_true(paths[i - 1] < paths[i]);
+	});
+
+	t.it('contains the known sentinels and a sample of resource scopes', () => {
+		let paths = scope.known_paths();
+		let want = { "*": true, "raw": true, "system": true, "firewall:zones": true, "network:interfaces": true };
+		for (let p in paths) delete want[p];
+		t.assert_deep_equal(want, {});
+	});
+
+	t.it('round-trip: every returned path is_known_path (after split into segments)', () => {
+		let paths = scope.known_paths();
+		for (let p in paths) t.assert_true(scope.is_known_path(split(p, ":")));
+	});
+
+	t.it('returns a fresh array each call (no shared mutable state)', () => {
+		let a = scope.known_paths();
+		let b = scope.known_paths();
+		push(a, "mutated");
+		t.assert_true(length(b) < length(a));
+	});
+});
