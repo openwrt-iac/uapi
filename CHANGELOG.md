@@ -7,6 +7,28 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
+## [2.2.3] - 2026-06-19
+
+OpenAPI spec correctness fix on the `x-uapi-clear-on-omit` annotation introduced in 2.2.2. Caught by the terraform-provider-uapi agent before any consumer built against it.
+
+### Fixed
+
+- Drop `"x-uapi-clear-on-omit": true` from three `network/interfaces` fields whose fromUci shapes are incompatible with the Terraform plugin-framework's plain-Optional contract: `ipaddr` (derived from `ipaddrs`, the two alias to the same uci key), `ipaddrs` (`as_list()` returns `[]` for absent, not null), and `dns` (same `as_list()` empty-list coercion). A plain-Optional Terraform attribute MUST read back null when config omits it; anything else fails the apply with "Provider produced inconsistent result after apply." The flag stays on `netmask` and `gateway`, which read back null cleanly.
+
+- The 2.2.2 criterion ("caller-owned and not defaulted") was too loose. The corrected criterion: a field carrying `"x-uapi-clear-on-omit": true` MUST have a fromUci assignment of exactly `<jsonkey>: section.<ucikey> ?? null` (no `as_list()`, no derivation, no aliasing) AND a `type:` declaration that includes `"null"`. `docs/adding-a-resource.md` documents both rules with safe/unsafe example pairs.
+
+### Internal
+
+- `make lint-defaults` gains two new checks:
+  - `check_clear_on_omit_shape`: verifies each flagged field's fromUci RHS is `section.X ?? null`.
+  - `check_clear_on_omit_type`: verifies each flagged field's `type:` declaration includes `"null"`.
+
+  Both would have caught the 2.2.2 mistake at lint time. Verified by reverting the annotation drops and confirming all 3 violations fire before re-applying.
+
+### Out of scope (deferred to openwrt-iac/uapi#3)
+
+The original field-report leftover case (adopted `wan` carrying static `ipaddr`/`gateway`/`netmask`/`dns` after switching to `proto=dhcp`) is now partially closed: `netmask` and `gateway` can be cleared via clear-on-omit; `ipaddr`/`ipaddrs`/`dns` need a different clearing path. Three options sketched on the issue thread; the design call is its own conversation.
+
 ## [2.2.2] - 2026-06-19
 
 OpenAPI spec enrichment to support the terraform-provider-uapi clear-on-omit work. No wire-surface change on any CRUD endpoint; no runtime behavior change; the `/openapi.json` document gains per-property annotations that downstream codegen consumes.

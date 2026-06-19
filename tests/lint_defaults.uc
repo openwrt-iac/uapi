@@ -105,6 +105,58 @@ function check_mutex(content) {
 	return !!(match(content, a) || match(content, b));
 }
 
+// Returns the list of field names carrying "x-uapi-clear-on-omit": true. The
+// codebase format puts the field-name `<f>: {` and the flag on the same line;
+// a future reformatter that splits the opening brace onto its own line would
+// silently bypass this scan. Assumption documented in the resource module
+// style; if it breaks, fix the resource file rather than complicate the lint.
+function find_clear_on_omit_fields(content) {
+	let fields = [];
+	let entry_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*\\{');
+	for (let line in split(content, "\n")) {
+		if (index(line, '"x-uapi-clear-on-omit": true') < 0) continue;
+		let m = match(line, entry_re);
+		if (m) push(fields, m[1]);
+	}
+	return fields;
+}
+
+// The Terraform plugin-framework rejects an apply with "Provider produced
+// inconsistent result after apply" when a plain Optional attribute (which
+// clear-on-omit-enabled fields must be on the provider side) reads back any
+// value for an absent uci option other than null. So `<jsonkey>: section.X ??
+// null` is the only safe fromUci shape; as_list (returns []), derived
+// expressions, ternaries, and `?? <non-null>` all break the contract.
+function check_clear_on_omit_shape(content, fields) {
+	let errors = [];
+	for (let field in fields) {
+		let safe_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
+		if (!match(content, safe_re))
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not the safe `section.X ?? null` shape (Terraform plain-Optional reads back null only; as_list/derived/aliased values trip 'Provider produced inconsistent result')", field));
+	}
+	return errors;
+}
+
+// A clearable field must type-allow null. Provider sends explicit JSON null
+// to clear; if the schema type is `"string"` (non-nullable), the wire payload
+// fails the spec itself.
+function check_clear_on_omit_type(content, fields) {
+	let errors = [];
+	let want = {};
+	for (let f in fields) want[f] = true;
+	let entry_open_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*\\{');
+	for (let line in split(content, "\n")) {
+		if (index(line, '"x-uapi-clear-on-omit": true') < 0) continue;
+		let m = match(line, entry_open_re);
+		if (!m || !want[m[1]]) continue;
+		let has_null_in_list = !!match(line, regexp('type:\\s*\\[[^]]*"null"[^]]*\\]'));
+		let is_null_scalar   = !!match(line, regexp('type:\\s*"null"'));
+		if (!has_null_in_list && !is_null_scalar)
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its type does not include \"null\" (provider sends JSON null to clear; non-nullable type rejects the wire payload)", m[1]));
+	}
+	return errors;
+}
+
 function lint_file(path) {
 	let content = read_file(path);
 	let base = basename(path);
@@ -128,6 +180,12 @@ function lint_file(path) {
 	if (check_mutex(content))
 		push(errors, sprintf("  %s: a schema_properties entry carries both 'default:' and '\"x-uapi-clear-on-omit\": true'; they are mutually exclusive (a defaulted field cannot be safely cleared without producing perpetual non-converging diffs)",
 			base));
+
+	let coo_fields = find_clear_on_omit_fields(content);
+	for (let e in check_clear_on_omit_shape(content, coo_fields))
+		push(errors, sprintf("  %s: %s", base, e));
+	for (let e in check_clear_on_omit_type(content, coo_fields))
+		push(errors, sprintf("  %s: %s", base, e));
 
 	return errors;
 }

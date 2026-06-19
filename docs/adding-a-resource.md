@@ -99,11 +99,39 @@ Only annotate **unconditional** defaults. Conditional defaults (e.g. `network.in
 For a field that is **caller-owned and safe for an IaC client to clear by omitting it from config**, also add `"x-uapi-clear-on-omit": true`:
 
 ```ucode
-ipaddr: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
-          description: "Static IPv4 address (single)" },
+netmask: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+           description: "IPv4 netmask (static proto)" },
 ```
 
-A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.2 is the static-proto fields on `network/interfaces` (`ipaddr`, `ipaddrs`, `netmask`, `gateway`, `dns`) surfaced by a real Terraform apply.
+A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. The flag enforces two hard constraints (the framework's `lint-defaults` verifies both):
+
+1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null`. No `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
+
+2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type: ["string", "null"]`). The provider sends explicit JSON null to clear; a non-nullable type fails the spec itself.
+
+Safe (passes the lint):
+
+```ucode
+gateway: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+           description: "IPv4 default gateway (static proto)" },
+```
+
+```ucode
+// fromUci: gateway: section.gateway ?? null
+```
+
+Unsafe (lint fails):
+
+```ucode
+// fromUci: dns: as_list(section.dns)      <-- returns []; lint shape violation
+// fromUci: ipaddr: ipaddr_first           <-- derived; lint shape violation
+```
+
+```ucode
+// schema:  dns: { type: "array", "x-uapi-clear-on-omit": true }   <-- non-nullable; lint type violation
+```
+
+Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3 is `network/interfaces` `netmask` and `gateway`. The originally-considered set in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those fail the shape/type constraints above and were dropped; see `docs/deprecations.md` and the openwrt-iac/uapi#3 thread for the design discussion on how to handle the aliased/array-typed cases.
 
 A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted fields would cause perpetual non-converging diffs if the provider treats them as clearable (apply clears uci, fromUci re-defaults, next plan diffs again). Either the field has a server-side default (sticky) or the operator fully owns it (clearable); never both.
 
