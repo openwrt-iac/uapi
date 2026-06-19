@@ -427,46 +427,6 @@ Not in v1. Operators wanting router-level metrics use `node_exporter`. Easy to a
 - Configure persistent syslog (`log_file` in `/etc/config/system`) for production deployments.
 - Consider forwarding syslog to a central collector (`log_ip`) for tamper-resistant audit trails.
 
-## Testing
-
-### Layers
-
-- **Unit tests** (pure ucode): schema validation, `fromUci`/`toUci`, scope matcher, ID generation, error envelope, transaction snapshot logic. Runs anywhere ucode runs. Sub-5s.
-- **Integration tests** (QEMU + official OpenWrt VM image): full transaction recipe against real ubus/uci, auth on the wire, audit log emission, snapshot-restore. ~1–2 min including boot.
-- **Contract / Terraform provider tests**: deferred to when the provider exists. Seeded by the in-repo curl example suite and the emitted OpenAPI spec.
-
-### ucode test harness
-
-Thin homegrown harness (`tests/harness.uc`, ~100 lines): `describe` / `it` / `assert_equal` / `assert_throws`, plain text output, exit code 1 on any failure.
-
-### Injectable ubus surface
-
-All ubus/uci calls route through a single injectable surface. In production it's the real `ubus.connect()` / `uci.cursor()`; in unit tests it's a stub returning canned responses. This is the difference between covering 30% and covering the transaction recipe's failure paths (specifically the snapshot-restore rollback, which is hard to trigger naturally).
-
-### Load-bearing integration tests (write first)
-
-1. **Serialization confirmation.** Handler sleeps 1s; 3 concurrent curls; total wall time ≈ 3s. Gates the no-flock decision.
-2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in syslog.
-3. **Validation failure.** Bad payload → 422 with field errors → no uci change.
-4. **Reload failure rollback.** Construct a config uci accepts but the daemon rejects → 500 `reload_failed_restored` → uci back to prior state.
-5. **Auth paths.** Missing/bad token → 401. Insufficient scope → 403. Plain HTTP from remote → 403 `tls_required`.
-6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT denied with `unmanaged_resource` → `POST .../adopt` → writable.
-7. **APK install smoke test.** Fresh OpenWrt 25.12 → `apk add uapi` → init script wires uhttpd → curl works.
-
-### CI shape
-
-- Every commit/PR: unit suite + lint.
-- Every PR + main: unit + integration suite (QEMU).
-- Release tag: + APK install smoke test against the candidate APK.
-
-### OpenAPI emission
-
-v1 deliverable. Generated at build time from the inline schemas; shipped as `/usr/share/uapi/openapi.json`. Becomes the contract document and input for future provider codegen.
-
-### Curl example suite
-
-In-repo at `examples/curl/`, one file per resource demonstrating CRUD. Doubles as documentation and seed for provider contract tests.
-
 ## API versioning policy
 
 The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves
