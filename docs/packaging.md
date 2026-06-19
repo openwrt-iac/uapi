@@ -128,7 +128,13 @@ uapi installed. To start using it:
 2. Commits uhttpd.
 3. Reloads uhttpd.
 
+These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v2/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
+
 The token store at `/etc/config/uapi` is preserved (conffile semantics). To wipe it: `rm /etc/config/uapi` after removal.
+
+## Upgrade contract
+
+`/etc/config/uapi` is marked as a conffile (`Package/uapi/conffiles` in the OpenWrt Makefile). The token store is precious user state and is preserved across `apk upgrade`. Files under `/usr/share/uapi/` are package-owned and freely overwritten by the upgrade; never add conffile markers to handler or library files there or upgrades will stop replacing them.
 
 ## Release artifacts
 

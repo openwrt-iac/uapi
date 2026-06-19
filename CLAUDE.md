@@ -1,8 +1,8 @@
 # uapi
 
-Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates standard REST verbs into ubus calls so modern edge routers become first-class targets for Infrastructure-as-Code workflows. Primary design validation: serving as the backend for a custom Terraform provider.
+Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates standard REST verbs into ubus calls so modern edge routers become first-class targets for Infrastructure-as-Code workflows. Primary design validation: serving as the backend for the openwrt-iac Terraform provider.
 
-This document captures the v1 design contract. It is comprehensive and authoritative; changes here require the same scrutiny as code changes.
+This file is the every-turn meta document: project identity, non-negotiable principles, code-style and workflow rules, plus a pointer table to topic-specific docs under `docs/`. Topical normative content (process model, transaction recipe, auth, error envelope, observability, testing, packaging, versioning) lives in the corresponding `docs/<topic>.md` file. When in doubt, the table at the bottom of this file is the index.
 
 ---
 
@@ -14,7 +14,7 @@ This document captures the v1 design contract. It is comprehensive and authorita
 
 Before adopting any library, daemon, persistence layer, or abstraction, check it against these three. Prefer ucode-native solutions; flag anything requiring a long-running auxiliary process, direct `/etc/config/` writes, or splitting a logical state change across multiple HTTP requests.
 
-**Aim.** Every change should move uapi closer to state-of-the-art for an embedded HTTP control plane: correctness, observability, security posture, test discipline, lock-and-state hygiene, drift detection. Roadmap items in this file are not aspirational backlog; they are the gap between today's posture and that target. Prefer hardening that closes a real gap over a feature that adds wire surface for its own sake.
+**Aim.** Every change should move uapi closer to state-of-the-art for an embedded HTTP control plane: correctness, observability, security posture, test discipline, lock-and-state hygiene, drift detection. The roadmap (`docs/roadmap.md`) is not aspirational backlog; it is the gap between today's posture and that target. Prefer hardening that closes a real gap over a feature that adds wire surface for its own sake.
 
 **Design reference: LuCI.** When a design choice is non-obvious (should this field be required? what should happen on a proto switch? how is this option meant to interact with that one?), read LuCI's source for the same surface before deciding. The OpenWrt SDK feeds carry it at `build/sdk/feeds/luci/`; the form/view code under `modules/luci-mod-*/htdocs/luci-static/resources/view/` and the platform abstractions under `modules/luci-base/htdocs/luci-static/resources/` are the two main entry points. LuCI is the long-baked baseline every OpenWrt operator already lives with; matching its behavior is the safe default. *Deliberately* diverging from it is fine when the divergence is a documented improvement; *accidentally* diverging because we didn't check is the failure mode to avoid.
 
@@ -58,28 +58,27 @@ Applies to every repo under the `openwrt-iac` org, not just uapi.
 
 CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-specific normative content lives in `docs/`:
 
-| Topic | File | Read when... |
-|-------|------|--------------|
-| Process model, lock layout, ETags, idempotency, metrics, audit, state inventory | `docs/architecture.md` | Touching the request lifecycle, locks, or anywhere "where state lives" matters. |
-| Transaction recipe, batch, snapshot/restore semantics | `docs/architecture.md` § Transaction recipe / Multi-package transactions | Changing the write path or designing a new resource that does anything beyond a single uci write. |
+| Topic | Primary file | Read when... |
+|-------|--------------|--------------|
+| Process model, lock layout, transaction recipe, batch, ETags, idempotency, metrics, audit, state inventory | `docs/architecture.md` | Touching the request lifecycle, locks, the write path, or anywhere "where state lives" matters. |
 | Fork-per-request rules (what you can/cannot do at module level) | `docs/concurrency.md` | Considering caches, background work, or "obvious" performance optimizations. |
 | Resource catalog (curated endpoints by domain), anonymous-section adoption | `docs/resources.md` | Understanding what's exposed, or how unmanaged uci sections become managed. |
 | Adding a new curated resource (module shape, annotations, tests, OpenAPI emission, naming conventions) | `docs/adding-a-resource.md` | Adding a resource or extending one. THE go-to file for curation work. |
 | Raw passthrough stability + semantics | `docs/raw.md` | Working on `/raw/` or considering using it. |
 | Non-uci resources (apk, leases, password, authorized_keys) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
-| Token CLI, HTTP token mint, scope syntax, raw-access composition, rate limits | `docs/tokens.md` | Anything auth-shaped beyond the policy. |
-| Threat model and TLS posture | `docs/security.md` | Security review, threat-model questions. |
+| Token CLI, HTTP token mint, scope syntax, raw-access composition, per-token rate limit overrides | `docs/tokens.md` | Anything auth-shaped from the operator angle. |
+| Threat model, TLS posture, public endpoints, design exclusions | `docs/security.md` | Security review, threat-model questions, "why not rpcd sessions?" |
 | Error envelope, top-level + field-level codes, response headers | `docs/errors.md` | Defining a new error code or auditing error shapes. |
-| Observability (log categories, format, metrics, diagnostics, healthz, capacity) | `docs/operations.md` | Operator-facing setup, log forwarding, debugging in the field. |
+| Observability (log categories, format, global rate limit, metrics, diagnostics, healthz, capacity) | `docs/operations.md` | Operator-facing setup, log forwarding, debugging in the field. Cross-references `docs/architecture.md` § Rate limit / Metrics for the implementation-side mechanics. |
 | Test layers, harness, lint suite, CI shape | `docs/testing.md` | Designing tests, expanding lint coverage. |
-| APK packaging (file layout, install hook, conffile, build steps) | `docs/packaging.md` | Touching the package contract, release artifacts. |
-| Semver mapping, non-breaking vs breaking changes, OpenAPI spec versioning | `docs/versioning.md` | Cutting a release, naming a deprecation, considering whether a change is patch / minor / major. |
+| APK packaging (file layout, install hook, conffile, build steps, upgrade contract) | `docs/packaging.md` | Touching the package contract, release artifacts. |
+| Operator installation (apk feed, token mint, first-token walkthrough) | `docs/installation.md` | Helping an operator install or troubleshoot a fresh install. |
+| Semver mapping, non-breaking vs breaking changes, OpenAPI spec versioning, schema annotations | `docs/versioning.md` | Cutting a release, naming a deprecation, considering whether a change is patch / minor / major. |
 | ucode quirks that have cost CI iterations | `docs/ucode-quirks.md` | Designing a new module; before assuming standard language behavior. |
 | Release process (signed tags, multi-arch build, feed publication) | `docs/release-process.md` | Cutting a tag or troubleshooting a release workflow. |
 | Lock-state audit (every fd-open / lock-acquire site with release proof) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
-| Migration v1 → v2 (rename map, breaking changes) | `docs/migration-v1-to-v2.md` | Supporting operators upgrading across the v2 boundary. |
+| Migration v1 to v2 (rename map, breaking changes) | `docs/migration-v1-to-v2.md` | Supporting operators upgrading across the v2 boundary. |
 | Field-level deprecation log | `docs/deprecations.md` | Renaming or removing a wire-surface field. |
+| Roadmap (shipped, in-flight, deferred, out of scope) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |
 
-## Roadmap
-
-See [docs/roadmap.md](docs/roadmap.md). Shipped, features (additive minor bumps), hardening (no new wire surface), out of scope. Update that file when an item moves between sections.
+A handful of topics span more than one file. The pointer above names the **primary** home (where the canonical contract lives); incidental coverage in other files is noted inline when relevant. If you find divergence between two files claiming the same rule, the primary is authoritative.

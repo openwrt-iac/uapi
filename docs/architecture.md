@@ -15,6 +15,8 @@ The code runs inside `uhttpd`'s existing fork-per-request CGI workers via
 `uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'`
 entry in `/etc/config/uhttpd` is the entire wiring.
 
+Specifically, uapi shares the default `main` uhttpd instance with LuCI. Both serve configuration use cases; sharing keeps the footprint minimal and lets uapi inherit whatever TLS configuration the operator already set up for LuCI (acme certs, custom listen addresses, etc.). A dedicated uapi uhttpd instance was considered and rejected: it doubles the runtime cost without earning the isolation back (an attacker who can reach LuCI can already reach the same box).
+
 ```
                          uhttpd parent (always running)
                          ├── compiles main.uc once at startup
@@ -196,6 +198,8 @@ exist" are enforced at `resource.validate()` time on every write, not via
 ETag mixing.)
 
 Two GETs of the same unchanged section always return the same ETag.
+
+Multi-resource collection endpoints (`GET /firewall/rules` without an id) do not currently carry an ETag. `If-Match` and `If-None-Match` only fire on resource-level endpoints; collections operate last-write-wins.
 
 ### Conditional GET
 

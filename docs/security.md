@@ -114,6 +114,25 @@ The token *name* is logged on every audit line. Tokens should be named for
 their owner (`ci-bot`, `terraform-prod`, `alice-laptop`) so the audit log
 identifies the responsible party, not a hash.
 
+## Authentication-design exclusions
+
+uapi defends the surface above with bearer tokens deliberately, not by accident. Two design candidates that would seem natural but are explicitly rejected:
+
+- **No rpcd sessions.** The OpenWrt rpcd session model (login endpoint returning a session id, session expiry, ubus `session.*` namespace) is well-trodden by LuCI but adds a runtime store, session-eviction machinery, and a separate failure mode for "session expired vs token revoked." uapi's bearer-token model is simpler at the cost of forcing the operator to mint tokens out of band.
+- **No HTTP login endpoint.** Tokens are minted via the `uapi-token` CLI on the router or via `POST /tokens` (which itself requires a token with `uapi:tokens:rw`). There is no bootstrap "POST /login with username+password to get a token" path. The first token is always minted locally; everything after composes from that.
+
+Both could be added without breaking the wire surface (new endpoints are non-breaking). The deliberate exclusion is to keep the security model auditable as "the set of tokens in `/etc/config/uapi`" with no second authentication path to reason about.
+
+## Public endpoints
+
+Three endpoints skip the bearer-token requirement:
+
+- `GET /healthz`: liveness probe; minimal info.
+- `GET /openapi.json`: spec discovery.
+- `GET /schema/*`: per-resource JSON Schema (codegen input).
+
+All three still pass the TLS check; only the bearer requirement is waived. Plain HTTP from a non-loopback source still returns `403 tls_required` before the public-endpoint short-circuit runs.
+
 ## TLS posture
 
 - `uhttpd` serves both HTTP and HTTPS. `tls_check()` permits HTTP only

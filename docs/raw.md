@@ -2,6 +2,8 @@
 
 The curated endpoints (`/firewall/rules`, `/network/interfaces`, etc.) wrap a small set of OpenWrt config types with stable schemas and Terraform-friendly JSON. For everything else, `/raw/` gives you the underlying uci surface with the same atomic-transaction guarantees and the same auth model.
 
+**`/raw/` is not raw ubus.** The endpoint exposes arbitrary uci packages and section types, not arbitrary ubus services. Sending ubus calls directly through uapi remains off-limits. The closest uapi gets to ubus is reading the runtime block (`runtime: {...}`) that curated resources populate from selected ubus calls; that is per-resource, hand-curated, and read-only.
+
 ## Stability
 
 **URL structure, verbs, auth/scope behavior, and error envelope are
