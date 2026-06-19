@@ -427,40 +427,6 @@ Not in v1. Operators wanting router-level metrics use `node_exporter`. Easy to a
 - Configure persistent syslog (`log_file` in `/etc/config/system`) for production deployments.
 - Consider forwarding syslog to a central collector (`log_ip`) for tamper-resistant audit trails.
 
-## API versioning policy
-
-The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves
-under `/api/v2/`, a future v3 would mount at `/api/v3/`. Within a given
-installed major, additions are backwards-compatible.
-
-**Non-breaking (allowed within a major):**
-- New endpoints / resources
-- New optional request fields
-- New response fields (clients must ignore unknown fields)
-- New optional query parameters
-- New error codes (clients branch on HTTP status, treat unknown `code` gracefully)
-- New scope names
-- Field rename with both old and new accepted during a deprecation window, the old marked `deprecated: true` in `build/openapi.json`, an entry added to `docs/deprecations.md`, and the actual removal scheduled for the next major. The deprecation log is the canonical place the operator-facing migration lives.
-
-**Breaking (requires the next major):**
-- Removing a field that was never deprecated, or removing one ahead of its scheduled `docs/deprecations.md` removal target
-- Removing or renaming any endpoint or error code (rename of a request field with deprecation pair is non-breaking; see above)
-- Changing a field's JSON type or semantic meaning
-- Making a previously-optional request field required
-- Tightening validation to reject previously-accepted payloads
-
-One uapi installation, one API major. There is no parallel mount; we don't carry two surface areas in a single binary on resource-constrained hardware. Operators who need to keep a v1 client working keep the v1 package installed (the v1.2.1 APK stays available on the feed; the signed `v1.2.1` git tag is the canonical v1 contract). The migration table for v1 -> v2 lives at `docs/migration-v1-to-v2.md`.
-
-### `/raw/` stability
-
-URL structure, verbs, auth/scope behavior, and error envelope are v1-stable. Payload shape follows uci, which is OpenWrt's moving target; if OpenWrt changes the `firewall` package schema, `/raw/firewall/...` payloads change with it. Documented loudly so users don't expect curated-level stability from raw.
-
-### OpenAPI spec versioning
-
-The emitted `openapi.json` carries the same version as the API it describes (`info.version: "1.0.0"` for uapi v1.0.0). The spec is the source of truth for what's in v1's contract at any given release.
-
----
-
 ## Roadmap
 
 See [docs/roadmap.md](docs/roadmap.md). Shipped, features (additive minor bumps), hardening (no new wire surface), out of scope. Update that file when an item moves between sections.
