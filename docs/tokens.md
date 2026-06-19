@@ -21,6 +21,8 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
 
 The router stores only the salt + `sha256(salt + ":" + bearer)`. The cleartext cannot be recovered.
 
+The token store is re-read from `/etc/config/uapi` on every request (uci read is millisecond-scale; the fork-per-request model means no cross-request cache anyway). Newly created tokens take effect immediately; no `uhttpd reload` is needed.
+
 ```sh
 uapi-token list             # short summary: name, scopes, expiry (if set), allowed_cidrs (if set)
 uapi-token show <name>      # detailed view (scopes, expiry, cidrs, last_used_at/ip; no secret)

@@ -9,7 +9,18 @@ The bar for adding to category 1 is high. New non-uci resources should justify t
 
 ## In-scope non-uci resources
 
-The canonical registry (and the single-line table form) lives in `CLAUDE.md` under "Resource model" → "Non-uci resources". Each entry below expands on its lock semantics, audit shape, the file/process it touches, and why the standard uci-transaction recipe doesn't apply.
+| Resource | Source of truth | Lock | Reload | Notes |
+|---|---|---|---|---|
+| `packages/installed` | apk DB (`apk add`/`del` shell-out) | `with_lock` on global | none | postinst runs as root; package's responsibility to wire its own uci/init scripts |
+| `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` on global | none | url-validated, name-validated |
+| `dhcp/leases` | `/tmp/dhcp.leases` (parse) | none (read-only) | n/a | dnsmasq IPv4 leases |
+| `dhcp/leases6` | `/tmp/hosts/odhcpd` (parse), fallback `/tmp/odhcpd.leases` | none (read-only) | n/a | odhcpd IPv6 leases |
+| `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` on global | none | write-only; audit logs token+user, never the password |
+| `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` on global for writes; reads lock-free | none | dropbear re-reads the file per connection |
+
+Each entry below expands on its lock semantics, audit shape, the file/process it touches, and why the standard uci-transaction recipe doesn't apply.
+
+Adding a non-uci resource means adding a row above. The bar is high: prefer driving the underlying daemon's uci surface if the option exists, or upstreaming the option to OpenWrt uci if it doesn't, before adding non-uci state to uapi.
 
 ### `packages/installed`
 
@@ -101,7 +112,7 @@ If your real-world configuration needs something uapi can't currently express, t
 
 If, after weighing those, a new non-uci resource really IS the right answer, it needs to ship together with:
 
-- A row in the CLAUDE.md "Non-uci resources" registry.
+- A row in the registry table at the top of this document.
 - A subsection in this doc describing source-of-truth, lock semantics, audit shape, validation, and the "why not uci" rationale.
 - Integration test coverage of the read AND write paths.
 - A scope-tree entry (`<domain>:<resource>:rw` / `:ro`).

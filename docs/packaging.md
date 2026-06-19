@@ -4,6 +4,18 @@ The version comes from a single source: the `VERSION` file at the repo root (sem
 
 This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK. Substitute the actual version from the `VERSION` file (or the release page) wherever you see `<version>` below.
 
+## Package contract
+
+**No daemon of our own.** The package's job is (a) drop files, (b) wire our handler into uhttpd's config, (c) clean up that wiring on removal. There is no `uapi` process, no `procd` service definition, no init script.
+
+**Wires only to the `main` uhttpd instance.** Operators running multiple uhttpd instances who want the API on another instance configure it manually (the post-install message points at this).
+
+**No conflicts.** Coexists with rpcd, LuCI, and anything else hosted on uhttpd.
+
+**No default token shipped.** Operators mint the first token via `uapi-token create` after install. Shipping a default would be a security hole.
+
+**Distribution.** v1 launch ships on the project-owned OpenWrt feed at `openwrt-iac.github.io/feed/`. Submission to the official `packages` feed is a later step, not a blocker.
+
 ## What gets installed
 
 ```
@@ -99,6 +111,15 @@ The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live insta
 
 After that, `https://<router>/api/v2/healthz` is reachable.
 
+The post-install message printed to the operator:
+
+```
+uapi installed. To start using it:
+  1. Create a token:    uapi-token create --name <label> --scope '*:rw'
+  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v2/system
+  3. See docs at:       /usr/share/uapi/openapi.json
+```
+
 ## Removal
 
 `apk remove uapi` triggers the `prerm` hook, which:
@@ -107,7 +128,13 @@ After that, `https://<router>/api/v2/healthz` is reachable.
 2. Commits uhttpd.
 3. Reloads uhttpd.
 
+These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v2/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
+
 The token store at `/etc/config/uapi` is preserved (conffile semantics). To wipe it: `rm /etc/config/uapi` after removal.
+
+## Upgrade contract
+
+`/etc/config/uapi` is marked as a conffile (`Package/uapi/conffiles` in the OpenWrt Makefile). The token store is precious user state and is preserved across `apk upgrade`. Files under `/usr/share/uapi/` are package-owned and freely overwritten by the upgrade; never add conffile markers to handler or library files there or upgrades will stop replacing them.
 
 ## Release artifacts
 

@@ -10,7 +10,9 @@ Look at `/etc/config/<package>` on a real router. Find the section type you want
 
 ## 2. Create the resource module
 
-`src/resources/<package>.<plural-type>.uc`. Export the uniform contract:
+`src/resources/<package>.<plural-type>.uc`. Schemas live inline in the resource module, not in separate JSON Schema files. `schema_properties` is the centrally-enforced type/enum/range/pattern/items table (`handler.check_schema_types` walks it on every write and returns 422 on shape mismatches before `validate()` runs); `validate()` carries the cross-field, cross-section, and format-string logic that pure JSON Schema can't express (e.g. "src_zone must reference an existing zone").
+
+Export the uniform contract:
 
 ```ucode
 return {
@@ -292,6 +294,10 @@ This walks the resource modules and emits `build/openapi.json`. Add an entry for
 ## 9. Update docs/tokens.md
 
 If the new resource introduces a new scope path (e.g. a new package), add it to the scope tree table.
+
+## Curation completeness
+
+When adding or extending a curated resource, the test is: *does this resource expose the options that a typical real configuration of this section actually sets?* If a common real-world setup of this section requires uci options the curated resource does not surface, that is a curation gap; close it. Telling users to drop to `/raw/` for a routine field is a smell.
 
 ## Validation should not be stricter than the platform
 
