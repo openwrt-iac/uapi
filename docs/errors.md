@@ -1,5 +1,7 @@
 # Errors
 
+The error model is RFC 7807-inspired but not strictly conformant. `application/json` throughout. Success responses are the resource value at top level (GET/POST/PUT 2xx body **is** the resource; no `{ "data": {...} }` wrapper). DELETE success is `204 No Content` with `X-Request-Id` and no body. Errors always carry the envelope below.
+
 ## Envelope
 
 Every non-2xx response carries this body shape (Content-Type: `application/json`):
