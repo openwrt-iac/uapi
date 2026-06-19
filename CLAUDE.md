@@ -44,6 +44,14 @@ The bar for every comment, helper, variable, and assertion: **a senior engineer 
 
 Load-bearing WHY comments stay: historical bug context, hidden constraints, workarounds for upstream behavior, lock-acquire ordering, the kind of thing that would cost the next reader an hour to rediscover. Be honest about which is which.
 
+### Branch + PR workflow
+
+All code changes land via a PR, never via direct push to `main`. Cut a branch (`release/v<version>` for releases, `feat/<topic>` or `fix/<topic>` otherwise), push the branch, open the PR with `gh pr create --base main`, wait for CI to pass on the branch, then merge only when explicitly told. The PR is the reviewable diff; direct-pushing bypasses that gate even when CI passes locally.
+
+Force-with-lease is permitted on the branch (typical use: amending a release commit after review fixes). Force-pushing `main` remains forbidden. Tag-creation discipline is unchanged: signed annotated tag after merge, only when explicitly told to tag.
+
+Applies to every repo under the `openwrt-iac` org, not just uapi.
+
 ---
 
 ## HTTP host
