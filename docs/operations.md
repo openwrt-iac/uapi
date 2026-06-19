@@ -74,7 +74,28 @@ uci commit system
 
 The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on the `uapi:` prefix to isolate API audit events.
 
+## Log categories
+
+| Category | syslog severity | Default | Triggers |
+|----------|-----------------|---------|----------|
+| AUDIT    | NOTICE          | on      | Successful writes (POST/PUT/DELETE 2xx) |
+| ERROR    | WARN / ERR      | on      | Auth failures (401/403), all 5xx |
+| ACCESS   | INFO            | off     | Every request (non-`/healthz`) |
+| DEBUG    | DEBUG           | off     | Per-ubus-call tracing |
+
+`/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
+
+ACCESS and DEBUG are opt-in via `/etc/config/uapi`:
+
+```
+config logging
+    option access '0'
+    option debug '0'
+```
+
 ## Log line format
+
+Plain text, fixed field order, syslog-native (chosen over JSON-per-line because `logread` is the primary consumer):
 
 ```
 uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<duration_ms>ms]
