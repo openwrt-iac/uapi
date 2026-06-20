@@ -176,6 +176,28 @@ inherits fromUci's string-form view of integer-typed fields, so type-checking
 the merge would falsely 422 on integer-untouched patches). The full merged
 body still goes through `resource.validate()` for cross-field logic.
 
+### Unmodeled uci options: PUT replaces, PATCH preserves
+
+A resource module curates a subset of its uci section's options; `toUci` emits
+only those. The write path treats options outside that modeled set
+differently per verb:
+
+- **PUT (replace)** normalizes the section to the modeled set. `diff_apply`
+  iterates the raw existing section and deletes every option not re-emitted by
+  `toUci`, including ones the resource does not model. PUT means "this body is
+  the whole resource," so uapi owns the section.
+- **PATCH (partial update)** preserves unmodeled options. `diff_apply_patch`
+  computes the modeled footprint as `toUci(fromUci(existing))` and only deletes
+  within it (a modeled field the patch cleared). Raw uci options outside the
+  footprint (which `toUci` cannot emit) are never enumerated, so a PATCH that
+  touches one field leaves a hand-set or stock option like firewall `icmp_type`
+  / unbound `dns64_prefix` untouched. This matches RFC 7396 merge-patch and
+  avoids the silent data loss a naive delete-everything-absent would cause.
+
+A consequence: the GET-then-PATCH-self round trip is lossless even for options
+uapi does not model, but GET-then-PUT-self is not (PUT discards them). Tooling
+that wants to preserve unmodeled state must use PATCH.
+
 Field errors are deduped by `(field, code)`. Schema errors win over
 validator errors for the same (field, code) tuple. The 422 body carries the
 full set; clients fix everything in one round trip.

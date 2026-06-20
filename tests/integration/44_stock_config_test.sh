@@ -147,4 +147,25 @@ for s in $SINGLETONS; do
 	echo "  ok: $s"
 done
 
+echo "=== PATCH preserves uci options uapi does not model (RFC-hybrid) ==="
+# Regression guard for the diff_apply silent-drop class: a partial PATCH must
+# not delete options the resource doesn't model. `localservice` is a real
+# dnsmasq option uapi does not curate; set it, PATCH a modeled field, and
+# confirm it survives. The drift check above can't catch this (fromUci never
+# surfaces unmodeled keys), so it needs a direct uci read.
+$SSH "uci set dhcp.@dnsmasq[0].localservice='1'; uci commit dhcp"
+patch_code=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
+	-o /dev/null -w '%{http_code}' -X PATCH "$URL/dhcp/dnsmasq" -d '{"domain":"uapitest"}')
+[ "$patch_code" = "200" ] || fail "PATCH /dhcp/dnsmasq returned $patch_code"
+# `uci -q get` exits non-zero when the key is absent; `|| true` keeps the
+# assignment from tripping `set -e` so the explicit check below reports clearly.
+preserved=$($SSH "uci -q get dhcp.@dnsmasq[0].localservice" 2>/dev/null || true)
+[ "$preserved" = "1" ] || fail "PATCH wiped unmodeled uci option localservice (silent_drop regression): got '$preserved'"
+echo "  ok: unmodeled option survived PATCH"
+
+# Note: the PUT-side counterpart (full replace DOES drop unmodeled options) is
+# covered by the unit test handler_test.uc "normalizes away unmodeled uci
+# options" and is already exercised by the round-trip loop above; no separate
+# integration assertion here.
+
 echo "stock-config round-trip ok"
