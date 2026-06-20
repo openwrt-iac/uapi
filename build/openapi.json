@@ -19994,6 +19994,7 @@
 										"icmpv6",
 										"esp",
 										"ah",
+										"igmp",
 										"any",
 										"all"
 									]
@@ -20210,6 +20211,7 @@
 										"icmpv6",
 										"esp",
 										"ah",
+										"igmp",
 										"any",
 										"all"
 									]

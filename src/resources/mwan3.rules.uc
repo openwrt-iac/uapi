@@ -1,7 +1,7 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
-let is_valid_cidr = values.is_valid_cidr;
+let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 
 const VALID_FAMILY = { "ipv4": true, "ipv6": true };
@@ -52,9 +52,10 @@ function _load_policy_names(conn) {
 	return names;
 }
 
-// src_ip / dest_ip accept either a bare IP or a CIDR. uci docs allow both.
+// src_ip / dest_ip accept either a bare IP (v4 or v6) or a CIDR (v4 or v6).
+// Stock mwan3 default_rule_v6 ships `option dest_ip '::/0'`.
 function _is_valid_addr_or_cidr(s) {
-	return is_valid_ip(s) || is_valid_cidr(s);
+	return is_valid_ip(s) || is_valid_cidr_any(s);
 }
 
 function validate(json, conn) {

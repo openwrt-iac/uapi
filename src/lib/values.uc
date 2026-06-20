@@ -76,6 +76,21 @@ function is_valid_cidr(s) {
 	return prefix >= 0 && prefix <= 32;
 }
 
+function is_valid_ipv6_cidr(s) {
+	if (type(s) != "string" || index(s, "/") == -1) return false;
+	let parts = split(s, "/");
+	if (length(parts) != 2 || !is_valid_ipv6(parts[0])) return false;
+	let prefix = int(parts[1]);
+	return prefix >= 0 && prefix <= 128;
+}
+
+// is_valid_cidr_any accepts both IPv4 (a.b.c.d/N) and IPv6 (xxxx::/N) CIDR
+// notation. Stock OpenWrt configs ship IPv6 CIDRs in several places
+// (mwan3 default_rule_v6's `option dest_ip '::/0'` is the forcing case).
+function is_valid_cidr_any(s) {
+	return is_valid_cidr(s) || is_valid_ipv6_cidr(s);
+}
+
 function ipv4_to_int(s) {
 	let parts = split(s, ".");
 	let n = 0;
@@ -126,7 +141,7 @@ function constant_time_equals(a, b) {
 
 return {
 	normalize_bool, as_list, as_int,
-	is_valid_ipv4, is_valid_ip, is_valid_cidr,
+	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,

@@ -113,14 +113,6 @@ function toUci(json) {
 	return out;
 }
 
-function interface_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('network', 'interface', function(s) {
-		if (s['.name'] == name) { found = true; return false; }
-	});
-	return found;
-}
-
 function validate(json, conn) {
 	let errs = [];
 
@@ -140,11 +132,12 @@ function validate(json, conn) {
 		push(errs, { field: "dhcpv6", code: "not_in_enum",
 		             message: "must be disabled, server, relay, or hybrid" });
 
-	if (conn != null && json.interface != null && json.interface != "") {
-		if (!interface_exists(conn, json.interface))
-			push(errs, { field: "interface", code: "conflict",
-			             message: sprintf("interface %J does not exist", json.interface) });
-	}
+	// Intentionally NOT verifying that json.interface names a real
+	// network.interface section: stock OpenWrt ships `config dhcp wan`
+	// referencing the `wan` interface, which on targets without a default WAN
+	// port (e.g. x86 generic) is absent. dnsmasq tolerates dangling interface
+	// refs (section is silently inactive until the interface appears), so
+	// rejecting them would be stricter than the platform.
 
 	return errs;
 }

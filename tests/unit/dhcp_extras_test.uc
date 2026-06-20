@@ -36,13 +36,13 @@ t.describe('dhcp.servers.validate', () => {
 		let re = filter(errs, function(e) { return e.field == "ra"; });
 		t.assert_equal(re[0].code, "not_in_enum");
 	});
-	t.it('reports conflict when interface does not exist', () => {
+	t.it('accepts dangling interface refs (stock OpenWrt ships dhcp.wan against absent network.wan on x86)', () => {
 		let conn = ubus.stub({ uci: { network: {
 			lan: { '.type': 'interface' },
 		} } });
 		let errs = servers.validate({ interface: 'wan' }, conn);
 		let ie = filter(errs, function(e) { return e.field == "interface"; });
-		t.assert_equal(ie[0].code, "conflict");
+		t.assert_equal(length(ie), 0);
 	});
 });
 

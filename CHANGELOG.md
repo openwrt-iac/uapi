@@ -23,6 +23,10 @@ Both surfaces enumerate the same internal `KNOWN_PATHS` const; the accessor (rat
 
 The OpenAPI vendor-extension option from the issue thread is deferred until a code-generated client surfaces with a concrete need; premature spec annotations without consumer evidence is what 2.2.2 / 2.2.3 corrected.
 
+### Internal
+
+- New integration test `tests/integration/44_stock_config_test.sh` round-trips every curated CRUD resource and singleton whose package ships in the bare OpenWrt 25.12.4 image (firewall, network, dhcp, dropbear, system): GET the section, adopt if unmanaged, PUT-self (or PATCH-self for singletons), then GET again and assert the persistable shape did not drift. A 422 or a diff surfaces a regression where uapi rejects (or silently mutates) what the platform itself ships. Resources from optional packages (snmpd, lldpd, vnstat, mwan3, etc.) are deferred to a follow-up that wires their install at VM-setup time. First run forced four schema relaxations to bring API rules in line with the platform: `igmp` accepted by `firewall.rules`/`firewall.redirects`; `*`/`any` wildcards accepted by `firewall.rules` zone refs; `dhcp.servers` no longer requires the referenced network interface to exist (stock ships `dhcp.wan` against an absent `network.wan` on x86); `is_valid_cidr_any` accepts IPv6 CIDR (used by `mwan3.rules` once mwan3 coverage lands).
+
 ## [2.2.3] - 2026-06-19
 
 OpenAPI spec correctness fix on the `x-uapi-clear-on-omit` annotation introduced in 2.2.2. Caught by the terraform-provider-uapi agent before any consumer built against it.

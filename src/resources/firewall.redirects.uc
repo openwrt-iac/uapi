@@ -8,7 +8,7 @@ const VALID_TARGETS = { "DNAT": true, "SNAT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_PROTOS = {
 	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
-	"esp": true, "ah": true, "any": true, "all": true,
+	"esp": true, "ah": true, "igmp": true, "any": true, "all": true,
 };
 const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 const PORT_RE = /^[0-9]+(-[0-9]+)?$/;
