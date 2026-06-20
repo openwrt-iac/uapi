@@ -364,12 +364,27 @@ function translate_tx(ctx, result) {
 	                    sprintf("transaction returned unknown kind %J", result.kind));
 }
 
-// Replace any uci options not in new_opts; set the rest. The two-loop shape
-// is required because uci_set on an existing key updates; we have to
-// explicitly delete the keys the new body omitted. The leading-dot keys
-// (.name/.type/.anonymous) are pseudo and must not be touched.
+// PUT/replace semantics: the body is the whole resource, so any uci option
+// not in new_opts is removed. Iterates the RAW existing section, so options
+// the resource does not model are normalized away too (uapi owns the section
+// on replace). The leading-dot keys (.name/.type/.anonymous) are pseudo.
 function diff_apply(c, p, id, existing, new_opts) {
 	for (let k in existing) {
+		if (substr(k, 0, 1) == ".") continue;
+		if (exists(new_opts, k)) continue;
+		c.uci_delete(p, id, k);
+	}
+	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+}
+
+// PATCH semantics: a partial update must not wipe options the resource does
+// not model. old_opts is toUci(fromUci(existing)) -- exactly the modeled keys
+// the section currently carries. We only delete within that footprint (a key
+// the patch cleared); raw uci options outside it (toUci cannot emit them) are
+// left untouched. Without this, a PATCH that touches one field would delete
+// every stock/operator option the resource happens not to model.
+function diff_apply_patch(c, p, id, old_opts, new_opts) {
+	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (exists(new_opts, k)) continue;
 		c.uci_delete(p, id, k);
@@ -587,7 +602,7 @@ function make(resource, opts) {
 					return { ok: false, kind: "validation", errors: uf_errs };
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply(c, p, id, existing, new_opts);
+				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -748,7 +763,7 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "validation", errors: errs };
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply(c, p, id, existing, new_opts);
+				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];

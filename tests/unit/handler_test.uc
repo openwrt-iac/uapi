@@ -303,6 +303,18 @@ t.describe('handler.replace', () => {
 		t.assert_deep_equal(r.body.match.dest_port, []);
 		t.assert_deep_equal(r.body.match.proto, []);
 	});
+
+	t.it('normalizes away unmodeled uci options (PUT = full replace, uapi owns the section)', () => {
+		// Counterpart to the PATCH-preserve test: PUT is a whole-resource
+		// replace, so an option uapi does not model is intentionally dropped.
+		let c = with_existing();
+		c._state.uci.firewall.r_existing.icmp_type = ['echo-request'];
+		let r = rules.replace(c, ctx(), 'r_existing', {
+			target: 'DROP', match: { src_zone: 'wan' },
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.icmp_type, null);
+	});
 });
 
 t.describe('handler.patch', () => {
@@ -348,6 +360,26 @@ t.describe('handler.patch', () => {
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.id, 'r_existing');
 		t.assert_equal(r.body.target, 'REJECT');
+	});
+
+	t.it('preserves uci options the resource does not model (PATCH is partial)', () => {
+		// icmp_type and limit are real stock firewall-rule options uapi does
+		// not model. A partial PATCH must not delete them (RFC-7396 merge).
+		let c = with_existing();
+		c._state.uci.firewall.r_existing.icmp_type = ['echo-request'];
+		c._state.uci.firewall.r_existing.limit = '1000/sec';
+		let r = rules.patch(c, ctx(), 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(c._state.uci.firewall.r_existing.icmp_type, ['echo-request']);
+		t.assert_equal(c._state.uci.firewall.r_existing.limit, '1000/sec');
+	});
+
+	t.it('still deletes a modeled field the patch clears (footprint delete)', () => {
+		let c = with_existing();
+		let r = rules.patch(c, ctx(), 'r_existing', { match: { dest_port: [] } });
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(r.body.match.dest_port, []);
+		t.assert_equal(c._state.uci.firewall.r_existing.dest_port, null);
 	});
 });
 
