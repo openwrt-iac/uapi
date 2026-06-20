@@ -83,7 +83,9 @@ The flag is scope-correct: same package, same section type. A `firewall.zone` wi
 
 The flag is string-only. The runtime check guards `type(val) == "string"` so non-string fields are silently skipped today; if your resource has a numeric or list-typed cross-reference key, the helper would need extending. Dynamic-type resources (those that declare `type_predicate` to match a family of section types like `wireguard_<iface>`) cannot declare `unique_field`; the framework will refuse to load such a module so the latent footgun does not ship.
 
-Resources that have their own per-validate uniqueness logic (e.g. `dhcp/servers` checks `interface` inside `validate()`) can keep that logic in place; `unique_field` is opt-in.
+Resources can keep their own per-validate uniqueness logic in place; `unique_field` is opt-in.
+
+A separate question: should `validate()` reject a cross-resource reference (e.g. `dhcp.servers.interface` naming a non-existent `network.interface` section)? **Default: no.** Stock OpenWrt ships configs that reference resources absent on the running target (`config dhcp wan` against an absent `network.wan` on x86 generic), and daemons typically tolerate dangling refs (the section is silently inactive). Rejecting them would be stricter than the platform. Validate cross-refs only when the daemon itself errors on a dangling ref, not because the operator might typo; in practice no curated resource currently does.
 
 ### Server-side defaults (`default:`) and clear-on-omit safety (`x-uapi-clear-on-omit:`)
 

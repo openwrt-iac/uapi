@@ -10,7 +10,7 @@ const VALID_TARGETS = {
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_PROTOS = {
 	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
-	"esp": true, "ah": true, "any": true, "all": true,
+	"esp": true, "ah": true, "igmp": true, "any": true, "all": true,
 };
 
 function fromUci(section) {
@@ -52,6 +52,11 @@ function toUci(json) {
 	return out;
 }
 
+// '*' (and the synonym 'any') is firewall4's wildcard meaning "any zone"; the
+// stock OpenWrt config ships rules with `option dest '*'` (e.g. Allow-ICMPv6-
+// Forward). Validation must accept it alongside named zones.
+const WILDCARD_ZONES = { "*": true, "any": true };
+
 function load_zones(conn) {
 	let zones = {};
 	conn.uci_foreach('firewall', 'zone', function(s) {
@@ -84,14 +89,14 @@ function validate(json, conn) {
 		             message: "is required" });
 	}
 
-	if (conn != null && m.src_zone != null && m.src_zone != "") {
+	if (conn != null && m.src_zone != null && m.src_zone != "" && !WILDCARD_ZONES[m.src_zone]) {
 		let zones = load_zones(conn);
 		if (!zones[m.src_zone]) {
 			push(errs, { field: "match.src_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.src_zone) });
 		}
 	}
-	if (conn != null && m.dest_zone != null && m.dest_zone != "") {
+	if (conn != null && m.dest_zone != null && m.dest_zone != "" && !WILDCARD_ZONES[m.dest_zone]) {
 		let zones = load_zones(conn);
 		if (!zones[m.dest_zone]) {
 			push(errs, { field: "match.dest_zone", code: "conflict",

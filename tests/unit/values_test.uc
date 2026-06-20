@@ -72,6 +72,36 @@ t.describe('values.is_valid_cidr', () => {
 		for (let s in ["10.0.0.0/33", "10.0.0.0/-1", "256.0.0.0/24", "10.0.0.0", "", null])
 			t.assert_false(v.is_valid_cidr(s));
 	});
+
+	t.it('is IPv4-only (does not accept IPv6 CIDR)', () => {
+		t.assert_false(v.is_valid_cidr("::/0"));
+		t.assert_false(v.is_valid_cidr("2001:db8::/32"));
+	});
+});
+
+t.describe('values.is_valid_ipv6_cidr', () => {
+	t.it('accepts valid IPv6 CIDR', () => {
+		for (let s in ["::/0", "::1/128", "2001:db8::/32", "fe80::/10"])
+			t.assert_true(v.is_valid_ipv6_cidr(s));
+	});
+
+	t.it('rejects v4, out-of-range prefix, missing slash, and non-strings', () => {
+		for (let s in ["10.0.0.0/8", "::/129", "::/-1", "::1", "", null, 1234])
+			t.assert_false(v.is_valid_ipv6_cidr(s));
+	});
+});
+
+t.describe('values.is_valid_cidr_any', () => {
+	t.it('accepts both v4 and v6 CIDR (stock mwan3 default_rule_v6 ships ::/0)', () => {
+		t.assert_true(v.is_valid_cidr_any("10.0.0.0/8"));
+		t.assert_true(v.is_valid_cidr_any("::/0"));
+		t.assert_true(v.is_valid_cidr_any("2001:db8::/64"));
+	});
+
+	t.it('rejects bare addresses and garbage', () => {
+		for (let s in ["10.0.0.0", "::1", "not-a-cidr", "", null])
+			t.assert_false(v.is_valid_cidr_any(s));
+	});
 });
 
 t.describe('values.ipv4_in_cidr', () => {
