@@ -49,31 +49,32 @@ Items that are interesting but conflict with an architectural principle or
 have an unresolved design question. Not "later"; "later if the right shape
 appears".
 
-### `commit-confirmed` timed rollback
+### `commit-confirmed` timed rollback (shipped 2.3.0)
 
-Apply, wait N seconds for client `POST /commits/<id>/confirm`, auto-revert
-if no ack. Cancelled in v2 planning after user-driven analysis of the
-failure mode:
+Resolved by the sidecar path (option 1 below), built as a separate package
+(`apply-confirm`) so uapi gains no daemon of its own; uapi integrates by
+invoking its CLI. See `docs/commit-confirm.md`. The original
+state-divergence objection ("the router reverts but Terraform thinks it's OK")
+is handled by making the ack client-driven: a confirmed write returns 202 + a
+token, and the client confirms only after verifying reachability. If the client
+never sees the response, it also never acks, so its own apply is not marked
+complete; the auto-revert and the client's view stay consistent.
+
+Sequencing: the wire surface ships in 2.3.0 but the 2.3.0 tag is held until
+`apply-confirm` reaches a stable, feed-published release (it is a safety
+primitive that soaks RC-first). The integration is optional and
+feature-detected, so an install without apply-confirm is unaffected.
+
+The original v2-planning analysis, kept for context:
 
 > If the router gets no confirmation because of a network temporary issue
 > between the router and Terraform, it reverts, but Terraform thinks it's
 > OK. That state-divergence is worse than the original race we're trying
 > to solve.
 
-Two viable redesigns to keep open:
-
-1. **Sidecar with webhook-on-revert.** Auto-revert posts to a client-side
-   webhook URL on rollback so the client knows to refresh its state. Breaks
-   "no daemon of our own" (needs a procd-managed timer holder), but the
-   sidecar is small and bounded.
-2. **Fully synchronous "stage-and-test" pattern.** Stage uci changes to a
-   shadow config, run a separate `POST /commit/<id>/test` request that the
-   server runs internally with full reload + a programmable acceptance
-   probe, and only then accept-or-revert. No timer; the entire decision is
-   server-side and the wire response is the final answer.
-
-Either path is post-v2 work; needs a real Terraform-provider use case to
-drive the choice.
+The webhook-on-revert refinement (push a rollback notification to the client)
+and the fully-synchronous "stage-and-test" pattern remain open as future
+enhancements, not requirements.
 
 ## Features (additive, future minor bumps in v2.x)
 

@@ -26,6 +26,12 @@ const STATUS_BY_CODE = {
 	reload_failed_unrecovered: 500,
 	service_unavailable: 503,
 	init_script_missing: 503,
+	// commit-confirmed apply (apply-confirm integration)
+	confirm_unavailable: 501,
+	already_armed: 409,
+	confirm_window_closed: 409,
+	confirm_stage_failed: 503,
+	rollback_reload_failed: 500,
 };
 
 const FIELD_CODES = {
@@ -51,6 +57,8 @@ const ALL_CODES = [
 	"validation_failed", "locked", "too_many_requests",
 	"internal_error", "reload_failed_restored", "reload_failed_unrecovered",
 	"service_unavailable", "init_script_missing",
+	"confirm_unavailable", "already_armed", "confirm_window_closed",
+	"confirm_stage_failed", "rollback_reload_failed",
 	"batch_partial_failure",
 ];
 

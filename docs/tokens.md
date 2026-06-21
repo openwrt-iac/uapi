@@ -122,7 +122,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `prometheus_node_exporter_lua` | `config` |
 | `vnstat` | `config`, `interfaces` |
 | `packages` | `installed`, `feeds` |
-| `uapi` | `tokens`, `metrics`, `diagnostics` |
+| `uapi` | `tokens`, `metrics`, `diagnostics`, `confirm` |
 | `raw` | `<any-package>` (composes with the curated domain tree) |
 
 ## Deepest-match-wins

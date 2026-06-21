@@ -195,6 +195,21 @@ function responses(verb, success) {
 	return r;
 }
 
+const CONFIRM_PARAM = { "$ref": "#/components/parameters/Confirm" };
+const CONFIRM_202   = { "$ref": "#/components/responses/PendingConfirm" };
+
+// Mark a uci-config-write operation as commit-confirm-capable: it accepts the
+// X-Uapi-Confirm header and may return 202 with an armed rollback window.
+// Scoped to config writes (resource CRUD, singleton patch, batch) - NOT token /
+// package / system-access writes, which apply-confirm does not snapshot.
+function with_confirm(op) {
+	if (op == null) return op;
+	op.parameters = op.parameters ?? [];
+	push(op.parameters, CONFIRM_PARAM);
+	op.responses["202"] = CONFIRM_202;
+	return op;
+}
+
 function build_crud_paths(ep) {
 	let schema_ref = schema_name(ep);
 	let mod = load_resource(ep.file);
@@ -286,12 +301,18 @@ function build_crud_paths(ep) {
 		},
 	};
 
+	with_confirm(paths[ep.path].post);
+	with_confirm(paths[ep.path + "/{id}"].put);
+	with_confirm(paths[ep.path + "/{id}"].patch);
+	with_confirm(paths[ep.path + "/{id}"].delete);
+	with_confirm(paths[ep.path + "/{id}/adopt"].post);
+
 	return paths;
 }
 
 function build_singleton_paths(ep) {
 	let schema_ref = schema_name(ep);
-	return {
+	let paths = {
 		[ep.path]: {
 			"get":   { "summary": sprintf("Get the %s singleton", ep.domain),
 			           "description": "Conditional GET via If-None-Match (or ?if_none_match=).",
@@ -308,6 +329,8 @@ function build_singleton_paths(ep) {
 			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }) },
 		},
 	};
+	with_confirm(paths[ep.path].patch);
+	return paths;
 }
 
 function build_collection_paths(ep) {
@@ -397,6 +420,7 @@ const TAGS = [
 	{ name: "Operational / Metrics",       group: "Operational endpoints", description: "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.", path_prefix: "/metrics" },
 	{ name: "Operational / Diagnostics",   group: "Operational endpoints", description: "Lock state, uptime, loaded resources.",       path_prefix: "/diagnostics" },
 	{ name: "Operational / Batch",         group: "Operational endpoints", description: "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.", path_prefix: "/batch" },
+	{ name: "Operational / Commit-confirm", group: "Operational endpoints", description: "Confirm or roll back a commit-confirmed apply (apply-confirm). Requires the apply-confirm package.", path_prefix: "/confirm" },
 ];
 
 function build_tags() {
@@ -681,6 +705,55 @@ function build_paths() {
 			}),
 		},
 	};
+	// Confirm-capable; the batch 202 carries the BatchResponse plus one confirm
+	// window spanning all touched packages.
+	paths["/batch"].post.parameters = [CONFIRM_PARAM];
+	paths["/batch"].post.responses["202"] = {
+		"description": "Accepted: every sub-request succeeded and a commit-confirmed rollback is armed over all touched packages. (x-uapi-requires: apply-confirm)",
+		"x-uapi-requires": "apply-confirm",
+		"headers": {
+			"X-Confirm-Token":    { "description": "The armed rollback token; pass to /confirm/{token}.", "schema": { "type": "string", "pattern": "^ac_[0-9]+_[0-9a-f]{8}$" } },
+			"X-Confirm-Deadline": { "description": "Best-effort unix epoch of auto-rollback.", "schema": { "type": "integer" } },
+		},
+		"content": { "application/json": { "schema": { "allOf": [
+			{ "$ref": "#/components/schemas/BatchResponse" },
+			{ "type": "object", "required": ["confirm"], "properties": { "confirm": { "$ref": "#/components/schemas/ConfirmWindow" } } },
+		] } } },
+	};
+
+	let confirm_token_param = { "name": "token", "in": "path", "required": true,
+		"schema": { "type": "string", "pattern": "^ac_[0-9]+_[0-9a-f]{8}$" } };
+	paths["/confirm"] = {
+		"get": {
+			"summary": "List pending confirm windows",
+			"description": "Passthrough to `apply-confirm list --json`. Scope: uapi:confirm:ro (or *:ro). Requires the apply-confirm package. (x-uapi-requires: apply-confirm)",
+			"x-uapi-requires": "apply-confirm",
+			"responses": responses("get", {
+				"200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ConfirmWindow" } } } } },
+			}),
+		},
+	};
+	paths["/confirm/{token}"] = {
+		"parameters": [confirm_token_param],
+		"get": {
+			"summary": "Status of a pending confirm window",
+			"description": "Passthrough to `apply-confirm status <token> --json` (authoritative remaining time). Scope: uapi:confirm:ro. (x-uapi-requires: apply-confirm)",
+			"x-uapi-requires": "apply-confirm",
+			"responses": responses("get", { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfirmWindow" } } } } }),
+		},
+		"post": {
+			"summary": "Confirm (ack) a pending apply",
+			"description": "Acks the window so the change is NOT rolled back. Scope: uapi:confirm:rw. 409 confirm_window_closed if the window already expired or closed. (x-uapi-requires: apply-confirm)",
+			"x-uapi-requires": "apply-confirm",
+			"responses": responses("post", { "200": { "description": "Confirmed", "content": { "application/json": { "schema": { "type": "object", "properties": { "confirmed": { "type": "string" } } } } } } }),
+		},
+		"delete": {
+			"summary": "Roll back a pending apply now",
+			"description": "Restores the snapshot immediately (early/forced revert). Scope: uapi:confirm:rw. (x-uapi-requires: apply-confirm)",
+			"x-uapi-requires": "apply-confirm",
+			"responses": responses("delete", { "200": { "description": "Rolled back", "content": { "application/json": { "schema": { "type": "object", "properties": { "rolled_back": { "type": "string" } } } } } } }),
+		},
+	};
 
 	// Tag non-curated paths. Longest-prefix-wins so /system/password doesn't
 	// get the bare "System" tag.
@@ -714,6 +787,17 @@ function build_paths() {
 
 function build_schemas() {
 	let schemas = {
+		"ConfirmWindow": {
+			"type": "object",
+			"required": ["token", "timeout", "deadline", "packages"],
+			"description": "An armed commit-confirmed rollback window (apply-confirm). Returned in the 202 body of a confirmed write.",
+			"properties": {
+				"token":    { "type": "string", "pattern": "^ac_[0-9]+_[0-9a-f]{8}$", "description": "Pass to POST /confirm/{token} to ack, or DELETE /confirm/{token} to roll back now." },
+				"timeout":  { "type": "integer", "description": "Seconds the window stays armed." },
+				"deadline": { "type": "integer", "description": "Best-effort unix epoch of auto-rollback; GET /confirm/{token} is authoritative." },
+				"packages": { "type": "array", "items": { "type": "string" }, "description": "uci packages snapshotted and restored on rollback." },
+			},
+		},
 		"ErrorEnvelope": {
 			"type": "object",
 			"required": ["code", "message", "request_id"],
@@ -1159,8 +1243,30 @@ function build_doc() {
 				"ValidationFailed":   { "description": "Request body failed validation (per-field errors in `errors[]`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 				"Locked":             { "description": "Another write holds the same per-package lock; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
 				"TooManyRequests":    { "description": "Per-token rate limit exceeded; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
-				"InternalError":      { "description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"ServiceUnavailable": { "description": "Service unavailable (codes: service_unavailable, init_script_missing)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"InternalError":      { "description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered, rollback_reload_failed)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"ServiceUnavailable": { "description": "Service unavailable (codes: service_unavailable, init_script_missing, confirm_stage_failed)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"PendingConfirm": {
+					"description": "Write committed with a commit-confirmed rollback armed. The body is the normal resource representation plus a `confirm` block; unless POST /confirm/{token} acks before the deadline, apply-confirm restores the pre-change snapshot. (x-uapi-requires: apply-confirm)",
+					"x-uapi-requires": "apply-confirm",
+					"headers": {
+						"X-Confirm-Token":    { "description": "The armed rollback token; pass to /confirm/{token}.", "schema": { "type": "string", "pattern": "^ac_[0-9]+_[0-9a-f]{8}$" } },
+						"X-Confirm-Deadline": { "description": "Best-effort unix epoch of auto-rollback; poll GET /confirm/{token} for authoritative remaining time.", "schema": { "type": "integer" } },
+					},
+					"content": { "application/json": { "schema": {
+						"type": "object",
+						"required": ["confirm"],
+						"description": "The resource representation plus the armed `confirm` window.",
+						"properties": { "confirm": { "$ref": "#/components/schemas/ConfirmWindow" } },
+					} } },
+				},
+			},
+			"parameters": {
+				"Confirm": {
+					"name": "confirm", "in": "query", "required": false,
+					"schema": { "type": "integer", "minimum": 1, "maximum": 3600 },
+					"x-uapi-requires": "apply-confirm",
+					"description": "Arm a commit-confirmed rollback on this write: snapshot the affected uci packages and auto-revert after this many seconds unless POST /confirm/{token} acks first. The query form is the portable interface; the `X-Uapi-Confirm` header also works but only behind a proxy that forwards it (uhttpd's CGI env strips custom headers via a hard-coded allowlist). When set, the success status is 202 with a `confirm` block. Requires the apply-confirm package; without it the write returns 501 confirm_unavailable.",
+				},
 			},
 		},
 	};

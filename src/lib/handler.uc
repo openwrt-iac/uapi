@@ -337,8 +337,24 @@ function attach_reload_headers(resp, result) {
 function translate_tx(ctx, result) {
 	if (result.ok) {
 		let resp = attach_reload_headers(errors.ok(ctx, result.body), result);
-		return (result.body != null) ? set_etag_header(resp, result.body) : resp;
+		if (result.body != null) resp = set_etag_header(resp, result.body);
+		// A commit-confirmed write returns 202 with the armed window so the
+		// client knows it must confirm (or the change auto-rolls back).
+		if (result.confirm != null) {
+			resp.status = 202;
+			// DELETE's result body is null; synthesize one so the 202 carries the
+			// required `confirm` block (PendingConfirm schema), not just the header.
+			if (type(resp.body) != "object") resp.body = {};
+			resp.body.confirm = result.confirm;
+			resp.headers["X-Confirm-Token"] = result.confirm.token;
+			resp.headers["X-Confirm-Deadline"] = "" + result.confirm.deadline;
+		}
+		return resp;
 	}
+	if (result.kind == "confirm_unavailable" || result.kind == "already_armed"
+	    || result.kind == "confirm_window_closed" || result.kind == "confirm_stage_failed"
+	    || result.kind == "rollback_reload_failed" || result.kind == "bad_request")
+		return errors.error(ctx, result.kind, result.message);
 	if (result.kind == "locked")
 		return errors.locked_from(ctx, null, result);
 	if (result.kind == "lock_unavailable")
@@ -507,6 +523,7 @@ function make(resource, opts) {
 
 	function create(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				// Section-name resolution: caller's body.id wins, else the
 				// per-resource id_for_create hook (e.g. network.interfaces
@@ -553,6 +570,7 @@ function make(resource, opts) {
 
 	function replace(conn, ctx, id, body) {
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				let errs = _validate_with_schema(resource, body, body, c, id);
 				if (length(errs) > 0)
@@ -589,6 +607,7 @@ function make(resource, opts) {
 
 	function patch(conn, ctx, id, body) {
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -630,6 +649,7 @@ function make(resource, opts) {
 
 	function remove(conn, ctx, id) {
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -648,7 +668,12 @@ function make(resource, opts) {
 			},
 		}));
 
-		if (result.ok)
+		// A confirmed delete armed a rollback window; route through translate_tx
+		// so the 202 + X-Confirm-Token reaches the client. Without this the 204
+		// short-circuit would drop the token: the section is deleted and the
+		// window armed, but the client has no token to ack and the delete
+		// silently auto-reverts at the deadline.
+		if (result.ok && result.confirm == null)
 			return attach_reload_headers(errors.no_content(ctx), result);
 		return translate_tx(ctx, result);
 	}
@@ -674,6 +699,7 @@ function make(resource, opts) {
 		// name, so we go through the full transaction (snapshot + commit +
 		// reload + restore-on-failure).
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -740,6 +766,7 @@ function make_singleton(resource, opts) {
 
 	function patch(conn, ctx, body) {
 		let result = transaction.transaction(conn, tx_params({
+			confirm: ctx.confirm,
 			fn: function(c, p) {
 				let existing = find(c);
 				if (!existing) {
