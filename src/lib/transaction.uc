@@ -1,4 +1,5 @@
 let fs = require('fs');
+let apply_confirm = require('apply_confirm');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -127,7 +128,24 @@ function _finalize_after_reload(reload_err, restore_fn, body, services) {
 	         reload_error: reload_err };
 }
 
-function run_inner(conn, pkg, services, fn, snapshot, reload) {
+// Attach the confirm block to a successful result, or disarm the window when
+// uapi already reverted in-band (the apply reload failed, so the staged
+// rollback is now pointless and must not fire later). Disarm with ac_ack, not
+// ac_rollback: uapi has already restored the pre-change config in-band, so we
+// only need to cancel apply-confirm's timer. ac_rollback would re-import the
+// (identical) snapshot and run a redundant second service reload whose failure
+// we could not surface. `armed` is ac_stage's return; null when no confirm.
+function _attach_confirm(result, armed, packages) {
+	if (armed == null) return result;
+	if (result.ok)
+		result.confirm = { token: armed.token, timeout: armed.timeout,
+		                   deadline: armed.deadline, packages };
+	else
+		apply_confirm.ac_ack(armed.token);
+	return result;
+}
+
+function run_inner(conn, pkg, services, fn, snapshot, reload, confirm) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -135,13 +153,34 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 		return result ?? { ok: false, kind: "unknown" };
 	}
 
-	conn.uci_commit(pkg);
+	// Arm the commit-confirmed rollback BEFORE commit: apply-confirm snapshots
+	// the on-disk pre-change config, which uci_commit is about to overwrite.
+	let armed = null;
+	if (confirm != null) {
+		armed = apply_confirm.ac_stage([pkg], services, confirm);
+		if (!armed.ok) {
+			conn.uci_revert(pkg);
+			return { ok: false, kind: armed.kind, message: armed.message };
+		}
+	}
 
-	return _finalize_after_reload(reload(services), function() {
-		conn.uci_import(pkg, snapshot);
+	// If commit or reload throws after the window is armed, disarm it before
+	// propagating: otherwise a stale rollback fires at the deadline and reverts
+	// whatever state exists then, with no token ever delivered to ack.
+	let fin;
+	try {
 		conn.uci_commit(pkg);
-		return reload(services);
-	}, result.body, services);
+		fin = _finalize_after_reload(reload(services), function() {
+			conn.uci_import(pkg, snapshot);
+			conn.uci_commit(pkg);
+			return reload(services);
+		}, result.body, services);
+	} catch (e) {
+		if (armed != null) apply_confirm.ac_rollback(armed.token);
+		die(e);
+	}
+
+	return _attach_confirm(fin, armed, [pkg]);
 }
 
 function transaction(conn, params) {
@@ -181,7 +220,7 @@ function transaction(conn, params) {
 	let caught = null;
 	try {
 		let snapshot = conn.uci_export(pkg);
-		result = run_inner(conn, pkg, services, fn, snapshot, reload);
+		result = run_inner(conn, pkg, services, fn, snapshot, reload, params.confirm);
 	} catch (e) {
 		caught = e;
 	}
@@ -247,6 +286,7 @@ function multi_transaction(conn, params) {
 	let snapshots = {};
 	let result = null;
 	let caught = null;
+	let armed = null;
 	try {
 		for (let pkg in sorted) snapshots[pkg] = conn.uci_export(pkg);
 		let inner = fn(conn);
@@ -254,34 +294,50 @@ function multi_transaction(conn, params) {
 			for (let pkg in sorted) conn.uci_revert(pkg);
 			result = inner ?? { ok: false, kind: "unknown" };
 		} else {
-			// Commit each package, but capture the first failure so we can
-			// still attempt a restore on every package (committed or not).
-			// Without this, a mid-loop commit throw leaves earlier packages
-			// committed and breaks the across-packages atomicity contract.
-			let commit_err = null;
-			for (let pkg in sorted) {
-				let caught_commit = null;
-				try { conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
-				if (caught_commit != null) {
-					commit_err = sprintf("uci_commit(%s) failed: %s",
-					                     pkg, caught_commit);
-					break;
+			// Arm the commit-confirmed rollback over all packages before any
+			// commit (apply-confirm snapshots the pre-change on-disk config).
+			if (params.confirm != null) {
+				armed = apply_confirm.ac_stage(sorted, services, params.confirm);
+				if (!armed.ok) {
+					for (let pkg in sorted) conn.uci_revert(pkg);
+					result = { ok: false, kind: armed.kind, message: armed.message };
 				}
 			}
-			let reload_err = (commit_err == null) ? reload(services) : commit_err;
-			result = _finalize_after_reload(reload_err, function() {
+			if (result == null) {
+				// Commit each package, but capture the first failure so we can
+				// still attempt a restore on every package (committed or not).
+				// Without this, a mid-loop commit throw leaves earlier packages
+				// committed and breaks the across-packages atomicity contract.
+				let commit_err = null;
 				for (let pkg in sorted) {
-					conn.uci_import(pkg, snapshots[pkg]);
-					conn.uci_commit(pkg);
+					let caught_commit = null;
+					try { conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
+					if (caught_commit != null) {
+						commit_err = sprintf("uci_commit(%s) failed: %s",
+						                     pkg, caught_commit);
+						break;
+					}
 				}
-				return reload(services);
-			}, inner.body, services);
+				let reload_err = (commit_err == null) ? reload(services) : commit_err;
+				result = _attach_confirm(_finalize_after_reload(reload_err, function() {
+					for (let pkg in sorted) {
+						conn.uci_import(pkg, snapshots[pkg]);
+						conn.uci_commit(pkg);
+					}
+					return reload(services);
+				}, inner.body, services), armed, sorted);
+			}
 		}
 	} catch (e) { caught = e; }
 
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
-	if (caught != null) die(caught);
+	if (caught != null) {
+		// A throw after arming (e.g. reload throwing) would leave the window
+		// armed; disarm before propagating so a stale rollback can't fire.
+		if (armed != null) apply_confirm.ac_rollback(armed.token);
+		die(caught);
+	}
 	return result;
 }
 

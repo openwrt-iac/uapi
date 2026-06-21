@@ -19,6 +19,7 @@ let ratelimit = require("ratelimit");
 let metrics = require("metrics");
 let idempotency = require("idempotency");
 let error_ring = require("error_ring");
+let apply_confirm = require("apply_confirm");
 
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
@@ -106,6 +107,7 @@ const INSECURE_MARKER = "/etc/uapi.insecure";
 
 const REASON = {
 	"200": "OK",
+	"202": "Accepted",
 	"204": "No Content",
 	"207": "Multi-Status",
 	"304": "Not Modified",
@@ -121,6 +123,7 @@ const REASON = {
 	"422": "Unprocessable Entity",
 	"423": "Locked",
 	"500": "Internal Server Error",
+	"501": "Not Implemented",
 	"503": "Service Unavailable",
 };
 
@@ -560,6 +563,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		r = transaction.multi_transaction(conn, {
 			packages: pkgs,
 			reload_services: reloads,
+			confirm: ctx.confirm,
 			fn: run_ops,
 		});
 	}
@@ -592,16 +596,25 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	if (r.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 			sprintf("batch lock unavailable: %s", r.error));
+	if (r.kind == "confirm_unavailable" || r.kind == "already_armed"
+	    || r.kind == "confirm_stage_failed" || r.kind == "bad_request")
+		return errors.error(ctx, r.kind, r.message);
 	if (!r.ok)
 		return errors.error(ctx, "internal_error",
 			sprintf("batch returned unknown kind %J", r.kind));
 
-	return {
-		status: 207,
-		headers: { "Content-Type": "application/json",
-		           "X-Request-Id": ctx.request_id },
-		body: { results, request_id: ctx.request_id },
-	};
+	let headers = { "Content-Type": "application/json",
+	                "X-Request-Id": ctx.request_id };
+	let resp_body = { results, request_id: ctx.request_id };
+	// A commit-confirmed batch returns 202 + the armed window (one token for
+	// all packages) instead of the usual 207.
+	if (r.confirm != null) {
+		resp_body.confirm = r.confirm;
+		headers["X-Confirm-Token"] = r.confirm.token;
+		headers["X-Confirm-Deadline"] = "" + r.confirm.deadline;
+		return { status: 202, headers, body: resp_body };
+	}
+	return { status: 207, headers, body: resp_body };
 }
 
 function metrics_response(ctx) {
@@ -614,6 +627,41 @@ function metrics_response(ctx) {
 		           "X-Request-Id": ctx.request_id },
 		body: text,
 	};
+}
+
+// /confirm/* control endpoints: thin passthroughs to the apply-confirm CLI.
+function confirm_ack_response(ctx, tok) {
+	let r = apply_confirm.ac_ack(tok);
+	if (r.ok) return errors.ok(ctx, { confirmed: tok });
+	return errors.error(ctx, r.kind, r.message);
+}
+
+function confirm_rollback_response(ctx, tok) {
+	let r = apply_confirm.ac_rollback(tok);
+	if (r.ok) return errors.ok(ctx, { rolled_back: tok });
+	return errors.error(ctx, r.kind, r.message);
+}
+
+function confirm_status_response(ctx, tok) {
+	let r = apply_confirm.ac_status(tok);
+	if (!r.ok) return errors.error(ctx, r.kind, r.message);
+	let parsed = null;
+	try { parsed = json(r.json); } catch (e) {}
+	if (parsed == null)
+		return errors.error(ctx, "confirm_stage_failed",
+			"apply-confirm status returned unparseable JSON");
+	return errors.ok(ctx, parsed);
+}
+
+function confirm_list_response(ctx) {
+	let r = apply_confirm.ac_list();
+	if (!r.ok) return errors.error(ctx, r.kind, r.message);
+	let parsed = null;
+	try { parsed = json(r.json); } catch (e) {}
+	if (parsed == null)
+		return errors.error(ctx, "confirm_stage_failed",
+			"apply-confirm list returned unparseable JSON");
+	return errors.ok(ctx, parsed);
 }
 
 function diagnostics_response(ctx) {
@@ -728,6 +776,23 @@ function dispatch(env) {
 	}
 	ctx.body_text = body_text;
 	ctx.idempotency_key = env.HTTP_IDEMPOTENCY_KEY ?? qs.idempotency_key ?? null;
+	// Commit-confirmed apply: ?confirm=<seconds> arms an apply-confirm rollback
+	// window on the write. The X-Uapi-Confirm header is also read but uhttpd's
+	// CGI env strips custom headers, so the query form is the portable path (see
+	// the If-Match / Idempotency-Key fallbacks). Cap at 3600 so uapi's
+	// best-effort deadline matches apply-confirm's own max_timeout clamp.
+	ctx.confirm = null;
+	// confirm only modifies a write; ignore the param on reads (a stray
+	// ?confirm= on a GET must not 400).
+	let is_write = (method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE");
+	let confirm_raw = is_write ? (env.HTTP_X_UAPI_CONFIRM ?? qs.confirm ?? null) : null;
+	if (confirm_raw != null && confirm_raw != "") {
+		if (type(confirm_raw) != "string" || !match(confirm_raw, /^[0-9]{1,4}$/)
+		    || int(confirm_raw) < 1 || int(confirm_raw) > 3600)
+			return { ctx, resp: errors.error(ctx, "bad_request",
+				"confirm must be a positive integer 1..3600 (seconds)") };
+		ctx.confirm = int(confirm_raw);
+	}
 	// PATCH with Content-Type: application/json-patch+json switches the
 	// handler from merge-patch (RFC 7396, the default) to RFC 6902 ops.
 	let ctype = env.CONTENT_TYPE ?? "";
@@ -805,6 +870,15 @@ function dispatch(env) {
 
 	let parts = split_path(path);
 
+	// commit-confirm only wraps uci-config transactions. Reject ?confirm= on
+	// the non-uci write endpoints (apk shell-out, /etc/shadow, authorized_keys,
+	// token mint) rather than silently ignoring it and reporting plain success.
+	if (ctx.confirm != null && (parts[0] == "packages" || parts[0] == "tokens"
+	    || (parts[0] == "system" && length(parts) >= 2
+	        && (parts[1] == "password" || parts[1] == "authorized_keys"))))
+		return { ctx, token, resp: errors.error(ctx, "bad_request",
+			"confirm is not supported on this endpoint (uci-config writes only)") };
+
 	if (path == "/metrics") {
 		if (method != "GET")
 			return { ctx, token,
@@ -829,6 +903,45 @@ function dispatch(env) {
 			"reading uapi/diagnostics");
 		if (denied != null) return { ctx, token, resp: denied };
 		return { ctx, token, resp: diagnostics_response(ctx) };
+	}
+
+	if (length(parts) >= 1 && parts[0] == "confirm") {
+		// GET /confirm -> list pending; {GET,POST,DELETE} /confirm/<token> ->
+		// status / ack / rollback. ro for reads, rw for ack+rollback.
+		if (length(parts) == 1) {
+			if (method != "GET")
+				return { ctx, token, resp: errors.error(ctx, "method_not_allowed",
+					"confirm collection only supports GET") };
+			let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "confirm"], "ro",
+				"listing confirm windows");
+			if (denied != null) return { ctx, token, resp: denied };
+			return { ctx, token, resp: confirm_list_response(ctx) };
+		}
+		if (length(parts) == 2) {
+			let tok = parts[1];
+			if (method == "GET") {
+				let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "confirm"], "ro",
+					"reading a confirm window");
+				if (denied != null) return { ctx, token, resp: denied };
+				return { ctx, token, resp: confirm_status_response(ctx, tok) };
+			}
+			if (method == "POST") {
+				let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "confirm"], "rw",
+					"confirming an apply");
+				if (denied != null) return { ctx, token, resp: denied };
+				return { ctx, token, resp: confirm_ack_response(ctx, tok) };
+			}
+			if (method == "DELETE") {
+				let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "confirm"], "rw",
+					"rolling back an apply");
+				if (denied != null) return { ctx, token, resp: denied };
+				return { ctx, token, resp: confirm_rollback_response(ctx, tok) };
+			}
+			return { ctx, token, resp: errors.error(ctx, "method_not_allowed",
+				"confirm token supports GET, POST, DELETE") };
+		}
+		return { ctx, token, resp: errors.error(ctx, "not_found",
+			sprintf("Unknown confirm sub-path %J", path)) };
 	}
 
 	if (length(parts) >= 1 && parts[0] == "auth") {
@@ -1032,9 +1145,14 @@ global.handle_request = function(env) {
 	// Idempotency store: cache 2xx POST responses so a repeated key replays.
 	// Only when the request actually carried a key (not on replay itself, the
 	// replay path returns before metrics/idempotency-store).
+	// 202 = a commit-confirmed write with a live, single-use rollback token.
+	// Caching it would replay a dead token on retry (the window auto-reverts
+	// and closes long before the 24h idempotency TTL) without re-arming, which
+	// silently defeats the retry-after-network-blip case confirm exists for. A
+	// retry of a confirmed write must re-dispatch (re-arm, or 409 already_armed).
 	if (method == "POST" && token != null && ctx != null
 	    && ctx.idempotency_key != null
-	    && resp.status >= 200 && resp.status < 300
+	    && resp.status >= 200 && resp.status < 300 && resp.status != 202
 	    && (resp.headers == null || resp.headers["Idempotent-Replayed"] == null)) {
 		try { idempotency.store(token.name, ctx.idempotency_key,
 		                        ctx.body_text ?? "", resp); }

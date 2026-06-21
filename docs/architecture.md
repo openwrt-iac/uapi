@@ -236,11 +236,12 @@ current ETag doesn't match, return `412 precondition_failed` BEFORE any uci
 write. `If-Match: *` matches any existing resource. Absent header preserves
 last-write-wins (opt-in concurrency).
 
-uhttpd's CGI env strips `If-Match`, `If-None-Match`, `X-Request-Id`, and
-`Idempotency-Key` (hard-coded allowlist in uhttpd source). All four have
-`?if_match=` / `?if_none_match=` / `?request_id=` / `?idempotency_key=`
-query-string fallbacks; a reverse proxy in front of uhttpd that forwards
-the headers still works via the header path.
+uhttpd's CGI env strips `If-Match`, `If-None-Match`, `X-Request-Id`,
+`Idempotency-Key`, and `X-Uapi-Confirm` (hard-coded allowlist in uhttpd
+source). All have query-string fallbacks (`?if_match=` / `?if_none_match=` /
+`?request_id=` / `?idempotency_key=` / `?confirm=`) which are the portable
+interface; a reverse proxy in front of uhttpd that forwards the headers also
+works via the header path.
 
 ## Rate limit token bucket
 
@@ -353,6 +354,16 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
+| Commit-confirm pending window | apply-confirm-owned (its durable state)    | Until ack/timeout |
+
+The commit-confirm pending window (snapshot + deadline) is owned entirely by
+the `apply-confirm` package, not uapi: uapi stages it via the CLI and surfaces
+it read-only through `/confirm`. uapi holds no timer and no persisted confirm
+state. Note the unconfirmed-window lock gap: the per-package flock is released
+when the write's fork exits, so a second normal write to an armed package can
+commit and then be clobbered by the auto-revert. apply-confirm's one-pending-
+apply rule bounds this, and the Terraform provider serializes its own applies;
+see `docs/commit-confirm.md`.
 
 `/tmp` is tmpfs on OpenWrt: rate-limit buckets, idempotency entries, and
 metrics counters reset on reboot. This is acceptable: operational

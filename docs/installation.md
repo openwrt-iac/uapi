@@ -48,6 +48,10 @@ The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`, 
 
 The stable line currently is `1.2.x` (`v2.0.0` is in RC at time of writing). `v1.2.1` stays available indefinitely for operators who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` (or `apk add uapi=1.2.1-r1`) gets you there.
 
+## Optional: commit-confirmed apply
+
+uapi does not depend on it, but installing the `apply-confirm` package enables the safe-apply (commit-confirmed rollback) surface: `apk add apply-confirm`. Without it, an ordinary write works as usual and a write that sets `X-Uapi-Confirm` returns `501 confirm_unavailable`. See `docs/commit-confirm.md`.
+
 ## TLS
 
 uapi inherits TLS from the `main` uhttpd instance. By default OpenWrt ships a self-signed certificate (regenerated at first boot via `px5g`); browsers and curl complain, and over a real network this is **not adequate**. Two well-trodden options on OpenWrt:

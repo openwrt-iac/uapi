@@ -383,6 +383,52 @@ t.describe('handler.patch', () => {
 	});
 });
 
+t.describe('translate_tx commit-confirm 202 shaping', () => {
+	function jctx() { return { request_id: "01hx0000000000000000000000" }; }
+	let armed = { token: "ac_1718900000_a1b2c3d4", timeout: 60, deadline: 1718900060, packages: ["firewall"] };
+
+	t.it('a confirmed write becomes 202 with the token header and confirm body', () => {
+		let resp = handler.translate_tx(jctx(),
+			{ ok: true, body: { id: "r1", target: "ACCEPT" }, confirm: armed });
+		t.assert_equal(resp.status, 202);
+		t.assert_equal(resp.headers["X-Confirm-Token"], "ac_1718900000_a1b2c3d4");
+		t.assert_equal(resp.body.confirm.token, "ac_1718900000_a1b2c3d4");
+	});
+
+	t.it('a confirmed delete (null body) is 202 with the token header AND a synthesized confirm body', () => {
+		let resp = handler.translate_tx(jctx(), { ok: true, body: null, confirm: armed });
+		t.assert_equal(resp.status, 202);
+		t.assert_equal(resp.headers["X-Confirm-Token"], "ac_1718900000_a1b2c3d4");
+		// PendingConfirm schema marks body.confirm required even for DELETE.
+		t.assert_equal(resp.body.confirm.token, "ac_1718900000_a1b2c3d4");
+	});
+
+	t.it('an ordinary write (no confirm) stays 200', () => {
+		let resp = handler.translate_tx(jctx(), { ok: true, body: { id: "r1" } });
+		t.assert_equal(resp.status, 200);
+	});
+});
+
+t.describe('handler commit-confirm threading', () => {
+	function cctx() { return { request_id: "01hx0000000000000000000000", confirm: 60 }; }
+
+	t.it('a confirmed write degrades to 501 when apply-confirm is absent', () => {
+		// ctx.confirm threads handler -> tx_params -> transaction -> run_inner
+		// -> ac_stage; with no binary in the unit env, stage returns
+		// confirm_unavailable and translate_tx maps it to 501.
+		let c = with_zones();
+		let r = rules.create(c, cctx(), { target: 'ACCEPT', match: { src_zone: 'lan' } });
+		t.assert_equal(r.status, 501);
+		t.assert_equal(r.body.code, "confirm_unavailable");
+	});
+
+	t.it('an unconfirmed write is unaffected (no confirm in ctx)', () => {
+		let c = with_zones();
+		let r = rules.create(c, ctx(), { target: 'ACCEPT', match: { src_zone: 'lan' } });
+		t.assert_equal(r.status, 200);
+	});
+});
+
 t.describe('handler.patch JSON Patch write-only secret carry-forward', () => {
 	let wiface_mod = loadfile('src/resources/wireless.interfaces.uc')();
 	let wiface = handler.make(wiface_mod, {
