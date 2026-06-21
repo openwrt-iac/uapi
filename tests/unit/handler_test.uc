@@ -383,6 +383,38 @@ t.describe('handler.patch', () => {
 	});
 });
 
+t.describe('handler.patch JSON Patch write-only secret carry-forward', () => {
+	let wiface_mod = loadfile('src/resources/wireless.interfaces.uc')();
+	let wiface = handler.make(wiface_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function jctx() { return { request_id: "01hx0000000000000000000000", json_patch: true }; }
+	function seeded() {
+		return ubus.stub({ uci: { wireless: {
+			w1: { '.type': 'wifi-iface', '.anonymous': false,
+			      device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'secretpw' },
+		} } });
+	}
+
+	t.it('a JSON Patch that does not touch the masked key preserves it (no spurious key-required 422)', () => {
+		let c = seeded();
+		let r = wiface.patch(c, jctx(), 'w1', [ { op: 'replace', path: '/ssid', value: 'home2' } ]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.ssid, 'home2');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'secretpw');
+	});
+
+	t.it('a JSON Patch that sets a new key is not clobbered by carry-forward', () => {
+		let c = seeded();
+		let r = wiface.patch(c, jctx(), 'w1', [ { op: 'add', path: '/key', value: 'newsecret' } ]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
+	});
+});
+
 t.describe('handler.adopt', () => {
 	function with_anon() {
 		let c = with_zones();

@@ -397,7 +397,7 @@ function diff_apply_patch(c, p, id, old_opts, new_opts) {
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
 // check only the delta. Returns either { ok: true, merged, schema_body } or
 // an error result that the caller short-circuits with.
-function apply_patch_body(existing, existing_view, body, ctx, merge_fn) {
+function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource) {
 	if (ctx != null && ctx.json_patch == true) {
 		let jp = jsonpatch.apply(existing_view, body);
 		if (!jp.ok) {
@@ -409,7 +409,21 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn) {
 			           sprintf("[%d]", jp.op_index ?? 0),
 			           "invalid_format", jp.message)] };
 		}
-		return { ok: true, merged: jp.value, schema_body: jp.value };
+		// Carry forward write-only secrets the masked read view hid, unless the
+		// patch explicitly set one. The merge-patch path does this inside each
+		// resource's merge_for_patch; the JSON Patch post-image is built from
+		// existing_view (which exposes has_key, not key), so without this a
+		// patch that does not touch the secret drops it and trips conditional-
+		// required validation (e.g. encryption=psk2 needs key). The post[k]==null
+		// guard keeps a patch-supplied new secret intact.
+		let post = jp.value;
+		let sp = (resource != null) ? resource.schema_properties : null;
+		if (type(sp) == "object")
+			for (let k in sp)
+				if (type(sp[k]) == "object" && sp[k].writeOnly
+				    && post[k] == null && existing[k] != null)
+					post[k] = existing[k];
+		return { ok: true, merged: post, schema_body: post };
 	}
 	return { ok: true, merged: merge_fn(existing, existing_view, body),
 	         schema_body: body };
@@ -590,7 +604,7 @@ function make(resource, opts) {
 					         message: pc.body.message };
 
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
-				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn);
+				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
@@ -755,7 +769,7 @@ function make_singleton(resource, opts) {
 					for (let k in b) merged[k] = b[k];
 					return merged;
 				};
-				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge);
+				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);

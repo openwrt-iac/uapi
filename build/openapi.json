@@ -20749,8 +20749,7 @@
 					}
 				},
 				"required": [
-					"name",
-					"type"
+					"name"
 				],
 				"allOf": [
 					{
@@ -21173,8 +21172,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[A-Za-z]{2}$",
-						"description": "ISO 3166-1 alpha-2 regulatory country code"
+						"pattern": "^([A-Za-z]{2}|00)$",
+						"description": "ISO 3166-1 alpha-2 regulatory country code, or \"00\" for the world/global domain (stock 6 GHz default)"
 					},
 					"txpower": {
 						"type": [
@@ -21245,6 +21244,7 @@
 						"enum": [
 							"none",
 							"wep",
+							"owe",
 							"psk",
 							"psk2",
 							"psk-mixed",
