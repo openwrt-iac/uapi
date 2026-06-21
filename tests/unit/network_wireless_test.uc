@@ -47,6 +47,15 @@ t.describe('network.devices', () => {
 		let te = filter(errs, function(e) { return e.field == "type"; });
 		t.assert_equal(te[0].code, 'not_in_enum');
 	});
+
+	t.it('validate accepts a type-less options-override section (stock macaddr override)', () => {
+		// config_generate emits anonymous `config device` sections with only
+		// name + macaddr on some targets; requiring type would be stricter
+		// than the platform.
+		let errs = full_validate(netdev, { name: 'wan', macaddr: '00:11:22:33:44:55' }, null);
+		let te = filter(errs, function(e) { return e.field == "type"; });
+		t.assert_equal(length(te), 0);
+	});
 });
 
 t.describe('wireless.devices', () => {
@@ -65,6 +74,18 @@ t.describe('wireless.devices', () => {
 		let errs = widev.validate({ type: 'mac80211', band: 'fictional' }, null);
 		let be = filter(errs, function(e) { return e.field == "band"; });
 		t.assert_equal(be[0].code, 'not_in_enum');
+	});
+
+	t.it('fromUci coerces empty country to null (stock x86 ships country="")', () => {
+		let r = widev.fromUci({ '.name': 'radio0', '.anonymous': false, '.type': 'wifi-device',
+		                        type: 'mac80211', band: '2g', country: '' });
+		t.assert_equal(r.country, null);
+	});
+
+	t.it('schema accepts "00" world regulatory domain (stock 6g default)', () => {
+		let errs = full_validate(widev, { type: 'mac80211', band: '6g', country: '00' }, null);
+		let ce = filter(errs, function(e) { return e.field == "country"; });
+		t.assert_equal(length(ce), 0);
 	});
 });
 
@@ -101,6 +122,14 @@ t.describe('wireless.interfaces', () => {
 	t.it('validate accepts open encryption without a key', () => {
 		let errs = wiface.validate({ device: 'radio0', ssid: 'open', encryption: 'none' }, null);
 		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('validate accepts owe encryption without a key (keyless; stock 6g default)', () => {
+		let errs = full_validate(wiface, { device: 'radio0', ssid: 'mesh6', encryption: 'owe' }, null);
+		let ke = filter(errs, function(e) { return e.field == "key"; });
+		let ee = filter(errs, function(e) { return e.field == "encryption"; });
+		t.assert_equal(length(ke), 0);
+		t.assert_equal(length(ee), 0);
 	});
 
 	t.it('merge_for_patch carries forward the existing key when the body omits it', () => {

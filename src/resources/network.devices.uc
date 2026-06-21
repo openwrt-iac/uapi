@@ -49,8 +49,14 @@ function validate(json) {
 	if (json.name == null || json.name == "")
 		push(errs, { field: "name", code: "required", message: "is required" });
 
-	if (json.type == null || json.type == "")
-		push(errs, { field: "type", code: "required", message: "is required" });
+	// type is optional: a `config device` section with only name + options
+	// (e.g. a macaddr/mtu override on an existing kernel device) is valid uci
+	// and is exactly what config_generate emits for per-device macaddr on some
+	// targets. Requiring type would be stricter than the platform. Validate the
+	// enum only when a type is actually present.
+	if (json.type != null && json.type != "" && !VALID_TYPES[json.type])
+		push(errs, { field: "type", code: "not_in_enum",
+		             message: "must be one of bridge, 8021q, 8021ad, macvlan, veth, tun, tap" });
 
 	if (json.type == "8021q" && (json.vid == null || json.vid == ""))
 		push(errs, { field: "vid", code: "required",
@@ -68,7 +74,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	openapi_singular: "network device",
-	openapi_required: ["name", "type"],
+	openapi_required: ["name"],
 	openapi_conditional: [
 		{ if:   { properties: { type: { const: "8021q" } }, required: ["type"] },
 		  then: { required: ["vid"] } },

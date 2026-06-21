@@ -15,7 +15,9 @@ function fromUci(section) {
 		channel: (section.channel == "auto" || section.channel == null)
 		         ? section.channel : as_int(section.channel),
 		htmode: section.htmode ?? null,
-		country: section.country ?? null,
+		// Stock x86 ships country='' (unset); coerce empty to null so the read
+		// view is clean and the country pattern check below never sees ''.
+		country: (section.country == null || section.country == "") ? null : section.country,
 		txpower: as_int(section.txpower),
 		disabled: normalize_bool(section.disabled, false),
 		runtime: {},
@@ -72,8 +74,8 @@ return {
 		            description: "Channel number (0-196) or the string \"auto\"" },
 		htmode:   { type: ["string", "null"],
 		            description: "HT/VHT/HE mode label (e.g. HT20, VHT80, HE160)" },
-		country:  { type: ["string", "null"], pattern: "^[A-Za-z]{2}$",
-		            description: "ISO 3166-1 alpha-2 regulatory country code" },
+		country:  { type: ["string", "null"], pattern: "^([A-Za-z]{2}|00)$",
+		            description: "ISO 3166-1 alpha-2 regulatory country code, or \"00\" for the world/global domain (stock 6 GHz default)" },
 		txpower:  { type: ["integer", "null"], minimum: 0, maximum: 30,
 		            description: "TX power in dBm" },
 		disabled: { type: "boolean", default: false,

@@ -5,11 +5,14 @@ const VALID_MODES = {
 	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true,
 };
 const VALID_ENCRYPTION = {
-	"none": true, "wep": true,
+	"none": true, "wep": true, "owe": true,
 	"psk": true, "psk2": true, "psk-mixed": true,
 	"sae": true, "sae-mixed": true,
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
 };
+// Encryption modes that take no passphrase. owe (Opportunistic Wireless
+// Encryption) is keyless and is the stock default on 6 GHz radios.
+const NO_KEY_ENCRYPTION = { "none": true, "wep": true, "owe": true };
 
 function lookup_ifname(conn, section_name) {
 	let status = null;
@@ -106,7 +109,7 @@ function validate(json) {
 		push(errs, { field: "encryption", code: "not_in_enum",
 		             message: "unknown encryption value" });
 
-	let needs_key = json.encryption != null && json.encryption != "none" && json.encryption != "wep";
+	let needs_key = json.encryption != null && !NO_KEY_ENCRYPTION[json.encryption];
 	if (needs_key && (json.key == null || json.key == ""))
 		push(errs, { field: "key", code: "required",
 		             message: sprintf("is required when encryption is %J", json.encryption) });
