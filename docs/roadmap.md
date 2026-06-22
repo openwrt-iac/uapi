@@ -97,16 +97,27 @@ endpoint under Features below.
   are per-resource and one package backs many (`network` backs 7 scopes,
   `firewall` 5, `dhcp` 6), so package-granularity authz is the only way the
   deadline auto-revert cannot restore a resource the caller could not write.
-  New endpoint, so a minor bump (2.4.0+), not a 2.3.x patch. Defer the merge
+  Corollary for operators: the wrap token is necessarily broader than the
+  apply it guards (wrapping a `network:routes`-only apply needs `:rw` on all
+  7 `network`-backed resources, since the revert can restore any of them), so
+  the guide must say "mint the wrap token at package granularity" or a narrow
+  token gets a confusing 403 on arm. New endpoint, so a minor bump (2.4.0+),
+  not a 2.3.x patch. Defer the merge
   until `apply-confirm` is feed-stable and a concrete consumer asks: the
   provider stays Option A (write path untouched) and the wrap is operator-
-  driven. Two residual hazards want a reference wrapper-with-ack/rollback-trap
-  shipped alongside, not prose alone: the box-global single-pending lock is
-  held for a whole apply (serializing other operators, per-write confirms,
-  LuCI, and parallel CI), and a forgotten ack reverts the entire armed package
-  to its arm-time snapshot, silently undoing sibling-resource changes a
-  partially-failed apply already committed. Origin: terraform-provider-uapi
-  integration feedback.
+  driven. Two residual hazards want a reference wrapper-with-ack/rollback-trap,
+  owned by the provider repo (the concrete consumer), not prose alone: the
+  box-global single-pending lock is held for a whole apply (serializing other
+  operators, per-write confirms, LuCI, and parallel CI, so no parallel CI
+  against one box), and a forgotten ack reverts the entire armed package to its
+  arm-time snapshot, silently undoing sibling-resource changes a partially-
+  failed apply already committed. The wrapper's ack-vs-rollback must key on
+  management-path reachability, not `terraform apply`'s exit code: a partial
+  failure where the box is still reachable should ack (Terraform has already
+  recorded the resources that succeeded, so acking keeps the box consistent
+  with state); only an unreachable box should be left to auto-revert (`apply;
+  if reachable then ack else let-expire`, never `if exit 0 then ack`). Origin:
+  terraform-provider-uapi integration feedback.
 - **Webhooks / change notifications.** Push notification to a configured
   URL after a successful write. Needs reliable retry + dead-letter queue;
   likely needs a sidecar. Defer until there's a concrete subscriber.
