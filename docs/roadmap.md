@@ -73,11 +73,40 @@ The original v2-planning analysis, kept for context:
 > to solve.
 
 The webhook-on-revert refinement (push a rollback notification to the client)
-and the fully-synchronous "stage-and-test" pattern remain open as future
-enhancements, not requirements.
+remains open as a future enhancement, not a requirement. The fully-synchronous
+"stage-and-test" pattern is now specified concretely as a standalone HTTP arm
+endpoint under Features below.
 
 ## Features (additive, future minor bumps in v2.x)
 
+- **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
+  `?confirm` shipped in 2.3.0 cannot wrap a whole `terraform apply`: a DAG
+  apply is N isolated provider RPCs with no apply-level begin/end hook, and
+  each `?confirm` mints a separate last-writer-wins window, so they never
+  merge into one transaction. The Terraform-useful shape is apply-confirm's
+  `stage` primitive (arm once over a package set, ack once after the apply)
+  exposed over HTTP, so a wrapper can arm, run the apply, then ack or let it
+  auto-revert with no SSH hop. `ac_stage` already exists and the bare
+  `POST /confirm` slot is free (currently 405). Locked design constraints if
+  built: the body names curated **resources/scopes, never raw packages**, and
+  uapi derives the package set and reload-service union from `RESOURCE_SOURCES`
+  (the same fold `/batch` does), which keeps the union correct-by-construction
+  and client strings out of the shell. Authz requires `uapi:confirm:rw` **and**
+  `:rw` on every curated resource backed by the *derived* package set, not just
+  the resources named: apply-confirm reverts whole uci packages while scopes
+  are per-resource and one package backs many (`network` backs 7 scopes,
+  `firewall` 5, `dhcp` 6), so package-granularity authz is the only way the
+  deadline auto-revert cannot restore a resource the caller could not write.
+  New endpoint, so a minor bump (2.4.0+), not a 2.3.x patch. Defer the merge
+  until `apply-confirm` is feed-stable and a concrete consumer asks: the
+  provider stays Option A (write path untouched) and the wrap is operator-
+  driven. Two residual hazards want a reference wrapper-with-ack/rollback-trap
+  shipped alongside, not prose alone: the box-global single-pending lock is
+  held for a whole apply (serializing other operators, per-write confirms,
+  LuCI, and parallel CI), and a forgotten ack reverts the entire armed package
+  to its arm-time snapshot, silently undoing sibling-resource changes a
+  partially-failed apply already committed. Origin: terraform-provider-uapi
+  integration feedback.
 - **Webhooks / change notifications.** Push notification to a configured
   URL after a successful write. Needs reliable retry + dead-letter queue;
   likely needs a sidecar. Defer until there's a concrete subscriber.
