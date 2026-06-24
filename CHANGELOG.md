@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 - (Reserved for next-cycle changes.)
 
-## [2.3.0-rc1] - 2026-06-22
+## [2.3.0] - 2026-06-24
 
 Surfaces the known scope tree through a sanctioned interface so external consumers (the upcoming `luci-app-uapi` LuCI frontend, fleet inventory tools, anything that wants to render a scope picker) can enumerate valid scopes without parsing `src/lib/scope.uc` or hardcoding a copy. Closes [openwrt-iac/uapi#5](https://github.com/openwrt-iac/uapi/issues/5). Also plumbs per-token `rate` / `burst` overrides through the mint surfaces, closing a "planned for v2.x" gap that has been carried in `docs/tokens.md` since 2.0.
 
