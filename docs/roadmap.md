@@ -49,33 +49,45 @@ Items that are interesting but conflict with an architectural principle or
 have an unresolved design question. Not "later"; "later if the right shape
 appears".
 
-### `commit-confirmed` timed rollback (shipped 2.3.0)
+### `commit-confirmed` timed rollback (built, deferred from 2.3.0)
 
-Resolved by the sidecar path (option 1 below), built as a separate package
-(`apply-confirm`) so uapi gains no daemon of its own; uapi integrates by
-invoking its CLI. See `docs/commit-confirm.md`. The original
-state-divergence objection ("the router reverts but Terraform thinks it's OK")
-is handled by making the ack client-driven: a confirmed write returns 202 + a
-token, and the client confirms only after verifying reachability. If the client
-never sees the response, it also never acks, so its own apply is not marked
-complete; the auto-revert and the client's view stay consistent.
-
-Sequencing: the wire surface ships in 2.3.0 but the 2.3.0 tag is held until
-`apply-confirm` reaches a stable, feed-published release (it is a safety
-primitive that soaks RC-first). The integration is optional and
-feature-detected, so an install without apply-confirm is unaffected.
-
-The original v2-planning analysis, kept for context:
+Built and validated, then deferred out of 2.3.0 stable. The sidecar path
+won: a separate package (`apply-confirm`) owns the durable rollback timer
+and snapshot state so uapi gains no daemon of its own; uapi integrates by
+invoking its CLI. A confirmed write returns `202` + a token via per-write
+`?confirm=<seconds>`, and the ack is client-driven, which resolves the
+original state-divergence objection (the client acks only after verifying
+reachability, so a lost response prevents both the ack and the client
+marking its own apply complete):
 
 > If the router gets no confirmation because of a network temporary issue
 > between the router and Terraform, it reverts, but Terraform thinks it's
 > OK. That state-divergence is worse than the original race we're trying
 > to solve.
 
-The webhook-on-revert refinement (push a rollback notification to the client)
-remains open as a future enhancement, not a requirement. The fully-synchronous
-"stage-and-test" pattern is now specified concretely as a standalone HTTP arm
-endpoint under Features below.
+The full per-write surface shipped in 2.3.0-rc1 and was soaked on live
+hardware, then removed before stable (recoverable from commit `a85a5cd`).
+Why deferred rather than shipped:
+
+- No first-party consumer: the Terraform provider ships 2.3.0 without
+  consuming confirm, so the surface would enter a permanent v2 contract
+  with nothing exercising it.
+- The authz model is unsettled and freezing it would cost a major bump to
+  fix. Per-write arming currently rides the write's own resource `:rw` with
+  no `uapi:confirm` requirement, and ack/rollback are window-agnostic (a
+  `uapi:confirm:rw` token can ack any window); the package-granularity
+  escalation analysis (a per-write arm snapshots and reverts the whole uci
+  package, not just the resource written) suggests these may need to change.
+  Committing them to v2 now forecloses that without a 3.0.0.
+
+The dependency is not the blocker: `apply-confirm` 0.1.0 is released and on
+the apk feed. The hold is the wire-contract commitment.
+
+Plan: ship the whole feature once, coherently, in a 2.4.0 (per-write
+`?confirm` plus the standalone `POST /confirm` arm under Features below,
+with one reviewed authz model), gated on a settled authz model and a
+concrete consumer. Design reference: `docs/commit-confirm.md`.
+
 
 ## Features (additive, future minor bumps in v2.x)
 

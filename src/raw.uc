@@ -96,22 +96,7 @@ function build_response_body(view, reload_info) {
 }
 
 function translate_raw_tx(ctx, result) {
-	if (result.ok) {
-		let resp = errors.ok(ctx, result.body);
-		// Commit-confirmed raw write: 202 + armed window (mirrors handler.translate_tx).
-		if (result.confirm != null) {
-			resp.status = 202;
-			if (type(resp.body) != "object") resp.body = {};
-			resp.body.confirm = result.confirm;
-			resp.headers["X-Confirm-Token"] = result.confirm.token;
-			resp.headers["X-Confirm-Deadline"] = "" + result.confirm.deadline;
-		}
-		return resp;
-	}
-	if (result.kind == "confirm_unavailable" || result.kind == "already_armed"
-	    || result.kind == "confirm_window_closed" || result.kind == "confirm_stage_failed"
-	    || result.kind == "rollback_reload_failed" || result.kind == "bad_request")
-		return errors.error(ctx, result.kind, result.message);
+	if (result.ok) return errors.ok(ctx, result.body);
 	if (result.kind == "locked")
 		return errors.locked_from(ctx, null, result);
 	if (result.kind == "lock_unavailable")
@@ -206,7 +191,6 @@ function create(conn, ctx, scopes, pkg, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		confirm: ctx.confirm,
 		fn: function(c, p) {
 			if (client_supplied_id && load_section(c, p, new_id) != null)
 				return { ok: false, kind: "conflict",
@@ -249,7 +233,6 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		confirm: ctx.confirm,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
 			if (!existing)
@@ -297,7 +280,6 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		confirm: ctx.confirm,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
 			if (!existing)
@@ -327,7 +309,6 @@ function remove(conn, ctx, scopes, pkg, id) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		confirm: ctx.confirm,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
 			if (!existing)
@@ -337,10 +318,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 			return { ok: true, body: null };
 		},
 	});
-	// A confirmed delete armed a window; route through translate_raw_tx so the
-	// 202 + X-Confirm-Token reaches the client instead of a bare 204 that drops
-	// the token and silently auto-reverts at the deadline (cf. handler.uc remove).
-	if (result.ok && result.confirm == null) return errors.no_content(ctx);
+	if (result.ok) return errors.no_content(ctx);
 	return translate_raw_tx(ctx, result);
 }
 
@@ -351,7 +329,6 @@ return {
 	replace,
 	patch,
 	remove,
-	translate_raw_tx,
 	inferred_domain_path,
 	TYPE_DOMAIN_MAP,
 };

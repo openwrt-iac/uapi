@@ -68,7 +68,6 @@ const KNOWN_PATHS = {
 	"uapi:tokens": true,
 	"uapi:metrics": true,
 	"uapi:diagnostics": true,
-	"uapi:confirm": true,
 	"raw": true,
 };
 
