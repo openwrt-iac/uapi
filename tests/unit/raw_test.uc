@@ -172,26 +172,3 @@ t.describe('raw permission composition for writes', () => {
 		t.assert_equal(r.status, 403);
 	});
 });
-
-t.describe('raw.translate_raw_tx commit-confirm 202 shaping', () => {
-	function jctx() { return { request_id: "01hx0000000000000000000000" }; }
-	let armed = { token: "ac_1718900000_a1b2c3d4", timeout: 60, deadline: 1718900060, packages: ["firewall"] };
-
-	t.it('a confirmed raw write becomes 202 with the token header and confirm body', () => {
-		let r = raw.translate_raw_tx(jctx(), { ok: true, body: { id: "r1" }, confirm: armed });
-		t.assert_equal(r.status, 202);
-		t.assert_equal(r.headers["X-Confirm-Token"], "ac_1718900000_a1b2c3d4");
-		t.assert_equal(r.body.confirm.token, "ac_1718900000_a1b2c3d4");
-	});
-
-	t.it('a confirmed raw delete (null body) still carries the confirm block', () => {
-		let r = raw.translate_raw_tx(jctx(), { ok: true, body: null, confirm: armed });
-		t.assert_equal(r.status, 202);
-		t.assert_equal(r.body.confirm.token, "ac_1718900000_a1b2c3d4");
-	});
-
-	t.it('confirm error kinds map to their status (confirm_unavailable -> 501)', () => {
-		let r = raw.translate_raw_tx(jctx(), { ok: false, kind: "confirm_unavailable", message: "x" });
-		t.assert_equal(r.status, 501);
-	});
-});

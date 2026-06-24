@@ -243,10 +243,6 @@
 		{
 			"name": "Operational / Batch",
 			"description": "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success."
-		},
-		{
-			"name": "Operational / Commit-confirm",
-			"description": "Confirm or roll back a commit-confirmed apply (apply-confirm). Requires the apply-confirm package."
 		}
 	],
 	"x-tagGroups": [
@@ -352,8 +348,7 @@
 				"Operational / Schema discovery",
 				"Operational / Metrics",
 				"Operational / Diagnostics",
-				"Operational / Batch",
-				"Operational / Commit-confirm"
+				"Operational / Batch"
 			]
 		}
 	],
@@ -505,16 +500,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Rules"
 				]
@@ -658,16 +645,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Rules"
 				]
@@ -748,16 +727,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Rules"
 				]
@@ -811,16 +782,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Rules"
 				]
@@ -901,16 +864,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Rules"
 				]
@@ -1057,16 +1012,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Zones"
 				]
@@ -1210,16 +1157,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Zones"
 				]
@@ -1300,16 +1239,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Zones"
 				]
@@ -1363,16 +1294,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Zones"
 				]
@@ -1453,16 +1376,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Zones"
 				]
@@ -1609,16 +1524,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Redirects"
 				]
@@ -1762,16 +1669,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Redirects"
 				]
@@ -1852,16 +1751,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Redirects"
 				]
@@ -1915,16 +1806,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Redirects"
 				]
@@ -2005,16 +1888,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Redirects"
 				]
@@ -2161,16 +2036,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Forwardings"
 				]
@@ -2314,16 +2181,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Forwardings"
 				]
@@ -2404,16 +2263,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Forwardings"
 				]
@@ -2467,16 +2318,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Forwardings"
 				]
@@ -2557,16 +2400,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Forwardings"
 				]
@@ -2704,16 +2539,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Firewall / Defaults"
 				]
@@ -2860,16 +2687,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Interfaces"
 				]
@@ -3013,16 +2832,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Interfaces"
 				]
@@ -3103,16 +2914,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Interfaces"
 				]
@@ -3166,16 +2969,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Interfaces"
 				]
@@ -3256,16 +3051,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Interfaces"
 				]
@@ -3412,16 +3199,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Devices"
 				]
@@ -3565,16 +3344,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Devices"
 				]
@@ -3655,16 +3426,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Devices"
 				]
@@ -3718,16 +3481,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Devices"
 				]
@@ -3808,16 +3563,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Devices"
 				]
@@ -3964,16 +3711,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Routes"
 				]
@@ -4117,16 +3856,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Routes"
 				]
@@ -4207,16 +3938,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Routes"
 				]
@@ -4270,16 +3993,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Routes"
 				]
@@ -4360,16 +4075,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Routes"
 				]
@@ -4516,16 +4223,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Rules"
 				]
@@ -4669,16 +4368,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Rules"
 				]
@@ -4759,16 +4450,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Rules"
 				]
@@ -4822,16 +4505,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Rules"
 				]
@@ -4912,16 +4587,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Rules"
 				]
@@ -5068,16 +4735,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Bridge Vlans"
 				]
@@ -5221,16 +4880,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Bridge Vlans"
 				]
@@ -5311,16 +4962,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Bridge Vlans"
 				]
@@ -5374,16 +5017,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Bridge Vlans"
 				]
@@ -5464,16 +5099,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Bridge Vlans"
 				]
@@ -5620,16 +5247,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Wireguard Peers"
 				]
@@ -5773,16 +5392,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Wireguard Peers"
 				]
@@ -5863,16 +5474,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Wireguard Peers"
 				]
@@ -5926,16 +5529,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Wireguard Peers"
 				]
@@ -6016,16 +5611,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Network / Wireguard Peers"
 				]
@@ -6172,16 +5759,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Devices"
 				]
@@ -6325,16 +5904,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Devices"
 				]
@@ -6415,16 +5986,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Devices"
 				]
@@ -6478,16 +6041,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Devices"
 				]
@@ -6568,16 +6123,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Devices"
 				]
@@ -6724,16 +6271,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Interfaces"
 				]
@@ -6877,16 +6416,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Interfaces"
 				]
@@ -6967,16 +6498,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Interfaces"
 				]
@@ -7030,16 +6553,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Interfaces"
 				]
@@ -7120,16 +6635,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Wireless / Interfaces"
 				]
@@ -7276,16 +6783,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Hosts"
 				]
@@ -7429,16 +6928,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Hosts"
 				]
@@ -7519,16 +7010,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Hosts"
 				]
@@ -7582,16 +7065,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Hosts"
 				]
@@ -7672,16 +7147,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Hosts"
 				]
@@ -8044,16 +7511,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Servers"
 				]
@@ -8197,16 +7656,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Servers"
 				]
@@ -8287,16 +7738,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Servers"
 				]
@@ -8350,16 +7793,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Servers"
 				]
@@ -8440,16 +7875,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Servers"
 				]
@@ -8587,16 +8014,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Dnsmasq"
 				]
@@ -8734,16 +8153,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dhcp / Odhcpd"
 				]
@@ -8881,16 +8292,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System"
 				]
@@ -9037,16 +8440,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System / Timeservers"
 				]
@@ -9190,16 +8585,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System / Timeservers"
 				]
@@ -9280,16 +8667,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System / Timeservers"
 				]
@@ -9343,16 +8722,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System / Timeservers"
 				]
@@ -9433,16 +8804,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"System / Timeservers"
 				]
@@ -9589,16 +8952,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dropbear / Instances"
 				]
@@ -9742,16 +9097,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dropbear / Instances"
 				]
@@ -9832,16 +9179,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dropbear / Instances"
 				]
@@ -9895,16 +9234,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dropbear / Instances"
 				]
@@ -9985,16 +9316,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Dropbear / Instances"
 				]
@@ -10141,16 +9464,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Instances"
 				]
@@ -10294,16 +9609,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Instances"
 				]
@@ -10384,16 +9691,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Instances"
 				]
@@ -10447,16 +9746,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Instances"
 				]
@@ -10537,16 +9828,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Instances"
 				]
@@ -10693,16 +9976,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Certs"
 				]
@@ -10846,16 +10121,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Certs"
 				]
@@ -10936,16 +10203,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Certs"
 				]
@@ -10999,16 +10258,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Certs"
 				]
@@ -11089,16 +10340,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Uhttpd / Certs"
 				]
@@ -11236,16 +10479,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Unbound / Server"
 				]
@@ -11383,16 +10618,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Unbound / Srv"
 				]
@@ -11530,16 +10757,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Unbound / Ext"
 				]
@@ -11686,16 +10905,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Sqm / Queues"
 				]
@@ -11839,16 +11050,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Sqm / Queues"
 				]
@@ -11929,16 +11132,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Sqm / Queues"
 				]
@@ -11992,16 +11187,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Sqm / Queues"
 				]
@@ -12082,16 +11269,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Sqm / Queues"
 				]
@@ -12238,16 +11417,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Agents"
 				]
@@ -12391,16 +11562,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Agents"
 				]
@@ -12481,16 +11644,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Agents"
 				]
@@ -12544,16 +11699,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Agents"
 				]
@@ -12634,16 +11781,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Agents"
 				]
@@ -12790,16 +11929,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Com2secs"
 				]
@@ -12943,16 +12074,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Com2secs"
 				]
@@ -13033,16 +12156,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Com2secs"
 				]
@@ -13096,16 +12211,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Com2secs"
 				]
@@ -13186,16 +12293,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Com2secs"
 				]
@@ -13342,16 +12441,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Groups"
 				]
@@ -13495,16 +12586,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Groups"
 				]
@@ -13585,16 +12668,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Groups"
 				]
@@ -13648,16 +12723,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Groups"
 				]
@@ -13738,16 +12805,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Groups"
 				]
@@ -13894,16 +12953,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Accesses"
 				]
@@ -14047,16 +13098,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Accesses"
 				]
@@ -14137,16 +13180,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Accesses"
 				]
@@ -14200,16 +13235,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Accesses"
 				]
@@ -14290,16 +13317,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / Accesses"
 				]
@@ -14437,16 +13456,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Snmpd / System"
 				]
@@ -14584,16 +13595,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Lldpd / Config"
 				]
@@ -14731,16 +13734,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Prometheus Node Exporter Lua / Config"
 				]
@@ -14878,16 +13873,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Config"
 				]
@@ -15034,16 +14021,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Interfaces"
 				]
@@ -15187,16 +14166,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Interfaces"
 				]
@@ -15277,16 +14248,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Interfaces"
 				]
@@ -15340,16 +14303,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Interfaces"
 				]
@@ -15430,16 +14385,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Vnstat / Interfaces"
 				]
@@ -15577,16 +14524,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Globals"
 				]
@@ -15733,16 +14672,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Interfaces"
 				]
@@ -15886,16 +14817,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Interfaces"
 				]
@@ -15976,16 +14899,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Interfaces"
 				]
@@ -16039,16 +14954,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Interfaces"
 				]
@@ -16129,16 +15036,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Interfaces"
 				]
@@ -16285,16 +15184,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Members"
 				]
@@ -16438,16 +15329,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Members"
 				]
@@ -16528,16 +15411,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Members"
 				]
@@ -16591,16 +15466,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Members"
 				]
@@ -16681,16 +15548,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Members"
 				]
@@ -16837,16 +15696,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Policies"
 				]
@@ -16990,16 +15841,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Policies"
 				]
@@ -17080,16 +15923,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Policies"
 				]
@@ -17143,16 +15978,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Policies"
 				]
@@ -17233,16 +16060,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Policies"
 				]
@@ -17389,16 +16208,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Rules"
 				]
@@ -17542,16 +16353,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Rules"
 				]
@@ -17632,16 +16435,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Rules"
 				]
@@ -17695,16 +16490,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Rules"
 				]
@@ -17785,16 +16572,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Mwan3 / Rules"
 				]
@@ -17932,16 +16711,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Usteer / Config"
 				]
@@ -18088,16 +16859,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Openvpn / Instances"
 				]
@@ -18241,16 +17004,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Openvpn / Instances"
 				]
@@ -18331,16 +17086,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Openvpn / Instances"
 				]
@@ -18394,16 +17141,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Openvpn / Instances"
 				]
@@ -18484,16 +17223,8 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"$ref": "#/components/responses/PendingConfirm"
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Openvpn / Instances"
 				]
@@ -20409,354 +19140,16 @@
 					},
 					"423": {
 						"$ref": "#/components/responses/Locked"
-					},
-					"202": {
-						"description": "Accepted: every sub-request succeeded and a commit-confirmed rollback is armed over all touched packages. (x-uapi-requires: apply-confirm)",
-						"x-uapi-requires": "apply-confirm",
-						"headers": {
-							"X-Confirm-Token": {
-								"description": "The armed rollback token; pass to /confirm/{token}.",
-								"schema": {
-									"type": "string",
-									"pattern": "^ac_[0-9]+_[0-9a-f]{8}$"
-								}
-							},
-							"X-Confirm-Deadline": {
-								"description": "Best-effort unix epoch of auto-rollback.",
-								"schema": {
-									"type": "integer"
-								}
-							}
-						},
-						"content": {
-							"application/json": {
-								"schema": {
-									"allOf": [
-										{
-											"$ref": "#/components/schemas/BatchResponse"
-										},
-										{
-											"type": "object",
-											"required": [
-												"confirm"
-											],
-											"properties": {
-												"confirm": {
-													"$ref": "#/components/schemas/ConfirmWindow"
-												}
-											}
-										}
-									]
-								}
-							}
-						}
 					}
 				},
-				"parameters": [
-					{
-						"$ref": "#/components/parameters/Confirm"
-					}
-				],
 				"tags": [
 					"Operational / Batch"
-				]
-			}
-		},
-		"/confirm": {
-			"get": {
-				"summary": "List pending confirm windows",
-				"description": "Passthrough to `apply-confirm list --json`. Scope: uapi:confirm:ro (or *:ro). Requires the apply-confirm package. (x-uapi-requires: apply-confirm)",
-				"x-uapi-requires": "apply-confirm",
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/ConfirmWindow"
-									}
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Operational / Commit-confirm"
-				]
-			}
-		},
-		"/confirm/{token}": {
-			"parameters": [
-				{
-					"name": "token",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string",
-						"pattern": "^ac_[0-9]+_[0-9a-f]{8}$"
-					}
-				}
-			],
-			"get": {
-				"summary": "Status of a pending confirm window",
-				"description": "Passthrough to `apply-confirm status <token> --json` (authoritative remaining time). Scope: uapi:confirm:ro. (x-uapi-requires: apply-confirm)",
-				"x-uapi-requires": "apply-confirm",
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ConfirmWindow"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Operational / Commit-confirm"
-				]
-			},
-			"post": {
-				"summary": "Confirm (ack) a pending apply",
-				"description": "Acks the window so the change is NOT rolled back. Scope: uapi:confirm:rw. 409 confirm_window_closed if the window already expired or closed. (x-uapi-requires: apply-confirm)",
-				"x-uapi-requires": "apply-confirm",
-				"responses": {
-					"200": {
-						"description": "Confirmed",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "object",
-									"properties": {
-										"confirmed": {
-											"type": "string"
-										}
-									}
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"Idempotent-Replayed": {
-								"$ref": "#/components/headers/IdempotentReplayed"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Operational / Commit-confirm"
-				]
-			},
-			"delete": {
-				"summary": "Roll back a pending apply now",
-				"description": "Restores the snapshot immediately (early/forced revert). Scope: uapi:confirm:rw. (x-uapi-requires: apply-confirm)",
-				"x-uapi-requires": "apply-confirm",
-				"responses": {
-					"200": {
-						"description": "Rolled back",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "object",
-									"properties": {
-										"rolled_back": {
-											"type": "string"
-										}
-									}
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Operational / Commit-confirm"
 				]
 			}
 		}
 	},
 	"components": {
 		"schemas": {
-			"ConfirmWindow": {
-				"type": "object",
-				"required": [
-					"token",
-					"timeout",
-					"deadline",
-					"packages"
-				],
-				"description": "An armed commit-confirmed rollback window (apply-confirm). Returned in the 202 body of a confirmed write.",
-				"properties": {
-					"token": {
-						"type": "string",
-						"pattern": "^ac_[0-9]+_[0-9a-f]{8}$",
-						"description": "Pass to POST /confirm/{token} to ack, or DELETE /confirm/{token} to roll back now."
-					},
-					"timeout": {
-						"type": "integer",
-						"description": "Seconds the window stays armed."
-					},
-					"deadline": {
-						"type": "integer",
-						"description": "Best-effort unix epoch of auto-rollback; GET /confirm/{token} is authoritative."
-					},
-					"packages": {
-						"type": "array",
-						"items": {
-							"type": "string"
-						},
-						"description": "uci packages snapshotted and restored on rollback."
-					}
-				}
-			},
 			"ErrorEnvelope": {
 				"type": "object",
 				"required": [
@@ -20790,11 +19183,6 @@
 							"reload_failed_unrecovered",
 							"service_unavailable",
 							"init_script_missing",
-							"confirm_unavailable",
-							"already_armed",
-							"confirm_window_closed",
-							"confirm_stage_failed",
-							"rollback_reload_failed",
 							"batch_partial_failure"
 						],
 						"description": "Machine-readable error code. Stable within a major. Clients should branch on HTTP status first and treat unknown codes gracefully (the project's additive contract permits new codes within a major)."
@@ -25781,7 +24169,7 @@
 				}
 			},
 			"InternalError": {
-				"description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered, rollback_reload_failed)",
+				"description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered)",
 				"content": {
 					"application/json": {
 						"schema": {
@@ -25791,7 +24179,7 @@
 				}
 			},
 			"ServiceUnavailable": {
-				"description": "Service unavailable (codes: service_unavailable, init_script_missing, confirm_stage_failed)",
+				"description": "Service unavailable (codes: service_unavailable, init_script_missing)",
 				"content": {
 					"application/json": {
 						"schema": {
@@ -25799,55 +24187,6 @@
 						}
 					}
 				}
-			},
-			"PendingConfirm": {
-				"description": "Write committed with a commit-confirmed rollback armed. The body is the normal resource representation plus a `confirm` block; unless POST /confirm/{token} acks before the deadline, apply-confirm restores the pre-change snapshot. (x-uapi-requires: apply-confirm)",
-				"x-uapi-requires": "apply-confirm",
-				"headers": {
-					"X-Confirm-Token": {
-						"description": "The armed rollback token; pass to /confirm/{token}.",
-						"schema": {
-							"type": "string",
-							"pattern": "^ac_[0-9]+_[0-9a-f]{8}$"
-						}
-					},
-					"X-Confirm-Deadline": {
-						"description": "Best-effort unix epoch of auto-rollback; poll GET /confirm/{token} for authoritative remaining time.",
-						"schema": {
-							"type": "integer"
-						}
-					}
-				},
-				"content": {
-					"application/json": {
-						"schema": {
-							"type": "object",
-							"required": [
-								"confirm"
-							],
-							"description": "The resource representation plus the armed `confirm` window.",
-							"properties": {
-								"confirm": {
-									"$ref": "#/components/schemas/ConfirmWindow"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"parameters": {
-			"Confirm": {
-				"name": "confirm",
-				"in": "query",
-				"required": false,
-				"schema": {
-					"type": "integer",
-					"minimum": 1,
-					"maximum": 3600
-				},
-				"x-uapi-requires": "apply-confirm",
-				"description": "Arm a commit-confirmed rollback on this write: snapshot the affected uci packages and auto-revert after this many seconds unless POST /confirm/{token} acks first. The query form is the portable interface; the `X-Uapi-Confirm` header also works but only behind a proxy that forwards it (uhttpd's CGI env strips custom headers via a hard-coded allowlist). When set, the success status is 202 with a `confirm` block. Requires the apply-confirm package; without it the write returns 501 confirm_unavailable."
 			}
 		}
 	}

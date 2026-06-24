@@ -49,13 +49,8 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `internal_error`                | Bug or unexpected condition                                  |
 | 500  | `reload_failed_restored`        | Daemon reload failed; uapi rolled back the uci change        |
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
-| 500  | `rollback_reload_failed`        | Forced commit-confirm rollback restored uci but a reload failed (config WAS restored) |
-| 501  | `confirm_unavailable`           | `X-Uapi-Confirm` used but the apply-confirm package is not installed |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
-| 503  | `confirm_stage_failed`          | apply-confirm could not snapshot/arm the rollback window     |
-| 409  | `already_armed`                 | A commit-confirm window is already pending (one at a time)   |
-| 409  | `confirm_window_closed`         | ack/rollback of a token with no open window (expired/unknown)|
 
 `batch_partial_failure` is special: it appears only in the body of a
 `POST /batch` abort response, with the HTTP status taken from the failing
