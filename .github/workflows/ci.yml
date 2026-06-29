@@ -82,7 +82,7 @@ jobs:
             qemu-system-x86 qemu-utils openssh-client curl jq
 
       - name: Cache OpenWrt image
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
           key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
@@ -164,7 +164,7 @@ jobs:
             unzip gawk gettext xsltproc rsync wget
 
       - name: Cache OpenWrt SDK
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: build/sdk
           key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
@@ -191,7 +191,7 @@ jobs:
           fi
 
       - name: Cache OpenWrt VM image
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
           key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
@@ -333,7 +333,7 @@ jobs:
             unzip gawk gettext xsltproc rsync wget
 
       - name: Cache OpenWrt SDK (${{ matrix.arch }})
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: build/sdk-${{ matrix.arch }}
           key: openwrt-sdk-25.12.4-${{ matrix.arch }}
