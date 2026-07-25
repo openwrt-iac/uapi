@@ -168,15 +168,30 @@ t.describe('firewall.rules.validate, required fields', () => {
 		t.assert_equal(target_errs[0].code, "required");
 	});
 
-	t.it('rejects missing src_zone', () => {
-		let errs = rules.validate({ target: 'ACCEPT', match: {} }, null);
+	// fw4 demands a named source zone only for NOTRACK and HELPER, whose chain
+	// names are derived from it; every other target is valid without one.
+	t.it('rejects missing src_zone for zone-derived targets', () => {
+		for (let target in ['NOTRACK', 'HELPER']) {
+			let errs = rules.validate({ target, set_helper: 'ftp', match: {} }, null);
+			let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
+			t.assert_equal(length(zone_errs), 1);
+			t.assert_equal(zone_errs[0].code, "required");
+		}
+	});
+
+	t.it('rejects a wildcard src_zone for zone-derived targets', () => {
+		let errs = rules.validate({ target: 'NOTRACK', match: { src_zone: '*' } }, null);
 		let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
 		t.assert_equal(length(zone_errs), 1);
-		t.assert_equal(zone_errs[0].code, "required");
+	});
+
+	t.it('accepts a missing src_zone for ordinary targets', () => {
+		t.assert_equal(length(rules.validate({ target: 'ACCEPT', match: {} }, null)), 0);
+		t.assert_equal(length(rules.validate({ target: 'ACCEPT', match: { src_zone: '*' } }, null)), 0);
 	});
 
 	t.it('reports all field errors together (not fail-fast)', () => {
-		let errs = rules.validate({}, null);
+		let errs = rules.validate({ target: 'HELPER', match: {} }, null);
 		t.assert_true(length(errs) >= 2);
 	});
 });
@@ -232,5 +247,115 @@ t.describe('firewall.rules.validate, cross-references', () => {
 			{ target: 'ACCEPT', match: { src_zone: 'lan', dest_zone: 'dmz' } }, conn);
 		let de = filter(errs, function(e) { return e.field == "match.dest_zone" && e.code == "conflict"; });
 		t.assert_equal(length(de), 1);
+	});
+});
+
+t.describe('firewall.rules mark / DSCP / helper', () => {
+	t.it('round-trips the set_* and match fields', () => {
+		let section = {
+			'.name': 'r1', '.anonymous': false, '.type': 'rule',
+			target: 'MARK', src: 'lan', dest: '*', set_mark: '0x43',
+			mark: '!0x1/0xff', dscp: 'EF', helper: 'ftp',
+		};
+		let json = rules.fromUci(section);
+		t.assert_equal(json.set_mark, '0x43');
+		t.assert_equal(json.match.mark, '!0x1/0xff');
+		t.assert_equal(json.match.dscp, 'EF');
+		t.assert_equal(json.match.helper, 'ftp');
+
+		let u = rules.toUci(json);
+		t.assert_equal(u.set_mark, '0x43');
+		t.assert_equal(u.mark, '!0x1/0xff');
+		t.assert_equal(u.dscp, 'EF');
+		t.assert_equal(u.helper, 'ftp');
+	});
+
+	t.it('reads absent fields as null and omits them on write', () => {
+		let json = rules.fromUci({ '.name': 'r1', '.anonymous': false, '.type': 'rule' });
+		for (let f in ['set_mark', 'set_xmark', 'set_dscp', 'set_helper'])
+			t.assert_equal(json[f], null);
+		for (let f in ['mark', 'dscp', 'helper'])
+			t.assert_equal(json.match[f], null);
+
+		let u = rules.toUci({ target: 'ACCEPT', match: {} });
+		for (let f in ['set_mark', 'set_xmark', 'set_dscp', 'set_helper', 'mark', 'dscp', 'helper'])
+			t.assert_equal(u[f], null);
+	});
+
+	t.it('accepts the DSCP and HELPER targets', () => {
+		for (let c in [{ target: 'DSCP', set_dscp: 'CS0' }, { target: 'HELPER', set_helper: 'ftp' }]) {
+			c.match = { src_zone: 'lan' };
+			let te = filter(full_validate(rules, c, null),
+			                function(e) { return e.field == "target"; });
+			t.assert_equal(length(te), 0);
+		}
+	});
+
+	// Each of these validates clean today and is then silently discarded by
+	// fw4, which is the defect the coupling rules exist to surface.
+	t.it('requires a mark value when target is MARK', () => {
+		let errs = rules.validate({ target: 'MARK', match: { src_zone: 'lan' } }, null);
+		let e = filter(errs, function(x) { return x.field == "set_mark"; });
+		t.assert_equal(e[0].code, "required");
+	});
+
+	t.it('rejects set_mark and set_xmark together', () => {
+		let errs = rules.validate(
+			{ target: 'MARK', set_mark: '0x1', set_xmark: '0x2', match: { src_zone: 'lan' } }, null);
+		let e = filter(errs, function(x) { return x.field == "set_xmark"; });
+		t.assert_equal(e[0].code, "conflict");
+	});
+
+	t.it('requires set_dscp for DSCP and set_helper for HELPER', () => {
+		let d = rules.validate({ target: 'DSCP', match: { src_zone: 'lan' } }, null);
+		t.assert_equal(filter(d, function(x) { return x.field == "set_dscp"; })[0].code, "required");
+		let h = rules.validate({ target: 'HELPER', match: { src_zone: 'lan' } }, null);
+		t.assert_equal(filter(h, function(x) { return x.field == "set_helper"; })[0].code, "required");
+	});
+
+	t.it('rejects a set_* value on a target that ignores it', () => {
+		for (let c in [{ f: 'set_mark', v: '0x1' }, { f: 'set_dscp', v: 'EF' }, { f: 'set_helper', v: 'ftp' }]) {
+			let body = { target: 'ACCEPT', match: { src_zone: 'lan' } };
+			body[c.f] = c.v;
+			let e = filter(rules.validate(body, null), function(x) { return x.field == c.f; });
+			t.assert_equal(e[0].code, "conflict");
+		}
+	});
+
+	t.it('rejects malformed and negated set values via the schema pattern', () => {
+		for (let v in ['2a', '!0x1']) {
+			let errs = full_validate(rules,
+				{ target: 'MARK', set_mark: v, match: { src_zone: 'lan' } }, null);
+			let e = filter(errs, function(x) { return x.field == "set_mark" && x.code == "invalid_format"; });
+			t.assert_equal(length(e), 1);
+		}
+	});
+
+	t.it('accepts negation on the match variants', () => {
+		let errs = full_validate(rules,
+			{ target: 'ACCEPT', match: { src_zone: 'lan', mark: '!0x1', helper: '!ftp', dscp: '!EF' } }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('rejects values past the 32-bit mark and 63 DSCP ceilings', () => {
+		let m = rules.validate({ target: 'MARK', set_mark: '4294967296', match: { src_zone: 'lan' } }, null);
+		t.assert_equal(filter(m, function(x) { return x.field == "set_mark"; })[0].code, "out_of_range");
+		let d = rules.validate({ target: 'DSCP', set_dscp: '64', match: { src_zone: 'lan' } }, null);
+		t.assert_equal(filter(d, function(x) { return x.field == "set_dscp"; })[0].code, "out_of_range");
+	});
+
+	// fw4 accepts these; LuCI's stricter form does not. We follow fw4 so a
+	// value the box applies is never rejected at the API.
+	t.it('accepts fw4 spellings LuCI rejects', () => {
+		for (let v in ['LE', 'ef']) {
+			let errs = full_validate(rules,
+				{ target: 'DSCP', set_dscp: v, match: { src_zone: 'lan' } }, null);
+			t.assert_equal(length(errs), 0);
+		}
+		for (let v in ['Q.931', 'netbios-ns']) {
+			let errs = full_validate(rules,
+				{ target: 'HELPER', set_helper: v, match: { src_zone: 'lan' } }, null);
+			t.assert_equal(length(errs), 0);
+		}
 	});
 });

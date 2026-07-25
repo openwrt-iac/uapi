@@ -5,6 +5,7 @@ const RESOURCES = [
 	{ name: "firewall.zones",       file: "firewall.zones.uc" },
 	{ name: "firewall.rules",       file: "firewall.rules.uc" },
 	{ name: "firewall.redirects",   file: "firewall.redirects.uc" },
+	{ name: "firewall.nat",         file: "firewall.nat.uc" },
 	{ name: "firewall.forwardings", file: "firewall.forwardings.uc" },
 	{ name: "firewall.defaults",    file: "firewall.defaults.uc" },
 	{ name: "network.interfaces",   file: "network.interfaces.uc" },

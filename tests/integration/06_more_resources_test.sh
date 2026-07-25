@@ -27,6 +27,36 @@ redirect=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/redir
 echo "$redirect" | tail -1 | grep -q '^200$' || fail "redirect POST expected 200"
 rid=$(echo "$redirect" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
+echo "--- POST /firewall/rules with target MARK ---"
+markrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
+	"target": "MARK", "set_mark": "0x43",
+	"match": { "src_zone": "uapi_test", "dest_zone": "*" }
+}')
+echo "$markrule" | tail -1 | grep -q '^200$' || fail "MARK rule POST expected 200"
+mid=$(echo "$markrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+echo "$markrule" | grep -q '"set_mark": "0x43"' || fail "MARK rule missing set_mark on read-back"
+
+echo "--- a MARK rule without a mark value is rejected, not silently dropped by fw4 ---"
+badmark=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
+	"target": "MARK", "match": { "src_zone": "uapi_test" }
+}')
+echo "$badmark" | tail -1 | grep -q '^422$' || fail "MARK without value expected 422"
+echo "$badmark" | grep -q '"field": "set_mark"' || fail "422 should name set_mark"
+
+echo "--- POST /firewall/nat ---"
+natrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -d '{
+	"name": "uapi_test_masq", "target": "MASQUERADE",
+	"match": { "src_zone": "uapi_test" }
+}')
+echo "$natrule" | tail -1 | grep -q '^200$' || fail "nat POST expected 200"
+nid=$(echo "$natrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+
+echo "--- SNAT without snat_ip or snat_port is rejected ---"
+badnat=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -d '{
+	"target": "SNAT", "match": { "src_zone": "uapi_test" }
+}')
+echo "$badnat" | tail -1 | grep -q '^422$' || fail "SNAT without rewrite expected 422"
+
 echo "--- POST /network/interfaces with proto: none ---"
 iface=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" -d '{
 	"proto": "none"
@@ -43,10 +73,14 @@ echo "$bad_if" | tail -1 | grep -q '^422$' || fail "bad ipaddr expected 422"
 echo "--- list each resource includes the new id ---"
 call "$URL/firewall/zones"     | grep -q "\"id\": \"$zid\"" || fail "zone list missing"
 call "$URL/firewall/redirects" | grep -q "\"id\": \"$rid\"" || fail "redirect list missing"
+call "$URL/firewall/rules"     | grep -q "\"id\": \"$mid\"" || fail "MARK rule list missing"
+call "$URL/firewall/nat"       | grep -q "\"id\": \"$nid\"" || fail "nat list missing"
 call "$URL/network/interfaces" | grep -q "\"id\": \"$iid\"" || fail "interface list missing"
 
 echo "--- DELETE each ---"
 call -X DELETE "$URL/firewall/redirects/$rid" | tail -1 | grep -q '^204$' || fail "redirect DELETE failed"
+call -X DELETE "$URL/firewall/nat/$nid"       | tail -1 | grep -q '^204$' || fail "nat DELETE failed"
+call -X DELETE "$URL/firewall/rules/$mid"     | tail -1 | grep -q '^204$' || fail "MARK rule DELETE failed"
 call -X DELETE "$URL/firewall/zones/$zid"     | tail -1 | grep -q '^204$' || fail "zone DELETE failed"
 call -X DELETE "$URL/network/interfaces/$iid" | tail -1 | grep -q '^204$' || fail "interface DELETE failed"
 

@@ -31,6 +31,7 @@ function fromUci(section) {
 			dest_port: as_list(section.dest_port),
 			proto: as_list(section.proto),
 			family: section.family ?? "any",
+			mark: section.mark ?? null,
 		},
 		reflection: (section.reflection != null) ? normalize_bool(section.reflection, true) : null,
 		reflection_src: section.reflection_src ?? null,
@@ -54,6 +55,7 @@ function toUci(json) {
 	if (type(m.dest_port) == "array" && length(m.dest_port) > 0) out.dest_port = m.dest_port;
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
+	if (m.mark != null) out.mark = m.mark;
 	if (json.reflection != null)     out.reflection = json.reflection ? "1" : "0";
 	if (json.reflection_src != null) out.reflection_src = json.reflection_src;
 	if (type(json.reflection_zone) == "array" && length(json.reflection_zone) > 0)
@@ -99,6 +101,10 @@ function validate(json, conn) {
 			             message: "must be a valid IPv4 address" });
 	}
 
+	if (values.masked_value_exceeds(m.mark, values.MARK_MAX))
+		push(errs, { field: "match.mark", code: "out_of_range",
+		             message: sprintf("%J exceeds the maximum of %d", m.mark, values.MARK_MAX) });
+
 	if (conn != null
 	    && ((m.src_zone != null && m.src_zone != "")
 	        || (m.dest_zone != null && m.dest_zone != ""))) {
@@ -140,6 +146,8 @@ return {
 				dest_port: { type: "array", items: { type: "string" } },
 				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
+				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
+				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },
 			},
 		},
 		reflection: { type: "boolean",

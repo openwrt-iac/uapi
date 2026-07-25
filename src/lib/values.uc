@@ -139,8 +139,30 @@ function constant_time_equals(a, b) {
 	return acc == 0;
 }
 
+// firewall4 accepts a mark as value[/mask] in decimal or 0x-prefixed hex, and
+// lets match options negate with a leading '!'. Shared by every resource that
+// exposes a mark, so the accepted syntax cannot drift between them.
+const MARK_VALUE = '(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})';
+const MARK_RE = '^' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
+const MARK_MATCH_RE = '^!?' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
+const MARK_MAX = 0xFFFFFFFF;
+
+// The pattern constrains digit count, not magnitude: a 10-digit decimal still
+// overflows 32 bits, and a 2-digit DSCP still exceeds 63. Components that are
+// not numeric (symbolic DSCP names like EF) coerce to NaN and are ignored.
+function masked_value_exceeds(v, max) {
+	if (type(v) != "string" || v == "") return false;
+	for (let part in split(replace(v, /^!/, ""), "/")) {
+		let n = +part;
+		if (n != n) continue;
+		if (n < 0 || n > max) return true;
+	}
+	return false;
+}
+
 return {
 	normalize_bool, as_list, as_int,
+	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 	constant_time_equals,

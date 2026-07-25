@@ -14,6 +14,7 @@ const KNOWN_PATHS = {
 	"firewall:zones": true,
 	"firewall:rules": true,
 	"firewall:redirects": true,
+	"firewall:nat": true,
 	"firewall:forwardings": true,
 	"firewall:defaults": true,
 	"dhcp": true,
