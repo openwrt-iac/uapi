@@ -49,6 +49,7 @@ RESOURCES="
 firewall/zones
 firewall/rules
 firewall/redirects
+firewall/nat
 firewall/forwardings
 network/interfaces
 network/devices

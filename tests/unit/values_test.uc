@@ -173,3 +173,40 @@ t.describe('values.constant_time_equals', () => {
 		t.assert_false(v.constant_time_equals(123, "123"));
 	});
 });
+
+t.describe('values.masked_value_exceeds', () => {
+	t.it('flags either component of a value/mask pair', () => {
+		t.assert_true(v.masked_value_exceeds('4294967296', v.MARK_MAX));
+		t.assert_true(v.masked_value_exceeds('0x1/4294967296', v.MARK_MAX));
+		t.assert_false(v.masked_value_exceeds('0xffffffff/0x1', v.MARK_MAX));
+	});
+
+	t.it('ignores negation and non-numeric components', () => {
+		t.assert_false(v.masked_value_exceeds('!0x1', v.MARK_MAX));
+		t.assert_false(v.masked_value_exceeds('EF', 63));
+		t.assert_true(v.masked_value_exceeds('64', 63));
+	});
+
+	t.it('returns false for absent or non-string input', () => {
+		t.assert_false(v.masked_value_exceeds(null, v.MARK_MAX));
+		t.assert_false(v.masked_value_exceeds('', v.MARK_MAX));
+		t.assert_false(v.masked_value_exceeds(42, v.MARK_MAX));
+	});
+});
+
+t.describe('values mark patterns', () => {
+	// fw4 accepts decimal and 0x hex with an optional /mask; a bare hex digit
+	// string such as "2a" passes fw4's own regex but fails its numeric
+	// coercion, so the pattern must reject it up front.
+	t.it('accepts the forms fw4 parses and rejects the rest', () => {
+		for (let s in ['0x43', '67', '0x43/0xff', '1/2'])
+			t.assert_true(match(s, regexp(v.MARK_RE)) != null);
+		for (let s in ['2a', '', '!0x1', 'x'])
+			t.assert_equal(match(s, regexp(v.MARK_RE)), null);
+	});
+
+	t.it('allows a leading negation only on the match variant', () => {
+		t.assert_true(match('!0x1', regexp(v.MARK_MATCH_RE)) != null);
+		t.assert_true(match('0x1', regexp(v.MARK_MATCH_RE)) != null);
+	});
+});

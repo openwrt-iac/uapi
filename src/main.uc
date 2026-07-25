@@ -33,6 +33,7 @@ const RESOURCES = {
 	"firewall:rules":        handler.make(load_resource("firewall:rules", "firewall.rules.uc")),
 	"firewall:zones":        handler.make(load_resource("firewall:zones", "firewall.zones.uc")),
 	"firewall:redirects":    handler.make(load_resource("firewall:redirects", "firewall.redirects.uc")),
+	"firewall:nat":          handler.make(load_resource("firewall:nat", "firewall.nat.uc")),
 	"firewall:forwardings":  handler.make(load_resource("firewall:forwardings", "firewall.forwardings.uc")),
 	"network:interfaces":    handler.make(load_resource("network:interfaces", "network.interfaces.uc")),
 	"network:devices":       handler.make(load_resource("network:devices", "network.devices.uc")),

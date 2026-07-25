@@ -4,8 +4,31 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+Closes the gap between what `firewall/rules` advertises and what firewall4 actually applies. `target: "MARK"` was accepted but had no field to carry the mark value, so fw4 warned `must specify option 'set_mark' or 'set_xmark' for target 'mark'` and skipped the section: the write returned 200 and the rule silently never existed. Auditing the rest of the surface against fw4 found the same class three more times, plus the inverse (uapi rejecting configurations fw4 accepts). Closes [openwrt-iac/uapi#20](https://github.com/openwrt-iac/uapi/issues/20).
+
 ### Added
-- (Reserved for next-cycle changes.)
+
+- `firewall/rules` gains the `DSCP` and `HELPER` targets alongside the existing `MARK`, and the values they require: `set_mark` / `set_xmark` (value or value/mask, decimal or `0x` hex, 32-bit), `set_dscp` (a symbolic class such as `CS0`, `AF11`, `EF`, `LE`, case-insensitive, or a number 0-63), and `set_helper` (a conntrack helper name such as `ftp` or `sip`). A target that needs a value and does not have one is now a `422` instead of a rule the router discards.
+
+- `firewall/rules` gains `match.mark`, `match.dscp`, and `match.helper`, each accepting a leading `!` for negation the way firewall4 does. `firewall/redirects` gains `match.mark`, the one match option fw4 accepts on a `config redirect`.
+
+- New resource `firewall/nat` wrapping `config nat`, the only way to express MASQUERADE or exemption from source NAT. Targets are `SNAT` (with `snat_ip` / `snat_port`), `MASQUERADE`, and `ACCEPT`; the nested `match` block carries `src_zone` (the outbound, postrouting zone), `device`, addresses, ports, `proto`, and `mark`. Scope `firewall:nat`. Note `match.family` is deliberately not defaulted: firewall4 reads an absent family on a NAT section as IPv4-only for backwards compatibility, so reporting `any` would misdescribe the router; set it explicitly for dual-stack.
+
+### Fixed
+
+- `firewall/rules` no longer requires `match.src_zone` on every rule. firewall4 requires a source zone only for `NOTRACK` and `HELPER`, whose chain names are derived from it; a rule without one is valid and lands in the `output` or `mangle_output` chain. Rules that omit it were previously rejected with a `422` uapi had no basis for.
+
+- Conversely, `NOTRACK` (and the new `HELPER`) now require a **named** source zone: `match.src_zone` absent or set to the `*` / `any` wildcard is rejected. This is the one case in this release that rejects a payload previously accepted, and it is deliberate: firewall4 discards those sections outright (`must specify a source zone for target ...`), so the only configurations affected are ones that were already silently dead on the router.
+
+### Internal
+
+- `values.uc` gains `MARK_RE` / `MARK_MATCH_RE` / `MARK_MAX` and `masked_value_exceeds()`, shared by the three resources that now expose a mark so the accepted syntax cannot drift between them. The schema `pattern` constrains shape; `masked_value_exceeds` catches the bound a pattern cannot express, since a 10-digit decimal still overflows 32 bits and a 2-digit DSCP still exceeds 63.
+
+- Where fw4 and LuCI disagree on accepted values, uapi follows fw4. LuCI's DSCP validation omits `LE` and is case-sensitive; fw4 accepts both, and fw4 is what applies the configuration, so a value the router honours is never rejected at the API.
+
+- `firewall/nat` models `match.src_ip`, `match.src_port`, `match.dest_ip`, and `match.dest_port` as scalars, not arrays. firewall4 marks only `proto` as a list option on a `config nat` section; the others are scalars, and its `parse_opt` refuses a list outright ("option must not be a list") and discards the whole section. The sibling `config rule` and `config redirect` types do mark them as lists, so the arity genuinely differs per section type.
+
+- Address and port fields on `firewall/nat` are validated against what firewall4 actually parses, in both directions. Addresses (`snat_ip`, `match.src_ip`, `match.dest_ip`) are typed `network` by fw4, which resolves a bare address, a prefix in either family, or a uci network name, so uapi does not second-guess the syntax and checks only the negation fw4 explicitly forbids on `snat_ip`. Ports accept fw4's full grammar (`80`, `1000-2000`, `1000:2000`, and a leading `!` on match ports but not on `snat_port`) and are bounded at 65535 with an ordered range, because a port fw4 cannot parse means it discards the whole section.
 
 ## [2.3.0] - 2026-06-24
 

@@ -154,7 +154,7 @@ t.describe('handler.get_one', () => {
 t.describe('handler.create', () => {
 	t.it('returns 422 with field errors for an invalid body', () => {
 		let c = with_zones();
-		let r = rules.create(c, ctx(), { target: "BOGUS", match: {} });
+		let r = rules.create(c, ctx(), { target: "BOGUS", match: { family: "ipxx" } });
 		t.assert_equal(r.status, 422);
 		t.assert_true(length(r.body.errors) >= 2);
 	});

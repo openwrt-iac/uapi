@@ -583,3 +583,25 @@ t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () 
 		t.assert_true(found);
 	});
 });
+
+t.describe('firewall.redirects mark match', () => {
+	t.it('round-trips match.mark and omits it when absent', () => {
+		let json = redirects.fromUci({
+			'.name': 'r1', '.anonymous': false, '.type': 'redirect',
+			target: 'DNAT', src: 'wan', mark: '!0x1/0xff',
+		});
+		t.assert_equal(json.match.mark, '!0x1/0xff');
+		t.assert_equal(redirects.toUci(json).mark, '!0x1/0xff');
+
+		let bare = redirects.fromUci({ '.name': 'r2', '.anonymous': false, '.type': 'redirect' });
+		t.assert_equal(bare.match.mark, null);
+		t.assert_equal(redirects.toUci(bare).mark, null);
+	});
+
+	t.it('rejects a mark past the 32-bit ceiling', () => {
+		let errs = redirects.validate(
+			{ target: 'DNAT', match: { src_zone: 'wan', mark: '4294967296' } }, null);
+		let e = filter(errs, function(x) { return x.field == "match.mark"; });
+		t.assert_equal(e[0].code, "out_of_range");
+	});
+});

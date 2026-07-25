@@ -110,7 +110,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `*` | any |
 | `network` | `interfaces`, `devices`, `routes`, `rules`, `bridge_vlans`, `wireguard_peers` |
 | `wireless` | `devices`, `interfaces` |
-| `firewall` | `zones`, `rules`, `redirects`, `forwardings`, `defaults` |
+| `firewall` | `zones`, `rules`, `redirects`, `nat`, `forwardings`, `defaults` |
 | `dhcp` | `hosts`, `leases`, `leases6`, `servers`, `dnsmasq`, `odhcpd` |
 | `system` | (singleton), `timeservers`, `password`, `authorized_keys` |
 | `dropbear` | `instances` |
