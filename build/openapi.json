@@ -30,7 +30,7 @@
 		},
 		{
 			"name": "Firewall / Rules",
-			"description": "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family, mark, dscp, helper, plus the MARK / DSCP / HELPER targets and their `set_*` values. Cross-refs `firewall/zones`."
+			"description": "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family, mark, dscp, plus the MARK and DSCP targets and their `set_*` values. Cross-refs `firewall/zones`."
 		},
 		{
 			"name": "Firewall / Redirects",
@@ -20452,8 +20452,7 @@
 							"DROP",
 							"NOTRACK",
 							"MARK",
-							"DSCP",
-							"HELPER"
+							"DSCP"
 						]
 					},
 					"enabled": {
@@ -20483,14 +20482,6 @@
 						],
 						"pattern": "^([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$",
 						"description": "DSCP class to apply: a symbolic name (CS0-CS7, BE, LE, AF11-AF43, EF, case-insensitive) or a number 0-63. Requires target DSCP"
-					},
-					"set_helper": {
-						"type": [
-							"string",
-							"null"
-						],
-						"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$",
-						"description": "Conntrack helper to assign, e.g. ftp or sip. Matched case-sensitively against the helpers firewall4 has loaded. Requires target HELPER"
 					},
 					"match": {
 						"type": "object",
@@ -20565,14 +20556,6 @@
 								],
 								"pattern": "^!?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$",
 								"description": "Match DSCP class or value, optionally negated with a leading '!'"
-							},
-							"helper": {
-								"type": [
-									"string",
-									"null"
-								],
-								"pattern": "^!?[A-Za-z0-9][A-Za-z0-9._-]{0,31}$",
-								"description": "Match traffic tracked by this conntrack helper, optionally negated with a leading '!'"
 							}
 						}
 					},
@@ -20589,10 +20572,7 @@
 						"if": {
 							"properties": {
 								"target": {
-									"enum": [
-										"NOTRACK",
-										"HELPER"
-									]
+									"const": "NOTRACK"
 								}
 							},
 							"required": [
@@ -20653,23 +20633,6 @@
 						"then": {
 							"required": [
 								"set_dscp"
-							]
-						}
-					},
-					{
-						"if": {
-							"properties": {
-								"target": {
-									"const": "HELPER"
-								}
-							},
-							"required": [
-								"target"
-							]
-						},
-						"then": {
-							"required": [
-								"set_helper"
 							]
 						}
 					}

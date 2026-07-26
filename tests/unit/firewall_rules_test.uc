@@ -171,8 +171,8 @@ t.describe('firewall.rules.validate, required fields', () => {
 	// fw4 demands a named source zone only for NOTRACK and HELPER, whose chain
 	// names are derived from it; every other target is valid without one.
 	t.it('rejects missing src_zone for zone-derived targets', () => {
-		for (let target in ['NOTRACK', 'HELPER']) {
-			let errs = rules.validate({ target, set_helper: 'ftp', match: {} }, null);
+		for (let target in ['NOTRACK']) {
+			let errs = rules.validate({ target, match: {} }, null);
 			let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
 			t.assert_equal(length(zone_errs), 1);
 			t.assert_equal(zone_errs[0].code, "required");
@@ -191,7 +191,7 @@ t.describe('firewall.rules.validate, required fields', () => {
 	});
 
 	t.it('reports all field errors together (not fail-fast)', () => {
-		let errs = rules.validate({ target: 'HELPER', match: {} }, null);
+		let errs = rules.validate({ target: 'MARK', set_dscp: 'EF', match: {} }, null);
 		t.assert_true(length(errs) >= 2);
 	});
 });
@@ -260,40 +260,38 @@ t.describe('firewall.rules.validate, cross-references', () => {
 	});
 });
 
-t.describe('firewall.rules mark / DSCP / helper', () => {
+t.describe('firewall.rules mark / DSCP', () => {
 	t.it('round-trips the set_* and match fields', () => {
 		let section = {
 			'.name': 'r1', '.anonymous': false, '.type': 'rule',
 			target: 'MARK', src: 'lan', dest: '*', set_mark: '0x43',
-			mark: '!0x1/0xff', dscp: 'EF', helper: 'ftp',
+			mark: '!0x1/0xff', dscp: 'EF',
 		};
 		let json = rules.fromUci(section);
 		t.assert_equal(json.set_mark, '0x43');
 		t.assert_equal(json.match.mark, '!0x1/0xff');
 		t.assert_equal(json.match.dscp, 'EF');
-		t.assert_equal(json.match.helper, 'ftp');
 
 		let u = rules.toUci(json);
 		t.assert_equal(u.set_mark, '0x43');
 		t.assert_equal(u.mark, '!0x1/0xff');
 		t.assert_equal(u.dscp, 'EF');
-		t.assert_equal(u.helper, 'ftp');
 	});
 
 	t.it('reads absent fields as null and omits them on write', () => {
 		let json = rules.fromUci({ '.name': 'r1', '.anonymous': false, '.type': 'rule' });
-		for (let f in ['set_mark', 'set_xmark', 'set_dscp', 'set_helper'])
+		for (let f in ['set_mark', 'set_xmark', 'set_dscp'])
 			t.assert_equal(json[f], null);
-		for (let f in ['mark', 'dscp', 'helper'])
+		for (let f in ['mark', 'dscp'])
 			t.assert_equal(json.match[f], null);
 
 		let u = rules.toUci({ target: 'ACCEPT', match: {} });
-		for (let f in ['set_mark', 'set_xmark', 'set_dscp', 'set_helper', 'mark', 'dscp', 'helper'])
+		for (let f in ['set_mark', 'set_xmark', 'set_dscp', 'mark', 'dscp'])
 			t.assert_equal(u[f], null);
 	});
 
-	t.it('accepts the DSCP and HELPER targets', () => {
-		for (let c in [{ target: 'DSCP', set_dscp: 'CS0' }, { target: 'HELPER', set_helper: 'ftp' }]) {
+	t.it('accepts the DSCP target', () => {
+		for (let c in [{ target: 'DSCP', set_dscp: 'CS0' }]) {
 			c.match = { src_zone: 'lan' };
 			let te = filter(full_validate(rules, c, null),
 			                function(e) { return e.field == "target"; });
@@ -316,15 +314,13 @@ t.describe('firewall.rules mark / DSCP / helper', () => {
 		t.assert_equal(e[0].code, "conflict");
 	});
 
-	t.it('requires set_dscp for DSCP and set_helper for HELPER', () => {
+	t.it('requires set_dscp when target is DSCP', () => {
 		let d = rules.validate({ target: 'DSCP', match: { src_zone: 'lan' } }, null);
 		t.assert_equal(filter(d, function(x) { return x.field == "set_dscp"; })[0].code, "required");
-		let h = rules.validate({ target: 'HELPER', match: { src_zone: 'lan' } }, null);
-		t.assert_equal(filter(h, function(x) { return x.field == "set_helper"; })[0].code, "required");
 	});
 
 	t.it('rejects a set_* value on a target that ignores it', () => {
-		for (let c in [{ f: 'set_mark', v: '0x1' }, { f: 'set_dscp', v: 'EF' }, { f: 'set_helper', v: 'ftp' }]) {
+		for (let c in [{ f: 'set_mark', v: '0x1' }, { f: 'set_dscp', v: 'EF' }]) {
 			let body = { target: 'ACCEPT', match: { src_zone: 'lan' } };
 			body[c.f] = c.v;
 			let e = filter(rules.validate(body, null), function(x) { return x.field == c.f; });
@@ -343,7 +339,7 @@ t.describe('firewall.rules mark / DSCP / helper', () => {
 
 	t.it('accepts negation on the match variants', () => {
 		let errs = full_validate(rules,
-			{ target: 'ACCEPT', match: { src_zone: 'lan', mark: '!0x1', helper: '!ftp', dscp: '!EF' } }, null);
+			{ target: 'ACCEPT', match: { src_zone: 'lan', mark: '!0x1', dscp: '!EF' } }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
@@ -360,11 +356,6 @@ t.describe('firewall.rules mark / DSCP / helper', () => {
 		for (let v in ['LE', 'ef']) {
 			let errs = full_validate(rules,
 				{ target: 'DSCP', set_dscp: v, match: { src_zone: 'lan' } }, null);
-			t.assert_equal(length(errs), 0);
-		}
-		for (let v in ['Q.931', 'netbios-ns']) {
-			let errs = full_validate(rules,
-				{ target: 'HELPER', set_helper: v, match: { src_zone: 'lan' } }, null);
 			t.assert_equal(length(errs), 0);
 		}
 	});

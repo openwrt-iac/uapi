@@ -51,7 +51,7 @@ daemon's runtime convergence.
 | Path | Wraps | Notes |
 |---|---|---|
 | `firewall/zones` | `config zone` | input/output/forward policies, `network` list. |
-| `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family, mark, dscp, helper}`. MARK / DSCP / HELPER targets carry `set_mark` / `set_xmark`, `set_dscp`, `set_helper`. `src_zone` is required only for NOTRACK and HELPER, matching fw4. |
+| `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family, mark, dscp}`. MARK and DSCP targets carry `set_mark` / `set_xmark` and `set_dscp`. `src_zone` is required only for NOTRACK, matching fw4. |
 | `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. |
 | `firewall/nat` | `config nat` | Source NAT: SNAT (`snat_ip` / `snat_port`), MASQUERADE, or ACCEPT to exempt traffic from rewriting. `match.src_zone` is the outbound zone. An unset `match.family` means IPv4 only, which is fw4's default for NAT. |
 | `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. |

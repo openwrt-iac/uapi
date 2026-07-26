@@ -4,7 +4,7 @@ let as_list = values.as_list;
 
 const VALID_TARGETS = {
 	"ACCEPT": true, "REJECT": true, "DROP": true,
-	"NOTRACK": true, "MARK": true, "DSCP": true, "HELPER": true,
+	"NOTRACK": true, "MARK": true, "DSCP": true,
 };
 
 // fw4 accepts a DSCP as one of its symbolic classes (case-insensitively) or a
@@ -14,12 +14,9 @@ const VALID_TARGETS = {
 // leading '!'; the set_* options carry NO_INVERT in fw4, and a negated value
 // there makes it skip the whole section.
 const DSCP_VAL = '([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})';
-const HELPER_VAL = '[A-Za-z0-9][A-Za-z0-9._-]{0,31}';
 
 const DSCP_RE = '^' + DSCP_VAL + '$';
 const DSCP_MATCH_RE = '^!?' + DSCP_VAL + '$';
-const HELPER_RE = '^' + HELPER_VAL + '$';
-const HELPER_MATCH_RE = '^!?' + HELPER_VAL + '$';
 
 const DSCP_MAX = 63;
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
@@ -40,7 +37,6 @@ function fromUci(section) {
 		set_mark: section.set_mark ?? null,
 		set_xmark: section.set_xmark ?? null,
 		set_dscp: section.set_dscp ?? null,
-		set_helper: section.set_helper ?? null,
 		match: {
 			src_zone: section.src ?? null,
 			dest_zone: section.dest ?? null,
@@ -52,7 +48,6 @@ function fromUci(section) {
 			family: section.family ?? "any",
 			mark: section.mark ?? null,
 			dscp: section.dscp ?? null,
-			helper: section.helper ?? null,
 		},
 		runtime: {},
 	};
@@ -66,7 +61,6 @@ function toUci(json) {
 	if (json.set_mark != null) out.set_mark = json.set_mark;
 	if (json.set_xmark != null) out.set_xmark = json.set_xmark;
 	if (json.set_dscp != null) out.set_dscp = json.set_dscp;
-	if (json.set_helper != null) out.set_helper = json.set_helper;
 	let m = json.match ?? {};
 	if (m.src_zone != null) out.src = m.src_zone;
 	if (m.dest_zone != null) out.dest = m.dest_zone;
@@ -78,7 +72,6 @@ function toUci(json) {
 	if (m.family != null && m.family != "any") out.family = m.family;
 	if (m.mark != null) out.mark = m.mark;
 	if (m.dscp != null) out.dscp = m.dscp;
-	if (m.helper != null) out.helper = m.helper;
 	return out;
 }
 
@@ -96,10 +89,10 @@ function load_zones(conn) {
 	return zones;
 }
 
-// fw4 derives the chain name from the zone (`helper_<zone>` / `notrack_<zone>`),
-// so a wildcard is as unusable as an absent one: both leave rule.src.zone unset
-// and fw4 discards the section.
-const ZONE_REQUIRED_TARGETS = { "NOTRACK": true, "HELPER": true };
+// fw4 derives the chain name from the zone (`notrack_<zone>`), so a wildcard is
+// as unusable as an absent one: both leave rule.src.zone unset and fw4 discards
+// the section.
+const ZONE_REQUIRED_TARGETS = { "NOTRACK": true };
 
 function is_set(v) {
 	return type(v) == "string" && v != "";
@@ -141,14 +134,6 @@ function check_target_coupling(json, errs) {
 		             message: "is only valid when target is DSCP; send null to clear it" });
 	}
 
-	if (t == "HELPER") {
-		if (!is_set(json.set_helper))
-			push(errs, { field: "set_helper", code: "required",
-			             message: "is required when target is HELPER" });
-	} else if (is_set(json.set_helper)) {
-		push(errs, { field: "set_helper", code: "conflict",
-		             message: "is only valid when target is HELPER; send null to clear it" });
-	}
 }
 
 function validate(json, conn) {
@@ -228,15 +213,13 @@ return {
 	openapi_singular: "firewall rule",
 	openapi_required: ["target", "match"],
 	openapi_conditional: [
-		{ if:   { properties: { target: { enum: ["NOTRACK", "HELPER"] } }, required: ["target"] },
+		{ if:   { properties: { target: { const: "NOTRACK" } }, required: ["target"] },
 		  then: { properties: { match: { type: "object", required: ["src_zone"] } },
 		          required: ["match"] } },
 		{ if:   { properties: { target: { const: "MARK" } }, required: ["target"] },
 		  then: { anyOf: [ { required: ["set_mark"] }, { required: ["set_xmark"] } ] } },
 		{ if:   { properties: { target: { const: "DSCP" } }, required: ["target"] },
 		  then: { required: ["set_dscp"] } },
-		{ if:   { properties: { target: { const: "HELPER" } }, required: ["target"] },
-		  then: { required: ["set_helper"] } },
 	],
 	schema_properties: {
 		name:    { type: ["string", "null"],
@@ -249,8 +232,6 @@ return {
 		             description: "Mark to XOR, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_mark" },
 		set_dscp: { type: ["string", "null"], pattern: DSCP_RE,
 		            description: "DSCP class to apply: a symbolic name (CS0-CS7, BE, LE, AF11-AF43, EF, case-insensitive) or a number 0-63. Requires target DSCP" },
-		set_helper: { type: ["string", "null"], pattern: HELPER_RE,
-		              description: "Conntrack helper to assign, e.g. ftp or sip. Matched case-sensitively against the helpers firewall4 has loaded. Requires target HELPER" },
 		match: {
 			type: "object",
 			properties: {
@@ -267,8 +248,6 @@ return {
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },
 				dscp:      { type: ["string", "null"], pattern: DSCP_MATCH_RE,
 				             description: "Match DSCP class or value, optionally negated with a leading '!'" },
-				helper:    { type: ["string", "null"], pattern: HELPER_MATCH_RE,
-				             description: "Match traffic tracked by this conntrack helper, optionally negated with a leading '!'" },
 			},
 		},
 	},
