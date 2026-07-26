@@ -108,11 +108,19 @@ function validate(json, conn) {
 		push(errs, { field: "snat_ip", code: "invalid_format",
 		             message: "must not be negated" });
 
+	if (type(m.device) == "string" && length(m.device) > values.DEVICE_MAX)
+		push(errs, { field: "match.device", code: "out_of_range",
+		             message: sprintf("must be at most %d characters, the nftables interface-name limit", values.DEVICE_MAX) });
+
 	for (let f in [["snat_ip", json.snat_ip], ["match.src_ip", m.src_ip], ["match.dest_ip", m.dest_ip]]) {
 		let a = values.address_problem(f[1]);
 		if (a != null)
 			push(errs, { field: f[0], code: a.code, message: a.message });
 	}
+
+	if (type(json.name) == "string" && length(json.name) > values.NAME_MAX)
+		push(errs, { field: "name", code: "out_of_range",
+		             message: sprintf("must be at most %d characters: firewall4 renders it into an nftables comment, which nft caps at 128", values.NAME_MAX) });
 
 	let protos = as_list(m.proto);
 	for (let i = 0; i < length(protos); i++) {

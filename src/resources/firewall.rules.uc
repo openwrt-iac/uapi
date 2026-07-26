@@ -173,6 +173,10 @@ function validate(json, conn) {
 		}
 	}
 
+	if (type(json.name) == "string" && length(json.name) > values.NAME_MAX)
+		push(errs, { field: "name", code: "out_of_range",
+		             message: sprintf("must be at most %d characters: firewall4 renders it into an nftables comment, which nft caps at 128", values.NAME_MAX) });
+
 	let protos = as_list(m.proto);
 	for (let i = 0; i < length(protos); i++) {
 		let pp = values.proto_problem(protos[i]);

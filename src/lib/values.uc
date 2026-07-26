@@ -160,6 +160,12 @@ function masked_value_exceeds(v, max) {
 	return false;
 }
 
+// nft caps a comment at 128 bytes and fw4 prefixes every one with "!fw4: ",
+// and it caps an interface name at 15. Exceeding either makes nft reject the
+// entire ruleset, so these are hard limits rather than style preferences.
+const NAME_MAX = 122;
+const DEVICE_MAX = 15;
+
 // firewall4 resolves a protocol name or number and firewall4 then renders it
 // verbatim as `meta l4proto <token>`. nft resolves that against its OWN built-in
 // table, which is narrower than /etc/protocols: ipcomp, l2tp and vrrp all exist
@@ -172,7 +178,8 @@ const PROTO_NAMES = {
 	"ipv6-icmp": true, "esp": true, "ah": true, "igmp": true, "gre": true,
 	"sctp": true, "dccp": true, "udplite": true, "ipip": true, "ipv6": true,
 	"ipv6-route": true, "ipv6-frag": true, "ipv6-nonxt": true, "ipv6-opts": true,
-	"ospf": true, "pim": true, "rsvp": true, "any": true, "all": true, "*": true,
+	"ospf": true, "pim": true, "rsvp": true, "ipencap": true,
+	"any": true, "all": true, "*": true,
 };
 const PROTO_MAX = 255;
 
@@ -183,7 +190,12 @@ const PROTO_RE = '^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$';
 
 function proto_problem(v) {
 	if (type(v) != "string") return null;
-	let s = lc(replace(v, /^!/, ""));
+	// fw4 parses a leading '!' and then drops the invert flag when rendering, so
+	// a negated protocol silently becomes a rule matching exactly that protocol.
+	if (substr(v, 0, 1) == "!")
+		return { code: "invalid_format",
+		         message: "firewall4 cannot express a negated protocol" };
+	let s = lc(v);
 	if (s == "") return { code: "invalid_format", message: "must not be empty" };
 	if (PROTO_NAMES[s]) return null;
 	// nft parses a protocol number with base 0, so a leading zero means octal:
@@ -261,6 +273,11 @@ function address_problem(v) {
 	if (length(ends) == 2) {
 		for (let e in ends) if (!is_valid_ip(e)) return bad;
 		if (is_valid_ipv4(ends[0]) != is_valid_ipv4(ends[1])) return bad;
+		// nft rejects a descending range with "Range negative size", and because
+		// nft -f is atomic that takes the whole ruleset with it.
+		if (is_valid_ipv4(ends[0]) && ipv4_to_int(ends[0]) > ipv4_to_int(ends[1]))
+			return { code: "out_of_range",
+			         message: "address range start must not exceed its end" };
 		return null;
 	}
 
@@ -279,6 +296,7 @@ return {
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem,
+	NAME_MAX, DEVICE_MAX,
 	address_problem,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
