@@ -200,3 +200,21 @@ t.describe('firewall.nat.validate', () => {
 		t.assert_equal(length(nat.validate({ target: 'MASQUERADE', match: { src_zone: 'lan' } }, conn)), 0);
 	});
 });
+
+t.describe('firewall.nat ports and protocol wildcards', () => {
+	// fw4's ensure_tcpudp keeps the section if ONE entry resolves to tcp or udp
+	// (6 and 17 included), otherwise it rewrites a wildcard to tcp+udp, but only
+	// when the list holds nothing else. A wildcard beside another protocol is
+	// discarded, so it must not pass here either.
+	t.it('mirrors ensure_tcpudp for a port match', () => {
+		function gate(protos) {
+			let errs = nat.validate({ target: 'SNAT', snat_ip: '10.0.0.1',
+			                          match: { proto: protos, dest_port: '80' } }, null);
+			return length(filter(errs, function(x) { return x.field == "match.proto"; })) == 0;
+		}
+		for (let p in [['tcp'], ['udp'], ['6'], ['17'], ['tcpudp'], ['any'], ['all'], ['tcp', 'gre']])
+			t.assert_true(gate(p));
+		for (let p in [['gre'], ['any', 'gre'], ['all', 'esp'], ['*', 'icmp']])
+			t.assert_false(gate(p));
+	});
+});

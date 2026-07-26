@@ -173,8 +173,9 @@ function validate(json, conn) {
 		}
 	}
 
-	for (let i = 0; i < length(as_list(m.proto)); i++) {
-		let pp = values.proto_problem(as_list(m.proto)[i]);
+	let protos = as_list(m.proto);
+	for (let i = 0; i < length(protos); i++) {
+		let pp = values.proto_problem(protos[i]);
 		if (pp != null)
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}

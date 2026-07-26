@@ -7,10 +7,9 @@ const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
 
 // Wildcards fw4 narrows to tcp+udp when a port is present, via ensure_tcpudp.
-const TCPUDP = {
-	"tcp": true, "6": true, "udp": true, "17": true, "tcpudp": true,
-	"any": true, "all": true, "*": true,
-};
+// fw4 resolves 6 and 17 to tcp and udp, and expands tcpudp into both.
+const TCPUDP = { "tcp": true, "6": true, "udp": true, "17": true, "tcpudp": true };
+const PROTO_WILDCARD = { "any": true, "all": true, "*": true };
 
 function is_set(v) {
 	return type(v) == "string" && v != "";
@@ -115,8 +114,9 @@ function validate(json, conn) {
 			push(errs, { field: f[0], code: a.code, message: a.message });
 	}
 
-	for (let i = 0; i < length(as_list(m.proto)); i++) {
-		let pp = values.proto_problem(as_list(m.proto)[i]);
+	let protos = as_list(m.proto);
+	for (let i = 0; i < length(protos); i++) {
+		let pp = values.proto_problem(protos[i]);
 		if (pp != null)
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}
@@ -127,13 +127,19 @@ function validate(json, conn) {
 
 	// fw4 rewrites a wildcard proto to tcp+udp when ports are present, so only
 	// an explicitly non-TCP/UDP proto is a real conflict.
-	let protos = as_list(m.proto);
 	if (length(protos) > 0 && (snat_port || is_set(m.src_port) || is_set(m.dest_port))) {
-		// ensure_tcpudp keeps the section as soon as ONE entry is tcp or udp, and
-		// it tests the name parse_protocol resolved, so 6 and 17 count as well.
-		let tcpudp = false;
-		for (let p in protos) if (type(p) == "string" && TCPUDP[lc(p)]) tcpudp = true;
-		if (!tcpudp)
+		// ensure_tcpudp keeps the section as soon as ONE entry resolves to tcp or
+		// udp. Failing that it rewrites a wildcard to tcp+udp, but only when the
+		// list holds nothing else, so a wildcard beside another protocol is not a
+		// free pass: fw4 discards that section.
+		let tcpudp = false, wildcard = false, other = false;
+		for (let p in protos) {
+			let lp = (type(p) == "string") ? lc(p) : null;
+			if (lp != null && TCPUDP[lp]) tcpudp = true;
+			else if (lp != null && PROTO_WILDCARD[lp]) wildcard = true;
+			else other = true;
+		}
+		if (!tcpudp && !(wildcard && !other))
 			push(errs, { field: "match.proto", code: "conflict",
 			             message: "ports require a TCP or UDP protocol" });
 	}

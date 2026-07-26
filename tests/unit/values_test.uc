@@ -319,3 +319,21 @@ t.describe('values.address_problem, fw4 parse ordering', () => {
 		t.assert_equal(v.address_problem('2001:db8::1-2001:db8::9'), null);
 	});
 });
+
+t.describe('values.proto_problem, numeric spelling', () => {
+	// nft parses a protocol number with base 0. A leading zero therefore means
+	// octal: 08 and 09 are unresolvable and fail the entire ruleset atomically,
+	// while 017 loads as 15 and 077 as 63, silently matching another protocol.
+	// Verified against nft -c and nft --debug=netlink on a real box.
+	t.it('rejects leading-zero spellings nft reads as octal', () => {
+		for (let p in ['08', '09', '019', '099'])
+			t.assert_equal(v.proto_problem(p).code, "invalid_format");
+		for (let p in ['017', '077', '010'])
+			t.assert_equal(v.proto_problem(p).code, "invalid_format");
+	});
+
+	t.it('still accepts canonical decimal numbers', () => {
+		for (let p in ['0', '6', '8', '17', '255'])
+			t.assert_equal(v.proto_problem(p), null);
+	});
+});
