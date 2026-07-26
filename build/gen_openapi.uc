@@ -344,7 +344,7 @@ function build_collection_paths(ep) {
 // order, and first-seen group order drives the x-tagGroups order.
 const TAGS = [
 	{ name: "Firewall / Zones",            group: "Firewall", description: "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles." },
-	{ name: "Firewall / Rules",            group: "Firewall", description: "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family, mark, dscp, helper, plus the MARK / DSCP / HELPER targets and their `set_*` values. Cross-refs `firewall/zones`." },
+	{ name: "Firewall / Rules",            group: "Firewall", description: "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family, mark, dscp, plus the MARK and DSCP targets and their `set_*` values. Cross-refs `firewall/zones`." },
 	{ name: "Firewall / Redirects",        group: "Firewall", description: "Port forwards and NAT loopback (`config redirect`). Cross-refs `firewall/zones`." },
 	{ name: "Firewall / Nat",              group: "Firewall", description: "Source NAT (`config nat`): SNAT, MASQUERADE, or exemption from address rewriting, keyed on the outbound zone. Cross-refs `firewall/zones`." },
 	{ name: "Firewall / Forwardings",      group: "Firewall", description: "Zone-to-zone forwarding (`config forwarding`)." },

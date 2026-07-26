@@ -8,7 +8,9 @@ Closes the gap between what `firewall/rules` advertises and what firewall4 actua
 
 ### Added
 
-- `firewall/rules` gains the `DSCP` and `HELPER` targets alongside the existing `MARK`, and the values they require: `set_mark` / `set_xmark` (value or value/mask, decimal or `0x` hex, 32-bit), `set_dscp` (a symbolic class such as `CS0`, `AF11`, `EF`, `LE`, case-insensitive, or a number 0-63), and `set_helper` (a conntrack helper name such as `ftp` or `sip`). A target that needs a value and does not have one is now a `422` instead of a rule the router discards.
+- `firewall/rules` gains the `DSCP` target alongside the existing `MARK`, and the values they require: `set_mark` / `set_xmark` (value or value/mask, decimal or `0x` hex, 32-bit) and `set_dscp` (a symbolic class such as `CS0`, `AF11`, `EF`, `LE`, case-insensitive, or a number 0-63). A target that needs a value and does not have one is now a `422` instead of a rule the router discards.
+
+- The `HELPER` target is deliberately **not** exposed. firewall4 accepts a `set_helper` naming any helper in its helpers file, but only emits the `ct helper` nftables object for helpers whose kernel module is loaded, and `nft -f` is atomic: a rule naming an unavailable helper makes the **entire ruleset** fail to load, leaving the router on its previous firewall. Helper modules ship as separate `kmod-nf-conntrack-*` packages and are absent by default, and uapi cannot verify availability from the resource layer (nor would a check hold, since the module can be removed later). Tracked as a follow-up.
 
 - `firewall/rules` gains `match.mark`, `match.dscp`, and `match.helper`, each accepting a leading `!` for negation the way firewall4 does. `firewall/redirects` gains `match.mark`, the one match option fw4 accepts on a `config redirect`.
 
@@ -26,9 +28,9 @@ Closes the gap between what `firewall/rules` advertises and what firewall4 actua
 
 - `firewall/redirects` rejected `match.dest_zone: "*"`, which firewall4 permits on a DNAT (only the source side forbids the wildcard), and never checked `reflection_zone` against real zones, where a misspelling discards the entire port forward rather than just its loopback rules.
 
-- `firewall/rules` no longer requires `match.src_zone` on every rule. firewall4 requires a source zone only for `NOTRACK` and `HELPER`, whose chain names are derived from it; a rule without one is valid and lands in the `output` or `mangle_output` chain. Rules that omit it were previously rejected with a `422` uapi had no basis for.
+- `firewall/rules` no longer requires `match.src_zone` on every rule. firewall4 requires a source zone only for `NOTRACK`, whose chain name is derived from it; a rule without one is valid and lands in the `output` or `mangle_output` chain. Rules that omit it were previously rejected with a `422` uapi had no basis for.
 
-- Conversely, `NOTRACK` (and the new `HELPER`) now require a **named** source zone: `match.src_zone` absent or set to the `*` / `any` wildcard is rejected. This is the one case in this release that rejects a payload previously accepted, and it is deliberate: firewall4 discards those sections outright (`must specify a source zone for target ...`), so the only configurations affected are ones that were already silently dead on the router.
+- Conversely, `NOTRACK` now requires a **named** source zone: `match.src_zone` absent or set to the `*` / `any` wildcard is rejected. This is the one case in this release that rejects a payload previously accepted, and it is deliberate: firewall4 discards those sections outright (`must specify a source zone for target ...`), so the only configurations affected are ones that were already silently dead on the router.
 
 ### Internal
 
