@@ -91,6 +91,26 @@ function is_valid_cidr_any(s) {
 	return is_valid_cidr(s) || is_valid_ipv6_cidr(s);
 }
 
+// Expands an IPv6 address to its full 32 hex digits so two addresses can be
+// ordered by plain string comparison, which is all the range check needs.
+function ipv6_sort_key(s) {
+	let head = s, tail = "";
+	let dbl = index(s, "::");
+	if (dbl != -1) {
+		head = substr(s, 0, dbl);
+		tail = substr(s, dbl + 2);
+	}
+	let parts = [];
+	for (let g in split(head, ":")) if (g != "") push(parts, g);
+	let tailp = [];
+	for (let g in split(tail, ":")) if (g != "") push(tailp, g);
+	while (length(parts) + length(tailp) < 8) push(parts, "0");
+	for (let g in tailp) push(parts, g);
+	let out = "";
+	for (let g in parts) out += substr("0000" + lc(g), -4);
+	return out;
+}
+
 function ipv4_to_int(s) {
 	let parts = split(s, ".");
 	let n = 0;
@@ -274,8 +294,14 @@ function address_problem(v) {
 		for (let e in ends) if (!is_valid_ip(e)) return bad;
 		if (is_valid_ipv4(ends[0]) != is_valid_ipv4(ends[1])) return bad;
 		// nft rejects a descending range with "Range negative size", and because
-		// nft -f is atomic that takes the whole ruleset with it.
-		if (is_valid_ipv4(ends[0]) && ipv4_to_int(ends[0]) > ipv4_to_int(ends[1]))
+		// nft -f is atomic that takes the whole ruleset with it. Both families
+		// behave the same way, so compare v6 as an expanded hex string rather
+		// than checking only the v4 case.
+		let lo = ends[0], hi = ends[1];
+		let descending = is_valid_ipv4(lo)
+			? (ipv4_to_int(lo) > ipv4_to_int(hi))
+			: (ipv6_sort_key(lo) > ipv6_sort_key(hi));
+		if (descending)
 			return { code: "out_of_range",
 			         message: "address range start must not exceed its end" };
 		return null;

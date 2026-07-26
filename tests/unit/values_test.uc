@@ -349,9 +349,14 @@ t.describe('values nftables string and range limits', () => {
 	// at 128 bytes (fw4 prefixes every one with "!fw4: ") and an interface name
 	// at 15. Each failure is atomic, taking the whole ruleset with it, so all
 	// three were measured against nft -c on a real box.
-	t.it('rejects a descending address range', () => {
-		t.assert_equal(v.address_problem('10.0.0.9-10.0.0.1').code, "out_of_range");
-		t.assert_equal(v.address_problem('10.0.0.1-10.0.0.9'), null);
+	// Both families behave the same way in nft, so the ordering check cannot be
+	// IPv4-only: a descending v6 range fails the load just as hard.
+	t.it('rejects a descending address range in either family', () => {
+		for (let a in ['10.0.0.9-10.0.0.1', '2001:db8::9-2001:db8::1',
+		               'fe80::2-fe80::1', '2001:db8:1::1-2001:db8:0::1'])
+			t.assert_equal(v.address_problem(a).code, "out_of_range");
+		for (let a in ['10.0.0.1-10.0.0.9', '2001:db8::1-2001:db8::9', '::1-::9'])
+			t.assert_equal(v.address_problem(a), null);
 	});
 
 	t.it('exposes the comment and interface-name ceilings', () => {
