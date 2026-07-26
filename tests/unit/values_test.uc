@@ -233,8 +233,14 @@ t.describe('values.port_problem', () => {
 	});
 
 	t.it('ignores absent and non-string input', () => {
-		for (let s in [null, '', 42, [], {}])
+		for (let s in [null, 42, [], {}])
 			t.assert_equal(v.port_problem(s, true), null);
+	});
+
+	// An empty element in a port list is not the same as an absent option: it
+	// reaches uci verbatim and fw4 discards the section over it.
+	t.it('rejects an empty string rather than treating it as absent', () => {
+		t.assert_equal(v.port_problem('', true).code, "invalid_format");
 	});
 
 	t.it('exposes patterns usable as schema constraints', () => {
@@ -260,7 +266,56 @@ t.describe('values.address_problem', () => {
 	});
 
 	t.it('ignores absent and non-string input', () => {
-		for (let s in [null, '', 42, []])
+		for (let s in [null, 42, []])
 			t.assert_equal(v.address_problem(s), null);
+	});
+
+	t.it('rejects an empty string rather than treating it as absent', () => {
+		t.assert_equal(v.address_problem('').code, "invalid_format");
+	});
+});
+
+t.describe('values.proto_problem', () => {
+	// firewall4 renders the token verbatim as `meta l4proto <token>` and nft
+	// resolves it against its own built-in table, which is narrower than
+	// /etc/protocols. Since nft -f is atomic, one unresolvable token rejects the
+	// entire ruleset, so these lists were checked against nft -c on a real box.
+	t.it('accepts every token nft resolves', () => {
+		for (let p in ['tcp', 'udp', 'tcpudp', 'icmp', 'ipv6-icmp', 'gre', 'sctp',
+		               'dccp', 'udplite', 'ipip', 'ospf', 'pim', 'rsvp',
+		               '0', '6', '255', '*', 'any', 'TCP', '!tcp'])
+			t.assert_equal(v.proto_problem(p), null);
+	});
+
+	t.it('rejects names present in /etc/protocols that nft cannot resolve', () => {
+		for (let p in ['ipcomp', 'l2tp', 'vrrp'])
+			t.assert_equal(v.proto_problem(p).code, "invalid_format");
+	});
+
+	t.it('bounds protocol numbers at 255', () => {
+		t.assert_equal(v.proto_problem('256').code, "out_of_range");
+		t.assert_equal(v.proto_problem('999').code, "out_of_range");
+	});
+
+	t.it('rejects unknown names and empty input', () => {
+		t.assert_equal(v.proto_problem('banana').code, "invalid_format");
+		t.assert_equal(v.proto_problem('').code, "invalid_format");
+		t.assert_equal(v.proto_problem(null), null);
+	});
+});
+
+t.describe('values.address_problem, fw4 parse ordering', () => {
+	// fw4's parse_subnet splits on '/' before '-', so a mask cannot appear inside
+	// a range, a range has exactly two endpoints, and both share a family.
+	t.it('rejects malformed ranges fw4 returns null for', () => {
+		for (let a in ['10.0.0.1-10.0.0.5/24', '10.0.0.1/24-10.0.0.5',
+		               '1.1.1.1-2.2.2.2-3.3.3.3', '10.0.0.1-::1',
+		               '10.0.0.1/::1', '-'])
+			t.assert_equal(v.address_problem(a).code, "invalid_format");
+	});
+
+	t.it('still accepts a well-formed same-family range', () => {
+		t.assert_equal(v.address_problem('10.0.0.1-10.0.0.9'), null);
+		t.assert_equal(v.address_problem('2001:db8::1-2001:db8::9'), null);
 	});
 });

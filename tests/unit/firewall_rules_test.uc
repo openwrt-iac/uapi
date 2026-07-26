@@ -391,3 +391,22 @@ t.describe('firewall.rules fw4 fidelity', () => {
 		t.assert_equal(length(errs), 0);
 	});
 });
+
+t.describe('firewall.rules empty values', () => {
+	// fw4 cannot resolve an empty zone ref, port or address, and discards the
+	// whole section over one, so none may reach uci.
+	t.it('never writes an empty zone reference', () => {
+		let u = rules.toUci({ target: 'ACCEPT', match: { src_zone: '', dest_zone: '' } });
+		t.assert_equal(u.src, null);
+		t.assert_equal(u.dest, null);
+	});
+
+	t.it('rejects an empty port or address element', () => {
+		for (let f in ['src_port', 'dest_port', 'src_ip', 'dest_ip']) {
+			let body = { target: 'ACCEPT', match: { src_zone: 'lan' } };
+			body.match[f] = [''];
+			let e = filter(rules.validate(body, null), function(x) { return x.field == "match." + f + "[0]"; });
+			t.assert_equal(e[0].code, "invalid_format");
+		}
+	});
+});

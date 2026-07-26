@@ -5,14 +5,16 @@ let as_list = values.as_list;
 const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
-// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
-// word it cannot resolve still parses, then reaches nft as a literal and fails
-// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
-// rather than accepting any token. Numbers cover anything missing.
-const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
 
 // Wildcards fw4 narrows to tcp+udp when a port is present, via ensure_tcpudp.
-const TCPUDP = { "tcp": true, "udp": true, "tcpudp": true, "any": true, "all": true, "*": true };
+const TCPUDP = {
+	"tcp": true, "6": true, "udp": true, "17": true, "tcpudp": true,
+	"any": true, "all": true, "*": true,
+};
+
+function is_set(v) {
+	return type(v) == "string" && v != "";
+}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -49,23 +51,19 @@ function toUci(json) {
 	if (json.name != null) out.name = json.name;
 	if (json.target != null) out.target = json.target;
 	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
-	if (json.snat_ip != null) out.snat_ip = json.snat_ip;
-	if (json.snat_port != null) out.snat_port = json.snat_port;
+	if (is_set(json.snat_ip)) out.snat_ip = json.snat_ip;
+	if (is_set(json.snat_port)) out.snat_port = json.snat_port;
 	let m = json.match ?? {};
-	if (m.src_zone != null) out.src = m.src_zone;
-	if (m.device != null) out.device = m.device;
-	if (m.src_ip != null) out.src_ip = m.src_ip;
-	if (m.src_port != null) out.src_port = m.src_port;
-	if (m.dest_ip != null) out.dest_ip = m.dest_ip;
-	if (m.dest_port != null) out.dest_port = m.dest_port;
+	if (is_set(m.src_zone)) out.src = m.src_zone;
+	if (is_set(m.device)) out.device = m.device;
+	if (is_set(m.src_ip)) out.src_ip = m.src_ip;
+	if (is_set(m.src_port)) out.src_port = m.src_port;
+	if (is_set(m.dest_ip)) out.dest_ip = m.dest_ip;
+	if (is_set(m.dest_port)) out.dest_port = m.dest_port;
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.mark != null) out.mark = m.mark;
 	if (m.family != null) out.family = m.family;
 	return out;
-}
-
-function is_set(v) {
-	return type(v) == "string" && v != "";
 }
 
 function port_error(field, value, allow_invert, errs) {
@@ -117,6 +115,12 @@ function validate(json, conn) {
 			push(errs, { field: f[0], code: a.code, message: a.message });
 	}
 
+	for (let i = 0; i < length(as_list(m.proto)); i++) {
+		let pp = values.proto_problem(as_list(m.proto)[i]);
+		if (pp != null)
+			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
+	}
+
 	port_error("snat_port", json.snat_port, false, errs);
 	for (let key in ["src_port", "dest_port"])
 		port_error("match." + key, m[key], true, errs);
@@ -125,10 +129,10 @@ function validate(json, conn) {
 	// an explicitly non-TCP/UDP proto is a real conflict.
 	let protos = as_list(m.proto);
 	if (length(protos) > 0 && (snat_port || is_set(m.src_port) || is_set(m.dest_port))) {
-		// ensure_tcpudp keeps the section only when EVERY protocol is TCP/UDP or
-		// a wildcard it can narrow; one stray icmp entry makes fw4 drop it.
-		let tcpudp = true;
-		for (let p in protos) if (!TCPUDP[p]) tcpudp = false;
+		// ensure_tcpudp keeps the section as soon as ONE entry is tcp or udp, and
+		// it tests the name parse_protocol resolved, so 6 and 17 count as well.
+		let tcpudp = false;
+		for (let p in protos) if (type(p) == "string" && TCPUDP[lc(p)]) tcpudp = true;
 		if (!tcpudp)
 			push(errs, { field: "match.proto", code: "conflict",
 			             message: "ports require a TCP or UDP protocol" });
@@ -186,7 +190,7 @@ return {
 				             description: "Match destination address, in the same forms as src_ip" },
 				dest_port: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match destination port or range, optionally negated with a leading '!'" },
-				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
+				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },
