@@ -20744,7 +20744,8 @@
 							"DNAT",
 							"SNAT"
 						],
-						"default": "DNAT"
+						"default": "DNAT",
+						"description": "DNAT forwards an incoming connection onward. SNAT rewrites the source of forwarded traffic and additionally needs match.dest_zone and match.src_dip; it is the legacy spelling, and LuCI migrates such sections to firewall/nat, so prefer that resource for new source NAT"
 					},
 					"enabled": {
 						"type": "boolean",
@@ -20792,7 +20793,15 @@
 									"type": "string",
 									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								},
-								"description": "Match the incoming destination port or range, one value per redirect"
+								"description": "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect"
+							},
+							"src_dip": {
+								"type": "array",
+								"maxItems": 1,
+								"items": {
+									"type": "string"
+								},
+								"description": "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect"
 							},
 							"dest_ip": {
 								"type": "array",
@@ -20881,6 +20890,32 @@
 									]
 								}
 							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"target": {
+									"const": "SNAT"
+								}
+							},
+							"required": [
+								"target"
+							]
+						},
+						"then": {
+							"properties": {
+								"match": {
+									"type": "object",
+									"required": [
+										"dest_zone",
+										"src_dip"
+									]
+								}
+							},
+							"required": [
+								"match"
+							]
 						}
 					}
 				]

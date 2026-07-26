@@ -14,7 +14,7 @@ const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 // (changing the type would break clients) but may carry at most one value.
 const SCALAR_MATCH_KEYS = {
 	src_ip: "src_ip", src_port: "src_port", src_dport: "src_dport",
-	dest_ip: "dest_ip", dest_port: "dest_port",
+	src_dip: "src_dip", dest_ip: "dest_ip", dest_port: "dest_port",
 };
 
 function is_set(v) {
@@ -35,6 +35,7 @@ function fromUci(section) {
 			src_ip: as_list(section.src_ip),
 			src_port: as_list(section.src_port),
 			src_dport: as_list(section.src_dport),
+			src_dip: as_list(section.src_dip),
 			dest_ip: as_list(section.dest_ip),
 			dest_port: as_list(section.dest_port),
 			proto: as_list(section.proto),
@@ -87,6 +88,22 @@ function validate(json, conn) {
 	if (m.src_zone == null || m.src_zone == "")
 		push(errs, { field: "match.src_zone", code: "required", message: "is required" });
 
+	// fw4's snat branch bails out unless the section names a real destination
+	// zone and carries a src_dip to rewrite to, and it refuses a negated one.
+	// Each of those produces a section the router drops on the floor.
+	if (json.target == "SNAT") {
+		if (!is_set(m.dest_zone) || m.dest_zone == "*")
+			push(errs, { field: "match.dest_zone", code: "required",
+			             message: "a named destination zone is required when target is SNAT" });
+		let dip = as_list(m.src_dip)[0];
+		if (!is_set(dip))
+			push(errs, { field: "match.src_dip", code: "required",
+			             message: "the source address to rewrite to is required when target is SNAT" });
+		else if (substr(dip, 0, 1) == "!")
+			push(errs, { field: "match.src_dip", code: "invalid_format",
+			             message: "must not be negated" });
+	}
+
 	// A second value would be written as a uci list, which fw4 refuses on these
 	// options, discarding the redirect entirely.
 	for (let key in SCALAR_MATCH_KEYS) {
@@ -106,7 +123,7 @@ function validate(json, conn) {
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}
 
-	for (let key in ["src_ip", "dest_ip"]) {
+	for (let key in ["src_ip", "dest_ip", "src_dip"]) {
 		let addrs = as_list(m[key]);
 		for (let i = 0; i < length(addrs); i++) {
 			let a = values.address_problem(addrs[i]);
@@ -160,9 +177,18 @@ return {
 	validate: validate,
 	openapi_singular: "firewall redirect",
 	openapi_required: ["match"],
-	openapi_conditional: [hints.match_requires_src_zone],
+	openapi_conditional: [
+		hints.match_requires_src_zone,
+		// Mirrors the SNAT branch of validate(): firewall4 discards the section
+		// without a named destination zone and an address to rewrite to.
+		{ if:   { properties: { target: { const: "SNAT" } }, required: ["target"] },
+		  then: { properties: { match: { type: "object",
+		                                 required: ["dest_zone", "src_dip"] } },
+		          required: ["match"] } },
+	],
 	schema_properties: {
-		target: { type: "string", enum: keys(VALID_TARGETS), default: "DNAT" },
+		target: { type: "string", enum: keys(VALID_TARGETS), default: "DNAT",
+		          description: "DNAT forwards an incoming connection onward. SNAT rewrites the source of forwarded traffic and additionally needs match.dest_zone and match.src_dip; it is the legacy spelling, and LuCI migrates such sections to firewall/nat, so prefer that resource for new source NAT" },
 		match: {
 			type: "object",
 			required: ["src_zone"],
@@ -174,7 +200,9 @@ return {
 				src_port:  { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "Match source port or range, one value per redirect" },
 				src_dport: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
-				             description: "Match the incoming destination port or range, one value per redirect" },
+				             description: "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect" },
+				src_dip:   { type: "array", maxItems: 1, items: { type: "string" },
+				             description: "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect" },
 				dest_ip:   { type: "array", maxItems: 1, items: { type: "string" },
 				             description: "Rewrite destination address, one value per redirect" },
 				dest_port: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
