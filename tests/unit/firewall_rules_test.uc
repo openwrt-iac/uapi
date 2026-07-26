@@ -168,24 +168,22 @@ t.describe('firewall.rules.validate, required fields', () => {
 		t.assert_equal(target_errs[0].code, "required");
 	});
 
-	// fw4 demands a named source zone only for NOTRACK and HELPER, whose chain
-	// names are derived from it; every other target is valid without one.
-	t.it('rejects missing src_zone for zone-derived targets', () => {
-		for (let target in ['NOTRACK']) {
-			let errs = rules.validate({ target, match: {} }, null);
-			let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
-			t.assert_equal(length(zone_errs), 1);
-			t.assert_equal(zone_errs[0].code, "required");
-		}
+	// fw4 demands a named source zone only for NOTRACK, whose chain name is
+	// derived from it; every other target is valid without one.
+	t.it('rejects missing src_zone for NOTRACK', () => {
+		let errs = rules.validate({ target: 'NOTRACK', match: {} }, null);
+		let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
+		t.assert_equal(length(zone_errs), 1);
+		t.assert_equal(zone_errs[0].code, "required");
 	});
 
-	t.it('rejects a wildcard src_zone for zone-derived targets', () => {
+	t.it('rejects a wildcard src_zone for NOTRACK', () => {
 		let errs = rules.validate({ target: 'NOTRACK', match: { src_zone: '*' } }, null);
 		let zone_errs = filter(errs, function(e) { return e.field == "match.src_zone"; });
 		t.assert_equal(length(zone_errs), 1);
 	});
 
-	t.it('accepts a missing src_zone for ordinary targets', () => {
+	t.it('accepts a missing or wildcard src_zone for other targets', () => {
 		t.assert_equal(length(rules.validate({ target: 'ACCEPT', match: {} }, null)), 0);
 		t.assert_equal(length(rules.validate({ target: 'ACCEPT', match: { src_zone: '*' } }, null)), 0);
 	});
@@ -223,7 +221,7 @@ t.describe('firewall.rules.validate, enums', () => {
 	});
 
 	t.it('accepts the protocols fw4 resolves that a closed enum would miss', () => {
-		for (let v in ['gre', 'sctp', '47', 'tcpudp', 'ipv6-icmp', '!tcp']) {
+		for (let v in ['gre', 'sctp', '47', 'tcpudp', 'ipv6-icmp', 'ipencap']) {
 			let errs = full_validate(rules,
 				{ target: 'ACCEPT', match: { src_zone: 'wan', proto: [v] } }, null);
 			t.assert_equal(length(errs), 0);

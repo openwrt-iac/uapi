@@ -283,7 +283,7 @@ t.describe('values.proto_problem', () => {
 	t.it('accepts every token nft resolves', () => {
 		for (let p in ['tcp', 'udp', 'tcpudp', 'icmp', 'ipv6-icmp', 'gre', 'sctp',
 		               'dccp', 'udplite', 'ipip', 'ospf', 'pim', 'rsvp',
-		               '0', '6', '255', '*', 'any', 'TCP', '!tcp'])
+		               '0', '6', '255', '*', 'any', 'TCP', 'ipencap'])
 			t.assert_equal(v.proto_problem(p), null);
 	});
 
@@ -295,6 +295,12 @@ t.describe('values.proto_problem', () => {
 	t.it('bounds protocol numbers at 255', () => {
 		t.assert_equal(v.proto_problem('256').code, "out_of_range");
 		t.assert_equal(v.proto_problem('999').code, "out_of_range");
+	});
+
+	// fw4 parses a leading '!' then discards the invert flag when rendering, so a
+	// negated protocol installs a rule matching exactly that protocol.
+	t.it('rejects a negated protocol firewall4 cannot express', () => {
+		t.assert_equal(v.proto_problem('!tcp').code, "invalid_format");
 	});
 
 	t.it('rejects unknown names and empty input', () => {
@@ -335,5 +341,21 @@ t.describe('values.proto_problem, numeric spelling', () => {
 	t.it('still accepts canonical decimal numbers', () => {
 		for (let p in ['0', '6', '8', '17', '255'])
 			t.assert_equal(v.proto_problem(p), null);
+	});
+});
+
+t.describe('values nftables string and range limits', () => {
+	// nft rejects a descending range with "Range negative size", caps a comment
+	// at 128 bytes (fw4 prefixes every one with "!fw4: ") and an interface name
+	// at 15. Each failure is atomic, taking the whole ruleset with it, so all
+	// three were measured against nft -c on a real box.
+	t.it('rejects a descending address range', () => {
+		t.assert_equal(v.address_problem('10.0.0.9-10.0.0.1').code, "out_of_range");
+		t.assert_equal(v.address_problem('10.0.0.1-10.0.0.9'), null);
+	});
+
+	t.it('exposes the comment and interface-name ceilings', () => {
+		t.assert_equal(v.NAME_MAX, 122);
+		t.assert_equal(v.DEVICE_MAX, 15);
 	});
 });
