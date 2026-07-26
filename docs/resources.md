@@ -52,7 +52,7 @@ daemon's runtime convergence.
 |---|---|---|
 | `firewall/zones` | `config zone` | input/output/forward policies, `network` list. |
 | `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family, mark, dscp}`. MARK and DSCP targets carry `set_mark` / `set_xmark` and `set_dscp`. `src_zone` is required only for NOTRACK, matching fw4. |
-| `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. |
+| `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. DNAT and SNAT. `match.src_dip` is the external address matched on a DNAT (and the address NAT reflection uses) and the rewrite source on an SNAT, where it is required along with a named `match.dest_zone`. Prefer `firewall/nat` for new source NAT; LuCI migrates these sections there. |
 | `firewall/nat` | `config nat` | Source NAT: SNAT (`snat_ip` / `snat_port`), MASQUERADE, or ACCEPT to exempt traffic from rewriting. `match.src_zone` is the outbound zone. An unset `match.family` means IPv4 only, which is fw4's default for NAT. |
 | `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. |
 | `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. |

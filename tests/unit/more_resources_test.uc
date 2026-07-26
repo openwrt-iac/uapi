@@ -614,3 +614,55 @@ t.describe('firewall.redirects mark match', () => {
 		t.assert_equal(e[0].code, "out_of_range");
 	});
 });
+
+t.describe('firewall.redirects SNAT', () => {
+	// fw4's snat branch bails out unless the section names a real destination
+	// zone and carries a src_dip to rewrite to, and refuses a negated one. Each
+	// of those produces a section the router silently drops.
+	t.it('accepts SNAT once fw4 requirements are met', () => {
+		let errs = full_validate(redirects,
+			{ target: 'SNAT', match: { src_zone: 'lan', dest_zone: 'wan',
+			                           src_dip: ['192.168.1.7'] } }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('refuses SNAT where firewall4 would drop the section', () => {
+		let cases = [
+			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan' } },
+			{ f: "match.dest_zone", m: { src_zone: 'lan', src_dip: ['192.168.1.7'] } },
+			{ f: "match.dest_zone", m: { src_zone: 'lan', dest_zone: '*', src_dip: ['192.168.1.7'] } },
+			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan', src_dip: ['!192.168.1.7'] } },
+		];
+		for (let c in cases) {
+			let errs = redirects.validate({ target: 'SNAT', match: c.m }, null);
+			t.assert_equal(length(filter(errs, function(e) { return e.field == c.f; })), 1);
+		}
+	});
+
+	// src_dip was unmodelled, so PUT's full-replace deleted it and firewall4
+	// then discarded a working section. It has to survive a read-modify-write.
+	t.it('round-trips src_dip instead of dropping it', () => {
+		let u = redirects.toUci(redirects.fromUci({
+			'.name': 'r1', '.anonymous': false, '.type': 'redirect',
+			target: 'SNAT', src: 'lan', dest: 'wan', src_dip: '192.168.1.7',
+		}));
+		t.assert_equal(u.src_dip, '192.168.1.7');
+		t.assert_equal(u.target, 'SNAT');
+	});
+
+	// fw4 reads src_dip on the DNAT path too, as the external address for NAT
+	// reflection, so modelling it fixes the same data loss there.
+	t.it('keeps src_dip on a DNAT reflection section', () => {
+		let body = { target: 'DNAT', match: { src_zone: 'wan', src_dport: ['80'],
+		                                      src_dip: ['203.0.113.5'], dest_ip: ['10.0.0.1'] } };
+		t.assert_equal(length(full_validate(redirects, body, null)), 0);
+		t.assert_equal(redirects.toUci(body).src_dip, '203.0.113.5');
+	});
+
+	t.it('still accepts DNAT and the DNAT default', () => {
+		let body = { match: { src_zone: 'wan', src_dport: ['80'], dest_ip: ['10.0.0.1'] } };
+		t.assert_equal(length(full_validate(redirects, body, null)), 0);
+		body.target = 'DNAT';
+		t.assert_equal(length(full_validate(redirects, body, null)), 0);
+	});
+});

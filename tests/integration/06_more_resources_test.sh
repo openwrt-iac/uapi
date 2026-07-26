@@ -51,7 +51,7 @@ natrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -
 echo "$natrule" | tail -1 | grep -q '^200$' || fail "nat POST expected 200"
 nid=$(echo "$natrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
-echo "--- SNAT without snat_ip or snat_port is rejected ---"
+echo "--- nat SNAT without snat_ip or snat_port is rejected ---"
 badnat=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -d '{
 	"target": "SNAT", "match": { "src_zone": "uapi_test" }
 }')
