@@ -20528,7 +20528,7 @@
 								"type": "array",
 								"items": {
 									"type": "string",
-									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
 								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
 							},
@@ -20815,7 +20815,7 @@
 								"type": "array",
 								"items": {
 									"type": "string",
-									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
 								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
 							},
@@ -20983,7 +20983,7 @@
 								"type": "array",
 								"items": {
 									"type": "string",
-									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
 								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset"
 							},

@@ -7,11 +7,6 @@ const VALID_TARGETS = { "DNAT": true, "SNAT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 
-// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
-// word it cannot resolve still parses, then reaches nft as a literal and fails
-// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
-// rather than accepting any token. Numbers cover anything missing.
-const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
 
 // fw4 marks only proto, src_mac and reflection_zone as list options on a
 // `config redirect`; the rest are scalars, and its parse_opt refuses a list
@@ -21,6 +16,10 @@ const SCALAR_MATCH_KEYS = {
 	src_ip: "src_ip", src_port: "src_port", src_dport: "src_dport",
 	dest_ip: "dest_ip", dest_port: "dest_port",
 };
+
+function is_set(v) {
+	return type(v) == "string" && v != "";
+}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -55,11 +54,11 @@ function toUci(json) {
 	if (json.target != null) out.target = json.target;
 	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
 	let m = json.match ?? {};
-	if (m.src_zone != null) out.src = m.src_zone;
-	if (m.dest_zone != null) out.dest = m.dest_zone;
+	if (is_set(m.src_zone)) out.src = m.src_zone;
+	if (is_set(m.dest_zone)) out.dest = m.dest_zone;
 	for (let key in SCALAR_MATCH_KEYS) {
-		let vals = as_list(m[key]);
-		if (length(vals) > 0) out[key] = vals[0];
+		let v = as_list(m[key])[0];
+		if (type(v) == "string" && v != "") out[key] = v;
 	}
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
@@ -94,6 +93,12 @@ function validate(json, conn) {
 		if (length(as_list(m[key])) > 1)
 			push(errs, { field: "match." + key, code: "conflict",
 			             message: "firewall4 accepts only one value for this option on a redirect" });
+	}
+
+	for (let i = 0; i < length(as_list(m.proto)); i++) {
+		let pp = values.proto_problem(as_list(m.proto)[i]);
+		if (pp != null)
+			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}
 
 	for (let key in ["src_ip", "dest_ip"]) {
@@ -132,7 +137,7 @@ function validate(json, conn) {
 
 		let rzones = as_list(json.reflection_zone);
 		for (let i = 0; i < length(rzones); i++) {
-			if (rzones[i] != "" && rzones[i] != "*" && !zones[rzones[i]])
+			if (!zones[rzones[i]])
 				push(errs, { field: sprintf("reflection_zone[%d]", i), code: "conflict",
 				             message: sprintf("zone %J does not exist", rzones[i]) });
 		}
@@ -169,7 +174,7 @@ return {
 				             description: "Rewrite destination address, one value per redirect" },
 				dest_port: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "Rewrite destination port or range, one value per redirect" },
-				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
+				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,

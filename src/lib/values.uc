@@ -160,6 +160,41 @@ function masked_value_exceeds(v, max) {
 	return false;
 }
 
+// firewall4 resolves a protocol name or number and firewall4 then renders it
+// verbatim as `meta l4proto <token>`. nft resolves that against its OWN built-in
+// table, which is narrower than /etc/protocols: ipcomp, l2tp and vrrp all exist
+// in /etc/protocols yet nft answers "Could not resolve protocol name", and since
+// `nft -f` is atomic one such token rejects the ENTIRE ruleset rather than one
+// section. Protocol numbers stop at 255. fw4 lowercases the value and treats
+// '*' as a wildcard, so both are accepted here.
+const PROTO_NAMES = {
+	"tcp": true, "udp": true, "tcpudp": true, "icmp": true, "icmpv6": true,
+	"ipv6-icmp": true, "esp": true, "ah": true, "igmp": true, "gre": true,
+	"sctp": true, "dccp": true, "udplite": true, "ipip": true, "ipv6": true,
+	"ipv6-route": true, "ipv6-frag": true, "ipv6-nonxt": true, "ipv6-opts": true,
+	"ospf": true, "pim": true, "rsvp": true, "any": true, "all": true, "*": true,
+};
+const PROTO_MAX = 255;
+
+// Shape only, so the spec documents the field; the authoritative check is
+// proto_problem, which fw4's case-insensitivity makes awkward to express as a
+// pattern (ucode's regex engine has no inline-flag support).
+const PROTO_RE = '^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$';
+
+function proto_problem(v) {
+	if (type(v) != "string") return null;
+	let s = lc(replace(v, /^!/, ""));
+	if (s == "") return { code: "invalid_format", message: "must not be empty" };
+	if (PROTO_NAMES[s]) return null;
+	if (match(s, /^[0-9]{1,3}$/)) {
+		if (+s <= PROTO_MAX) return null;
+		return { code: "out_of_range",
+		         message: sprintf("protocol number must not exceed %d", PROTO_MAX) };
+	}
+	return { code: "invalid_format",
+	         message: "must be a protocol name nftables can resolve, or a number 0-255" };
+}
+
 // firewall4 parses a port as a single number or a min-max / min:max range,
 // each endpoint within 0..65535 and the range ordered; match options may be
 // negated with a leading '!', target options such as snat_port may not. Shared
@@ -167,14 +202,17 @@ function masked_value_exceeds(v, max) {
 const PORT_RE = '^[0-9]{1,5}([-:][0-9]{1,5})?$';
 const PORT_MATCH_RE = '^!?[0-9]{1,5}([-:][0-9]{1,5})?$';
 const PORT_MAX = 65535;
+const PORT_CRE = regexp(PORT_RE);
+const PORT_MATCH_CRE = regexp(PORT_MATCH_RE);
 
 // Returns null when the value is absent or acceptable, otherwise the {code,
 // message} for a field error. A port fw4 cannot parse makes it discard the
 // whole section, so passing one through would be a silent no-op.
 function port_problem(v, allow_invert) {
-	if (type(v) != "string" || v == "") return null;
+	if (type(v) != "string") return null;
+	if (v == "") return { code: "invalid_format", message: "must not be empty" };
 
-	if (!match(v, regexp(allow_invert ? PORT_MATCH_RE : PORT_RE)))
+	if (!match(v, allow_invert ? PORT_MATCH_CRE : PORT_CRE))
 		return { code: "invalid_format",
 		         message: allow_invert
 		             ? "must be a port or port range (e.g. 80, 1000-2000, 1000:2000), optionally negated with a leading '!'"
@@ -204,29 +242,40 @@ function address_problem(v) {
 	let bad = { code: "invalid_format",
 	            message: "must be an address, a prefix, an address range, or a uci network name" };
 
-	if (type(v) != "string" || v == "") return null;
+	if (type(v) != "string") return null;
+	if (v == "") return bad;
 
 	let s = replace(v, /^!/, "");
 	if (s == "") return bad;
 
 	if (index(s, ".") == -1 && index(s, ":") == -1 && index(s, "/") == -1)
-		return match(s, /^[A-Za-z0-9_-]+$/) ? null : bad;
+		return match(s, /^[A-Za-z0-9][A-Za-z0-9_-]*$/) ? null : bad;
 
-	for (let part in split(s, "-")) {
-		if (part == "") return bad;
-		if (is_valid_ip(part) || is_valid_cidr_any(part)) continue;
-		// addr/netmask, which fw4 accepts alongside addr/prefixlen
-		let seg = split(part, "/");
-		if (length(seg) == 2 && is_valid_ip(seg[0]) && is_valid_ip(seg[1])) continue;
-		return bad;
+	// fw4's parse_subnet splits on '/' first, so a mask may not appear inside a
+	// range, and a range has exactly two endpoints of the same family.
+	let ends = split(s, "-");
+	if (length(ends) > 2) return bad;
+	if (length(ends) == 2) {
+		for (let e in ends) if (!is_valid_ip(e)) return bad;
+		if (is_valid_ipv4(ends[0]) != is_valid_ipv4(ends[1])) return bad;
+		return null;
 	}
-	return null;
+
+	if (is_valid_ip(s) || is_valid_cidr_any(s)) return null;
+
+	// addr/netmask, which fw4 accepts alongside addr/prefixlen
+	let seg = split(s, "/");
+	if (length(seg) == 2 && is_valid_ip(seg[0]) && is_valid_ip(seg[1])
+	    && is_valid_ipv4(seg[0]) == is_valid_ipv4(seg[1]))
+		return null;
+	return bad;
 }
 
 return {
 	normalize_bool, as_list, as_int,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
+	PROTO_RE, PROTO_MAX, proto_problem,
 	address_problem,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,

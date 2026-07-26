@@ -20,11 +20,10 @@ const DSCP_MATCH_RE = '^!?' + DSCP_VAL + '$';
 
 const DSCP_MAX = 63;
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
-// word it cannot resolve still parses, then reaches nft as a literal and fails
-// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
-// rather than accepting any token. Numbers cover anything missing.
-const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
+
+function is_set(v) {
+	return type(v) == "string" && v != "";
+}
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -62,8 +61,8 @@ function toUci(json) {
 	if (json.set_xmark != null) out.set_xmark = json.set_xmark;
 	if (json.set_dscp != null) out.set_dscp = json.set_dscp;
 	let m = json.match ?? {};
-	if (m.src_zone != null) out.src = m.src_zone;
-	if (m.dest_zone != null) out.dest = m.dest_zone;
+	if (is_set(m.src_zone)) out.src = m.src_zone;
+	if (is_set(m.dest_zone)) out.dest = m.dest_zone;
 	if (type(m.src_ip) == "array" && length(m.src_ip) > 0) out.src_ip = m.src_ip;
 	if (type(m.dest_ip) == "array" && length(m.dest_ip) > 0) out.dest_ip = m.dest_ip;
 	if (type(m.src_port) == "array" && length(m.src_port) > 0) out.src_port = m.src_port;
@@ -93,10 +92,6 @@ function load_zones(conn) {
 // as unusable as an absent one: both leave rule.src.zone unset and fw4 discards
 // the section.
 const ZONE_REQUIRED_TARGETS = { "NOTRACK": true };
-
-function is_set(v) {
-	return type(v) == "string" && v != "";
-}
 
 function range_error(field, value, max, errs) {
 	if (values.masked_value_exceeds(value, max))
@@ -178,6 +173,12 @@ function validate(json, conn) {
 		}
 	}
 
+	for (let i = 0; i < length(as_list(m.proto)); i++) {
+		let pp = values.proto_problem(as_list(m.proto)[i]);
+		if (pp != null)
+			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
+	}
+
 	check_target_coupling(json, errs);
 	range_error("set_mark", json.set_mark, values.MARK_MAX, errs);
 	range_error("set_xmark", json.set_xmark, values.MARK_MAX, errs);
@@ -241,7 +242,7 @@ return {
 				dest_ip:   { type: "array", items: { type: "string" } },
 				src_port:  { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
 				dest_port: { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
-				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
+				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
