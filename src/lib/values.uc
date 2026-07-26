@@ -186,7 +186,10 @@ function proto_problem(v) {
 	let s = lc(replace(v, /^!/, ""));
 	if (s == "") return { code: "invalid_format", message: "must not be empty" };
 	if (PROTO_NAMES[s]) return null;
-	if (match(s, /^[0-9]{1,3}$/)) {
+	// nft parses a protocol number with base 0, so a leading zero means octal:
+	// 08 and 09 are unresolvable and fail the whole ruleset, while 017 quietly
+	// becomes 15. Only a canonical decimal spelling is safe.
+	if (match(s, /^(0|[1-9][0-9]{0,2})$/)) {
 		if (+s <= PROTO_MAX) return null;
 		return { code: "out_of_range",
 		         message: sprintf("protocol number must not exceed %d", PROTO_MAX) };

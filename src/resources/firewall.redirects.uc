@@ -95,8 +95,9 @@ function validate(json, conn) {
 			             message: "firewall4 accepts only one value for this option on a redirect" });
 	}
 
-	for (let i = 0; i < length(as_list(m.proto)); i++) {
-		let pp = values.proto_problem(as_list(m.proto)[i]);
+	let protos = as_list(m.proto);
+	for (let i = 0; i < length(protos); i++) {
+		let pp = values.proto_problem(protos[i]);
 		if (pp != null)
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}
