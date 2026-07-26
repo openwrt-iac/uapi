@@ -5,21 +5,14 @@ let as_list = values.as_list;
 const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
-// fw4 resolves a protocol by name against /etc/protocols, by number, or as one
-// of the wildcards, so a closed enum would reject working config such as gre,
-// sctp, or a bare 47. Shape only; fw4 owns the lookup.
-const PROTO_STR = '^!?[A-Za-z0-9][A-Za-z0-9-]{0,31}$';
+// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
+// word it cannot resolve still parses, then reaches nft as a literal and fails
+// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
+// rather than accepting any token. Numbers cover anything missing.
+const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
 
 // Wildcards fw4 narrows to tcp+udp when a port is present, via ensure_tcpudp.
 const TCPUDP = { "tcp": true, "udp": true, "tcpudp": true, "any": true, "all": true, "*": true };
-// fw4 parses a port as a single number or a min-max / min:max range, each
-// component within 0..65535 and the range ordered. Match options may be
-// negated; snat_port carries NO_INVERT and may not.
-const PORT_STR = '^[0-9]{1,5}([-:][0-9]{1,5})?$';
-const PORT_MATCH_STR = '^!?[0-9]{1,5}([-:][0-9]{1,5})?$';
-const PORT_RE = regexp(PORT_STR);
-const PORT_MATCH_RE = regexp(PORT_MATCH_STR);
-const PORT_MAX = 65535;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -76,36 +69,9 @@ function is_set(v) {
 }
 
 function port_error(field, value, allow_invert, errs) {
-	if (type(value) != "string" || value == "") return;
-
-	if (!match(value, allow_invert ? PORT_MATCH_RE : PORT_RE)) {
-		push(errs, { field, code: "invalid_format",
-		             message: allow_invert
-		                 ? "must be a port or port range (e.g. 80, 1000-2000, 1000:2000), optionally negated with a leading '!'"
-		                 : "must be a port or port range (e.g. 80, 1000-2000, 1000:2000)" });
-		return;
-	}
-
-	// The pattern bounds the digit count, not the value: fw4 rejects a section
-	// whose port exceeds 65535 or whose range runs backwards, which would
-	// otherwise reach the router and be silently dropped.
-	let bounds = [];
-	for (let part in split(replace(value, /^!/, ""), /[-:]/)) push(bounds, +part);
-	for (let n in bounds) {
-		if (n > PORT_MAX) {
-			push(errs, { field, code: "out_of_range",
-			             message: sprintf("port %d exceeds the maximum of %d", n, PORT_MAX) });
-			return;
-		}
-	}
-	if (length(bounds) == 2 && bounds[0] > bounds[1])
-		push(errs, { field, code: "out_of_range",
-		             message: "port range start must not exceed its end" });
-}
-
-function check_ports(m, errs) {
-	for (let key in ["src_port", "dest_port"])
-		port_error("match." + key, m[key], true, errs);
+	let p = values.port_problem(value, allow_invert);
+	if (p != null)
+		push(errs, { field, code: p.code, message: p.message });
 }
 
 function validate(json, conn) {
@@ -140,16 +106,20 @@ function validate(json, conn) {
 			             message: "is only valid when target is SNAT; send null to clear it" });
 	}
 
-	// fw4 types snat_ip as a network, which resolves an address, a prefix in
-	// either family, or a uci network name, so there is no syntax we can check
-	// here without reimplementing its resolver. Negation is the one form it
-	// explicitly refuses (NO_INVERT).
+	// snat_ip is a network like the match addresses, but carries NO_INVERT.
 	if (snat_ip && substr(json.snat_ip, 0, 1) == "!")
 		push(errs, { field: "snat_ip", code: "invalid_format",
 		             message: "must not be negated" });
 
+	for (let f in [["snat_ip", json.snat_ip], ["match.src_ip", m.src_ip], ["match.dest_ip", m.dest_ip]]) {
+		let a = values.address_problem(f[1]);
+		if (a != null)
+			push(errs, { field: f[0], code: a.code, message: a.message });
+	}
+
 	port_error("snat_port", json.snat_port, false, errs);
-	check_ports(m, errs);
+	for (let key in ["src_port", "dest_port"])
+		port_error("match." + key, m[key], true, errs);
 
 	// fw4 rewrites a wildcard proto to tcp+udp when ports are present, so only
 	// an explicitly non-TCP/UDP proto is a real conflict.
@@ -210,13 +180,13 @@ return {
 				             description: "Outbound interface name to match" },
 				src_ip:    { type: ["string", "null"],
 				             description: "Match source address. firewall4 resolves an address, a prefix in either family, or a uci network name, optionally negated with a leading '!'" },
-				src_port:  { type: ["string", "null"], pattern: PORT_MATCH_STR,
+				src_port:  { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match source port or range, optionally negated with a leading '!'" },
 				dest_ip:   { type: ["string", "null"],
 				             description: "Match destination address, in the same forms as src_ip" },
-				dest_port: { type: ["string", "null"], pattern: PORT_MATCH_STR,
+				dest_port: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match destination port or range, optionally negated with a leading '!'" },
-				proto:     { type: "array", items: { type: "string", pattern: PROTO_STR },
+				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

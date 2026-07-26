@@ -210,6 +210,8 @@ t.describe('firewall.rules.validate, enums', () => {
 		t.assert_equal(fe[0].code, "not_in_enum");
 	});
 
+	// An unresolvable name still parses in fw4 and then reaches nft as a
+	// literal, which fails the whole ruleset, so it has to be caught here.
 	t.it('rejects unknown protocol with the position in the field path', () => {
 		let errs = full_validate(rules,
 			{ target: 'ACCEPT', match: { src_zone: 'wan', proto: ['tcp', 'bogus'] } },
@@ -217,7 +219,15 @@ t.describe('firewall.rules.validate, enums', () => {
 		let pe = filter(errs, function(e) { return match(e.field, /match\.proto\[/); });
 		t.assert_equal(length(pe), 1);
 		t.assert_equal(pe[0].field, "match.proto[1]");
-		t.assert_equal(pe[0].code, "not_in_enum");
+		t.assert_equal(pe[0].code, "invalid_format");
+	});
+
+	t.it('accepts the protocols fw4 resolves that a closed enum would miss', () => {
+		for (let v in ['gre', 'sctp', '47', 'tcpudp', 'ipv6-icmp', '!tcp']) {
+			let errs = full_validate(rules,
+				{ target: 'ACCEPT', match: { src_zone: 'wan', proto: [v] } }, null);
+			t.assert_equal(length(errs), 0);
+		}
 	});
 });
 
@@ -357,5 +367,36 @@ t.describe('firewall.rules mark / DSCP / helper', () => {
 				{ target: 'HELPER', set_helper: v, match: { src_zone: 'lan' } }, null);
 			t.assert_equal(length(errs), 0);
 		}
+	});
+});
+
+t.describe('firewall.rules fw4 fidelity', () => {
+	// fw4's parse_zone_ref knows exactly one wildcard, '*'. Treating 'any' as a
+	// synonym both skipped the existence check and let fw4 discard the section.
+	t.it('treats only * as a wildcard zone', () => {
+		let conn = ubus.stub({ uci: { firewall: { z: { '.type': 'zone', name: 'lan' } } } });
+		t.assert_equal(length(rules.validate({ target: 'ACCEPT', match: { src_zone: '*' } }, conn)), 0);
+		let e = filter(rules.validate({ target: 'ACCEPT', match: { src_zone: 'any' } }, conn),
+		               function(x) { return x.field == "match.src_zone"; });
+		t.assert_equal(e[0].code, "conflict");
+	});
+
+	t.it('rejects ports and addresses fw4 would discard', () => {
+		for (let c in [{ f: 'dest_port', v: '70000' }, { f: 'dest_port', v: '90-80' },
+		               { f: 'src_ip', v: '10.0.0.256' }, { f: 'dest_ip', v: 'not an ip' }]) {
+			let body = { target: 'ACCEPT', match: { src_zone: 'lan' } };
+			body.match[c.f] = [c.v];
+			let e = filter(rules.validate(body, null),
+			               function(x) { return match(x.field, /^match\./) && x.field != "match.src_zone"; });
+			t.assert_true(length(e) >= 1);
+		}
+	});
+
+	t.it('accepts the port and address forms fw4 resolves', () => {
+		let errs = rules.validate({ target: 'ACCEPT', match: {
+			src_zone: 'lan', dest_port: ['1000:2000', '!22'],
+			src_ip: ['10.0.0.0/8', '2001:db8::/32', 'lan', '10.0.0.1-10.0.0.9'],
+		} }, null);
+		t.assert_equal(length(errs), 0);
 	});
 });

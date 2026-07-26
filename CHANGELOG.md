@@ -16,6 +16,16 @@ Closes the gap between what `firewall/rules` advertises and what firewall4 actua
 
 ### Fixed
 
+- **A redirect created through `firewall/redirects` was silently discarded by the router whenever it set `src_ip`, `src_port`, `src_dport`, `dest_ip`, or `dest_port`.** firewall4 marks only `proto`, `src_mac`, and `reflection_zone` as list options on a `config redirect`; the rest are scalars, and its `parse_opt` refuses a list outright, dropping the whole section. uapi modelled all of them as arrays and uci writes an array as a `list`, even for a single element, so the write returned 200 and the port forward never existed. The wire type stays an array for compatibility, but at most one value is accepted (a second is now a `422` rather than a dead rule) and uci receives a scalar. Sections adopted from an existing config were unaffected, which is why the failure went unnoticed.
+
+- `firewall/rules` treated `match.src_zone` / `match.dest_zone` value `any` as a wildcard synonym for `*`. firewall4 has exactly one wildcard, `*`; `any` resolves against zone names, matches nothing, and the section is discarded. uapi additionally suppressed the "zone does not exist" error for it, so the operator got a stronger signal that the value was valid. `any` is now checked against real zones like any other name.
+
+- Ports and addresses are validated against what firewall4 actually parses, across all three firewall resources. Previously `firewall/rules` validated neither, so `dest_port: ["70000"]` or a typo'd address returned 200 and the router discarded the rule; `firewall/redirects` bounded neither the magnitude nor the ordering of a range while rejecting fw4's `!` negation and `:` range separator, and accepted only bare IPv4 in `dest_ip`, rejecting IPv6, prefixes, ranges, and uci network names it resolves happily.
+
+- The `proto` enum across the firewall resources rejected protocols firewall4 supports, including `gre`, `sctp`, `ipv6-icmp`, numeric values, and `tcpudp`, which is fw4's own default token and what LuCI writes. It now covers the protocols an OpenWrt box carries plus numbers. Unresolvable names stay rejected: fw4 passes them through to nft as literals, where they fail the entire ruleset rather than one section.
+
+- `firewall/redirects` rejected `match.dest_zone: "*"`, which firewall4 permits on a DNAT (only the source side forbids the wildcard), and never checked `reflection_zone` against real zones, where a misspelling discards the entire port forward rather than just its loopback rules.
+
 - `firewall/rules` no longer requires `match.src_zone` on every rule. firewall4 requires a source zone only for `NOTRACK` and `HELPER`, whose chain names are derived from it; a rule without one is valid and lands in the `output` or `mangle_output` chain. Rules that omit it were previously rejected with a `422` uapi had no basis for.
 
 - Conversely, `NOTRACK` (and the new `HELPER`) now require a **named** source zone: `match.src_zone` absent or set to the `*` / `any` wildcard is rejected. This is the one case in this release that rejects a payload previously accepted, and it is deliberate: firewall4 discards those sections outright (`must specify a source zone for target ...`), so the only configurations affected are ones that were already silently dead on the router.

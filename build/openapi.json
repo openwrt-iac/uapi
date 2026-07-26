@@ -20522,31 +20522,24 @@
 							"src_port": {
 								"type": "array",
 								"items": {
-									"type": "string"
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"dest_port": {
 								"type": "array",
 								"items": {
-									"type": "string"
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"proto": {
 								"type": "array",
 								"items": {
 									"type": "string",
-									"enum": [
-										"tcp",
-										"udp",
-										"icmp",
-										"icmpv6",
-										"esp",
-										"ah",
-										"igmp",
-										"any",
-										"all"
-									]
-								}
+									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
+								},
+								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
 							},
 							"family": {
 								"type": "string",
@@ -20814,50 +20807,54 @@
 							},
 							"src_ip": {
 								"type": "array",
+								"maxItems": 1,
 								"items": {
 									"type": "string"
-								}
+								},
+								"description": "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name"
 							},
 							"src_port": {
 								"type": "array",
+								"maxItems": 1,
 								"items": {
-									"type": "string"
-								}
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								},
+								"description": "Match source port or range, one value per redirect"
 							},
 							"src_dport": {
 								"type": "array",
+								"maxItems": 1,
 								"items": {
-									"type": "string"
-								}
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								},
+								"description": "Match the incoming destination port or range, one value per redirect"
 							},
 							"dest_ip": {
 								"type": "array",
+								"maxItems": 1,
 								"items": {
 									"type": "string"
-								}
+								},
+								"description": "Rewrite destination address, one value per redirect"
 							},
 							"dest_port": {
 								"type": "array",
+								"maxItems": 1,
 								"items": {
-									"type": "string"
-								}
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								},
+								"description": "Rewrite destination port or range, one value per redirect"
 							},
 							"proto": {
 								"type": "array",
 								"items": {
 									"type": "string",
-									"enum": [
-										"tcp",
-										"udp",
-										"icmp",
-										"icmpv6",
-										"esp",
-										"ah",
-										"igmp",
-										"any",
-										"all"
-									]
-								}
+									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
+								},
+								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
 							},
 							"family": {
 								"type": "string",
@@ -21023,7 +21020,7 @@
 								"type": "array",
 								"items": {
 									"type": "string",
-									"pattern": "^!?[A-Za-z0-9][A-Za-z0-9-]{0,31}$"
+									"pattern": "^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$"
 								},
 								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset"
 							},

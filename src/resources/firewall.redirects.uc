@@ -2,16 +2,25 @@ let values = require('values');
 let hints = require('openapi_hints');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
-let is_valid_ipv4 = values.is_valid_ipv4;
 
 const VALID_TARGETS = { "DNAT": true, "SNAT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-const VALID_PROTOS = {
-	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
-	"esp": true, "ah": true, "igmp": true, "any": true, "all": true,
-};
 const VALID_REFLECTION_SRC = { "internal": true, "external": true };
-const PORT_RE = /^[0-9]+(-[0-9]+)?$/;
+
+// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
+// word it cannot resolve still parses, then reaches nft as a literal and fails
+// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
+// rather than accepting any token. Numbers cover anything missing.
+const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
+
+// fw4 marks only proto, src_mac and reflection_zone as list options on a
+// `config redirect`; the rest are scalars, and its parse_opt refuses a list
+// outright, discarding the whole section. These stay arrays on the wire
+// (changing the type would break clients) but may carry at most one value.
+const SCALAR_MATCH_KEYS = {
+	src_ip: "src_ip", src_port: "src_port", src_dport: "src_dport",
+	dest_ip: "dest_ip", dest_port: "dest_port",
+};
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -48,11 +57,10 @@ function toUci(json) {
 	let m = json.match ?? {};
 	if (m.src_zone != null) out.src = m.src_zone;
 	if (m.dest_zone != null) out.dest = m.dest_zone;
-	if (type(m.src_ip) == "array" && length(m.src_ip) > 0) out.src_ip = m.src_ip;
-	if (type(m.src_port) == "array" && length(m.src_port) > 0) out.src_port = m.src_port;
-	if (type(m.src_dport) == "array" && length(m.src_dport) > 0) out.src_dport = m.src_dport;
-	if (type(m.dest_ip) == "array" && length(m.dest_ip) > 0) out.dest_ip = m.dest_ip;
-	if (type(m.dest_port) == "array" && length(m.dest_port) > 0) out.dest_port = m.dest_port;
+	for (let key in SCALAR_MATCH_KEYS) {
+		let vals = as_list(m[key]);
+		if (length(vals) > 0) out[key] = vals[0];
+	}
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
 	if (m.mark != null) out.mark = m.mark;
@@ -80,25 +88,30 @@ function validate(json, conn) {
 	if (m.src_zone == null || m.src_zone == "")
 		push(errs, { field: "match.src_zone", code: "required", message: "is required" });
 
-	let src_dports = as_list(m.src_dport);
-	for (let i = 0; i < length(src_dports); i++) {
-		if (!match(src_dports[i], PORT_RE))
-			push(errs, { field: sprintf("match.src_dport[%d]", i), code: "invalid_format",
-			             message: "must be a port or port range" });
+	// A second value would be written as a uci list, which fw4 refuses on these
+	// options, discarding the redirect entirely.
+	for (let key in SCALAR_MATCH_KEYS) {
+		if (length(as_list(m[key])) > 1)
+			push(errs, { field: "match." + key, code: "conflict",
+			             message: "firewall4 accepts only one value for this option on a redirect" });
 	}
 
-	let dest_ports = as_list(m.dest_port);
-	for (let i = 0; i < length(dest_ports); i++) {
-		if (!match(dest_ports[i], PORT_RE))
-			push(errs, { field: sprintf("match.dest_port[%d]", i), code: "invalid_format",
-			             message: "must be a port or port range" });
+	for (let key in ["src_ip", "dest_ip"]) {
+		let addrs = as_list(m[key]);
+		for (let i = 0; i < length(addrs); i++) {
+			let a = values.address_problem(addrs[i]);
+			if (a != null)
+				push(errs, { field: sprintf("match.%s[%d]", key, i), code: a.code, message: a.message });
+		}
 	}
 
-	let dest_ips = as_list(m.dest_ip);
-	for (let i = 0; i < length(dest_ips); i++) {
-		if (dest_ips[i] != "" && !is_valid_ipv4(dest_ips[i]))
-			push(errs, { field: sprintf("match.dest_ip[%d]", i), code: "invalid_format",
-			             message: "must be a valid IPv4 address" });
+	for (let key in ["src_port", "src_dport", "dest_port"]) {
+		let ports = as_list(m[key]);
+		for (let i = 0; i < length(ports); i++) {
+			let p = values.port_problem(ports[i], true);
+			if (p != null)
+				push(errs, { field: sprintf("match.%s[%d]", key, i), code: p.code, message: p.message });
+		}
 	}
 
 	if (values.masked_value_exceeds(m.mark, values.MARK_MAX))
@@ -113,9 +126,16 @@ function validate(json, conn) {
 		if (m.src_zone != null && m.src_zone != "" && !zones[m.src_zone])
 			push(errs, { field: "match.src_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.src_zone) });
-		if (m.dest_zone != null && m.dest_zone != "" && !zones[m.dest_zone])
+		if (m.dest_zone != null && m.dest_zone != "" && m.dest_zone != "*" && !zones[m.dest_zone])
 			push(errs, { field: "match.dest_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.dest_zone) });
+
+		let rzones = as_list(json.reflection_zone);
+		for (let i = 0; i < length(rzones); i++) {
+			if (rzones[i] != "" && rzones[i] != "*" && !zones[rzones[i]])
+				push(errs, { field: sprintf("reflection_zone[%d]", i), code: "conflict",
+				             message: sprintf("zone %J does not exist", rzones[i]) });
+		}
 	}
 
 	return errs;
@@ -139,12 +159,18 @@ return {
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
-				src_ip:    { type: "array", items: { type: "string" } },
-				src_port:  { type: "array", items: { type: "string" } },
-				src_dport: { type: "array", items: { type: "string" } },
-				dest_ip:   { type: "array", items: { type: "string" } },
-				dest_port: { type: "array", items: { type: "string" } },
-				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
+				src_ip:    { type: "array", maxItems: 1, items: { type: "string" },
+				             description: "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name" },
+				src_port:  { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				             description: "Match source port or range, one value per redirect" },
+				src_dport: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				             description: "Match the incoming destination port or range, one value per redirect" },
+				dest_ip:   { type: "array", maxItems: 1, items: { type: "string" },
+				             description: "Rewrite destination address, one value per redirect" },
+				dest_port: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				             description: "Rewrite destination port or range, one value per redirect" },
+				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
+				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

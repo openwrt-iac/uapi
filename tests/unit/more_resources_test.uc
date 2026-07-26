@@ -77,9 +77,18 @@ t.describe('firewall.redirects', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
-	t.it('validate accepts port ranges given as arrays', () => {
+	// fw4 marks src_dport a scalar on a redirect, so a second value would be
+	// written as a uci list and make it discard the whole section.
+	t.it('validate rejects a second value on a scalar-typed match option', () => {
 		let errs = redirects.validate({ target: 'DNAT',
 		                                match: { src_zone: 'wan', src_dport: ['8000-8100', '9000'] } }, null);
+		let e = filter(errs, function(x) { return x.field == "match.src_dport"; });
+		t.assert_equal(e[0].code, "conflict");
+	});
+
+	t.it('validate accepts a single port range', () => {
+		let errs = redirects.validate({ target: 'DNAT',
+		                                match: { src_zone: 'wan', src_dport: ['8000-8100'] } }, null);
 		t.assert_equal(length(errs), 0);
 	});
 

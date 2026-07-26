@@ -23,10 +23,11 @@ const HELPER_MATCH_RE = '^!?' + HELPER_VAL + '$';
 
 const DSCP_MAX = 63;
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-const VALID_PROTOS = {
-	"tcp": true, "udp": true, "icmp": true, "icmpv6": true,
-	"esp": true, "ah": true, "igmp": true, "any": true, "all": true,
-};
+// fw4 resolves a protocol by name against /etc/protocols or by number. A bare
+// word it cannot resolve still parses, then reaches nft as a literal and fails
+// the WHOLE ruleset, so this lists the names an OpenWrt box actually carries
+// rather than accepting any token. Numbers cover anything missing.
+const PROTO_RE = '^!?([0-9]{1,3}|tcp|udp|tcpudp|icmp|icmpv6|ipv6-icmp|esp|ah|igmp|gre|sctp|dccp|udplite|ipcomp|l2tp|ipip|ipv6|ipv6-route|ipv6-frag|ipv6-nonxt|ipv6-opts|ospf|vrrp|pim|rsvp|any|all)$';
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -81,10 +82,11 @@ function toUci(json) {
 	return out;
 }
 
-// '*' (and the synonym 'any') is firewall4's wildcard meaning "any zone"; the
-// stock OpenWrt config ships rules with `option dest '*'` (e.g. Allow-ICMPv6-
-// Forward). Validation must accept it alongside named zones.
-const WILDCARD_ZONES = { "*": true, "any": true };
+// '*' is firewall4's only wildcard zone reference; the stock OpenWrt config
+// ships rules with `option dest '*'` (e.g. Allow-ICMPv6-Forward). 'any' is NOT
+// a synonym: parse_zone_ref resolves it against zone names, finds nothing, and
+// fw4 discards the whole section, so it has to fail the existence check.
+const WILDCARD_ZONES = { "*": true };
 
 function load_zones(conn) {
 	let zones = {};
@@ -173,6 +175,24 @@ function validate(json, conn) {
 		             message: sprintf("a named source zone is required when target is %s", json.target) });
 	}
 
+	for (let key in ["src_port", "dest_port"]) {
+		let ports = as_list(m[key]);
+		for (let i = 0; i < length(ports); i++) {
+			let p = values.port_problem(ports[i], true);
+			if (p != null)
+				push(errs, { field: sprintf("match.%s[%d]", key, i), code: p.code, message: p.message });
+		}
+	}
+
+	for (let key in ["src_ip", "dest_ip"]) {
+		let addrs = as_list(m[key]);
+		for (let i = 0; i < length(addrs); i++) {
+			let a = values.address_problem(addrs[i]);
+			if (a != null)
+				push(errs, { field: sprintf("match.%s[%d]", key, i), code: a.code, message: a.message });
+		}
+	}
+
 	check_target_coupling(json, errs);
 	range_error("set_mark", json.set_mark, values.MARK_MAX, errs);
 	range_error("set_xmark", json.set_xmark, values.MARK_MAX, errs);
@@ -238,9 +258,10 @@ return {
 				dest_zone: { type: ["string", "null"] },
 				src_ip:    { type: "array", items: { type: "string" } },
 				dest_ip:   { type: "array", items: { type: "string" } },
-				src_port:  { type: "array", items: { type: "string" } },
-				dest_port: { type: "array", items: { type: "string" } },
-				proto:     { type: "array", items: { type: "string", enum: keys(VALID_PROTOS) } },
+				src_port:  { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
+				dest_port: { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
+				proto:     { type: "array", items: { type: "string", pattern: PROTO_RE },
+				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

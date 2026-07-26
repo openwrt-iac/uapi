@@ -210,3 +210,57 @@ t.describe('values mark patterns', () => {
 		t.assert_true(match('0x1', regexp(v.MARK_MATCH_RE)) != null);
 	});
 });
+
+t.describe('values.port_problem', () => {
+	// Mirrors fw4's parse_port: N or a min-max/min:max range, endpoints within
+	// 0..65535 and ordered, negation allowed only on match options.
+	t.it('accepts every form fw4 parses', () => {
+		for (let s in ['80', '1000-2000', '1000:2000', '65535', '0'])
+			t.assert_equal(v.port_problem(s, false), null);
+		t.assert_equal(v.port_problem('!80', true), null);
+	});
+
+	t.it('rejects negation when the option forbids it', () => {
+		t.assert_equal(v.port_problem('!80', false).code, "invalid_format");
+	});
+
+	t.it('rejects values fw4 would discard the section for', () => {
+		t.assert_equal(v.port_problem('65536', true).code, "out_of_range");
+		t.assert_equal(v.port_problem(sprintf("%d", v.PORT_MAX + 1), true).code, "out_of_range");
+		t.assert_equal(v.port_problem('2000-1000', true).code, "out_of_range");
+		t.assert_equal(v.port_problem('notaport', true).code, "invalid_format");
+		t.assert_equal(v.port_problem('80,443', true).code, "invalid_format");
+	});
+
+	t.it('ignores absent and non-string input', () => {
+		for (let s in [null, '', 42, [], {}])
+			t.assert_equal(v.port_problem(s, true), null);
+	});
+
+	t.it('exposes patterns usable as schema constraints', () => {
+		t.assert_true(match('1000:2000', regexp(v.PORT_RE)) != null);
+		t.assert_equal(match('!80', regexp(v.PORT_RE)), null);
+		t.assert_true(match('!80', regexp(v.PORT_MATCH_RE)) != null);
+	});
+});
+
+t.describe('values.address_problem', () => {
+	// fw4 types these as networks: a host, a prefix, a netmask, a range, or a
+	// uci network name, any of them negatable.
+	t.it('accepts every form fw4 resolves', () => {
+		for (let s in ['192.168.1.1', '10.0.0.0/8', '192.168.1.0/255.255.255.0',
+		               '2001:db8::1', '2001:db8::/32', '10.0.0.1-10.0.0.9',
+		               '!10.0.0.1', 'lan', 'wan6'])
+			t.assert_equal(v.address_problem(s), null);
+	});
+
+	t.it('rejects values fw4 cannot resolve', () => {
+		for (let s in ['999.0.0.1', '10.0.0.256', 'not an ip', '10.0.0..1', '!', '10.0.0.1-'])
+			t.assert_equal(v.address_problem(s).code, "invalid_format");
+	});
+
+	t.it('ignores absent and non-string input', () => {
+		for (let s in [null, '', 42, []])
+			t.assert_equal(v.address_problem(s), null);
+	});
+});

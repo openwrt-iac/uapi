@@ -160,9 +160,74 @@ function masked_value_exceeds(v, max) {
 	return false;
 }
 
+// firewall4 parses a port as a single number or a min-max / min:max range,
+// each endpoint within 0..65535 and the range ordered; match options may be
+// negated with a leading '!', target options such as snat_port may not. Shared
+// so the three firewall resources cannot drift from what the router accepts.
+const PORT_RE = '^[0-9]{1,5}([-:][0-9]{1,5})?$';
+const PORT_MATCH_RE = '^!?[0-9]{1,5}([-:][0-9]{1,5})?$';
+const PORT_MAX = 65535;
+
+// Returns null when the value is absent or acceptable, otherwise the {code,
+// message} for a field error. A port fw4 cannot parse makes it discard the
+// whole section, so passing one through would be a silent no-op.
+function port_problem(v, allow_invert) {
+	if (type(v) != "string" || v == "") return null;
+
+	if (!match(v, regexp(allow_invert ? PORT_MATCH_RE : PORT_RE)))
+		return { code: "invalid_format",
+		         message: allow_invert
+		             ? "must be a port or port range (e.g. 80, 1000-2000, 1000:2000), optionally negated with a leading '!'"
+		             : "must be a port or port range (e.g. 80, 1000-2000, 1000:2000)" };
+
+	let bounds = [];
+	for (let part in split(replace(v, /^!/, ""), /[-:]/)) push(bounds, +part);
+	for (let n in bounds) {
+		if (n > PORT_MAX)
+			return { code: "out_of_range",
+			         message: sprintf("port %d exceeds the maximum of %d", n, PORT_MAX) };
+	}
+	if (length(bounds) == 2 && bounds[0] > bounds[1])
+		return { code: "out_of_range", message: "port range start must not exceed its end" };
+
+	return null;
+}
+
+// firewall4 types its address options as `network`, resolving a host address,
+// addr/prefixlen, addr/netmask, an addr-addr range, or a uci network name, any
+// of them optionally negated. Validating these as bare IPv4 rejects working
+// configuration; accepting anything lets a typo reach the router, where fw4
+// discards the whole section. So check only the forms we can tell apart: a
+// value that looks like an address is validated as one, and a bare word is
+// left for fw4 to resolve as a network name.
+function address_problem(v) {
+	let bad = { code: "invalid_format",
+	            message: "must be an address, a prefix, an address range, or a uci network name" };
+
+	if (type(v) != "string" || v == "") return null;
+
+	let s = replace(v, /^!/, "");
+	if (s == "") return bad;
+
+	if (index(s, ".") == -1 && index(s, ":") == -1 && index(s, "/") == -1)
+		return match(s, /^[A-Za-z0-9_-]+$/) ? null : bad;
+
+	for (let part in split(s, "-")) {
+		if (part == "") return bad;
+		if (is_valid_ip(part) || is_valid_cidr_any(part)) continue;
+		// addr/netmask, which fw4 accepts alongside addr/prefixlen
+		let seg = split(part, "/");
+		if (length(seg) == 2 && is_valid_ip(seg[0]) && is_valid_ip(seg[1])) continue;
+		return bad;
+	}
+	return null;
+}
+
 return {
 	normalize_bool, as_list, as_int,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
+	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
+	address_problem,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 	constant_time_equals,
