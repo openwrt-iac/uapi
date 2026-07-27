@@ -39,7 +39,7 @@ markrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules
 echo "$markrule" | tail -1 | grep -q '^200$' || fail "MARK rule POST expected 200"
 mid=$(echo "$markrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "$markrule" | grep -q '"set_mark": "0x43"' || fail "MARK rule missing set_mark on read-back"
-assert_fw4_emits "!fw4: t_mark"
+assert_fw4_emits "!fw4: $mid"
 assert_fw4_emits "mark set 0x00000043"
 
 echo "--- a MARK rule without a mark value is rejected, not silently dropped by fw4 ---"
@@ -55,7 +55,7 @@ natrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -
 	"match": { "src_zone": "uapi_test" }
 }')
 echo "$natrule" | tail -1 | grep -q '^200$' || fail "nat POST expected 200"
-assert_fw4_emits "!fw4: uapi_test_masq"
+assert_fw4_emits "!fw4: $nid"
 nid=$(echo "$natrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
 echo "--- nat SNAT without snat_ip or snat_port is rejected ---"
