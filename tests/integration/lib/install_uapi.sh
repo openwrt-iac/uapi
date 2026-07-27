@@ -100,7 +100,12 @@ assert_fw4_emits() {
 	if ! fw4_render | grep -qF -- "$1"; then
 		needle=$(printf '%s' "$1" | sed 's/^!fw4: //')
 		why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -iF -- "$needle" | head -2)
-		fail "firewall4 renders no rule matching '$1'${why:+ -- it said: $why}"
+		# No complaint from fw4 means the section either never reached uci or was
+		# rendered somewhere the match did not look, so show both.
+		if [ -z "$why" ]; then
+			why="(no fw4 warning) uci: $($SSH "uci show firewall | grep -iF -- '$needle' | head -3" | tr '\n' ' ')"
+		fi
+		fail "firewall4 renders no rule matching '$1' -- $why"
 	fi
 }
 
