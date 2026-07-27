@@ -66,3 +66,57 @@ install_uapi() {
 	FW_RO_TOKEN=$($SSH 'uapi-token create --name test_firewall_ro --scope "firewall:ro"' 2>/dev/null | head -1)
 	export ADMIN_TOKEN RO_TOKEN FW_RO_TOKEN
 }
+
+# firewall4 renders the uci config and nftables loads it as one atomic
+# transaction, so an HTTP 200 says nothing about whether a rule exists on the
+# box. fw4 silently drops a section it cannot parse, and nft rejects the whole
+# table if any rendered rule is invalid. Both failures are invisible to a
+# status-code assertion, and both have shipped.
+#
+# These assert on what fw4 RENDERS from uci rather than on the applied table.
+# The CI image stubs /etc/init.d/firewall to a no-op because applying a real
+# ruleset would tear down the port forwards the tests run over, so the live
+# table is never populated here. Rendering needs no running firewall, shows
+# both failures anyway (a dropped section emits no rule; an unloadable one
+# fails `nft -c`), and is equally safe to run against a real router.
+
+fail() { echo "FAIL: $*"; exit 1; }
+
+fw4_render() {
+	$SSH 'command -v fw4 >/dev/null 2>&1 || { echo "__NO_FW4__"; exit 0; }; fw4 print 2>/dev/null'
+}
+
+# Guards against the assertions quietly passing on an image without fw4, which
+# would recreate exactly the false confidence this is meant to remove.
+require_fw4() {
+	$SSH 'command -v fw4 >/dev/null 2>&1' || fail "fw4 is not installed in the test image; the firewall assertions cannot run"
+}
+
+# fw4 tags every rule it emits with `!fw4: <name>`, so the section name is the
+# handle. On failure, report fw4's own complaint about that section: it is
+# almost always the explanation.
+assert_fw4_emits() {
+	require_fw4
+	if ! fw4_render | grep -qF -- "$1"; then
+		needle=$(printf '%s' "$1" | sed 's/^!fw4: //')
+		why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -iF -- "$needle" | head -2)
+		fail "firewall4 renders no rule matching '$1'${why:+ -- it said: $why}"
+	fi
+}
+
+assert_fw4_omits() {
+	require_fw4
+	if fw4_render | grep -qF -- "$1"; then
+		fail "firewall4 still renders a rule matching '$1'"
+	fi
+}
+
+# Check-loads the rendered ruleset without applying it, which is the assertion
+# that catches the atomic-failure class: nft -f is all-or-nothing, so a single
+# unrenderable token rejects every rule and the router keeps its old ruleset
+# while `firewall reload` still exits 0.
+assert_fw4_loads() {
+	require_fw4
+	err=$($SSH 'fw4 print 2>/dev/null | nft -c -f - 2>&1' | head -3)
+	[ -z "$err" ] || fail "nftables would reject the whole ruleset: $err"
+}

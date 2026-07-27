@@ -32,6 +32,11 @@ id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$
 [ -n "$id" ] || fail "created rule missing id"
 echo "  new id: $id  request_id: $request_id"
 
+echo "--- firewall4 actually renders the rule (a 200 alone does not prove it) ---"
+assert_fw4_emits "!fw4: $id"
+assert_fw4_emits "tcp dport 22"
+assert_fw4_loads
+
 echo "--- successful POST emits an AUDIT line in logread carrying that request_id ---"
 sleep 1
 $SSH "logread | tail -200" > /tmp/uapi_logread.txt || true
@@ -93,5 +98,9 @@ echo "$deleted" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
 echo "--- GET /firewall/rules/$id after delete returns 404 ---"
 gone=$(call "$URL/firewall/rules/$id")
 echo "$gone" | tail -1 | grep -q '^404$' || fail "after delete expected 404"
+
+echo "--- and firewall4 no longer renders it, not just gone from uci ---"
+assert_fw4_omits "!fw4: $id"
+assert_fw4_loads
 
 echo "firewall rules CRUD ok"
