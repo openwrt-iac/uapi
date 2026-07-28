@@ -295,18 +295,35 @@ t.describe('network.interfaces', () => {
 		t.assert_deep_equal(r.addresses, ['10.42.0.1/16']);
 	});
 
-	t.it('merge_for_patch carries forward the existing private_key', () => {
-		let existing = {
-			'.name': 'wg1', '.anonymous': false, '.type': 'interface',
-			proto: 'wireguard',
-			private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
-			addresses: ['10.42.0.1/16'],
+	// A wireguard interface could not be written through PUT at all before the
+	// handler learned to restore a masked secret: the read view hides
+	// private_key and validate requires it, so the round-trip 422'd.
+	t.it('PUT and PATCH both keep a private_key the read view hid', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let seed = function() {
+			return ubus.stub({ uci: { network: {
+				wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+				       private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
+				       addresses: ['10.42.0.1/16'], listen_port: '51820' },
+			} } });
 		};
-		let merged = interfaces.merge_for_patch(existing,
-			interfaces.fromUci(existing), { listen_port: 51999 });
-		t.assert_equal(merged.private_key,
+
+		let c1 = seed();
+		t.assert_equal(ifh.patch(c1, ctx, 'wg1', { listen_port: 51999 }).status, 200);
+		t.assert_equal(c1._state.uci.network.wg1.private_key,
 			'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
-		t.assert_equal(merged.listen_port, 51999);
+
+		let c2 = seed();
+		t.assert_equal(ifh.replace(c2, ctx, 'wg1',
+			{ proto: 'wireguard', addresses: ['10.42.0.1/16'], listen_port: 51999 }).status, 200);
+		t.assert_equal(c2._state.uci.network.wg1.private_key,
+			'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
 	});
 
 	t.it('toUci stringifies numeric ip6assign', () => {

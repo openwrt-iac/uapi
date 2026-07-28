@@ -383,6 +383,59 @@ t.describe('handler.patch', () => {
 	});
 });
 
+t.describe('handler.replace write-only secret carry-forward', () => {
+	let wiface_mod = loadfile('src/resources/wireless.interfaces.uc')();
+	let wiface = handler.make(wiface_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function rctx() { return { request_id: "01hx0000000000000000000000" }; }
+	function seeded() {
+		return ubus.stub({ uci: { wireless: {
+			w1: { '.type': 'wifi-iface', '.anonymous': false,
+			      device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'secretpw' },
+		} } });
+	}
+
+	// The read view hides the key, so a client cannot send it back. PUT is
+	// full-replace, and validate requires a key for psk2, so before the
+	// carry-forward this was a 422 with no way to write the section at all.
+	t.it('PUT of the masked read view succeeds and keeps the key', () => {
+		let c = seeded();
+		let r = wiface.replace(c, rctx(), 'w1',
+			{ device: 'radio0', ssid: 'home2', encryption: 'psk2' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.ssid, 'home2');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'secretpw');
+	});
+
+	t.it('PUT that supplies a new key still replaces it', () => {
+		let c = seeded();
+		let r = wiface.replace(c, rctx(), 'w1',
+			{ device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'newsecret' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
+	});
+
+	// An IaC client that emits null for every unset optional attribute must not
+	// destroy a working key, so null means keep, exactly as omission does.
+	t.it('PUT with an explicit null keeps the key rather than clearing it', () => {
+		let c = seeded();
+		let r = wiface.replace(c, rctx(), 'w1',
+			{ device: 'radio0', ssid: 'home', encryption: 'psk2', key: null });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.key, 'secretpw');
+	});
+
+	t.it('still reports validation before not_found on an unknown id', () => {
+		let c = seeded();
+		let r = wiface.replace(c, rctx(), 'nope', { ssid: 'x', encryption: 'psk2' });
+		t.assert_equal(r.status, 422);
+	});
+});
+
 t.describe('handler.patch JSON Patch write-only secret carry-forward', () => {
 	let wiface_mod = loadfile('src/resources/wireless.interfaces.uc')();
 	let wiface = handler.make(wiface_mod, {

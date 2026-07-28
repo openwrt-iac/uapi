@@ -138,6 +138,44 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
+	// preshared_key is masked on read, so a client that GETs a peer and PUTs it
+	// back cannot send it. PUT is full-replace, so without the carry-forward the
+	// key is deleted from uci and the tunnel loses it, with a 200 in reply.
+	t.it('PUT does not erase a preshared_key the masked read view hid', () => {
+		let h = make_handler();
+		let c = with_wg();
+		c.uci_set('network', 'g_existing', 'preshared_key',
+		          'c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0MDA=');
+		let view = wgp.fromUci(c.uci_get('network', 'g_existing'), c);
+		t.assert_equal(view.preshared_key, null);
+		t.assert_true(view.has_preshared_key);
+
+		let r = h.replace(c, ctx(), 'g_existing', {
+			interface: 'wg1',
+			public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			allowed_ips: ['10.42.0.5/32'],
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c.uci_get('network', 'g_existing', 'preshared_key'),
+		               'c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0MDA=');
+	});
+
+	t.it('PUT still replaces a preshared_key the client does send', () => {
+		let h = make_handler();
+		let c = with_wg();
+		c.uci_set('network', 'g_existing', 'preshared_key',
+		          'c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0MDA=');
+		let r = h.replace(c, ctx(), 'g_existing', {
+			interface: 'wg1',
+			public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			allowed_ips: ['10.42.0.5/32'],
+			preshared_key: 'bmV3c2VjcmV0bmV3c2VjcmV0bmV3c2VjcmV0bmV3c2U=',
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c.uci_get('network', 'g_existing', 'preshared_key'),
+		               'bmV3c2VjcmV0bmV3c2VjcmV0bmV3c2VjcmV0bmV3c2U=');
+	});
+
 	t.it('PUT response preserves the parent interface from the real uci type', () => {
 		let h = make_handler();
 		let c = with_wg();

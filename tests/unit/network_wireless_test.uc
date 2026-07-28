@@ -1,5 +1,6 @@
 let t = require('harness');
 let handler = require('handler');
+let ubus = require('bus');
 
 let netdev = loadfile('src/resources/network.devices.uc')();
 let widev = loadfile('src/resources/wireless.devices.uc')();
@@ -132,20 +133,37 @@ t.describe('wireless.interfaces', () => {
 		t.assert_equal(length(ee), 0);
 	});
 
-	t.it('merge_for_patch carries forward the existing key when the body omits it', () => {
-		let existing_section = { '.name': 'w1', '.anonymous': false, '.type': 'wifi-iface',
-		                         device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'secretpw' };
-		let existing_json = wiface.fromUci(existing_section);
-		let merged = wiface.merge_for_patch(existing_section, existing_json, { ssid: 'newssid' });
-		t.assert_equal(merged.ssid, 'newssid');
-		t.assert_equal(merged.key, 'secretpw');
+	// The carry-forward lives in the handler, keyed on writeOnly, so it is
+	// asserted through a real PATCH rather than against a resource hook.
+	function wiface_handler() {
+		return handler.make(wiface, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+	}
+	function seeded_wiface() {
+		return ubus.stub({ uci: { wireless: {
+			w1: { '.type': 'wifi-iface', '.anonymous': false,
+			      device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'secretpw' },
+		} } });
+	}
+
+	t.it('PATCH that omits the masked key carries the stored one forward', () => {
+		let c = seeded_wiface();
+		let r = wiface_handler().patch(c, { request_id: "01hx0000000000000000000000" },
+		                               'w1', { ssid: 'newssid' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.ssid, 'newssid');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'secretpw');
 	});
 
-	t.it('merge_for_patch lets the body override the key explicitly', () => {
-		let existing_section = { '.name': 'w1', '.anonymous': false, '.type': 'wifi-iface',
-		                         device: 'radio0', encryption: 'psk2', key: 'old' };
-		let existing_json = wiface.fromUci(existing_section);
-		let merged = wiface.merge_for_patch(existing_section, existing_json, { key: 'new' });
-		t.assert_equal(merged.key, 'new');
+	t.it('PATCH that supplies a key overrides the stored one', () => {
+		let c = seeded_wiface();
+		let r = wiface_handler().patch(c, { request_id: "01hx0000000000000000000000" },
+		                               'w1', { key: 'new' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.key, 'new');
 	});
 });

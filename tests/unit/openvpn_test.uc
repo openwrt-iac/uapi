@@ -1,5 +1,6 @@
 let t = require('harness');
 let handler = require('handler');
+let ubus = require('bus');
 
 let instances = loadfile('src/resources/openvpn.instances.uc')();
 
@@ -61,26 +62,51 @@ t.describe('openvpn.instances contract', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
-	t.it('merge_for_patch carries forward key when PATCH omits it', () => {
-		let existing_section = {
-			'.name': 'srv', '.type': 'openvpn',
-			key: '/etc/openvpn/old.key',
-			tls_auth: '/etc/openvpn/old.ta',
-		};
-		let existing_view = instances.fromUci(existing_section);
-		// PATCH only changes verb; key/tls_auth not in body.
-		let merged = instances.merge_for_patch(existing_section, existing_view, { verb: 4 });
-		t.assert_equal(merged.key, '/etc/openvpn/old.key');
-		t.assert_equal(merged.tls_auth, '/etc/openvpn/old.ta');
-		t.assert_equal(merged.verb, 4);
+	// The carry-forward lives in the handler, keyed on writeOnly, so these go
+	// through real writes. openvpn is the resource with three masked fields at
+	// once, which is what makes it worth exercising separately.
+	function ovpn_handler() {
+		return handler.make(instances, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+	}
+	function seeded_ovpn() {
+		return ubus.stub({ uci: { openvpn: {
+			srv: { '.type': 'openvpn', '.anonymous': false, enabled: '1',
+			       key: '/etc/openvpn/old.key', tls_auth: '/etc/openvpn/old.ta',
+			       pkcs12: '/etc/openvpn/old.p12' },
+		} } });
+	}
+
+	t.it('PATCH that omits the masked secrets carries all three forward', () => {
+		let c = seeded_ovpn();
+		let r = ovpn_handler().patch(c, { request_id: "01hx0000000000000000000000" },
+		                             'srv', { verb: 4 });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.openvpn.srv.key, '/etc/openvpn/old.key');
+		t.assert_equal(c._state.uci.openvpn.srv.tls_auth, '/etc/openvpn/old.ta');
+		t.assert_equal(c._state.uci.openvpn.srv.pkcs12, '/etc/openvpn/old.p12');
 	});
 
-	t.it('merge_for_patch lets PATCH rotate a key explicitly', () => {
-		let existing_section = { '.name': 'srv', '.type': 'openvpn', key: '/etc/openvpn/old.key' };
-		let existing_view = instances.fromUci(existing_section);
-		let merged = instances.merge_for_patch(existing_section, existing_view,
-		                                       { key: '/etc/openvpn/new.key' });
-		t.assert_equal(merged.key, '/etc/openvpn/new.key');
+	t.it('PUT of the masked read view keeps all three rather than erasing them', () => {
+		let c = seeded_ovpn();
+		let r = ovpn_handler().replace(c, { request_id: "01hx0000000000000000000000" },
+		                               'srv', { enabled: true, verb: 4 });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.openvpn.srv.key, '/etc/openvpn/old.key');
+		t.assert_equal(c._state.uci.openvpn.srv.tls_auth, '/etc/openvpn/old.ta');
+		t.assert_equal(c._state.uci.openvpn.srv.pkcs12, '/etc/openvpn/old.p12');
+	});
+
+	t.it('a supplied secret still rotates', () => {
+		let c = seeded_ovpn();
+		let r = ovpn_handler().patch(c, { request_id: "01hx0000000000000000000000" },
+		                             'srv', { key: '/etc/openvpn/new.key' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.openvpn.srv.key, '/etc/openvpn/new.key');
 	});
 
 	t.it('schema enforces port range', () => {
