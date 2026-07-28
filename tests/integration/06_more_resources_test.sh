@@ -40,7 +40,8 @@ echo "$markrule" | tail -1 | grep -q '^200$' || fail "MARK rule POST expected 20
 mid=$(echo "$markrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "$markrule" | grep -q '"set_mark": "0x43"' || fail "MARK rule missing set_mark on read-back"
 assert_fw4_emits "!fw4: $mid"
-assert_fw4_emits "mark set 0x00000043"
+# fw4 renders the mark as written; only the applied table pads it to 0x00000043
+assert_fw4_emits "mark set 0x43"
 
 echo "--- a MARK rule without a mark value is rejected, not silently dropped by fw4 ---"
 badmark=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
