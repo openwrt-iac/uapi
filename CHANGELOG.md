@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
-Closes the gap between what `firewall/rules` advertises and what firewall4 actually applies. `target: "MARK"` was accepted but had no field to carry the mark value, so fw4 warned `must specify option 'set_mark' or 'set_xmark' for target 'mark'` and skipped the section: the write returned 200 and the rule silently never existed. Auditing the rest of the surface against fw4 found the same class three more times, plus the inverse (uapi rejecting configurations fw4 accepts). Closes [openwrt-iac/uapi#20](https://github.com/openwrt-iac/uapi/issues/20).
+Closes the gap between what the firewall resources advertise and what firewall4 actually applies. `target: "MARK"` was accepted but had no field to carry the mark value, so fw4 warned `must specify option 'set_mark' or 'set_xmark' for target 'mark'` and skipped the section: the write returned 200 and the rule silently never existed. Auditing the rest of the surface against fw4 found the same class repeatedly, plus the inverse (uapi rejecting configurations fw4 accepts). Closes [openwrt-iac/uapi#20](https://github.com/openwrt-iac/uapi/issues/20).
+
+One item is a different and more serious shape than the rest, and is worth reading before upgrading: a port matched alongside a protocol that cannot carry one was not a no-op but a **widening**. firewall4 dropped the port and emitted the rule anyway, so it matched more traffic than asked for, and with the `all` wildcard it matched everything. Verified on hardware: `proto: ["all"]` with `dest_port: ["22"]` on an `ACCEPT` rule renders a bare `counter accept`. Such payloads are now rejected. See the entry under Fixed, and [openwrt-iac/uapi#24](https://github.com/openwrt-iac/uapi/issues/24).
 
 ### Added
 

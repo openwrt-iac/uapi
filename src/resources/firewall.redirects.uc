@@ -134,10 +134,13 @@ function validate(json, conn) {
 		             message: sprintf("must be at most %d characters: firewall4 renders it into an nftables comment, which nft caps at 128", values.NAME_MAX) });
 
 	let protos = as_list(m.proto);
+	let proto_ok = true;
 	for (let i = 0; i < length(protos); i++) {
 		let pp = values.proto_problem(protos[i]);
 		if (pp != null)
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
+		if (pp != null || type(protos[i]) != "string")
+			proto_ok = false;
 	}
 
 	for (let key in ["src_ip", "dest_ip", "src_dip"]) {
@@ -161,8 +164,10 @@ function validate(json, conn) {
 	}
 
 	// A redirect has no ensure_tcpudp rewrite, so even a wildcard drops the ports
-	// and leaves a redirect matching the whole protocol.
-	if (has_port && values.port_proto_conflict(protos, false))
+	// and leaves a redirect matching the whole protocol. Only worth saying once
+	// the protocols themselves parse: an unresolvable token fails the entire
+	// ruleset rather than widening one redirect.
+	if (proto_ok && has_port && values.port_proto_conflict(protos, false))
 		push(errs, { field: "match.proto", code: "conflict",
 		             message: "firewall4 keeps a port match only on tcp or udp, so this redirect would match the whole protocol instead" });
 

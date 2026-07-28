@@ -178,15 +178,21 @@ function validate(json, conn) {
 		             message: sprintf("must be at most %d characters: firewall4 renders it into an nftables comment, which nft caps at 128", values.NAME_MAX) });
 
 	let protos = as_list(m.proto);
+	let proto_ok = true;
 	for (let i = 0; i < length(protos); i++) {
 		let pp = values.proto_problem(protos[i]);
 		if (pp != null)
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
+		if (pp != null || type(protos[i]) != "string")
+			proto_ok = false;
 	}
 
 	// A rule has no ensure_tcpudp rewrite, so even a wildcard drops the ports and
-	// leaves a rule matching the whole protocol.
-	if ((length(as_list(m.src_port)) > 0 || length(as_list(m.dest_port)) > 0)
+	// leaves a rule matching the whole protocol. Only worth saying once the
+	// protocols themselves parse: an unresolvable token fails the entire ruleset
+	// rather than widening one rule, so claiming the latter would misdescribe it.
+	if (proto_ok
+	    && (length(as_list(m.src_port)) > 0 || length(as_list(m.dest_port)) > 0)
 	    && values.port_proto_conflict(protos, false))
 		push(errs, { field: "match.proto", code: "conflict",
 		             message: "firewall4 keeps a port match only on tcp or udp, so this rule would match the whole protocol instead" });
