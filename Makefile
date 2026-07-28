@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs openapi openapi-check stage sbom vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -18,7 +18,9 @@ help:
 	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
 	@echo "  lint-defaults      verify every fromUci default is annotated in schema_properties"
+	@echo "  lint-openapi-shape structural checks a conformance validator does not make"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
+	@echo "  openapi-validate   conformance-check the spec (needs python3 + openapi-spec-validator)"
 	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
 	@echo "  sbom               emit SPDX 2.3 SBOM (build/sbom.spdx.json); APK=<path> attaches built APK sha256"
 	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.4 QEMU VM"
@@ -63,7 +65,7 @@ openapi-validate:
 	@command -v python3 >/dev/null || { echo "python3 required for openapi-validate"; exit 1; }
 	@python3 -c 'import openapi_spec_validator' 2>/dev/null \
 		|| { echo "openapi-spec-validator not installed: pip install openapi-spec-validator"; exit 1; }
-	@python3 -c 'import json,sys; from openapi_spec_validator import validate; \
+	@python3 -c 'import json; from openapi_spec_validator import validate; \
 		validate(json.load(open("build/openapi.json"))); \
 		print("OK: build/openapi.json is a valid OpenAPI 3.1 document")'
 

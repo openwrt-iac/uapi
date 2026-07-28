@@ -87,8 +87,18 @@ function walk(node, path) {
 	    || exists(node, "if") || exists(node, "then") || exists(node, "else"))
 		check_schema(node, path);
 
-	for (let k in node)
+	for (let k in node) {
+		// The value of `properties` maps a property NAME to a schema, so it is
+		// not itself a schema. Descending into it blindly would read a uci option
+		// called "enum" or "required" as a keyword on the map and report a
+		// contradiction that is not there.
+		if (k == "properties" && type(node[k]) == "object") {
+			for (let name in node[k])
+				walk(node[k][name], sprintf("%s/properties/%s", path, name));
+			continue;
+		}
 		walk(node[k], path + "/" + k);
+	}
 }
 
 walk(spec, "");
