@@ -390,6 +390,47 @@ t.describe('firewall.rules fw4 fidelity', () => {
 	});
 });
 
+// fw4 assigns src_port and dest_port only inside `case "tcp": case "udp":`, so
+// a port beside any other protocol is dropped and the rule still emitted,
+// matching the whole protocol. A rule gets no ensure_tcpudp rewrite, so even a
+// wildcard loses its ports: {proto: ['all'], dest_port: ['22']} on an ACCEPT
+// rule renders a rule accepting everything.
+t.describe('firewall.rules ports and protocol wildcards', () => {
+	function gate(protos, m) {
+		let body = { target: 'ACCEPT', match: { src_zone: 'lan', proto: protos, ...m } };
+		return length(filter(rules.validate(body, null),
+		                     function(x) { return x.field == "match.proto"; })) == 0;
+	}
+
+	t.it('refuses a port beside any protocol that would lose it', () => {
+		for (let p in [['tcp'], ['udp'], ['6'], ['17'], ['tcpudp'], ['TCP'], ['tcp', 'udp']])
+			t.assert_true(gate(p, { dest_port: ['80'] }));
+		for (let p in [['gre'], ['icmp'], ['esp'], ['tcp', 'gre']])
+			t.assert_false(gate(p, { dest_port: ['80'] }));
+	});
+
+	// The wildcard is the worst case, not a free pass: it is the one that turns
+	// a port rule into a rule matching every packet.
+	t.it('refuses a wildcard with a port, since no rewrite saves it here', () => {
+		for (let p in [['all'], ['any'], ['*']]) {
+			t.assert_false(gate(p, { dest_port: ['80'] }));
+			t.assert_false(gate(p, { src_port: ['80'] }));
+			t.assert_true(gate(p, {}));
+		}
+	});
+
+	t.it('leaves a protocol alone when no port is matched', () => {
+		for (let p in [['gre'], ['icmp'], ['tcp', 'gre']])
+			t.assert_true(gate(p, {}));
+	});
+
+	// An absent proto is [] and fw4 defaults it to tcpudp, which carries ports.
+	t.it('accepts a port with no protocol at all', () => {
+		t.assert_equal(length(rules.validate({ target: 'ACCEPT',
+			match: { src_zone: 'lan', dest_port: ['22'] } }, null)), 0);
+	});
+});
+
 t.describe('firewall.rules empty values', () => {
 	// fw4 cannot resolve an empty zone ref, port or address, and discards the
 	// whole section over one, so none may reach uci.

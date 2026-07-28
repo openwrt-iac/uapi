@@ -50,6 +50,13 @@ badmark=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules"
 echo "$badmark" | tail -1 | grep -q '^422$' || fail "MARK without value expected 422"
 echo "$badmark" | grep -q '"field": "set_mark"' || fail "422 should name set_mark"
 
+echo "--- a port beside a protocol firewall4 drops it from is rejected, not silently widened ---"
+badport=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
+	"target": "ACCEPT", "match": { "src_zone": "uapi_test", "proto": ["gre"], "dest_port": ["80"] }
+}')
+echo "$badport" | tail -1 | grep -q '^422$' || fail "port on a non-tcp/udp proto expected 422"
+echo "$badport" | grep -q '"field": "match.proto"' || fail "422 should name match.proto"
+
 echo "--- POST /firewall/nat ---"
 natrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -d '{
 	"name": "uapi_test_masq", "target": "MASQUERADE",

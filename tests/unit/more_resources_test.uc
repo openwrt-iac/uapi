@@ -615,6 +615,62 @@ t.describe('firewall.redirects mark match', () => {
 	});
 });
 
+// fw4 rewrites to dest_ip on a DNAT rather than matching on it, and returns
+// before emitting anything if it is negated or carries a non-contiguous mask.
+t.describe('firewall.redirects DNAT dest_ip', () => {
+	// target defaults to DNAT in fromUci but validate reads the raw body, so a
+	// request that omits it has to take the same branch.
+	t.it('refuses a negated or non-contiguously masked dest_ip, target given or not', () => {
+		for (let dip in ['!192.168.1.10', '10.0.0.0/255.0.255.0']) {
+			for (let body in [{ target: 'DNAT', match: { src_zone: 'wan', dest_ip: [dip] } },
+			                  { match: { src_zone: 'wan', dest_ip: [dip] } }]) {
+				let e = filter(redirects.validate(body, null),
+				               function(x) { return x.field == "match.dest_ip"; });
+				t.assert_equal(e[0].code, "invalid_format");
+			}
+		}
+	});
+
+	t.it('keeps the forms fw4 rewrites to', () => {
+		for (let dip in ['192.168.1.10', '10.0.0.0/255.255.0.0', '10.0.0.0/8'])
+			t.assert_equal(length(redirects.validate(
+				{ target: 'DNAT', match: { src_zone: 'wan', dest_ip: [dip] } }, null)), 0);
+	});
+
+	// On an SNAT redirect dest_ip is an ordinary match, where fw4 renders both
+	// a negation and a non-contiguous mask.
+	t.it('leaves dest_ip alone when the target is not DNAT', () => {
+		for (let dip in ['!10.0.0.1', '10.0.0.0/255.0.255.0']) {
+			let e = filter(redirects.validate({ target: 'SNAT',
+				match: { src_zone: 'lan', dest_zone: 'wan', src_dip: ['1.2.3.4'], dest_ip: [dip] } }, null),
+				function(x) { return x.field == "match.dest_ip"; });
+			t.assert_equal(length(e), 0);
+		}
+	});
+});
+
+// Same widening as firewall.rules: fw4 keeps a port match only on tcp or udp,
+// and a redirect gets no ensure_tcpudp rewrite to save a wildcard.
+t.describe('firewall.redirects ports and protocol wildcards', () => {
+	function gate(protos, m) {
+		let body = { target: 'DNAT', match: { src_zone: 'wan', proto: protos, ...m } };
+		return length(filter(redirects.validate(body, null),
+		                     function(x) { return x.field == "match.proto"; })) == 0;
+	}
+
+	t.it('refuses a port beside any protocol that would lose it', () => {
+		for (let p in [['tcp'], ['udp'], ['tcpudp'], ['tcp', 'udp']])
+			t.assert_true(gate(p, { src_dport: ['8443'] }));
+		for (let p in [['gre'], ['icmp'], ['tcp', 'gre'], ['all'], ['any'], ['*']])
+			t.assert_false(gate(p, { src_dport: ['8443'] }));
+	});
+
+	t.it('leaves a protocol alone when no port is matched', () => {
+		for (let p in [['gre'], ['all'], ['tcp', 'gre']])
+			t.assert_true(gate(p, {}));
+	});
+});
+
 t.describe('firewall.redirects SNAT', () => {
 	// fw4's snat branch bails out unless the section names a real destination
 	// zone and carries a src_dip to rewrite to, and refuses a negated one. Each
@@ -632,6 +688,8 @@ t.describe('firewall.redirects SNAT', () => {
 			{ f: "match.dest_zone", m: { src_zone: 'lan', src_dip: ['192.168.1.7'] } },
 			{ f: "match.dest_zone", m: { src_zone: 'lan', dest_zone: '*', src_dip: ['192.168.1.7'] } },
 			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan', src_dip: ['!192.168.1.7'] } },
+			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan',
+			                             src_dip: ['10.0.0.0/255.0.255.0'] } },
 		];
 		for (let c in cases) {
 			let errs = redirects.validate({ target: 'SNAT', match: c.m }, null);
