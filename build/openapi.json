@@ -24443,14 +24443,26 @@
 							"string",
 							"null"
 						],
-						"enum": "NaN"
+						"enum": [
+							"tun",
+							"tap",
+							null
+						]
 					},
 					"proto": {
 						"type": [
 							"string",
 							"null"
 						],
-						"enum": "NaN"
+						"enum": [
+							"udp",
+							"tcp",
+							"udp4",
+							"tcp4",
+							"udp6",
+							"tcp6",
+							null
+						]
 					},
 					"port": {
 						"type": [
