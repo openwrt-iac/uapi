@@ -1,6 +1,13 @@
 SSH="tests/vm/ssh.sh"
 UAPI_PREFIX_ENTRY="/api/v2=/usr/share/uapi/main.uc"
 
+# Everything the box runs. Named once so the push and the fingerprint below
+# cannot drift apart and start attesting to a different set of files than the
+# one actually installed.
+PUSH_PATHS="src/main.uc src/raw.uc build/openapi.json VERSION cli/uapi-token src/lib src/resources"
+
+fail() { echo "FAIL: $*"; exit 1; }
+
 push_file_to_vm() {
 	$SSH "cat > $2" < "$1"
 }
@@ -18,19 +25,36 @@ ensure_wireless_radio() {
 	return 0
 }
 
-# One-time bootstrap: install deps, push every source file in a single tar
-# stream, wire the uhttpd prefix, restart. Guarded by a tmpfs sentinel so a
-# second call is a no-op. Each request to /api/v2 forks a fresh ucode child
-# that reads the on-disk source, so per-test isolation only needs a clean
-# token store, not a re-copy of the source tree.
+# Content fingerprint of exactly what gets pushed. Paths are included so a
+# rename counts as a change, and mtimes are not, so an untouched tree keeps its
+# fingerprint across runs.
+source_fingerprint() {
+	# shellcheck disable=SC2086
+	find $PUSH_PATHS -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
+}
+
+# Bootstrap: install deps, push every source file in a single tar stream, wire
+# the uhttpd prefix, restart. Each request to /api/v2 forks a fresh ucode child
+# that reads the on-disk source, so per-test isolation only needs a clean token
+# store, not a re-copy of the source tree.
+#
+# The sentinel records WHICH tree is installed, not merely that something is.
+# A bare "have we bootstrapped" flag lives in tmpfs and so outlives the session
+# that wrote it: a leftover one silently made the whole suite exercise whatever
+# was already on the box instead of the working tree, and a run that passed
+# that way looked exactly like a real pass. Recording the fingerprint also
+# makes an edit-then-rerun cycle correct rather than merely fast.
 bootstrap_uapi() {
-	$SSH 'test -f /var/run/uapi-bootstrapped' 2>/dev/null && return 0
+	local want installed
+	want=$(source_fingerprint)
+	installed=$($SSH 'cat /var/run/uapi-bootstrapped 2>/dev/null' 2>/dev/null || true)
+	if [ "$want" = "$installed" ] && [ -z "${UAPI_FORCE_BOOTSTRAP:-}" ]; then
+		return 0
+	fi
+
 	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest 2>&1' | tail -3
-	tar c -C . \
-		src/main.uc src/raw.uc \
-		build/openapi.json VERSION \
-		cli/uapi-token \
-		src/lib src/resources \
+	# shellcheck disable=SC2086
+	if ! tar c -C . $PUSH_PATHS \
 		| $SSH '
 			rm -rf /tmp/uapi-bundle &&
 			mkdir -p /tmp/uapi-bundle /usr/share/uapi/lib /usr/share/uapi/resources &&
@@ -45,12 +69,18 @@ bootstrap_uapi() {
 			chmod +x /usr/bin/uapi-token &&
 			rm -rf /tmp/uapi-bundle
 		'
+	then
+		fail "pushing the uapi source to the test box failed; the box still runs whatever it had"
+	fi
+
+	# The fingerprint is written last and only on success, so a push that dies
+	# halfway leaves no claim about what is installed and the next run retries.
 	$SSH "touch /etc/uapi.insecure
 	      uci -q del_list uhttpd.main.ucode_prefix='$UAPI_PREFIX_ENTRY' || true
 	      uci add_list uhttpd.main.ucode_prefix='$UAPI_PREFIX_ENTRY'
 	      uci commit uhttpd
 	      /etc/init.d/uhttpd restart
-	      touch /var/run/uapi-bootstrapped"
+	      printf %s '$want' > /var/run/uapi-bootstrapped"
 	sleep 2
 }
 
@@ -79,8 +109,6 @@ install_uapi() {
 # table is never populated here. Rendering needs no running firewall, shows
 # both failures anyway (a dropped section emits no rule; an unloadable one
 # fails `nft -c`), and is equally safe to run against a real router.
-
-fail() { echo "FAIL: $*"; exit 1; }
 
 # Guards against the assertions quietly passing on an image missing either tool,
 # which would recreate exactly the false confidence this is meant to remove.
