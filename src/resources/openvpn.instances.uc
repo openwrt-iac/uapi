@@ -5,7 +5,18 @@ let as_int = values.as_int;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_ip = values.is_valid_ip;
 
-const VALID_PROTO = { "udp": true, "tcp": true, "udp4": true, "tcp4": true, "udp6": true, "tcp6": true };
+// openvpn's --proto takes a family-agnostic form plus explicit v4 and v6
+// variants, and tcp has separate client and server spellings. The tcp-client
+// and tcp-server forms are the ones LuCI actually offers (luci-app-openvpn's
+// openvpn-basic.lua), so omitting them would reject configuration written by
+// the frontend most operators use. This list only became load-bearing when the
+// enum started reaching validation: it was previously emitted as NaN, which
+// check_schema_types skips.
+const VALID_PROTO = {
+	"udp": true,  "tcp": true,  "tcp-client": true,  "tcp-server": true,
+	"udp4": true, "tcp4": true, "tcp4-client": true, "tcp4-server": true,
+	"udp6": true, "tcp6": true, "tcp6-client": true, "tcp6-server": true,
+};
 const VALID_DEV   = { "tun": true, "tap": true };
 const VALID_TLS   = { "tls-server": true, "tls-client": true, "tls-auth": true };
 // Filesystem paths on the router. The shape excludes shell meta + relative

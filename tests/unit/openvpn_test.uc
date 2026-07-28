@@ -109,6 +109,35 @@ t.describe('openvpn.instances contract', () => {
 		t.assert_equal(c._state.uci.openvpn.srv.key, '/etc/openvpn/new.key');
 	});
 
+	// These enums reached the spec as the string "NaN", because ucode's `+` on
+	// two arrays coerces rather than concatenating. check_schema_types skips a
+	// non-array enum, so neither field was validated at all. Fixing the
+	// expression made the enum live, which is only safe if it lists everything
+	// openvpn accepts: the tcp-client and tcp-server spellings are the ones
+	// luci-app-openvpn writes, and omitting them would reject working config.
+	t.it('accepts every proto spelling openvpn takes, including the LuCI ones', () => {
+		for (let p in ['udp', 'tcp', 'tcp-client', 'tcp-server',
+		               'udp4', 'tcp4', 'tcp4-client', 'tcp4-server',
+		               'udp6', 'tcp6', 'tcp6-client', 'tcp6-server']) {
+			let errs = full_validate(instances, { proto: p });
+			t.assert_equal(length(filter(errs, function(e) { return e.field == "proto"; })), 0);
+		}
+	});
+
+	t.it('still rejects a proto openvpn does not take', () => {
+		for (let p in ['sctp', 'bogus', 'tcp-peer'])
+			t.assert_equal(filter(full_validate(instances, { proto: p }),
+			                      function(e) { return e.field == "proto"; })[0].code, "not_in_enum");
+	});
+
+	t.it('constrains dev_type to tun or tap', () => {
+		for (let d in ['tun', 'tap'])
+			t.assert_equal(length(filter(full_validate(instances, { dev_type: d }),
+			                             function(e) { return e.field == "dev_type"; })), 0);
+		t.assert_equal(filter(full_validate(instances, { dev_type: 'tap0' }),
+		                      function(e) { return e.field == "dev_type"; })[0].code, "not_in_enum");
+	});
+
 	t.it('schema enforces port range', () => {
 		let errs = full_validate(instances, { port: 99999 });
 		t.assert_true(length(filter(errs, e => e.field == "port")) > 0);
