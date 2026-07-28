@@ -24457,10 +24457,16 @@
 						"enum": [
 							"udp",
 							"tcp",
+							"tcp-client",
+							"tcp-server",
 							"udp4",
 							"tcp4",
+							"tcp4-client",
+							"tcp4-server",
 							"udp6",
 							"tcp6",
+							"tcp6-client",
+							"tcp6-server",
 							null
 						]
 					},
