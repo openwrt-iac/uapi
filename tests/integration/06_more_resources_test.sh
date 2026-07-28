@@ -25,11 +25,11 @@ redirect=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/redir
 	           "dest_ip": ["192.168.1.10"], "dest_port": ["443"], "proto": ["tcp"] }
 }')
 echo "$redirect" | tail -1 | grep -q '^200$' || fail "redirect POST expected 200"
+rid=$(echo "$redirect" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 # The arity bug lived exactly here: this POST returned 200 while firewall4
 # discarded the section, because uci wrote src_dport as a list.
-assert_fw4_emits "dport 8443"
+assert_fw4_emits "!fw4: $rid" "dport 8443"
 assert_fw4_loads
-rid=$(echo "$redirect" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
 echo "--- POST /firewall/rules with target MARK ---"
 markrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
@@ -39,9 +39,9 @@ markrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules
 echo "$markrule" | tail -1 | grep -q '^200$' || fail "MARK rule POST expected 200"
 mid=$(echo "$markrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "$markrule" | grep -q '"set_mark": "0x43"' || fail "MARK rule missing set_mark on read-back"
-assert_fw4_emits "!fw4: $mid"
 # fw4 renders the mark as written; only the applied table pads it to 0x00000043
-assert_fw4_emits "mark set 0x43"
+assert_fw4_emits "!fw4: $mid" "mark set 0x43"
+assert_fw4_loads
 
 echo "--- a MARK rule without a mark value is rejected, not silently dropped by fw4 ---"
 badmark=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/rules" -d '{
@@ -58,6 +58,7 @@ natrule=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -
 echo "$natrule" | tail -1 | grep -q '^200$' || fail "nat POST expected 200"
 nid=$(echo "$natrule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 assert_fw4_emits "!fw4: uapi_test_masq"
+assert_fw4_loads
 
 echo "--- nat SNAT without snat_ip or snat_port is rejected ---"
 badnat=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/nat" -d '{
@@ -91,5 +92,11 @@ call -X DELETE "$URL/firewall/nat/$nid"       | tail -1 | grep -q '^204$' || fai
 call -X DELETE "$URL/firewall/rules/$mid"     | tail -1 | grep -q '^204$' || fail "MARK rule DELETE failed"
 call -X DELETE "$URL/firewall/zones/$zid"     | tail -1 | grep -q '^204$' || fail "zone DELETE failed"
 call -X DELETE "$URL/network/interfaces/$iid" | tail -1 | grep -q '^204$' || fail "interface DELETE failed"
+
+echo "--- and firewall4 renders none of them any more ---"
+assert_fw4_omits "!fw4: $rid"
+assert_fw4_omits "!fw4: $mid"
+assert_fw4_omits "!fw4: uapi_test_masq"
+assert_fw4_loads
 
 echo "more resources ok"

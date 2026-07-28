@@ -33,8 +33,7 @@ id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$
 echo "  new id: $id  request_id: $request_id"
 
 echo "--- firewall4 actually renders the rule (a 200 alone does not prove it) ---"
-assert_fw4_emits "!fw4: $id"
-assert_fw4_emits "tcp dport 22"
+assert_fw4_emits "!fw4: $id" "tcp dport 22"
 assert_fw4_loads
 
 echo "--- successful POST emits an AUDIT line in logread carrying that request_id ---"
