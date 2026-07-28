@@ -81,9 +81,9 @@ function fromUci(section, conn) {
 		view.has_private_key = (section.private_key != null && section.private_key != "");
 	}
 	// For the v1.2 dhcp / dhcpv6 fields, surface null when uci has nothing
-	// explicitly set. Surfacing the daemon's effective default would cause
-	// merge_for_patch to write those defaults into uci on the next PATCH,
-	// silently changing the section's surface area for the client.
+	// explicitly set. Surfacing the daemon's effective default would have the
+	// patch merge write those defaults into uci on the next PATCH, silently
+	// changing the section's surface area for the client.
 	if (proto == "dhcp") {
 		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
 		view.defaultroute = (section.defaultroute != null) ? normalize_bool(section.defaultroute, true) : null;

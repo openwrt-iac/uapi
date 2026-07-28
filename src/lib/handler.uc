@@ -562,10 +562,12 @@ function make(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				// Read before validating so a masked secret can be restored first,
-				// but keep reporting validation ahead of not_found.
+				// but keep reporting validation ahead of not_found. Kept in its own
+				// binding rather than reassigning body, because it holds a plaintext
+				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
-				body = carry_write_only(resource, body, existing);
-				let errs = _validate_with_schema(resource, body, body, c, id);
+				let write_body = carry_write_only(resource, body, existing);
+				let errs = _validate_with_schema(resource, write_body, write_body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				if (!existing || !type_predicate(existing['.type']))
@@ -580,11 +582,11 @@ function make(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
-				let uf_errs = check_unique_field(c, body, id);
+				let uf_errs = check_unique_field(c, write_body, id);
 				if (length(uf_errs) > 0)
 					return { ok: false, kind: "validation", errors: uf_errs };
 
-				let new_opts = resource.toUci(body);
+				let new_opts = resource.toUci(write_body);
 				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
