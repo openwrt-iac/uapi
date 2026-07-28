@@ -46,6 +46,87 @@ t.describe('values.is_valid_ipv4', () => {
 		for (let s in ["256.0.0.1", "1.2.3", "1.2.3.4.5", "a.b.c.d", "", null, 1234])
 			t.assert_false(v.is_valid_ipv4(s));
 	});
+
+	// inet_pton reads an octet with base 0, so iptoarr returns null for every
+	// zero-padded spelling (checked on the router). firewall4 then falls through
+	// to a network-name lookup, resolves nothing and discards the section.
+	t.it('rejects zero-padded octets, which inet_pton cannot parse', () => {
+		for (let s in ["010.0.0.1", "08.0.0.1", "00.0.0.0", "1.2.3.04"])
+			t.assert_false(v.is_valid_ipv4(s));
+		t.assert_true(v.is_valid_ipv4("0.0.0.0"));
+	});
+});
+
+t.describe('values.is_valid_ipv6', () => {
+	// Checked against iptoarr on a real box: it parses the embedded-IPv4 form,
+	// which the old character-class regex refused, and rejects ':::::', which
+	// that regex accepted and which then discards the section on the router.
+	t.it('accepts every form inet_pton parses', () => {
+		for (let s in ['::1', '::', '2001:db8::1', 'fe80::1', '::ffff:192.168.1.1',
+		               '2001:0db8:0000:0000:0000:0000:0000:0001', '1:2:3:4:5:6:7:8',
+		               '1:2:3:4:5:6:7::', '::ffff:0:0'])
+			t.assert_true(v.is_valid_ipv6(s));
+	});
+
+	t.it('rejects what inet_pton refuses', () => {
+		for (let s in [':::::', ':', '12345::1', '1:2:3:4:5:6:7:8::', '::1::2',
+		               '1:2:3:4:5:6:7:8:9', '1:2:3:4:5:6:7', 'fe80:',
+		               '::ffff:010.0.0.1', '::ffff:999.0.0.1',
+		               '2001:db8::1.2.3.4:5', 'abcd', '10.0.0.1', '', null, 42])
+			t.assert_false(v.is_valid_ipv6(s));
+	});
+});
+
+t.describe('values.has_noncontiguous_mask', () => {
+	// fw4 renders a non-contiguous mask on a match address as
+	// `saddr & <mask> == <addr>`, so it stays valid there, but discards the
+	// section when one reaches an address it rewrites to.
+	t.it('reports a mask whose set bits are not one leading run', () => {
+		for (let s in ['10.0.0.0/255.0.255.0', '10.0.0.0/0.0.0.1',
+		               '!10.0.0.0/255.255.0.255', '2001:db8::/ffff:0:ffff::'])
+			t.assert_true(v.has_noncontiguous_mask(s));
+	});
+
+	t.it('passes a contiguous mask, a prefix length, and a bare address', () => {
+		for (let s in ['10.0.0.0/255.255.0.0', '10.0.0.0/255.255.255.255',
+		               '10.0.0.0/0.0.0.0', '10.0.0.0/8', '10.0.0.1', 'lan',
+		               '2001:db8::/ffff:ffff::', '', null, 42])
+			t.assert_false(v.has_noncontiguous_mask(s));
+	});
+});
+
+t.describe('values.port_proto_conflict', () => {
+	// fw4 assigns src_port/dest_port only inside `case "tcp": case "udp":`, so a
+	// port beside anything else is dropped and the rule still emitted, matching
+	// the whole protocol. Only `config nat` runs ensure_tcpudp, which rewrites a
+	// lone wildcard to tcp+udp before the ports are read.
+	t.it('passes protocols that keep their ports', () => {
+		for (let p in [['tcp'], ['udp'], ['6'], ['17'], ['tcpudp'], ['TCP'], ['tcp', 'udp']]) {
+			t.assert_false(v.port_proto_conflict(p, false));
+			t.assert_false(v.port_proto_conflict(p, true));
+		}
+	});
+
+	t.it('reports a protocol that silently loses its ports', () => {
+		for (let p in [['gre'], ['icmp'], ['tcp', 'gre'], ['all', 'gre'], [null]]) {
+			t.assert_true(v.port_proto_conflict(p, false));
+			t.assert_true(v.port_proto_conflict(p, true));
+		}
+	});
+
+	t.it('allows a lone wildcard only where ensure_tcpudp rewrites it', () => {
+		for (let p in [['all'], ['any'], ['*']]) {
+			t.assert_true(v.port_proto_conflict(p, false));
+			t.assert_false(v.port_proto_conflict(p, true));
+		}
+	});
+
+	// An absent proto is [], and fw4 supplies its own default, so there is
+	// nothing to conflict with.
+	t.it('passes an absent protocol list', () => {
+		t.assert_false(v.port_proto_conflict([], false));
+		t.assert_false(v.port_proto_conflict([], true));
+	});
 });
 
 t.describe('values.is_valid_ip', () => {
@@ -272,6 +353,14 @@ t.describe('values.address_problem', () => {
 
 	t.it('rejects an empty string rather than treating it as absent', () => {
 		t.assert_equal(v.address_problem('').code, "invalid_format");
+	});
+
+	// Reachable only since is_valid_ipv6 started accepting the embedded-IPv4
+	// form. ipv6_sort_key pads each group to four hex digits, so it has to
+	// expand that tail first or the range comparison reads '.3.4' as the key.
+	t.it('orders a range of embedded-IPv4 addresses', () => {
+		t.assert_equal(v.address_problem('::ffff:1.2.3.4-::ffff:1.2.3.9'), null);
+		t.assert_equal(v.address_problem('::ffff:1.2.3.9-::ffff:1.2.3.4').code, "out_of_range");
 	});
 });
 

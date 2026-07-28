@@ -202,19 +202,42 @@ t.describe('firewall.nat.validate', () => {
 });
 
 t.describe('firewall.nat ports and protocol wildcards', () => {
-	// fw4's ensure_tcpudp keeps the section if ONE entry resolves to tcp or udp
-	// (6 and 17 included), otherwise it rewrites a wildcard to tcp+udp, but only
-	// when the list holds nothing else. A wildcard beside another protocol is
-	// discarded, so it must not pass here either.
-	t.it('mirrors ensure_tcpudp for a port match', () => {
+	// ensure_tcpudp keeps the section as soon as ONE entry resolves to tcp or
+	// udp, but fw4 then assigns the ports only inside `case "tcp": case "udp":`,
+	// so the other protocols in the list are emitted matching everything. uapi
+	// is deliberately stricter than ensure_tcpudp there: a kept section that
+	// silently widens is worse than one fw4 discards. A lone wildcard stays
+	// valid because ensure_tcpudp rewrites it to tcp+udp before the ports read.
+	t.it('refuses a port beside any protocol that would lose it', () => {
 		function gate(protos) {
 			let errs = nat.validate({ target: 'SNAT', snat_ip: '10.0.0.1',
 			                          match: { proto: protos, dest_port: '80' } }, null);
 			return length(filter(errs, function(x) { return x.field == "match.proto"; })) == 0;
 		}
-		for (let p in [['tcp'], ['udp'], ['6'], ['17'], ['tcpudp'], ['any'], ['all'], ['tcp', 'gre']])
+		for (let p in [['tcp'], ['udp'], ['6'], ['17'], ['tcpudp'], ['any'], ['all']])
 			t.assert_true(gate(p));
-		for (let p in [['gre'], ['any', 'gre'], ['all', 'esp'], ['*', 'icmp']])
+		for (let p in [['gre'], ['tcp', 'gre'], ['any', 'gre'], ['all', 'esp'], ['*', 'icmp']])
 			t.assert_false(gate(p));
+	});
+
+	t.it('leaves a protocol alone when no port is matched', () => {
+		for (let p in [['gre'], ['icmp'], ['tcp', 'gre']])
+			t.assert_equal(length(nat.validate({ target: 'MASQUERADE',
+			                                     match: { proto: p } }, null)), 0);
+	});
+});
+
+// fw4 rewrites to snat_ip rather than matching on it, so unlike a match address
+// it refuses a non-contiguous mask and discards the section over one.
+t.describe('firewall.nat snat_ip masks', () => {
+	t.it('rejects a non-contiguous mask', () => {
+		let errs = nat.validate({ target: 'SNAT', snat_ip: '10.0.0.0/255.0.255.0', match: {} }, null);
+		t.assert_equal(filter(errs, function(x) { return x.field == "snat_ip"; })[0].code, "invalid_format");
+	});
+
+	t.it('accepts a contiguous mask and keeps one on a match address', () => {
+		t.assert_equal(length(nat.validate({ target: 'SNAT', snat_ip: '10.0.0.0/255.255.0.0', match: {} }, null)), 0);
+		t.assert_equal(length(nat.validate({ target: 'MASQUERADE',
+		                                     match: { src_ip: '10.0.0.0/255.0.255.0' } }, null)), 0);
 	});
 });
