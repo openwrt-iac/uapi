@@ -429,6 +429,16 @@ t.describe('firewall.rules ports and protocol wildcards', () => {
 		t.assert_equal(length(rules.validate({ target: 'ACCEPT',
 			match: { src_zone: 'lan', dest_port: ['22'] } }, null)), 0);
 	});
+
+	// An unresolvable token does not widen a rule, it makes nft reject the whole
+	// ruleset, so reporting the port conflict on top of it would describe the
+	// wrong failure.
+	t.it('stays quiet about ports when the protocol itself does not parse', () => {
+		let errs = rules.validate({ target: 'ACCEPT',
+			match: { src_zone: 'lan', proto: ['bogus'], dest_port: ['80'] } }, null);
+		t.assert_equal(length(filter(errs, function(x) { return x.field == "match.proto[0]"; })), 1);
+		t.assert_equal(length(filter(errs, function(x) { return x.field == "match.proto"; })), 0);
+	});
 });
 
 t.describe('firewall.rules empty values', () => {
