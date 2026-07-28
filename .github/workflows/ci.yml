@@ -60,12 +60,16 @@ jobs:
       image: alpine:edge
     steps:
       - name: Install ucode and tooling
-        run: apk add --no-cache ucode make grep findutils
+        run: apk add --no-cache ucode make grep findutils python3 py3-pip
+      - name: Install the OpenAPI conformance validator
+        run: pip install --break-system-packages --quiet openapi-spec-validator
       - uses: actions/checkout@v7
-      - name: Lint (em-dash + ucode syntax + reserved-name guard)
+      - name: Lint (em-dash + ucode syntax + reserved-name guard + OpenAPI shape)
         run: make lint
       - name: OpenAPI contract is up to date
         run: make openapi-check
+      - name: OpenAPI document is valid 3.1
+        run: make openapi-validate
       - name: Package staging succeeds
         run: make stage
 

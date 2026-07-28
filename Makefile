@@ -54,6 +54,19 @@ openapi-check:
 		exit 1; }
 	@rm -f /tmp/openapi.gen.json
 
+# Conformance run against a real OpenAPI 3.1 validator. Deliberately not part
+# of `lint`, which must stay dependency-free: this needs python3 and is wired
+# into CI instead, so the gate is enforced without every local `make lint`
+# requiring a pip install. Fails loudly when the validator is missing rather
+# than skipping, since a check that quietly passes is worse than none.
+openapi-validate:
+	@command -v python3 >/dev/null || { echo "python3 required for openapi-validate"; exit 1; }
+	@python3 -c 'import openapi_spec_validator' 2>/dev/null \
+		|| { echo "openapi-spec-validator not installed: pip install openapi-spec-validator"; exit 1; }
+	@python3 -c 'import json,sys; from openapi_spec_validator import validate; \
+		validate(json.load(open("build/openapi.json"))); \
+		print("OK: build/openapi.json is a valid OpenAPI 3.1 document")'
+
 stage:
 	@rm -rf build/openwrt/uapi/files
 	@mkdir -p build/openwrt/uapi/files/usr/share/uapi/lib
@@ -97,7 +110,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-defaults
+lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults
 
 lint-emdash:
 	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile README.md CHANGELOG.md CLAUDE.md CONTRIBUTING.md 2>/dev/null; then \
@@ -123,6 +136,12 @@ lint-reserved:
 # the dict that references them and the dict that defines them.
 lint-refs:
 	@$(UCODE) tests/lint_ref_integrity.uc
+
+# Structural checks a conformance validator does not make, because the shapes
+# they catch are legal JSON Schema and merely useless to a code generator.
+# Complements openapi-validate rather than duplicating it.
+lint-openapi-shape:
+	@$(UCODE) tests/lint_openapi_shape.uc
 
 # Verifies every fromUci unconditional default has a matching
 # `default: V` in schema_properties. Catches the drift case where a new
