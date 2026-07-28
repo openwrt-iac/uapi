@@ -6,11 +6,6 @@ const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
 
-// Wildcards fw4 narrows to tcp+udp when a port is present, via ensure_tcpudp.
-// fw4 resolves 6 and 17 to tcp and udp, and expands tcpudp into both.
-const TCPUDP = { "tcp": true, "6": true, "udp": true, "17": true, "tcpudp": true };
-const PROTO_WILDCARD = { "any": true, "all": true, "*": true };
-
 function is_set(v) {
 	return type(v) == "string" && v != "";
 }
@@ -103,10 +98,15 @@ function validate(json, conn) {
 			             message: "is only valid when target is SNAT; send null to clear it" });
 	}
 
-	// snat_ip is a network like the match addresses, but carries NO_INVERT.
+	// snat_ip is a network like the match addresses, but fw4 rewrites to it
+	// rather than matching on it, so it carries NO_INVERT and rejects the
+	// non-contiguous mask a match address is allowed.
 	if (snat_ip && substr(json.snat_ip, 0, 1) == "!")
 		push(errs, { field: "snat_ip", code: "invalid_format",
 		             message: "must not be negated" });
+	else if (snat_ip && values.has_noncontiguous_mask(json.snat_ip))
+		push(errs, { field: "snat_ip", code: "invalid_format",
+		             message: "must not use a non-contiguous mask" });
 
 	if (type(m.device) == "string" && length(m.device) > values.DEVICE_MAX)
 		push(errs, { field: "match.device", code: "out_of_range",
@@ -133,24 +133,13 @@ function validate(json, conn) {
 	for (let key in ["src_port", "dest_port"])
 		port_error("match." + key, m[key], true, errs);
 
-	// fw4 rewrites a wildcard proto to tcp+udp when ports are present, so only
-	// an explicitly non-TCP/UDP proto is a real conflict.
-	if (length(protos) > 0 && (snat_port || is_set(m.src_port) || is_set(m.dest_port))) {
-		// ensure_tcpudp keeps the section as soon as ONE entry resolves to tcp or
-		// udp. Failing that it rewrites a wildcard to tcp+udp, but only when the
-		// list holds nothing else, so a wildcard beside another protocol is not a
-		// free pass: fw4 discards that section.
-		let tcpudp = false, wildcard = false, other = false;
-		for (let p in protos) {
-			let lp = (type(p) == "string") ? lc(p) : null;
-			if (lp != null && TCPUDP[lp]) tcpudp = true;
-			else if (lp != null && PROTO_WILDCARD[lp]) wildcard = true;
-			else other = true;
-		}
-		if (!tcpudp && !(wildcard && !other))
-			push(errs, { field: "match.proto", code: "conflict",
-			             message: "ports require a TCP or UDP protocol" });
-	}
+	// ensure_tcpudp rewrites a lone wildcard to tcp+udp, so a wildcard keeps its
+	// ports here. Anything else non-TCP/UDP loses them, whether fw4 discards the
+	// section or emits it matching the whole protocol.
+	if ((snat_port || is_set(m.src_port) || is_set(m.dest_port))
+	    && values.port_proto_conflict(protos, true))
+		push(errs, { field: "match.proto", code: "conflict",
+		             message: "firewall4 keeps a port match only on tcp or udp, or on a wildcard it rewrites to both" });
 
 	if (values.masked_value_exceeds(m.mark, values.MARK_MAX))
 		push(errs, { field: "match.mark", code: "out_of_range",
@@ -205,7 +194,7 @@ return {
 				dest_port: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match destination port or range, optionally negated with a leading '!'" },
 				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
-				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset" },
+				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. When a port is matched, every protocol must be tcp or udp, or all of them a wildcard that firewall4 rewrites to both. Defaults to all when unset" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },
 				family:    { type: ["string", "null"], enum: [...keys(VALID_FAMILIES), null],

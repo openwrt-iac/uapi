@@ -20530,7 +20530,7 @@
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
-								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
+								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a rule matching the whole protocol. Defaults to tcpudp when unset"
 							},
 							"family": {
 								"type": "string",
@@ -20826,7 +20826,7 @@
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
-								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp"
+								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a redirect matching the whole protocol. Defaults to tcpudp when unset"
 							},
 							"family": {
 								"type": "string",
@@ -21020,7 +21020,7 @@
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
 								},
-								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. Defaults to all when unset"
+								"description": "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. When a port is matched, every protocol must be tcp or udp, or all of them a wildcard that firewall4 rewrites to both. Defaults to all when unset"
 							},
 							"mark": {
 								"type": [
