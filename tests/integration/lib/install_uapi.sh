@@ -100,10 +100,12 @@ assert_fw4_emits() {
 	if ! fw4_render | grep -qF -- "$1"; then
 		needle=$(printf '%s' "$1" | sed 's/^!fw4: //')
 		why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -iF -- "$needle" | head -2)
-		# No complaint from fw4 means the section either never reached uci or was
-		# rendered somewhere the match did not look, so show both.
+		# The needle is usually a rendered fragment, not a section name, so the
+		# targeted lookup misses. fw4's own warnings name the option that got the
+		# section dropped, which is the answer nearly every time.
 		if [ -z "$why" ]; then
-			why="(no fw4 warning) uci: $($SSH "uci show firewall | grep -iF -- '$needle' | head -3" | tr '\n' ' ')"
+			why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -v 'is disabled' | head -3 | tr '\n' ' ')
+			why="${why:-no fw4 warning either; the section may never have been written}"
 		fi
 		fail "firewall4 renders no rule matching '$1' -- $why"
 	fi
