@@ -392,6 +392,26 @@ function diff_apply_patch(c, p, id, old_opts, new_opts) {
 	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
 }
 
+// A write-only field is masked on read, so a client that reads a section and
+// writes it back never carries the secret. Every write path therefore has to
+// restore it from uci, or a read-modify-write either erases the secret (PUT is
+// full-replace) or trips a conditional-required rule (encryption=psk2 needs a
+// key). Absent and explicit null both mean "keep": an IaC client that emits
+// null for every unset optional attribute must not destroy a working key, so
+// clearing a secret is deliberately not expressible.
+function carry_write_only(resource, body, existing) {
+	let sp = (resource != null) ? resource.schema_properties : null;
+	if (type(sp) != "object" || type(body) != "object" || type(existing) != "object")
+		return body;
+
+	let out = { ...body };
+	for (let k in sp)
+		if (type(sp[k]) == "object" && sp[k].writeOnly
+		    && out[k] == null && existing[k] != null)
+			out[k] = existing[k];
+	return out;
+}
+
 // Reduce a PATCH body against existing state to a post-image plus a schema-
 // validation target. JSON Patch (RFC 6902) synthesises the full post-image,
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
@@ -409,23 +429,10 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 			           sprintf("[%d]", jp.op_index ?? 0),
 			           "invalid_format", jp.message)] };
 		}
-		// Carry forward write-only secrets the masked read view hid, unless the
-		// patch explicitly set one. The merge-patch path does this inside each
-		// resource's merge_for_patch; the JSON Patch post-image is built from
-		// existing_view (which exposes has_key, not key), so without this a
-		// patch that does not touch the secret drops it and trips conditional-
-		// required validation (e.g. encryption=psk2 needs key). The post[k]==null
-		// guard keeps a patch-supplied new secret intact.
-		let post = jp.value;
-		let sp = (resource != null) ? resource.schema_properties : null;
-		if (type(sp) == "object")
-			for (let k in sp)
-				if (type(sp[k]) == "object" && sp[k].writeOnly
-				    && post[k] == null && existing[k] != null)
-					post[k] = existing[k];
+		let post = carry_write_only(resource, jp.value, existing);
 		return { ok: true, merged: post, schema_body: post };
 	}
-	return { ok: true, merged: merge_fn(existing, existing_view, body),
+	return { ok: true, merged: carry_write_only(resource, merge_fn(existing, existing_view, body), existing),
 	         schema_body: body };
 }
 
@@ -554,10 +561,13 @@ function make(resource, opts) {
 	function replace(conn, ctx, id, body) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
+				// Read before validating so a masked secret can be restored first,
+				// but keep reporting validation ahead of not_found.
+				let existing = load_section(c, p, id);
+				body = carry_write_only(resource, body, existing);
 				let errs = _validate_with_schema(resource, body, body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };

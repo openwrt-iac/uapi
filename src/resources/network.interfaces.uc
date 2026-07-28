@@ -297,21 +297,6 @@ return {
 			route:            { type: "array", items: { type: "object" } },
 		},
 	},
-	merge_for_patch: function(existing_section, existing_json, body) {
-		let merged = { ...existing_json };
-		for (let k in body) {
-			if (type(merged[k]) == "object" && type(body[k]) == "object")
-				merged[k] = { ...merged[k], ...body[k] };
-			else
-				merged[k] = body[k];
-		}
-		// For wireguard interfaces, carry forward the masked private_key
-		// when PATCH omits it (same pattern as wireless.interfaces' key).
-		let proto = merged.proto ?? existing_section.proto ?? null;
-		if (proto == "wireguard" && body.private_key == null && existing_section.private_key != null)
-			merged.private_key = existing_section.private_key;
-		return merged;
-	},
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS), default: "none" },
 		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",

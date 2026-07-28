@@ -165,16 +165,4 @@ return {
 		isolate:    { type: "boolean", default: false,
 		              description: "Block station-to-station traffic on this AP" },
 	},
-	merge_for_patch: function(existing_section, existing_json, body) {
-		let merged = { ...existing_json };
-		for (let k in body) {
-			if (type(merged[k]) == "object" && type(body[k]) == "object")
-				merged[k] = { ...merged[k], ...body[k] };
-			else
-				merged[k] = body[k];
-		}
-		if (body.key == null && existing_section.key != null)
-			merged.key = existing_section.key;
-		return merged;
-	},
 };
