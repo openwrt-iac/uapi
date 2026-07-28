@@ -88,6 +88,20 @@ function validate(json, conn) {
 	if (m.src_zone == null || m.src_zone == "")
 		push(errs, { field: "match.src_zone", code: "required", message: "is required" });
 
+	// target defaults to DNAT in fromUci, but validate sees the raw body, so a
+	// request that omits it arrives as null and still means DNAT.
+	if ((json.target ?? "DNAT") == "DNAT") {
+		let dip = as_list(m.dest_ip)[0];
+		if (is_set(dip)) {
+			if (substr(dip, 0, 1) == "!")
+				push(errs, { field: "match.dest_ip", code: "invalid_format",
+				             message: "must not be negated when target is DNAT" });
+			else if (values.has_noncontiguous_mask(dip))
+				push(errs, { field: "match.dest_ip", code: "invalid_format",
+				             message: "must not use a non-contiguous mask when target is DNAT" });
+		}
+	}
+
 	// fw4's snat branch bails out unless the section names a real destination
 	// zone and carries a src_dip to rewrite to, and it refuses a negated one.
 	// Each of those produces a section the router drops on the floor.
@@ -102,6 +116,9 @@ function validate(json, conn) {
 		else if (substr(dip, 0, 1) == "!")
 			push(errs, { field: "match.src_dip", code: "invalid_format",
 			             message: "must not be negated" });
+		else if (values.has_noncontiguous_mask(dip))
+			push(errs, { field: "match.src_dip", code: "invalid_format",
+			             message: "must not use a non-contiguous mask" });
 	}
 
 	// A second value would be written as a uci list, which fw4 refuses on these
@@ -132,14 +149,22 @@ function validate(json, conn) {
 		}
 	}
 
+	let has_port = false;
 	for (let key in ["src_port", "src_dport", "dest_port"]) {
 		let ports = as_list(m[key]);
+		if (length(ports) > 0) has_port = true;
 		for (let i = 0; i < length(ports); i++) {
 			let p = values.port_problem(ports[i], true);
 			if (p != null)
 				push(errs, { field: sprintf("match.%s[%d]", key, i), code: p.code, message: p.message });
 		}
 	}
+
+	// A redirect has no ensure_tcpudp rewrite, so even a wildcard drops the ports
+	// and leaves a redirect matching the whole protocol.
+	if (has_port && values.port_proto_conflict(protos, false))
+		push(errs, { field: "match.proto", code: "conflict",
+		             message: "firewall4 keeps a port match only on tcp or udp, so this redirect would match the whole protocol instead" });
 
 	if (values.masked_value_exceeds(m.mark, values.MARK_MAX))
 		push(errs, { field: "match.mark", code: "out_of_range",
@@ -208,7 +233,7 @@ return {
 				dest_port: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "Rewrite destination port or range, one value per redirect" },
 				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
-				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
+				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a redirect matching the whole protocol. Defaults to tcpudp when unset" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

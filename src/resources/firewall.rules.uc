@@ -184,6 +184,13 @@ function validate(json, conn) {
 			push(errs, { field: sprintf("match.proto[%d]", i), code: pp.code, message: pp.message });
 	}
 
+	// A rule has no ensure_tcpudp rewrite, so even a wildcard drops the ports and
+	// leaves a rule matching the whole protocol.
+	if ((length(as_list(m.src_port)) > 0 || length(as_list(m.dest_port)) > 0)
+	    && values.port_proto_conflict(protos, false))
+		push(errs, { field: "match.proto", code: "conflict",
+		             message: "firewall4 keeps a port match only on tcp or udp, so this rule would match the whole protocol instead" });
+
 	check_target_coupling(json, errs);
 	range_error("set_mark", json.set_mark, values.MARK_MAX, errs);
 	range_error("set_xmark", json.set_xmark, values.MARK_MAX, errs);
@@ -248,7 +255,7 @@ return {
 				src_port:  { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
 				dest_port: { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
 				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
-				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp" },
+				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a rule matching the whole protocol. Defaults to tcpudp when unset" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

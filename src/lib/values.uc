@@ -1,5 +1,9 @@
-const IPV4_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
-const IPV6_RE = /^[0-9a-fA-F:]+$/;
+// inet_pton parses an octet with base 0, so a zero-padded one is either octal
+// or unparseable: firewall4 fails to read 010.0.0.1, falls through to a uci
+// network-name lookup, resolves nothing and discards the whole section. Same
+// reasoning as the protocol-number spelling in proto_problem.
+const IPV4_RE = /^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$/;
+const IPV6_GROUP_RE = /^[0-9a-fA-F]{1,4}$/;
 const CIDR_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}\/[0-9]{1,2}$/;
 
 function normalize_bool(v, default_val) {
@@ -58,8 +62,38 @@ function is_valid_ipv4(s) {
 	return true;
 }
 
+// A character-class check accepted addresses inet_pton rejects, such as
+// ':::::', and refused the embedded-IPv4 form '::ffff:192.168.1.1' that it
+// parses. Both directions matter: the first reaches the router and discards a
+// section, the second rejects an address the box applies. Structural rather
+// than a regex because the real grammar is unreadable as one and its
+// quantifiers approach the limit ucode's engine accepts.
 function is_valid_ipv6(s) {
-	return type(s) == "string" && s != "" && !!match(s, IPV6_RE);
+	if (type(s) != "string" || s == "" || index(s, ":") == -1) return false;
+
+	let halves = split(s, "::");
+	if (length(halves) > 2) return false;
+
+	let count = 0;
+	for (let i = 0; i < length(halves); i++) {
+		if (halves[i] == "") continue;
+		let groups = split(halves[i], ":");
+		for (let j = 0; j < length(groups); j++) {
+			let g = groups[j];
+			// The embedded IPv4 form occupies the final 32 bits, so it is only
+			// legal as the last group of the whole address.
+			if (index(g, ".") != -1) {
+				if (i != length(halves) - 1 || j != length(groups) - 1) return false;
+				if (!is_valid_ipv4(g)) return false;
+				count += 2;
+				continue;
+			}
+			if (!match(g, IPV6_GROUP_RE)) return false;
+			count++;
+		}
+	}
+
+	return (length(halves) == 2) ? (count <= 7) : (count == 8);
 }
 
 function is_valid_ip(s) {
@@ -92,8 +126,22 @@ function is_valid_cidr_any(s) {
 }
 
 // Expands an IPv6 address to its full 32 hex digits so two addresses can be
-// ordered by plain string comparison, which is all the range check needs.
+// ordered by plain string comparison, which is all the range check needs. The
+// embedded-IPv4 tail has to become two hex groups first: padding it as a group
+// would yield '.3.4' and silently misorder the range.
 function ipv6_sort_key(s) {
+	let dot = index(s, ".");
+	if (dot != -1) {
+		let cut = 0;
+		for (let i = 0; i < dot; i++) if (substr(s, i, 1) == ":") cut = i;
+		let v4 = substr(s, cut + 1);
+		if (is_valid_ipv4(v4)) {
+			let o = split(v4, ".");
+			s = substr(s, 0, cut + 1)
+			    + sprintf("%02x%02x:%02x%02x", int(o[0]), int(o[1]), int(o[2]), int(o[3]));
+		}
+	}
+
 	let head = s, tail = "";
 	let dbl = index(s, "::");
 	if (dbl != -1) {
@@ -317,13 +365,67 @@ function address_problem(v) {
 	return bad;
 }
 
+// firewall4 supports a non-contiguous mask on a MATCH address, rendering it as
+// `saddr & <mask> == <addr>`, but discards the section outright when one
+// appears in an address it has to rewrite to: a DNAT dest_ip, an SNAT src_dip,
+// or snat_ip. Mirrors fw4's to_bits returning -1. A prefix length cannot be
+// non-contiguous, so only the addr/netmask form is examined.
+function has_noncontiguous_mask(v) {
+	if (type(v) != "string") return false;
+
+	let seg = split(replace(v, /^!/, ""), "/");
+	if (length(seg) != 2) return false;
+
+	let hex;
+	if (is_valid_ipv4(seg[1])) {
+		hex = "";
+		for (let o in split(seg[1], ".")) hex += sprintf("%02x", int(o));
+	}
+	else if (is_valid_ipv6(seg[1])) hex = ipv6_sort_key(seg[1]);
+	else return false;
+
+	let seen_zero = false;
+	for (let i = 0; i < length(hex); i++) {
+		let n = index("0123456789abcdef", substr(hex, i, 1));
+		for (let b = 3; b >= 0; b--) {
+			if ((n >> b) & 1) {
+				if (seen_zero) return true;
+			}
+			else seen_zero = true;
+		}
+	}
+	return false;
+}
+
+// firewall4 wires src_port and dest_port into a rule only inside its
+// `case "tcp": case "udp":` branch, so a port beside any other protocol is
+// dropped and the rule is still emitted, matching the whole protocol instead of
+// the port asked for. That is a widening rather than a no-op, which is why it
+// has to fail validation. `config nat` is the one place a lone wildcard is
+// safe: ensure_tcpudp rewrites it to tcp+udp before the ports are read.
+const TCPUDP = { "tcp": true, "6": true, "udp": true, "17": true, "tcpudp": true };
+const PROTO_WILDCARD = { "any": true, "all": true, "*": true };
+
+function port_proto_conflict(protos, wildcard_rewrites) {
+	if (length(protos) == 0) return false;
+
+	let all_tcpudp = true, all_wildcard = true;
+	for (let p in protos) {
+		let lp = (type(p) == "string") ? lc(p) : null;
+		if (lp == null || !TCPUDP[lp]) all_tcpudp = false;
+		if (lp == null || !PROTO_WILDCARD[lp]) all_wildcard = false;
+	}
+
+	return !(all_tcpudp || (wildcard_rewrites && all_wildcard));
+}
+
 return {
 	normalize_bool, as_list, as_int,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
-	PROTO_RE, PROTO_MAX, proto_problem,
+	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
-	address_problem,
+	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
 	constant_time_equals,
