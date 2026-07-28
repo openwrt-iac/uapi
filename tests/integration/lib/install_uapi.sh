@@ -82,32 +82,40 @@ install_uapi() {
 
 fail() { echo "FAIL: $*"; exit 1; }
 
-fw4_render() {
-	$SSH 'command -v fw4 >/dev/null 2>&1 || { echo "__NO_FW4__"; exit 0; }; fw4 print 2>/dev/null'
-}
-
-# Guards against the assertions quietly passing on an image without fw4, which
-# would recreate exactly the false confidence this is meant to remove.
+# Guards against the assertions quietly passing on an image missing either tool,
+# which would recreate exactly the false confidence this is meant to remove.
+# Memoized because the answer cannot change mid-run and every assertion would
+# otherwise spend an SSH round trip re-asking.
 require_fw4() {
-	$SSH 'command -v fw4 >/dev/null 2>&1' || fail "fw4 is not installed in the test image; the firewall assertions cannot run"
+	if [ -z "${FW4_PRESENT:-}" ]; then
+		$SSH 'command -v fw4 >/dev/null 2>&1 && command -v nft >/dev/null 2>&1' \
+			|| fail "the test image lacks fw4 or nft; the firewall assertions cannot run"
+		FW4_PRESENT=1
+	fi
 }
 
-# fw4 tags every rule it emits with `!fw4: <name>`, so the section name is the
-# handle. On failure, report fw4's own complaint about that section: it is
-# almost always the explanation.
+fw4_render() {
+	$SSH 'fw4 print 2>/dev/null'
+}
+
+# fw4 tags every rule it emits with `!fw4: <section>` on the same line as the
+# match, so passing the section id first and a rendered fragment second pins the
+# fragment to the section under test instead of to any rule that happens to
+# contain it. On failure, report fw4's own complaint: a dropped section is nearly
+# always the reason, and the warning names the option at fault.
 assert_fw4_emits() {
 	require_fw4
-	if ! fw4_render | grep -qF -- "$1"; then
-		needle=$(printf '%s' "$1" | sed 's/^!fw4: //')
-		why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -iF -- "$needle" | head -2)
-		# The needle is usually a rendered fragment, not a section name, so the
-		# targeted lookup misses. fw4's own warnings name the option that got the
-		# section dropped, which is the answer nearly every time.
-		if [ -z "$why" ]; then
-			why=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -v 'is disabled' | head -3 | tr '\n' ' ')
-			why="${why:-no fw4 warning either; the section may never have been written}"
-		fi
-		fail "firewall4 renders no rule matching '$1' -- $why"
+	local hits needle warnings why
+	hits=$(fw4_render)
+	for needle in "$@"; do
+		hits=$(printf '%s\n' "$hits" | grep -F -- "$needle" || true)
+	done
+	if [ -z "$hits" ]; then
+		warnings=$($SSH 'fw4 print 2>&1 >/dev/null' | grep -v 'is disabled' || true)
+		why=$(printf '%s\n' "$warnings" \
+			| grep -iF -- "$(printf '%s' "$1" | sed 's/^!fw4: //')" | head -2)
+		[ -n "$why" ] || why=$(printf '%s\n' "$warnings" | head -3 | tr '\n' ' ')
+		fail "firewall4 renders no single rule matching '$*' -- ${why:-no fw4 warning either; the section may never have been written}"
 	fi
 }
 
@@ -124,6 +132,13 @@ assert_fw4_omits() {
 # while `firewall reload` still exits 0.
 assert_fw4_loads() {
 	require_fw4
-	err=$($SSH 'fw4 print 2>/dev/null | nft -c -f - 2>&1' | head -3)
+	local rendered err
+	rendered=$(fw4_render)
+	# nft -c exits 0 on empty input, so an fw4 that rendered nothing at all would
+	# otherwise pass the very check this exists to make.
+	if [ -z "$rendered" ]; then
+		fail "fw4 rendered no ruleset at all: $($SSH 'fw4 print 2>&1 >/dev/null' | head -3 | tr '\n' ' ')"
+	fi
+	err=$(printf '%s\n' "$rendered" | $SSH 'nft -c -f - 2>&1' | head -3)
 	[ -z "$err" ] || fail "nftables would reject the whole ruleset: $err"
 }
