@@ -171,12 +171,6 @@ function validate(json) {
 function merge_for_patch(existing_section, existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) merged[k] = body[k];
-	if (body.key == null && existing_section.key != null)
-		merged.key = existing_section.key;
-	if (body.tls_auth == null && existing_section.tls_auth != null)
-		merged.tls_auth = existing_section.tls_auth;
-	if (body.pkcs12 == null && existing_section.pkcs12 != null)
-		merged.pkcs12 = existing_section.pkcs12;
 	delete merged.has_key;
 	delete merged.has_tls_auth;
 	delete merged.has_pkcs12;

@@ -99,9 +99,6 @@ function merge_for_patch(existing_section, existing_json, body) {
 		else
 			merged[k] = body[k];
 	}
-	// Carry forward the preshared_key when PATCH omits it (it's masked in read).
-	if (body.preshared_key == null && existing_section.preshared_key != null)
-		merged.preshared_key = existing_section.preshared_key;
 	delete merged.has_preshared_key;
 	return merged;
 }
