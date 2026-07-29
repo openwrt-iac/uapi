@@ -412,6 +412,45 @@ t.describe('network.interfaces proto=dhcp client fields', () => {
 	});
 });
 
+// netifd registers protocol handlers by scanning /lib/netifd/proto at startup
+// and caches the result: a reload does not rescan, only a restart does. So a
+// protocol whose package is absent, or was installed after netifd started, is
+// silently discarded and reported as "none" while uci keeps the requested
+// value. uapi does not refuse the write, because the config is legitimate and
+// only the runtime is behind; it surfaces netifd's view so the gap is visible.
+t.describe('network.interfaces effective_proto', () => {
+	function with_status(status) {
+		let c = ubus.stub({ uci: { network: {} } });
+		c.set_ubus_response("network.interface.wg0", "status", status);
+		return c;
+	}
+	const SECTION = { '.name': 'wg0', '.anonymous': false, proto: 'wireguard' };
+
+	t.it('surfaces what netifd is running, not what uci asked for', () => {
+		let r = interfaces.fromUci(SECTION, with_status({ up: false, proto: 'none' }));
+		t.assert_equal(r.proto, 'wireguard');
+		t.assert_equal(r.runtime.effective_proto, 'none');
+	});
+
+	t.it('agrees with uci when the handler is registered', () => {
+		let r = interfaces.fromUci(SECTION, with_status({ up: true, proto: 'wireguard' }));
+		t.assert_equal(r.runtime.effective_proto, 'wireguard');
+	});
+
+	// A write is never refused over this, so nothing here may produce an error.
+	t.it('never makes a write fail', () => {
+		let body = { proto: 'wwan' };
+		t.assert_equal(length(filter(interfaces.validate(body, with_status({ proto: 'none' })),
+		                             function(e) { return e.field == "proto"; })), 0);
+	});
+
+	t.it('is null when netifd cannot be asked at all', () => {
+		t.assert_equal(interfaces.fromUci(SECTION, null).runtime.effective_proto, null);
+		let r = interfaces.fromUci(SECTION, ubus.stub({ uci: { network: {} } }));
+		t.assert_equal(r.runtime.effective_proto ?? null, null);
+	});
+});
+
 t.describe('network.interfaces proto=dhcpv6 client fields', () => {
 	t.it('fromUci surfaces reqprefix/reqaddress/ip6hint/ip6ifaceid/delegate/peerdns', () => {
 		let r = interfaces.fromUci({

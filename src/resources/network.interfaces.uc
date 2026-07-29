@@ -36,6 +36,14 @@ function fetch_runtime(conn, name) {
 		up: !!status.up,
 		pending: !!status.pending,
 		available: !!status.available,
+		// What netifd is actually running, which is not always what uci asks
+		// for. netifd registers protocol handlers by scanning
+		// /lib/netifd/proto at startup and caches the result: a reload does not
+		// rescan, only a restart does. So a protocol whose package is absent, or
+		// was installed after netifd started, is silently discarded and reported
+		// as "none" while uci still holds the requested value. Comparing this
+		// against `proto` is the only way to see that from outside.
+		effective_proto: status.proto ?? null,
 		l3_device: status.l3_device ?? null,
 		uptime: status.uptime ?? null,
 		ipv4_address: status["ipv4-address"] ?? [],
@@ -289,6 +297,8 @@ return {
 			up:               { type: "boolean" },
 			pending:          { type: "boolean" },
 			available:        { type: "boolean" },
+			effective_proto:  { type: ["string", "null"],
+			                    description: "The protocol netifd is actually running for this interface. Differs from the configured `proto` when no handler is registered for it, in which case netifd reports `none` and the interface is inert; a mismatch means the device needs the handler package and a networking restart." },
 			l3_device:        { type: ["string", "null"] },
 			uptime:           { type: ["integer", "null"], minimum: 0 },
 			ipv4_address:     { type: "array", items: { type: "object" } },
@@ -298,7 +308,8 @@ return {
 		},
 	},
 	schema_properties: {
-		proto: { type: "string", enum: keys(VALID_PROTOS), default: "none" },
+		proto: { type: "string", enum: keys(VALID_PROTOS), default: "none",
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it" },
 		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
 		             deprecated: true,
 		             description: "DEPRECATED in 2.2.0: use `id` instead (the universal section-name input across every resource). Both are accepted during the deprecation window; if both are supplied they must match. `name` is scheduled for removal in v3. See docs/deprecations.md." },
