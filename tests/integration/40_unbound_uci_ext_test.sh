@@ -130,10 +130,19 @@ call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/ext" -d '{
 }' | tail -1 | grep -q '^200$' || fail "cleanup PATCH /unbound/ext failed"
 
 echo "--- managed regions are emptied after disable ---"
-$SSH "awk '/unbound-uci-ext managed \\(do not edit\\)/{f=1; next} /<<< unbound-uci-ext managed <<</{f=0; next} f' /etc/unbound/unbound_srv.conf | grep -v '^$' | head -3" \
-	&& fail "unbound_srv.conf still has managed-region content after disable" || true
-$SSH "awk '/unbound-uci-ext managed \\(do not edit\\)/{f=1; next} /<<< unbound-uci-ext managed <<</{f=0; next} f' /etc/unbound/unbound_ext.conf | grep -v '^$' | head -3" \
-	&& fail "unbound_ext.conf still has managed-region content after disable" || true
+# Capture and test the output rather than gating on the pipeline's exit status.
+# The pipeline ends in `head`, which exits 0 whether or not anything reached it,
+# so the status form fired unconditionally and this assertion could never pass.
+#
+# `head` stays deliberately: without it grep's exit 1 on no-match propagates out
+# of the command substitution, and `set -e` kills the script on the very path
+# where the assertion should succeed. So the terminal `head` is what makes the
+# capture safe, and dropping it trades one silent failure for another.
+for seam in unbound_srv unbound_ext; do
+	leftover=$($SSH "awk '/unbound-uci-ext managed \\(do not edit\\)/{f=1; next} /<<< unbound-uci-ext managed <<</{f=0; next} f' /etc/unbound/$seam.conf | grep -v '^\$' | head -3")
+	[ -z "$leftover" ] \
+		|| fail "$seam.conf still has managed-region content after disable: $leftover"
+done
 
 echo "--- 2.2.0 create_if_missing: wipe unbound_srv conffile, PATCH recreates ---"
 # Save a snapshot of the current conffile (which the package shipped) so we
