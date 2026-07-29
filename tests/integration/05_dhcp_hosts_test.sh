@@ -28,6 +28,10 @@ got=$(call "$URL/dhcp/hosts/$id")
 echo "$got" | tail -1 | grep -q '^200$' || fail "GET expected 200"
 echo "$got" | grep -q '"mac": "aa:bb:cc:dd:ee:ff"' || fail "mac missing"
 
+echo "--- and dnsmasq compiled it, which a 200 and a read-back do not prove ---"
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.50,printer,12h"
+assert_dnsmasq_loads
+
 echo "--- POST with invalid MAC returns 422 ---"
 invalid=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
 	"mac": "garbage", "ip": "10.0.0.1"
@@ -38,10 +42,16 @@ echo "--- PATCH updates IP ---"
 patched=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/hosts/$id" -d '{"ip": "192.168.1.51"}')
 echo "$patched" | tail -1 | grep -q '^200$' || fail "PATCH expected 200"
 echo "$patched" | grep -q '"ip": "192.168.1.51"' || fail "PATCH did not update ip"
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.51,printer,12h"
+assert_dnsmasq_omits "192.168.1.50"
 
 echo "--- DELETE returns 204 ---"
 deleted=$(call -X DELETE "$URL/dhcp/hosts/$id")
 echo "$deleted" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
+
+echo "--- and dnsmasq no longer compiles it ---"
+assert_dnsmasq_omits "dhcp-host=aa:bb:cc:dd:ee:ff"
+assert_dnsmasq_loads
 
 echo "--- DNS-only entry: mac + name, no ip ---"
 dns_only=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
