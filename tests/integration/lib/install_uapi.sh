@@ -177,33 +177,49 @@ assert_fw4_loads() {
 # a read-back. `dnsmasq --test` is the counterpart to `nft -c`: it parses the
 # generated file and reports a bad option or a bad value without disturbing the
 # running server.
-DNSMASQ_CONF='$(ls /var/etc/dnsmasq.conf.* 2>/dev/null | head -1)'
+# Every instance, not just the first. OpenWrt compiles one file per `config
+# dnsmasq` section, and dhcp/hosts exposes an `instance` field, so a host bound
+# to a non-default instance lands in a file that a `head -1` glob never reads:
+# that reported "no line matching" for a host the daemon had compiled correctly,
+# and it also skipped a syntax error in any instance but the first.
+#
+# Caveat: deleting an instance leaves its compiled file behind until dnsmasq is
+# restarted, so on a box with that history the glob can read a stale file. The
+# tests never create or delete instances, so this cannot arise in a suite run.
+DNSMASQ_CONFS='/var/etc/dnsmasq.conf.*'
 
 require_dnsmasq() {
 	if [ -z "${DNSMASQ_PRESENT:-}" ]; then
-		$SSH "command -v dnsmasq >/dev/null 2>&1 && [ -n \"$DNSMASQ_CONF\" ]" \
+		$SSH "command -v dnsmasq >/dev/null 2>&1 && ls $DNSMASQ_CONFS >/dev/null 2>&1" \
 			|| fail "the test image has no dnsmasq or no compiled config; the dhcp assertions cannot run"
 		DNSMASQ_PRESENT=1
 	fi
 }
 
 dnsmasq_render() {
-	$SSH "cat $DNSMASQ_CONF 2>/dev/null"
+	$SSH "cat $DNSMASQ_CONFS 2>/dev/null"
+}
+
+# dnsmasq --test takes one file at a time, so check each instance and report the
+# first complaint. Empty output means every instance parsed.
+dnsmasq_complaints() {
+	$SSH "for f in $DNSMASQ_CONFS; do dnsmasq --test -C \"\$f\" 2>&1; done" \
+		| grep -v 'syntax check OK' || true
 }
 
 assert_dnsmasq_emits() {
 	require_dnsmasq
 	if ! dnsmasq_render | grep -qF -- "$1"; then
 		local why
-		why=$($SSH "dnsmasq --test -C $DNSMASQ_CONF 2>&1" | grep -v 'syntax check OK' | head -2 | tr '\n' ' ')
-		fail "dnsmasq's compiled config has no line matching '$1' -- ${why:-no dnsmasq complaint either; the section may never have been written}"
+		why=$(dnsmasq_complaints | head -2 | tr '\n' ' ')
+		fail "no dnsmasq instance compiled a line matching '$1' -- ${why:-no dnsmasq complaint either; the section may never have been written}"
 	fi
 }
 
 assert_dnsmasq_omits() {
 	require_dnsmasq
 	if dnsmasq_render | grep -qF -- "$1"; then
-		fail "dnsmasq's compiled config still has a line matching '$1'"
+		fail "a dnsmasq instance still compiles a line matching '$1'"
 	fi
 }
 
@@ -216,6 +232,6 @@ assert_dnsmasq_loads() {
 	if [ -z "$rendered" ]; then
 		fail "dnsmasq compiled no config at all"
 	fi
-	err=$($SSH "dnsmasq --test -C $DNSMASQ_CONF 2>&1" | grep -v 'syntax check OK' | head -3 | tr '\n' ' ')
+	err=$(dnsmasq_complaints | head -3 | tr '\n' ' ')
 	[ -z "$err" ] || fail "dnsmasq would reject its own compiled config: $err"
 }
