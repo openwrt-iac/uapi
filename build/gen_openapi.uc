@@ -1044,8 +1044,12 @@ function build_schemas() {
 			}
 		}
 
+		// runtime is derived from ubus and toUci ignores it, so it can never be
+		// written. Saying so matters for the fields that deliberately disagree
+		// with the configured value: a generator that treats them as writable
+		// produces a diff no configuration can resolve.
 		if (type(mod.openapi_runtime) == "object" && type(properties.runtime) == "object")
-			properties.runtime = mod.openapi_runtime;
+			properties.runtime = { ...mod.openapi_runtime, readOnly: true };
 
 		// 2.2.0: every CRUD resource accepts an optional `id` at create
 		// that becomes both the uci section name and the response id. If

@@ -21229,7 +21229,8 @@
 							"wwan",
 							"wireguard"
 						],
-						"default": "none"
+						"default": "none",
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it"
 					},
 					"ipaddr": {
 						"type": [
@@ -21302,6 +21303,13 @@
 							"available": {
 								"type": "boolean"
 							},
+							"effective_proto": {
+								"type": [
+									"string",
+									"null"
+								],
+								"description": "The protocol netifd is actually running for this interface. Differs from the configured `proto` when no handler is registered for it, in which case netifd reports `none` and the interface is inert; a mismatch means the device needs the handler package and a networking restart."
+							},
 							"l3_device": {
 								"type": [
 									"string",
@@ -21339,7 +21347,8 @@
 									"type": "object"
 								}
 							}
-						}
+						},
+						"readOnly": true
 					},
 					"name": {
 						"type": "string",
@@ -22122,7 +22131,8 @@
 								"type": "integer",
 								"minimum": 0
 							}
-						}
+						},
+						"readOnly": true
 					},
 					"key": {
 						"type": "string",
@@ -22445,7 +22455,8 @@
 								"minimum": 0,
 								"description": "IPv6 leases issued on this section's interface"
 							}
-						}
+						},
+						"readOnly": true
 					}
 				},
 				"required": [
