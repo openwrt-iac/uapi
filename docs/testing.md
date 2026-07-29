@@ -40,6 +40,15 @@ Every regression in this list has cost a real debug round-trip at some point. Ke
 - `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json` that a conformance validator does not make, because the shapes are legal JSON Schema and merely useless to a generator: a schema `required` naming a property the schema does not declare, an `if` with no `then` or `else` (and the reverse), an empty or non-array `enum`, and any value that is the string `"NaN"`. The last one exists because ucode's `+` on two arrays yields NaN rather than concatenating, which is how an `enum` of `"NaN"` reached the published spec.
 - `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies a matching `default:` annotation in `schema_properties`; for every `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ?? null` and the schema type includes `"null"`.
 
+### Asserting that a write reached the daemon
+
+A 200 and a successful read-back prove only that uci accepted the write. Both were true of the redirect bug that made every uapi-created port forward silently vanish. Where a daemon compiles uci into something else, the integration library asserts against that compiled form instead:
+
+- `assert_fw4_emits` / `assert_fw4_omits` / `assert_fw4_loads` check what firewall4 renders from uci and that `nft -c` accepts the whole ruleset. Rendering is used rather than the applied table because CI stubs `/etc/init.d/firewall`, and because `nft -f` is atomic, so one bad token rejects every rule while `firewall reload` still exits 0.
+- `assert_dnsmasq_emits` / `assert_dnsmasq_omits` / `assert_dnsmasq_loads` check `/var/etc/dnsmasq.conf.<id>`, which dnsmasq compiles from `/etc/config/dhcp` on reload, and run `dnsmasq --test` over it. `--test` is the counterpart to `nft -c`: it reports a bad option or a bad value without disturbing the running server.
+
+There is deliberately **no equivalent for network**. netifd reports a status object for an interface whose proto it does not recognise (silently falling back to `none`) and for one whose device does not exist, so "netifd knows about it" passes for broken configuration and would be a tautological assertion. `available: false` is not a usable signal either, since it is also false for a perfectly valid interface that has no device to bind to. A meaningful check would need a test interface bound to a real device, which the suite does not currently create.
+
 `make openapi-validate` (2.4.0+) runs a real OpenAPI 3.1 conformance validator over the emitted document. It is deliberately **not** part of `make lint`, which stays dependency-free; it needs `python3` and `openapi-spec-validator`, and CI runs it as its own step so the gate is enforced without every local `make lint` requiring a pip install. It fails rather than skips when the validator is absent, since a check that quietly passes is worse than no check. The two gates are complementary and were measured to be so: the conformance run catches type and keyword violations anywhere in the document, and misses the two semantic cases above, which are valid JSON Schema.
 
 ## CI shape

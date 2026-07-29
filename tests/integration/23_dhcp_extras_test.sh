@@ -18,12 +18,15 @@ status=$(echo "$created" | tail -1)
 [ "$status" = "200" ] || fail "servers POST expected 200, got $status"
 sid=$(echo "$created" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
-echo "--- dhcp/servers: PATCH leasetime ---"
+echo "--- dhcp/servers: PATCH leasetime, and dnsmasq recompiles the range ---"
 call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/$sid" -d '{"leasetime":"24h"}' | tail -1 | grep -q '^200$' \
 	|| fail "PATCH servers expected 200"
+assert_dnsmasq_emits ",24h"
+assert_dnsmasq_loads
 
 echo "--- dhcp/servers: DELETE ---"
 call -X DELETE "$URL/dhcp/servers/$sid" | tail -1 | grep -q '^204$' || fail "DELETE servers expected 204"
+assert_dnsmasq_loads
 
 echo "--- dhcp/dnsmasq singleton: GET returns the existing config ---"
 got=$(call "$URL/dhcp/dnsmasq")

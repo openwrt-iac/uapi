@@ -170,3 +170,52 @@ assert_fw4_loads() {
 	err=$(printf '%s\n' "$rendered" | $SSH 'nft -c -f - 2>&1' | head -3)
 	[ -z "$err" ] || fail "nftables would reject the whole ruleset: $err"
 }
+
+# The same gap on the dhcp side. uapi writes /etc/config/dhcp, and dnsmasq
+# compiles that into /var/etc/dnsmasq.conf.<id> on reload; a write that reaches
+# uci but never reaches the compiled file is invisible to a status code and to
+# a read-back. `dnsmasq --test` is the counterpart to `nft -c`: it parses the
+# generated file and reports a bad option or a bad value without disturbing the
+# running server.
+DNSMASQ_CONF='$(ls /var/etc/dnsmasq.conf.* 2>/dev/null | head -1)'
+
+require_dnsmasq() {
+	if [ -z "${DNSMASQ_PRESENT:-}" ]; then
+		$SSH "command -v dnsmasq >/dev/null 2>&1 && [ -n \"$DNSMASQ_CONF\" ]" \
+			|| fail "the test image has no dnsmasq or no compiled config; the dhcp assertions cannot run"
+		DNSMASQ_PRESENT=1
+	fi
+}
+
+dnsmasq_render() {
+	$SSH "cat $DNSMASQ_CONF 2>/dev/null"
+}
+
+assert_dnsmasq_emits() {
+	require_dnsmasq
+	if ! dnsmasq_render | grep -qF -- "$1"; then
+		local why
+		why=$($SSH "dnsmasq --test -C $DNSMASQ_CONF 2>&1" | grep -v 'syntax check OK' | head -2 | tr '\n' ' ')
+		fail "dnsmasq's compiled config has no line matching '$1' -- ${why:-no dnsmasq complaint either; the section may never have been written}"
+	fi
+}
+
+assert_dnsmasq_omits() {
+	require_dnsmasq
+	if dnsmasq_render | grep -qF -- "$1"; then
+		fail "dnsmasq's compiled config still has a line matching '$1'"
+	fi
+}
+
+assert_dnsmasq_loads() {
+	require_dnsmasq
+	local rendered err
+	rendered=$(dnsmasq_render)
+	# An empty compiled file would sail through --test, which is the same trap
+	# nft -c has on empty input.
+	if [ -z "$rendered" ]; then
+		fail "dnsmasq compiled no config at all"
+	fi
+	err=$($SSH "dnsmasq --test -C $DNSMASQ_CONF 2>&1" | grep -v 'syntax check OK' | head -3 | tr '\n' ' ')
+	[ -z "$err" ] || fail "dnsmasq would reject its own compiled config: $err"
+}
