@@ -189,7 +189,13 @@ jobs:
             mkdir -p build/sdk
             SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
             curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
-            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" )
+            # --ignore-missing: build/sdk.sha256 pins every arch this repo builds,
+            # but this job downloads only its own tarball, so a bare --check fails on
+            # the three it never fetched. verify-arch-build below has always passed the
+            # flag; this job did not, and the gap stayed invisible because the download
+            # only runs on a cache miss and the SDK cache was warm for every release
+            # until 2.4.0 hit a cold one.
+            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
             tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" -C build/sdk --strip-components=1
             rm -f "/tmp/$SDK_TARBALL"
           fi
