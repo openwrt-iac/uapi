@@ -13,6 +13,30 @@ Closes the gap between what the firewall resources advertise and what firewall4 
 
 One item is a different and more serious shape than the rest, and is worth reading before upgrading: a port matched alongside a protocol that cannot carry one was not a no-op but a **widening**. firewall4 dropped the port and emitted the rule anyway, so it matched more traffic than asked for, and with the `all` wildcard it matched everything. Verified on hardware: `proto: ["all"]` with `dest_port: ["22"]` on an `ACCEPT` rule renders a bare `counter accept`. Such payloads are now rejected. See the entry under Fixed, and [openwrt-iac/uapi#24](https://github.com/openwrt-iac/uapi/issues/24).
 
+### Upgrade note: payloads that were accepted and are now rejected
+
+This release starts refusing configuration it previously wrote. Every shape below was already broken on the router before the upgrade: firewall4 was discarding the section, or emitting a rule matching more traffic than asked for, or the value was never validated at all. The `422` is not new breakage, it is the first time uapi says so.
+
+Nothing here needs action on a router whose configuration uapi wrote and that has not been hand-edited. The risk is concentrated in sections adopted from an existing config, written by LuCI, or edited by hand, because those never passed through this validation.
+
+| Payload | Result before | Why it was already broken |
+|---|---|---|
+| A port matched alongside a protocol that cannot carry one, on `firewall/rules`, `firewall/redirects` or `firewall/nat` | 200 | firewall4 dropped the port and emitted the rule anyway, so it matched the **whole protocol**. With `proto: ["all"]` it matched everything. |
+| More than one value in a `firewall/redirects` `match` field (`src_ip`, `src_port`, `src_dport`, `dest_ip`, `dest_port`) | 200 | uci wrote a list, firewall4 refuses a list on those options and discarded the entire redirect. |
+| `match.src_zone` or `match.dest_zone` set to `any` on `firewall/rules` | 200 | firewall4 has exactly one wildcard, `*`. `any` resolved against zone names, matched nothing, and the section was discarded. |
+| `target: "NOTRACK"` with no source zone, or a wildcard one | 200 | firewall4 derives the chain name from the zone and discards the section without a named one. |
+| A protocol token nftables cannot resolve (`ipcomp`, `l2tp`, `vrrp`), or a negated one | 200 | firewall4 renders the token verbatim and `nft -f` is atomic, so one unresolvable token rejected the **entire ruleset** and the router kept its previous firewall. A negated protocol had its negation silently dropped. |
+| A port or address firewall4 cannot parse: out of range, a descending range, malformed | 200 | `firewall/rules` validated neither, so the section was discarded. |
+| A zero-padded IPv4 octet such as `010.0.0.1` | 200 | `inet_pton` cannot read it, so firewall4 fell through to a network-name lookup, resolved nothing, and discarded the section. |
+| A malformed IPv6 address such as `:::::` | 200 | Accepted by a character-class check, rejected by `inet_pton`, section discarded. |
+| A non-contiguous netmask in an address firewall4 rewrites **to**: `snat_ip`, an SNAT redirect's `src_dip`, a DNAT redirect's `dest_ip` | 200 | firewall4 discards the section over one. Still accepted on match addresses, where it renders correctly. |
+| A negated `match.dest_ip` on a DNAT redirect | 200 | firewall4 returns before emitting anything. Still accepted on an SNAT redirect, where `dest_ip` is an ordinary match. |
+| `proto` or `dev_type` outside the accepted set on `openvpn/instances` | 200 | The enum reached the spec as the string `"NaN"`, which the type checker skips, so neither field was validated at all. |
+
+Two of these were also widened while being enforced, so the new check is not simply stricter: the `openvpn` `proto` set gained the `tcp-client` and `tcp-server` spellings that luci-app-openvpn actually writes, and IPv6 validation now accepts the embedded-IPv4 form `::ffff:192.168.1.1` that the platform parses.
+
+There is currently no way to ask a router which of its sections will be refused before writing to them; that gap is tracked in [openwrt-iac/uapi#47](https://github.com/openwrt-iac/uapi/issues/47).
+
 ### Added
 
 - `firewall/rules` gains the `DSCP` target alongside the existing `MARK`, and the values they require: `set_mark` / `set_xmark` (value or value/mask, decimal or `0x` hex, 32-bit) and `set_dscp` (a symbolic class such as `CS0`, `AF11`, `EF`, `LE`, case-insensitive, or a number 0-63). A target that needs a value and does not have one is now a `422` instead of a rule the router discards.
