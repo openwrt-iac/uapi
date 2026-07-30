@@ -3,6 +3,10 @@ tests/vm/openwrt*.img*
 tests/vm/id_ed25519*
 tests/vm/qemu.pid
 tests/vm/qemu.log
+# Per-machine marker written by tests/vm/setup.sh to record that the SSH key
+# was injected into the image. setup.sh compares its mtime against the key, so
+# a committed copy would make a fresh clone skip key injection.
+tests/vm/.injected
 build/sdk/
 build/sdk-*/
 build/sbom.spdx.json
