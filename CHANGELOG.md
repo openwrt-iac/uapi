@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Added
+- (Reserved for next-cycle changes.)
+
+## [2.4.0] - 2026-07-30
+
 Closes the gap between what the firewall resources advertise and what firewall4 actually applies. `target: "MARK"` was accepted but had no field to carry the mark value, so fw4 warned `must specify option 'set_mark' or 'set_xmark' for target 'mark'` and skipped the section: the write returned 200 and the rule silently never existed. Auditing the rest of the surface against fw4 found the same class repeatedly, plus the inverse (uapi rejecting configurations fw4 accepts). Closes [openwrt-iac/uapi#20](https://github.com/openwrt-iac/uapi/issues/20).
 
 One item is a different and more serious shape than the rest, and is worth reading before upgrading: a port matched alongside a protocol that cannot carry one was not a no-op but a **widening**. firewall4 dropped the port and emitted the rule anyway, so it matched more traffic than asked for, and with the `all` wildcard it matched everything. Verified on hardware: `proto: ["all"]` with `dest_port: ["22"]` on an `ACCEPT` rule renders a bare `counter accept`. Such payloads are now rejected. See the entry under Fixed, and [openwrt-iac/uapi#24](https://github.com/openwrt-iac/uapi/issues/24).
@@ -57,7 +62,17 @@ One item is a different and more serious shape than the rest, and is worth readi
 
 - IPv6 validation was both too loose and too strict, in ways that each had a consequence. It accepted addresses `inet_pton` rejects, such as `:::::`, which reach the router and discard a section; and it refused the embedded-IPv4 form `::ffff:192.168.1.1`, which the platform parses and applies. Validation now follows the real grammar in both directions: at most one `::`, at most four hex digits per group, exactly eight groups once expanded, and an embedded IPv4 tail permitted only in the final 32 bits. This affects every resource that validates an address, not only the firewall ones.
 
+- **`runtime` is now annotated `readOnly` on every schema that carries it, not just the three that document its shape.** It is derived from ubus and `toUci` ignores it, so it is never writable on any resource, but 42 of the 45 emitted a bare `{"type": "object"}` with no annotation, which a code generator reads as an ordinary writable free-form map. Regenerate any client that derives writability from the spec. `lint-openapi-shape` now asserts the annotation so it cannot go missing again. Reported from downstream while building provider support for this release, found by diffing the spec. Closes [openwrt-iac/uapi#40](https://github.com/openwrt-iac/uapi/issues/40).
+
+- `firewall/rules` no longer lists `match` as required. It was accurate at v2.0.0, when every rule needed a source zone and therefore a `match` object to hold it; relaxing `src_zone` to NOTRACK-only earlier in this release made a match-less rule valid, and the spec kept advertising the old constraint. The server has always accepted such a rule, so this only stops the document overstating. `firewall/redirects` keeps the requirement, where it is real because `src_zone` is mandatory there, and `firewall/nat` still has none. Closes [openwrt-iac/uapi#42](https://github.com/openwrt-iac/uapi/issues/42).
+
+- `/firewall/nat` stays singular, deliberately: `nats` reads badly and `nat_rules` would diverge from the `config nat` section type and from what LuCI calls it. The exception is now recorded at the endpoint declaration and allowlisted in the plural-collection lint rule, so it is enforced rather than remembered. Closes [openwrt-iac/uapi#41](https://github.com/openwrt-iac/uapi/issues/41).
+
 ### Internal
+
+- `BatchOperation.body` declares `type: object` instead of being left untyped. Its shape is whatever the target resource accepts, so the spec cannot say more, but an untyped schema is precisely where the malformed `enum` above hid from every check that walks the document.
+
+- `lint-openapi-shape` gains two rules, both prompted by spec defects a downstream consumer found by diffing rather than by any gate here: `runtime` must be `readOnly` wherever it appears, and a collection path segment must be plural unless allowlisted with a reason. A collection is identified structurally, by having a sibling `{id}` path, so neither rule guesses at naming. Closes [openwrt-iac/uapi#43](https://github.com/openwrt-iac/uapi/issues/43).
 
 - `values.uc` gains `MARK_RE` / `MARK_MATCH_RE` / `MARK_MAX` and `masked_value_exceeds()`, shared by the three resources that now expose a mark so the accepted syntax cannot drift between them. The schema `pattern` constrains shape; `masked_value_exceeds` catches the bound a pattern cannot express, since a 10-digit decimal still overflows 32 bits and a 2-digit DSCP still exceeds 63.
 
