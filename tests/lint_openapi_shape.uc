@@ -103,11 +103,54 @@ function walk(node, path) {
 
 walk(spec, "");
 
+// `runtime` is derived from ubus and toUci ignores it, so it is never writable
+// on any resource. An un-annotated `type: object` reads to a code generator as
+// an ordinary writable free-form map, which is how 42 of 45 schemas came to
+// advertise a writable runtime: the annotation was applied where the shape was
+// documented rather than everywhere the property is emitted. There is no
+// resource for which the rule needs an exception, so it needs no allowlist.
+let runtime_seen = 0;
+let schemas = spec.components?.schemas ?? {};
+for (let name in schemas) {
+	let rt = schemas[name].properties?.runtime;
+	if (type(rt) != "object") continue;
+	runtime_seen++;
+	if (rt.readOnly !== true)
+		note(sprintf("/components/schemas/%s/properties/runtime", name),
+		     "must be readOnly: a generator reads an un-annotated object as writable, and no resource accepts a runtime");
+}
+
+// A collection segment names a set, so it reads plural, and every curated one
+// is the plural of its uci section type. The exceptions below are decisions,
+// not oversights, and each became load-bearing the moment it shipped: the path,
+// the scope name and the schema name all appear in released clients. A new
+// singular collection that is not listed here is a mistake, which is the point
+// of failing rather than warning.
+//
+// A collection is identified structurally, by having a sibling {id} path, so
+// this needs no guesswork about what a resource is called.
+const SINGULAR_COLLECTIONS = {
+	"/firewall/nat": "\"nats\" reads badly; `nat` matches the uci section type and LuCI",
+	"/dhcp/leases6": "\"leases\" plus a family suffix; already plural",
+	"/raw/{package}": "passthrough, not a curated collection",
+};
+
+let paths = spec.paths ?? {};
+let collections = 0;
+for (let p in paths) {
+	if (!exists(paths, p + "/{id}")) continue;
+	collections++;
+	if (exists(SINGULAR_COLLECTIONS, p)) continue;
+	let seg = split(p, "/")[-1];
+	if (substr(seg, -1) != "s")
+		note(p, sprintf("collection segment %J is singular; make it plural, or add it to SINGULAR_COLLECTIONS with the reason", seg));
+}
+
 if (length(problems) > 0) {
 	for (let p in problems) print(p + "\n");
 	printf("FAIL: %d structural problem(s) in build/openapi.json\n", length(problems));
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, no structural problems\n",
-       schemas_seen, conditionals_seen);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, collections);

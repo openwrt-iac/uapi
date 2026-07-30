@@ -22,6 +22,13 @@ const ENDPOINTS = [
 	{ path: "/firewall/rules",        file: "firewall.rules.uc",        kind: "crud", domain: "firewall", subresource: "rules" },
 	{ path: "/firewall/zones",        file: "firewall.zones.uc",        kind: "crud", domain: "firewall", subresource: "zones" },
 	{ path: "/firewall/redirects",    file: "firewall.redirects.uc",    kind: "crud", domain: "firewall", subresource: "redirects" },
+	// Deliberately singular, and the only curated collection that is. Every
+	// other segment is the plural of its uci section type, but "nats" reads
+	// badly and "nat_rules" would diverge from `config nat`, which is also what
+	// LuCI calls it. The path, the `firewall:nat` scope and the FirewallNat
+	// schema all became load-bearing at 2.4.0, so this is not a wart to tidy up
+	// later; lint_openapi_shape.uc allowlists it so the exception stays a
+	// recorded decision rather than a thing someone renames on sight.
 	{ path: "/firewall/nat",          file: "firewall.nat.uc",          kind: "crud", domain: "firewall", subresource: "nat" },
 	{ path: "/firewall/forwardings",  file: "firewall.forwardings.uc",  kind: "crud", domain: "firewall", subresource: "forwardings" },
 	{ path: "/firewall/defaults",     file: "firewall.defaults.uc",     kind: "singleton", domain: "firewall", subresource: "defaults" },
@@ -773,7 +780,7 @@ function build_schemas() {
 				"name": { "type": "string" },
 				"version": { "type": ["string", "null"] },
 				"installed": { "type": "boolean" },
-				"runtime": { "type": "object" },
+				"runtime": { "type": "object", "readOnly": true },
 			},
 		},
 		"PackageInstallRequest": {
@@ -795,7 +802,7 @@ function build_schemas() {
 				"url": { "type": "string" },
 				"enabled": { "type": "boolean" },
 				"update_status": { "type": "string" },
-				"runtime": { "type": "object" },
+				"runtime": { "type": "object", "readOnly": true },
 			},
 		},
 		"PackageFeedCreateRequest": {
@@ -975,7 +982,12 @@ function build_schemas() {
 			"properties": {
 				"path":     { "type": "string", "description": "Resource path (e.g. /firewall/rules)" },
 				"method":   { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
-				"body":     { "description": "Request body for POST/PUT/PATCH; omit for GET/DELETE" },
+				// Typed rather than left open: the payload is whatever the target
+				// resource accepts, so it cannot be described further here, but an
+				// untyped schema is where a malformed value hides from every check
+				// that walks the document.
+				"body":     { "type": "object", "additionalProperties": true,
+				              "description": "Request body for POST/PUT/PATCH; shape is the target resource's own schema. Omit for GET/DELETE" },
 				"if_match": { "type": "string", "description": "Optional per-sub-request If-Match ETag" },
 			},
 		},
@@ -1045,11 +1057,18 @@ function build_schemas() {
 		}
 
 		// runtime is derived from ubus and toUci ignores it, so it can never be
-		// written. Saying so matters for the fields that deliberately disagree
-		// with the configured value: a generator that treats them as writable
-		// produces a diff no configuration can resolve.
-		if (type(mod.openapi_runtime) == "object" && type(properties.runtime) == "object")
-			properties.runtime = { ...mod.openapi_runtime, readOnly: true };
+		// written on any resource. Saying so matters twice over: for the fields
+		// that deliberately disagree with the configured value, where a generator
+		// treating them as writable produces a diff no configuration can resolve;
+		// and for the resources that merely carry an empty runtime, where an
+		// un-annotated `type: object` reads to a generator as an ordinary
+		// writable free-form map. The annotation has to land whether or not the
+		// module documents its runtime shape, which is why it is applied to the
+		// property rather than folded into the openapi_runtime override.
+		if (type(properties.runtime) == "object") {
+			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : properties.runtime;
+			properties.runtime = { ...documented, readOnly: true };
+		}
 
 		// 2.2.0: every CRUD resource accepts an optional `id` at create
 		// that becomes both the uci section name and the response id. If
