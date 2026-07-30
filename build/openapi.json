@@ -19840,7 +19840,8 @@
 						"type": "boolean"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -19885,7 +19886,8 @@
 						"type": "string"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -20354,7 +20356,9 @@
 						]
 					},
 					"body": {
-						"description": "Request body for POST/PUT/PATCH; omit for GET/DELETE"
+						"type": "object",
+						"additionalProperties": true,
+						"description": "Request body for POST/PUT/PATCH; shape is the target resource's own schema. Omit for GET/DELETE"
 					},
 					"if_match": {
 						"type": "string",
@@ -20560,12 +20564,12 @@
 						}
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
-					"target",
-					"match"
+					"target"
 				],
 				"allOf": [
 					{
@@ -20712,7 +20716,8 @@
 						"default": "any"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -20867,7 +20872,8 @@
 						"description": "Zones in which NAT reflection is allowed (uci list reflection_zone)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -21046,7 +21052,8 @@
 						}
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"allOf": [
@@ -21112,7 +21119,8 @@
 						"default": true
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -21194,7 +21202,8 @@
 						"description": "Enable hardware flow offloading (requires NIC support)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -21557,7 +21566,8 @@
 						"description": "Enable IPv6 on this device"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -21659,7 +21669,8 @@
 						"default": "unicast"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -21752,7 +21763,8 @@
 						"description": "Match fwmark (value or value/mask)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"allOf": [
@@ -21846,7 +21858,8 @@
 						"description": "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -21919,7 +21932,8 @@
 						"description": "Skip this peer when starting the tunnel"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					},
 					"preshared_key": {
 						"type": "string",
@@ -22002,7 +22016,8 @@
 						"description": "Disable this radio at boot"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -22257,7 +22272,8 @@
 						"description": "Pin this reservation to a specific dhcp/dnsmasq instance (section name)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"allOf": [
@@ -22560,7 +22576,8 @@
 						"default": true
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -22603,7 +22620,8 @@
 						"description": "syslog priority (0=emerg .. 7=debug)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -22683,7 +22701,8 @@
 						"default": false
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -22728,7 +22747,8 @@
 						"description": "Accept NTP servers learned via DHCP option 42"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"allOf": [
@@ -22803,7 +22823,8 @@
 						"description": "Allow remote port forwarding"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -22926,7 +22947,8 @@
 						"description": "Reject requests from RFC1918 ranges with non-RFC1918 host header"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -22975,7 +22997,8 @@
 						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23133,7 +23156,8 @@
 						"description": "Local-zone type for the configured domain"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23186,7 +23210,8 @@
 						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line; `unbound-checkconf` validates grammar after restart."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23216,7 +23241,8 @@
 						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line; build whole `forward-zone:`, `view:`, `stub:`, or `remote-control:` clauses by listing them in order. `unbound-checkconf` validates grammar after restart."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23280,7 +23306,8 @@
 						"description": "Per-packet overhead bytes for link-layer accounting"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23306,7 +23333,8 @@
 						}
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23335,7 +23363,8 @@
 						"description": "SNMP community string"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23376,7 +23405,8 @@
 						"description": "Security name (community for v1/v2c, USM user for v3)"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23452,7 +23482,8 @@
 						"description": "View name granted for notifications"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23499,7 +23530,8 @@
 						"description": "SNMPv2-MIB::sysObjectID OID"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23570,7 +23602,8 @@
 						}
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23603,7 +23636,8 @@
 						"description": "TCP port for the /metrics endpoint"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					},
 					"cpu": {
 						"type": "boolean",
@@ -23721,7 +23755,8 @@
 						"description": "Day of month that monthly counters roll over"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23747,7 +23782,8 @@
 						"description": "Whether vnstat tracks this interface"
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -23814,7 +23850,8 @@
 						"description": "Seconds between netlink route-monitor polls."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -23999,7 +24036,8 @@
 						"description": "Events that flush conntrack table."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -24041,7 +24079,8 @@
 						"description": "Relative load-share weight among equal-metric members."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -24081,7 +24120,8 @@
 						"description": "Member section names. Equal metric balances; lower metric is preferred."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -24181,7 +24221,8 @@
 						"default": false
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				},
 				"required": [
@@ -24417,7 +24458,8 @@
 						"description": "Filter usteer's action to these SSIDs (empty = all)."
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					}
 				}
 			},
@@ -24793,7 +24835,8 @@
 						"readOnly": true
 					},
 					"runtime": {
-						"type": "object"
+						"type": "object",
+						"readOnly": true
 					},
 					"key": {
 						"type": "string",

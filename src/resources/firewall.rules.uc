@@ -230,7 +230,12 @@ return {
 	toUci: toUci,
 	validate: validate,
 	openapi_singular: "firewall rule",
-	openapi_required: ["target", "match"],
+	// `match` was genuinely required while every rule needed a source zone.
+	// Relaxing src_zone to NOTRACK-only made a match-less rule valid (it lands
+	// in the output chain), and the server accepts one, so listing it here
+	// described a constraint that no longer exists. The NOTRACK case that does
+	// need a match is expressed conditionally below.
+	openapi_required: ["target"],
 	openapi_conditional: [
 		{ if:   { properties: { target: { const: "NOTRACK" } }, required: ["target"] },
 		  then: { properties: { match: { type: "object", required: ["src_zone"] } },
