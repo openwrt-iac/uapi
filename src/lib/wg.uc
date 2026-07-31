@@ -99,6 +99,16 @@ function psk_file(value) {
 // config. Keepalive and preshared key are always spelled out, with 0 and
 // /dev/null as the explicit clears, because `wg set` merges and would otherwise
 // leave a stale value behind that uci no longer has.
+// An IPv6 endpoint has to be bracketed for wg to find the port, but the caller
+// may already have bracketed it: that is the form `wg show endpoints` prints
+// back, so it round-trips straight into a PUT. Same guard upstream's handler
+// uses. Without it "[fd00::1]" became "[[fd00::1]]" and wg refused the peer.
+function endpoint_arg(host, port) {
+	if (index(host, ":") >= 0 && substr(host, 0, 1) != "[")
+		host = "[" + host + "]";
+	return sprintf("%s:%d", host, port);
+}
+
 function set_peer(iface, peer) {
 	let args = sprintf("wg set %s peer %s", iface, shellquote(peer.public_key));
 	args += " allowed-ips " + shellquote(join(",", peer.allowed_ips));
@@ -115,10 +125,8 @@ function set_peer(iface, peer) {
 		args += " preshared-key /dev/null";
 
 	if (peer.endpoint_host != null && peer.endpoint_host != "") {
-		let host = peer.endpoint_host;
-		if (index(host, ":") >= 0) host = "[" + host + "]";
-		args += sprintf(" endpoint %s", shellquote(sprintf("%s:%d", host,
-		                peer.endpoint_port ?? 51820)));
+		args += " endpoint " + shellquote(endpoint_arg(peer.endpoint_host,
+		                                                peer.endpoint_port ?? 51820));
 	}
 
 	let r = run(args);
@@ -362,5 +370,5 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, interfaces_of, shellquote, to_peer,
+return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg,
          route_prefixes: routes_from, route_table };
