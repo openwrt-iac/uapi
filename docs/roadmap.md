@@ -101,18 +101,34 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
   Held out of 2.4.1 because a new header is additive wire surface, which
   `docs/versioning.md` puts outside a patch release.
 
-- **Upstream: make a peer edit count as an interface config change.** The
-  underlying defect is not uapi's and not LuCI's. netifd does not treat a
-  `wireguard_<iface>` section as part of interface `<iface>`'s config identity,
-  so `network reload` converges nothing, and the `config.change` event that
-  drives every apply carries only a package name. LuCI ships the workaround in
-  its peer form ("Restart wireguard interface to apply changes"). Two
-  contributions are possible: teach netifd to hash proto-declared dependent
-  sections, which fixes it for every consumer and would let uapi delete
-  `src/lib/wg.uc`; or a smaller LuCI-side change, since its client already
-  tracks changes per section and could trigger a per-interface apply after
-  saving. Neither removes the need for the local fix, which has to cover the
-  support window of current releases.
+- **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
+  Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
+  `wg syncconf` is all or nothing and the proto handler escalates any failure to
+  `proto_setup_failed`, so a peer whose endpoint hostname does not resolve stops
+  the interface coming up at all, healthy peers included. Measured: `up=false`,
+  zero peers, no addresses, netifd retrying and giving up.
+
+  This is the half that still matters to us. The `wg set` apply protects the
+  *write*, not the *boot*: a peer whose endpoint resolves when written and stops
+  resolving later sits in uci, and the next reboot runs it through the proto
+  handler and drops the tunnel. No amount of local code fixes that, because the
+  platform owns the boot path.
+
+  The **peer change detection** half needs nothing from us. It was reported
+  twice, on the devel list in 2023 and as
+  [netifd#66](https://github.com/openwrt/netifd/pull/66) in 2026, and neither
+  landed in that form; it is instead solved in master by the ucode proto rewrite
+  (`package/network/utils/wireguard-tools/files/wireguard.uc`), whose `config`
+  function loads peers so the framework's change detection covers them. That
+  rewrite also fixed route metrics
+  ([#23199](https://github.com/openwrt/openwrt/issues/23199)) but left
+  `proto.setup_failed()` exactly as it was.
+
+  Neither outcome retires `src/lib/wg.uc`. Even with both fixed, a netifd-driven
+  apply stays asynchronous, so uapi still could not report whether a write
+  reached the kernel, which is what the transaction contract needs. Retiring the
+  local code would take netifd applying peer deltas synchronously, which is not
+  on anyone's roadmap.
 
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` shipped in 2.3.0 cannot wrap a whole `terraform apply`: a DAG
