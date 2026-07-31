@@ -67,6 +67,14 @@ Subsequent `fs.rename(tmp, KEYS_PATH)` is also wrapped in try/catch; failure cle
 - **flock: acquire / try-fn / release / die-if-caught.** `transaction.uc::transaction()` and `with_lock()` release the lock OUTSIDE the try block, AFTER catch, BEFORE the conditional `die(caught)`.
 - **2-level locks.** `default_acquire_pkg()` releases the global lock if the per-package acquire fails. `default_release_pkg()` releases in reverse order (per-package, then global).
 
+## The wireguard peer apply
+
+`wg.uc` shells out to `wg set` after the commit, inside the locked region, to push peer changes to the kernel (see `docs/architecture.md` § Transaction recipe step 7). Two things about it are load-bearing here.
+
+The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than a unique one. That is safe only because every uci transaction holds the per-package exclusive lock for `network`, so two peer applies can never be in flight at once. If that lock discipline ever changes, this needs a unique path. Mode `0600` is set before the content is written, following the same order as the authorized-keys writer above, and the file is unlinked immediately after the command returns.
+
+`wg show <iface> dump` is read on the reconcile path only. Its second field is the peer's preshared key, so that output must never be logged or surfaced in an error message.
+
 ## Scope
 
 This audit is about **logical** resource-state correctness within the lifetime of a single request. The fork-per-request model provides OS-level fd cleanup at fork exit as a backstop, but the audit does not rely on that backstop: every site listed above releases explicitly inside the request.

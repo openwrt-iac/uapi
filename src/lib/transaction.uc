@@ -1,4 +1,5 @@
 let fs = require('fs');
+let wg = require('wg');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -127,7 +128,7 @@ function _finalize_after_reload(reload_err, restore_fn, body, services) {
 	         reload_error: reload_err };
 }
 
-function run_inner(conn, pkg, services, fn, snapshot, reload) {
+function run_inner(conn, pkg, services, fn, snapshot, apply, restore) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -137,11 +138,37 @@ function run_inner(conn, pkg, services, fn, snapshot, reload) {
 
 	conn.uci_commit(pkg);
 
-	return _finalize_after_reload(reload(services), function() {
+	return _finalize_after_reload(apply(), function() {
 		conn.uci_import(pkg, snapshot);
 		conn.uci_commit(pkg);
-		return reload(services);
+		return restore();
 	}, result.body, services);
+}
+
+// Reload the declared services, then push the wireguard peer changes the write
+// collected to the kernel. Both report the same way (null or a message), so a
+// failed apply lands in the existing reload-failure recipe: restore the snapshot,
+// re-apply, and report reload_failed_restored. `ops` is read here rather than
+// captured by value because the handler fills it while fn runs, and fn has
+// already returned by the time this is called.
+function _make_apply(conn, reload, services, wg_apply, ops) {
+	return function() {
+		let err = reload(services);
+		if (err != null) return err;
+		return wg_apply(conn, ops);
+	};
+}
+
+// The restore path must not replay the request's own operations. A batch can
+// apply several peers before failing on a later one, so replaying would reapply
+// the failure instead of undoing what landed. Reconciling each touched interface
+// against the restored uci converges from whatever state the kernel is in.
+function _make_restore(conn, reload, services, wg_reconcile, ops) {
+	return function() {
+		let err = reload(services);
+		if (err != null) return err;
+		return wg_reconcile(conn, wg.interfaces_of(ops));
+	};
 }
 
 function transaction(conn, params) {
@@ -152,6 +179,9 @@ function transaction(conn, params) {
 	let acquire = params.acquire ?? function(p) { return default_acquire_pkg(p, pkg); };
 	let release = params.release ?? default_release_pkg;
 	let reload = params.reload ?? default_reload;
+	let wg_apply = params.wg_apply ?? wg.apply;
+	let wg_reconcile = params.wg_reconcile ?? wg.reconcile;
+	let wg_ops = params.wg_ops ?? [];
 	let check_services = params.check_services ?? default_check_services;
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
@@ -181,7 +211,9 @@ function transaction(conn, params) {
 	let caught = null;
 	try {
 		let snapshot = conn.uci_export(pkg);
-		result = run_inner(conn, pkg, services, fn, snapshot, reload);
+		result = run_inner(conn, pkg, services, fn, snapshot,
+		                   _make_apply(conn, reload, services, wg_apply, wg_ops),
+		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops));
 	} catch (e) {
 		caught = e;
 	}
@@ -202,6 +234,10 @@ function multi_transaction(conn, params) {
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
+	let wg_ops = params.wg_ops ?? [];
+	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops);
+	let restore_apply = _make_restore(conn, reload, services,
+	                                  params.wg_reconcile ?? wg.reconcile, wg_ops);
 	let check_services = params.check_services ?? default_check_services;
 
 	let svc_err = check_services(services);
@@ -268,13 +304,13 @@ function multi_transaction(conn, params) {
 					break;
 				}
 			}
-			let reload_err = (commit_err == null) ? reload(services) : commit_err;
+			let reload_err = (commit_err == null) ? apply() : commit_err;
 			result = _finalize_after_reload(reload_err, function() {
 				for (let pkg in sorted) {
 					conn.uci_import(pkg, snapshots[pkg]);
 					conn.uci_commit(pkg);
 				}
-				return reload(services);
+				return restore_apply();
 			}, inner.body, services);
 		}
 	} catch (e) { caught = e; }

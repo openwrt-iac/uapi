@@ -60,6 +60,120 @@ function build_params(overrides) {
 	return p;
 }
 
+// A wireguard peer edit leaves the parent `interface` section untouched, so the
+// network reload converges nothing and the peer never reaches the kernel. The
+// post-commit apply exists to close that, and it has to fail the same way a
+// reload does so a half-applied write rolls back.
+t.describe('transaction, post-commit kernel apply', () => {
+	function track() {
+		let calls = [];
+		return { calls: calls,
+		         fn: function(conn, ops) { push(calls, [...ops]); return null; } };
+	}
+
+	t.it('applies the ops the write collected, after the reload', () => {
+		let order = [];
+		let conn = ubus.stub();
+		let ops = [];
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: ops,
+			reload: function(s) { push(order, "reload"); return null; },
+			wg_apply: function(c, o) { push(order, "apply:" + length(o)); return null; },
+			fn: function(c, pkg) {
+				push(ops, { iface: "wg1", action: "set" });
+				return { ok: true, body: {} };
+			},
+		}));
+		t.assert_true(r.ok);
+		t.assert_deep_equal(order, ["reload", "apply:1"]);
+	});
+
+	// The array is handed to the transaction before fn runs and read after the
+	// commit. If it were copied at params-build time the op list would always be
+	// empty, which is the whole bug this step exists to fix.
+	t.it('reads the collected ops after fn ran, not when params were built', () => {
+		let conn = ubus.stub();
+		let ops = [];
+		let tracker = track();
+		tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: ops, wg_apply: tracker.fn,
+			fn: function(c, pkg) {
+				push(ops, { iface: "wg2", action: "remove", public_key: "k" });
+				return { ok: true, body: {} };
+			},
+		}));
+		t.assert_equal(length(tracker.calls), 1);
+		t.assert_equal(tracker.calls[0][0].iface, "wg2");
+	});
+
+	t.it('does not apply when fn failed, since nothing was committed', () => {
+		let conn = ubus.stub();
+		let tracker = track();
+		tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: [{ iface: "wg1", action: "set" }], wg_apply: tracker.fn,
+			fn: function(c, pkg) { return { ok: false, kind: "validation", errors: [] }; },
+		}));
+		t.assert_equal(length(tracker.calls), 0);
+	});
+
+	t.it('never applies when the reload failed, on either the apply or the restore', () => {
+		let conn = ubus.stub();
+		let tracker = track();
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: [{ iface: "wg1", action: "set" }], wg_apply: tracker.fn,
+			reload: reload_failing("netifd: bad"),
+		}));
+		t.assert_equal(r.kind, "reload_failed_unrecovered");
+		t.assert_equal(length(tracker.calls), 0);
+	});
+
+	t.it('an apply failure restores the snapshot and reports reload_failed_restored', () => {
+		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule', target: 'DROP' } } } });
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: [{ iface: "wg1", action: "set" }],
+			wg_apply: function(c, o) { return "wg set on wg1 failed: Name does not resolve"; },
+			wg_reconcile: function(c, ifaces) { return null; },
+		}));
+		t.assert_false(r.ok);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_true(index(r.reload_error, "Name does not resolve") >= 0);
+		t.assert_equal(conn._state.uci.fw.r1.target, "DROP");
+	});
+
+	// A batch can apply several peers before failing on a later one, so replaying
+	// the request's own operations would reapply the failure instead of undoing
+	// what landed. The restore reconciles the touched interfaces instead.
+	t.it('the restore reconciles the touched interfaces, it does not replay the ops', () => {
+		let conn = ubus.stub();
+		let replayed = 0, reconciled = [];
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: [{ iface: "wgA", action: "set" }, { iface: "wgB", action: "set" }],
+			wg_apply: function(c, o) { replayed++; return "wg set on wgB failed"; },
+			wg_reconcile: function(c, ifaces) { reconciled = ifaces; return null; },
+		}));
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(replayed, 1);
+		t.assert_deep_equal(reconciled, ["wgA", "wgB"]);
+	});
+
+	t.it('a reconcile that also fails is unrecovered', () => {
+		let conn = ubus.stub();
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: [{ iface: "wg1", action: "set" }],
+			wg_apply: function(c, o) { return "wg set failed"; },
+			wg_reconcile: function(c, ifaces) { return "reconcile failed too"; },
+		}));
+		t.assert_equal(r.kind, "reload_failed_unrecovered");
+	});
+});
+
 t.describe('transaction, lock acquisition', () => {
 	t.it('returns kind=locked when the lock cannot be acquired', () => {
 		let locks = harness_locks(false);

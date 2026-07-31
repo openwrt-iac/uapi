@@ -540,9 +540,13 @@ function batch_dispatch(conn, ctx, token, method, body) {
 
 	let aborted = null;
 	let results = [];
+	// One ordered sink shared by every sub-request, so a batch touching the same
+	// peer twice ends on its last state. multi_transaction reads it after the
+	// commit, by which point run_ops has filled it.
+	let kernel_ops = [];
 	let run_ops = function(c) {
 		for (let i = 0; i < length(ops); i++) {
-			let sub_ctx = { request_id: ctx.request_id + "." + i };
+			let sub_ctx = { request_id: ctx.request_id + "." + i, kernel_sink: kernel_ops };
 			let resp = batch_run_one(c, sub_ctx, token.scopes, ops[i]);
 			push(results, { status: resp.status, body: resp.body });
 			if (resp.status >= 400) {
@@ -561,6 +565,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		r = transaction.multi_transaction(conn, {
 			packages: pkgs,
 			reload_services: reloads,
+			wg_ops: kernel_ops,
 			fn: run_ops,
 		});
 	}

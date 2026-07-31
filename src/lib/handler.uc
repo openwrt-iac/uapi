@@ -490,6 +490,21 @@ function make(resource, opts) {
 		return p;
 	}
 
+	// What a write has to push to the kernel is only knowable inside the tx fn: for
+	// wireguard peers the parent interface is encoded in the uci section type
+	// rather than stored as an option, so a DELETE can only read it off the section
+	// it is about to remove, and the preshared key has to come from the uci options
+	// because the read view masks it. The array is handed to the transaction before
+	// fn runs and read after the commit, so fn filling it in between is the whole
+	// point. /batch passes its own sink in ctx so every sub-request accumulates
+	// into one ordered list applied once.
+	function collect_kernel_ops(sink, kind, opts, sec_type, existing) {
+		if (resource.kernel_ops == null) return;
+		let ops = resource.kernel_ops(kind, opts, sec_type, existing);
+		if (type(ops) != "array") return;
+		for (let op in ops) push(sink, op);
+	}
+
 	function list(conn, ctx, query) {
 		let want_managed = query.managed;
 		let out = [];
@@ -513,7 +528,9 @@ function make(resource, opts) {
 	}
 
 	function create(conn, ctx, body) {
+		let kops = ctx.kernel_sink ?? [];
 		let result = transaction.transaction(conn, tx_params({
+			wg_ops: kops,
 			fn: function(c, p) {
 				// Section-name resolution: caller's body.id wins, else the
 				// per-resource id_for_create hook (e.g. network.interfaces
@@ -551,7 +568,9 @@ function make(resource, opts) {
 				view['.name'] = new_id;
 				view['.anonymous'] = false;
 				view['.type'] = resolved_type;
-				return { ok: true, body: resource.fromUci(view, conn) };
+				let out = resource.fromUci(view, conn);
+				collect_kernel_ops(kops, "create", new_opts, resolved_type, null);
+				return { ok: true, body: out };
 			},
 		}));
 
@@ -559,7 +578,9 @@ function make(resource, opts) {
 	}
 
 	function replace(conn, ctx, id, body) {
+		let kops = ctx.kernel_sink ?? [];
 		let result = transaction.transaction(conn, tx_params({
+			wg_ops: kops,
 			fn: function(c, p) {
 				// Read before validating so a masked secret can be restored first,
 				// but keep reporting validation ahead of not_found. Kept in its own
@@ -592,7 +613,9 @@ function make(resource, opts) {
 				view['.name'] = id;
 				view['.anonymous'] = false;
 				view['.type'] = existing['.type'];
-				return { ok: true, body: resource.fromUci(view, conn) };
+				let out = resource.fromUci(view, conn);
+				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+				return { ok: true, body: out };
 			},
 		}));
 
@@ -600,7 +623,9 @@ function make(resource, opts) {
 	}
 
 	function patch(conn, ctx, id, body) {
+		let kops = ctx.kernel_sink ?? [];
 		let result = transaction.transaction(conn, tx_params({
+			wg_ops: kops,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -633,7 +658,9 @@ function make(resource, opts) {
 				view['.name'] = id;
 				view['.anonymous'] = false;
 				view['.type'] = existing['.type'];
-				return { ok: true, body: resource.fromUci(view, conn) };
+				let out = resource.fromUci(view, conn);
+				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+				return { ok: true, body: out };
 			},
 		}));
 
@@ -641,7 +668,9 @@ function make(resource, opts) {
 	}
 
 	function remove(conn, ctx, id) {
+		let kops = ctx.kernel_sink ?? [];
 		let result = transaction.transaction(conn, tx_params({
+			wg_ops: kops,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -656,6 +685,7 @@ function make(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 				c.uci_delete(p, id);
+				collect_kernel_ops(kops, "remove", null, existing['.type'], existing);
 				return { ok: true, body: null };
 			},
 		}));
