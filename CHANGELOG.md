@@ -4,8 +4,9 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
-### Added
-- (Reserved for next-cycle changes.)
+### Fixed
+
+- `network/rules` accepts a packet mark as the only selector. It required one of `in`/`out`/`src`/`dest`, but `mark` is a selector in its own right and the one policy routing of reply traffic depends on: firewall4 marks in mangle prerouting and the rule sends the mark to a table, with neither source nor destination knowable in advance. `ip rule add fwmark 0x43 lookup 43` is valid, netifd writes exactly that from a rule carrying only `mark`, `lookup` and `priority`, and the kernel prints it back as `from all fwmark 0x43`. The check prevented nothing, since the workaround was to add `src: "0.0.0.0/0"`, which is what a mark-only rule already means. Closes [openwrt-iac/uapi#52](https://github.com/openwrt-iac/uapi/issues/52).
 
 ## [2.4.0] - 2026-07-31
 

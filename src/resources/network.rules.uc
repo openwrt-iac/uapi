@@ -50,13 +50,21 @@ function validate(json) {
 		return errs;
 	}
 
+	// A mark is a selector in its own right, and the one that matters for policy
+	// routing reply traffic: firewall4 marks in mangle prerouting and the rule
+	// sends the mark to a table, with no source or destination knowable in
+	// advance. `ip rule add fwmark 0x43 lookup 43` is valid, netifd writes it
+	// from a rule carrying only mark/lookup/priority, and the kernel prints it
+	// back as `from all fwmark 0x43`. Leaving mark out here forced the caller to
+	// add `src: "0.0.0.0/0"`, which is what a mark-only rule already means.
 	let has_selector = (json['in'] != null && json['in'] != "")
 	                || (json.out != null && json.out != "")
 	                || (json.src != null && json.src != "")
-	                || (json.dest != null && json.dest != "");
+	                || (json.dest != null && json.dest != "")
+	                || (json.mark != null && json.mark != "");
 	if (!has_selector)
 		push(errs, { field: "", code: "required",
-		             message: "at least one of in/out/src/dest must be set" });
+		             message: "at least one of in/out/src/dest/mark must be set" });
 
 	if (json.src != null && json.src != "" && !is_valid_ipv4(json.src) && !is_valid_cidr(json.src))
 		push(errs, { field: "src", code: "invalid_format",
