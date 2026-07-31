@@ -52,6 +52,14 @@ Force-with-lease is permitted on the branch (typical use: amending a release com
 
 Applies to every repo under the `openwrt-iac` org, not just uapi.
 
+**Every PR body answers three questions.** These are not a checklist to tick; each one has caught a real defect that CI could not, so answer them with evidence and say so plainly when the answer is "no".
+
+1. **Does this change the wire surface?** Naming the semver impact (`docs/versioning.md`) at authoring time is what stops a breaking change shipping as a patch. A new field, header or status is additive and belongs in a minor; a payload that used to be accepted and now is not is the breaking clause and needs its carve-out stated.
+2. **Was it verified against a real device, or only by CI?** Both are fine answers, but they are not the same claim. Unit tests and CI pass against stubs, so anything asserting what a daemon or the kernel *did* has to be run somewhere real, and the observed output belongs in the PR.
+3. **Was LuCI checked, when the change is a behaviour or design choice?** Per the design-reference rule above. Matching it is the safe default and diverging is fine, but the divergence has to be deliberate and written down, not discovered later.
+
+There is no PR template file: PRs here are opened with `gh pr create --body`, which never reads one.
+
 ---
 
 ## Where the details live

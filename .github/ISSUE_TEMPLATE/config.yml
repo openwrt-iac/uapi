@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Roadmap
+    url: https://github.com/openwrt-iac/uapi/blob/main/docs/roadmap.md
+    about: Whether something is shipped, planned, deferred or out of scope is usually answered here.
