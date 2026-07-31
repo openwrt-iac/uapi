@@ -780,3 +780,129 @@ t.describe('firewall.redirects SNAT', () => {
 		t.assert_equal(length(full_validate(redirects, body, null)), 0);
 	});
 });
+
+// `ipaddr` and `ipaddrs` are two wire names for one `list ipaddr`, and toUci
+// prefers the list. A body carrying both with a differing scalar had half of it
+// discarded and answered 200, so the caller re-read the value it sent and saw its
+// write vanish. That is the shape a Terraform optional+computed attribute
+// produces on every apply: the previously-read list travels beside the changed
+// scalar, so the address could never be changed through `ipaddr`.
+t.describe('network.interfaces ipaddr vs ipaddrs', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+
+	function conflicts(body) {
+		return filter(ifaces.validate(body, null),
+		              function(e) { return e.field == "ipaddr" && e.code == "conflict"; });
+	}
+
+	t.it('rejects a body whose scalar disagrees with the list', () => {
+		let e = conflicts({ proto: 'static', ipaddr: '10.9.9.9', ipaddrs: ['192.0.2.4'] });
+		t.assert_equal(length(e), 1);
+	});
+
+	// What a faithful GET-then-PUT round trip sends, so it has to keep working.
+	t.it('accepts agreement between the scalar and the first entry', () => {
+		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '192.0.2.4',
+		                                  ipaddrs: ['192.0.2.4'] })), 0);
+	});
+
+	t.it('accepts a multi-address list whose first entry matches the scalar', () => {
+		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '192.0.2.4',
+		                                  ipaddrs: ['192.0.2.4', '10.0.0.7'] })), 0);
+	});
+
+	t.it('accepts either field alone', () => {
+		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '10.9.9.9' })), 0);
+		t.assert_equal(length(conflicts({ proto: 'static', ipaddrs: ['10.9.9.9'] })), 0);
+	});
+
+	t.it('treats an empty list as no list, so the scalar stands', () => {
+		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '10.9.9.9', ipaddrs: [] })), 0);
+	});
+
+	// The default merge folded the read view in, so a PATCH naming only the scalar
+	// arrived carrying the ipaddrs just read and lost to it: 200, nothing changed.
+	t.it('a patch naming only the scalar drops the list read off the server', () => {
+		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		                                    { ipaddr: '10.9.9.9' });
+		t.assert_equal(merged.ipaddr, '10.9.9.9');
+		t.assert_equal(merged.ipaddrs, null);
+		t.assert_equal(ifaces.toUci(merged).ipaddr, '10.9.9.9');
+	});
+
+	t.it('a patch naming only the list drops the stale scalar', () => {
+		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		                                    { ipaddrs: ['10.0.0.1', '10.0.0.2'] });
+		t.assert_equal(merged.ipaddr, null);
+		t.assert_deep_equal(ifaces.toUci(merged).ipaddr, ['10.0.0.1', '10.0.0.2']);
+	});
+
+	t.it('a patch naming both keeps both, so the conflict is still caught', () => {
+		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		                                    { ipaddr: '10.9.9.9', ipaddrs: ['192.0.2.4'] });
+		t.assert_equal(length(conflicts({ ...merged, proto: 'static' })), 1);
+	});
+});
+
+// JSON Patch never went through merge_for_patch, so a single `replace /ipaddr`
+// produced a document asserting both names with different values and was refused:
+// a legitimate op made impossible. Both patch flavours now resolve the alias the
+// same way, off the fields the ops actually name.
+t.describe('network.interfaces ipaddr under JSON Patch', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	let handler = require('handler');
+
+	function make() {
+		return handler.make(ifaces, {
+			tx: {
+				acquire: function() { return {}; },
+				release: function() {},
+				reload: function() { return null; },
+				check_services: function() { return null; },
+			},
+		});
+	}
+
+	function conn() {
+		return ubus.stub({ uci: { network: {
+			iptest: { '.type': 'interface', '.anonymous': false,
+			          proto: 'static', ipaddr: ['192.0.2.4'], netmask: '255.255.255.0' },
+		} } });
+	}
+
+	function ctx() { return { request_id: "01hx0000000000000000000000", json_patch: true }; }
+
+	t.it('replacing only /ipaddr applies, rather than conflicting with the read view', () => {
+		let c = conn();
+		let r = make().patch(c, ctx(), 'iptest',
+		                     [{ op: 'replace', path: '/ipaddr', value: '10.9.9.9' }]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c.uci_get('network', 'iptest', 'ipaddr'), '10.9.9.9');
+	});
+
+	t.it('replacing only /ipaddrs still applies the list', () => {
+		let c = conn();
+		let r = make().patch(c, ctx(), 'iptest',
+		                     [{ op: 'replace', path: '/ipaddrs', value: ['10.1.1.1', '10.2.2.2'] }]);
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(c.uci_get('network', 'iptest', 'ipaddr'), ['10.1.1.1', '10.2.2.2']);
+	});
+
+	// A patch that really does assert both, disagreeing, is still a contradiction.
+	t.it('replacing both with different addresses is still refused', () => {
+		let r = make().patch(conn(), ctx(), 'iptest', [
+			{ op: 'replace', path: '/ipaddr', value: '10.9.9.9' },
+			{ op: 'replace', path: '/ipaddrs', value: ['192.0.2.4'] },
+		]);
+		t.assert_equal(r.status, 422);
+	});
+
+	t.it('a patch on an unrelated field leaves the address alone', () => {
+		let c = conn();
+		let r = make().patch(c, ctx(), 'iptest',
+		                     [{ op: 'replace', path: '/netmask', value: '255.255.0.0' }]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c.uci_get('network', 'iptest', 'netmask'), '255.255.0.0');
+		t.assert_deep_equal(c.uci_get('network', 'iptest', 'ipaddr'), ['192.0.2.4']);
+	});
+});

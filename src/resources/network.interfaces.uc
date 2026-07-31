@@ -154,6 +154,26 @@ function toUci(json) {
 	return out;
 }
 
+// The default merge folds the read view into the body, so a PATCH naming only
+// `ipaddr` arrived carrying the `ipaddrs` that had just been read, and toUci
+// preferred that list: the patch answered 200 and changed nothing. Whichever of
+// the two the caller actually named wins, and the other is dropped rather than
+// resurrected from the server's own read.
+function merge_for_patch(existing_section, existing_json, body) {
+	let merged = { ...existing_json };
+	for (let k in body) {
+		if (type(merged[k]) == "object" && type(body[k]) == "object")
+			merged[k] = { ...merged[k], ...body[k] };
+		else
+			merged[k] = body[k];
+	}
+	let sent_scalar = exists(body, "ipaddr");
+	let sent_list = exists(body, "ipaddrs");
+	if (sent_scalar && !sent_list) delete merged.ipaddrs;
+	else if (sent_list && !sent_scalar) delete merged.ipaddr;
+	return merged;
+}
+
 function validate(json, conn, id) {
 	let errs = [];
 
@@ -161,6 +181,20 @@ function validate(json, conn, id) {
 		push(errs, { field: "", code: "invalid_type", message: "body must be a JSON object" });
 		return errs;
 	}
+
+	// `ipaddr` and `ipaddrs` are two wire names for the same `list ipaddr`, and
+	// toUci prefers the list whenever it is non-empty. A body carrying both, with
+	// the scalar naming a different address, is a contradiction: half of it was
+	// discarded and answered 200, so a caller re-reading saw its own write vanish
+	// rather than fail. Agreement is still accepted, which is what a faithful
+	// GET-then-PUT round trip sends.
+	let ips = json.ipaddrs;
+	if (type(ips) == "array" && length(ips) > 0
+	    && json.ipaddr != null && json.ipaddr != "" && json.ipaddr != ips[0])
+		push(errs, { field: "ipaddr", code: "conflict",
+		             message: sprintf(
+		               "conflicts with ipaddrs[0] (%J): both name the same uci option, so send one or the other",
+		               ips[0]) });
 
 	if (json.proto == null || json.proto == "")
 		push(errs, { field: "proto", code: "required", message: "is required" });
@@ -267,6 +301,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	merge_for_patch: merge_for_patch,
 	// Caller-supplied name wins. proto=wireguard falls back to a 14-char
 	// wg_<rand> (netifd's IFNAMSIZ constraint); other protos return null
 	// so handler.create emits the standard 28-char ULID.
@@ -318,9 +353,9 @@ return {
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],
-		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`." },
+		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty, so send one or the other rather than both with different values." },
 		ipaddrs:   { type: "array", items: { type: "string" },
-		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces." },
+		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`; a body carrying both with a differing `ipaddr` is rejected." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
