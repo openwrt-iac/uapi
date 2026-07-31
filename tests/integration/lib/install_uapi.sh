@@ -235,3 +235,29 @@ assert_dnsmasq_loads() {
 	err=$(dnsmasq_complaints | head -3 | tr '\n' ' ')
 	[ -z "$err" ] || fail "dnsmasq would reject its own compiled config: $err"
 }
+
+# kmod-wireguard alone is not enough. netifd scans /lib/netifd/proto only when it
+# starts, so a proto handler installed underneath a running netifd stays invisible
+# and proto=wireguard never gets a netdev. The restart has to be detached, since
+# it drops the link this ssh session is riding on. Readiness is netifd actually
+# advertising the handler, not a fixed sleep.
+ensure_wireguard() {
+	$SSH 'apk info -e kmod-wireguard >/dev/null 2>&1 && apk info -e wireguard-tools >/dev/null 2>&1' && {
+		$SSH 'lsmod | grep -q "^wireguard " || modprobe wireguard 2>/dev/null
+		      lsmod | grep -q "^wireguard " && command -v wg >/dev/null' && \
+		$SSH 'ubus call network get_proto_handlers 2>/dev/null | grep -q wireguard' && return 0
+	}
+
+	$SSH 'apk add kmod-wireguard wireguard-tools 2>&1 | tail -5' || return 1
+	$SSH '(sleep 1; /etc/init.d/network restart) >/dev/null 2>&1 &' || true
+
+	n=0
+	while [ $n -lt 40 ]; do
+		if $SSH 'ubus call network get_proto_handlers 2>/dev/null | grep -q wireguard'; then
+			$SSH 'lsmod | grep -q "^wireguard " || modprobe wireguard 2>/dev/null' || true
+			$SSH 'lsmod | grep -q "^wireguard " && command -v wg >/dev/null' && return 0
+		fi
+		n=$((n + 1)); sleep 2
+	done
+	return 1
+}

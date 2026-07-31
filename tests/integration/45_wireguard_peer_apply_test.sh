@@ -20,17 +20,17 @@ body_of() { echo "$1" | sed '$d'; }
 status_of() { echo "$1" | tail -1; }
 id_of() { echo "$1" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//'; }
 
-# Same guard as 35: the stock CI image ships no kmod-wireguard, and without the
-# kernel module there is no netdev to inspect, which is the only thing this file
-# tests. Skipping beats asserting on uci and calling it covered.
-if ! $SSH '
-	apk list -i kmod-wireguard 2>/dev/null | grep -q kmod-wireguard || \
-		apk add kmod-wireguard wireguard-tools >/dev/null 2>&1 || true
-	lsmod | grep -q "^wireguard " || modprobe wireguard >/dev/null 2>&1
-	lsmod | grep -q "^wireguard " && command -v wg >/dev/null
-'; then
-	echo "[45_wgpeer] WARN: no wireguard kernel module in this VM; skipping"
-	exit 0
+# apk-tools 3 `list -i` prints any package present in the INDEX, installed or
+# not, so the previous `apk list -i ... | grep -q` guard was always true, the
+# install never ran, and this entire file skipped itself in CI while reporting
+# success. Missing the module is now a failure: a wireguard file that quietly
+# does nothing is worse than one that fails.
+if ! ensure_wireguard; then
+	echo "[45_wgpeer] FAIL: no usable wireguard support, so none of the assertions below ran"
+	echo "[45_wgpeer] uname -r: $($SSH 'uname -r')"
+	echo "[45_wgpeer] modules:  $($SSH 'find /lib/modules/$(uname -r)/ -name "wireguard*" 2>/dev/null | head -3')"
+	echo "[45_wgpeer] protos:   $($SSH 'ubus call network get_proto_handlers 2>/dev/null | grep -c wireguard')"
+	exit 1
 fi
 
 IFACE=wgpa
