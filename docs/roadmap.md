@@ -138,7 +138,7 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
   `stage` primitive (arm once over a package set, ack once after the apply)
   exposed over HTTP, so a wrapper can arm, run the apply, then ack or let it
   auto-revert with no SSH hop. `ac_stage` already exists and the bare
-  `POST /confirm` slot is free (currently 405). Locked design constraints if
+  `POST /confirm` slot is free (unrouted, so 404 like any unknown path). Locked design constraints if
   built: the body names curated **resources/scopes, never raw packages**, and
   uapi derives the package set and reload-service union from `RESOURCE_SOURCES`
   (the same fold `/batch` does), which keeps the union correct-by-construction
@@ -204,21 +204,27 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
 
 ## Hardening (next, no new wire surface)
 
-- **Constant-time hash comparison in auth.** Today's `==` on sha256 hex is
-  not constant-time; a timing-attack hardening is cheap and could close
-  the side-channel disclosed under "Threat model out of scope" in
-  `docs/security.md`. Worth doing.
-- **Per-token request budget metrics.** `uapi_requests_total{token_id}` is
-  in scope but currently uses path-templated cardinality. Adding the
-  `token_id` label would let operators see who's burning the budget.
-  Token IDs are stable identifiers, so cardinality is bounded by the
-  total number of tokens (small).
-- **`/diagnostics` ring buffer of recent errors.** Plan called for "last
-  N errors from /tmp/uapi-error-ring/". Currently `/diagnostics` lists
-  lock state and uptime; the ring is future work.
-- **Property test coverage gate.** Every resource has fuzz coverage; CI
-  could gate on a minimum number of fuzz iterations per resource per CI
-  run. Today's harness is `tests/property_harness.uc`.
+- **Derive the property-fuzz resource list from the resource registry.**
+  `tests/unit/property_test.uc` keeps `RESOURCES` as a hand-written literal, so a
+  new curated resource gets no fuzz coverage until somebody remembers to add it.
+  That is how `unbound.srv` and `unbound.ext` went unfuzzed: both are writable and
+  both have a `validate()`, and neither was in the list. They are in it now, but
+  the next resource can slip the same way. The read-only collections
+  (`dhcp.leases`, `dhcp.leases6`) have no `validate()` and are correctly excluded,
+  so a derived list needs that one filter.
+
+Everything else this section used to list has shipped, and the section had gone
+stale enough to be misleading:
+
+- Constant-time hash comparison in auth landed in v2.0.0
+  (`values.constant_time_equals`, used at `src/lib/auth.uc`).
+- `uapi_requests_total` already carries the `token_id` label
+  (`src/lib/metrics.uc`).
+- `/diagnostics` already returns `recent_errors` from the ring buffer
+  (`src/lib/error_ring.uc`, exposed in `src/main.uc`).
+- CI already runs the property pass at a fixed 1000 iterations per resource
+  (`PROPERTY_ITERS=1000 make test-property`), which was the iteration gate this
+  section asked for.
 
 ## Out of scope by design
 
