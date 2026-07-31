@@ -16,29 +16,17 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-# OpenWrt's stock x86_64 image used by CI does not ship kmod-wireguard nor
-# auto-load the kernel module. Try to install + modprobe; if the kernel
-# module isn't available (e.g. kmod package version doesn't match the
-# running kernel), skip the netdev assertion rather than failing - the
-# uci-side assertions still run and the unit-test layer covers the rest.
+# netifd only learns a proto handler at startup, so installing wireguard-tools
+# is not enough on its own; ensure_wireguard handles the restart. If it cannot be
+# made to work the netdev assertions below are meaningless, so this fails rather
+# than quietly downgrading to uci-only checks, which is how they went unrun.
 WG_KMOD_AVAILABLE=0
-if $SSH '
-	if ! apk list -i kmod-wireguard 2>/dev/null | grep -q kmod-wireguard; then
-		echo "[35_wg] installing kmod-wireguard + wireguard-tools"
-		apk add kmod-wireguard wireguard-tools 2>&1 | tail -10 || true
-	fi
-	if ! lsmod | grep -q "^wireguard "; then
-		echo "[35_wg] uname -r: $(uname -r)"
-		echo "[35_wg] looking for wireguard.ko under /lib/modules/$(uname -r)/"
-		find /lib/modules/$(uname -r)/ -name "wireguard*" 2>/dev/null | head -5
-		echo "[35_wg] modprobe -v wireguard"
-		modprobe -v wireguard 2>&1
-	fi
-	lsmod | grep -q "^wireguard "
-'; then
+if ensure_wireguard; then
 	WG_KMOD_AVAILABLE=1
 else
-	echo "[35_wg] WARN: wireguard kernel module not available in this VM; skipping netdev assertions"
+	echo "[35_wg] FAIL: no usable wireguard support; the netdev assertions cannot run"
+	echo "[35_wg] uname -r: $($SSH 'uname -r')"
+	exit 1
 fi
 
 # Example WireGuard private key (44 chars, base64). Doesn't have to match a

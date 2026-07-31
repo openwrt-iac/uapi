@@ -15,17 +15,20 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-# The openwrt-iac feed is not part of the stock OpenWrt apk index, so the
-# CI VM may not have unbound-uci-ext available. If the install fails, the
-# 503 init_script_missing pre-flight gets a quick smoke and the rest is
-# skipped - real coverage runs against the live router (192.168.10.123).
+# The openwrt-iac feed is not in the stock apk index, so the CI VM cannot install
+# unbound-uci-ext and this falls back to smoking the 503 init_script_missing
+# pre-flight; real coverage runs against a box that has the feed. The daemon is
+# `unbound-daemon`, not `unbound`, which had no visible effect only because apk
+# aborts the whole transaction on the unselectable ext package and so installs
+# neither. That is also what keeps the 503 path valid: it needs
+# /etc/init.d/unbound absent, so installing the daemon alone would break it.
 HAVE_EXT=0
 if $SSH '
-	if apk list -i unbound-uci-ext 2>/dev/null | grep -q unbound-uci-ext; then
+	if apk info -e unbound-uci-ext >/dev/null 2>&1; then
 		exit 0
 	fi
-	apk add unbound unbound-uci-ext 2>&1 | tail -10
-	apk list -i unbound-uci-ext 2>/dev/null | grep -q unbound-uci-ext
+	apk add unbound-daemon unbound-uci-ext 2>&1 | tail -10
+	apk info -e unbound-uci-ext >/dev/null 2>&1
 '; then
 	HAVE_EXT=1
 else
