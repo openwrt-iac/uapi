@@ -417,6 +417,23 @@ function carry_write_only(resource, body, existing) {
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
 // check only the delta. Returns either { ok: true, merged, schema_body } or
 // an error result that the caller short-circuits with.
+// The top-level fields a JSON Patch names, taken from the first segment of each
+// op path. A resource whose read view exposes one uci option under two names has
+// to know which of them the caller actually touched, and with merge-patch that is
+// simply the body's keys. Without this the JSON Patch flavour cannot tell, and a
+// single `replace /ipaddr` looked like a body asserting two different addresses.
+function patch_touched_fields(ops, patched) {
+	if (type(ops) != "array" || type(patched) != "object") return null;
+	let out = {};
+	for (let op in ops) {
+		if (type(op) != "object" || type(op.path) != "string" || op.path == "") return null;
+		let seg = split(op.path, "/")[1];
+		if (seg == null || seg == "") return null;
+		out[seg] = patched[seg];
+	}
+	return out;
+}
+
 function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource) {
 	if (ctx != null && ctx.json_patch == true) {
 		let jp = jsonpatch.apply(existing_view, body);
@@ -430,6 +447,13 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 			           "invalid_format", jp.message)] };
 		}
 		let post = carry_write_only(resource, jp.value, existing);
+		// Run the resource's own merge over just the fields the patch named, so both
+		// patch flavours resolve an aliased field the same way.
+		let touched = (resource != null && resource.merge_for_patch != null)
+		              ? patch_touched_fields(body, post) : null;
+		if (touched != null)
+			post = carry_write_only(resource,
+			                        resource.merge_for_patch(existing, post, touched), existing);
 		return { ok: true, merged: post, schema_body: post };
 	}
 	return { ok: true, merged: carry_write_only(resource, merge_fn(existing, existing_view, body), existing),
