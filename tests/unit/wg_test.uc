@@ -209,3 +209,22 @@ t.describe('wg.route_table', () => {
 		t.assert_equal(wg.route_table(ubus.stub(), 'nope', false), null);
 	});
 });
+
+// wg needs an IPv6 endpoint bracketed to find the port, but the caller may have
+// bracketed it already: that is the form `wg show endpoints` prints back, so it
+// round-trips straight into a PUT. Double-bracketing made wg refuse the peer,
+// turning a valid body into a 500.
+t.describe('wg IPv6 endpoint bracketing', () => {
+	function endpoint_arg(host) { return wg.endpoint_arg(host, 51820); }
+
+	t.it('brackets a bare IPv6 address', () => {
+		t.assert_equal(endpoint_arg('fd00::1'), '[fd00::1]:51820');
+	});
+	t.it('leaves an already-bracketed address alone', () => {
+		t.assert_equal(endpoint_arg('[fd00::1]'), '[fd00::1]:51820');
+	});
+	t.it('leaves IPv4 and hostnames alone', () => {
+		t.assert_equal(endpoint_arg('198.51.100.7'), '198.51.100.7:51820');
+		t.assert_equal(endpoint_arg('vpn.example.org'), 'vpn.example.org:51820');
+	});
+});
