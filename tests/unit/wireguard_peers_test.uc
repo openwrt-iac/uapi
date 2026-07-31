@@ -79,6 +79,41 @@ t.describe('network.wireguard_peers.validate', () => {
 		let ae = filter(errs, function(e) { return match(e.field, /^allowed_ips\[/); });
 		t.assert_equal(ae[0].code, "invalid_format");
 	});
+
+	// Every shape below was checked against `wg set ... allowed-ips` on a real
+	// interface. Requiring an IPv4 CIDR refused every IPv6 peer, so a dual-stack
+	// tunnel could not be built through the API at all, and refused the bare
+	// address form that `wg show` prints back and netifd turns into a host route.
+	t.it('accepts every allowed_ips form wg accepts', () => {
+		for (let a in ['10.0.0.0/24', '10.0.0.5', 'fd00::/64', 'fd00::1',
+		               '0.0.0.0/0', '::/0']) {
+			let errs = wgp.validate({
+				interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+				allowed_ips: [a],
+			}, null);
+			let ae = filter(errs, function(e) { return match(e.field, /^allowed_ips\[/); });
+			t.assert_equal(length(ae), 0, sprintf("%s should be accepted", a));
+		}
+	});
+
+	t.it('still rejects what wg rejects', () => {
+		for (let a in ['10.0.0.0/33', 'fd00::/129', 'garbage', '', '10.0.0.256']) {
+			let errs = wgp.validate({
+				interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+				allowed_ips: [a],
+			}, null);
+			let ae = filter(errs, function(e) { return match(e.field, /^allowed_ips\[/); });
+			t.assert_equal(length(ae), 1, sprintf("%s should be rejected", a));
+		}
+	});
+
+	t.it('accepts a dual-stack peer', () => {
+		let errs = wgp.validate({
+			interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			allowed_ips: ['10.42.0.2/32', 'fd00:42::2/128'],
+		}, null);
+		t.assert_equal(length(errs), 0);
+	});
 	t.it('reports conflict when parent interface has wrong proto', () => {
 		let conn = ubus.stub({ uci: { network: {
 			lan: { '.type': 'interface', proto: 'static' },
@@ -194,5 +229,182 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		let r = h.patch(c, ctx(), 'g_existing', { allowed_ips: ['10.42.0.6/32'] });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.interface, 'wg1');
+	});
+});
+
+// netifd only reads peer sections inside the proto setup step, so a network
+// reload leaves the kernel untouched: the peer is committed and never applied,
+// and a delete does not revoke it. Every write has to emit the peer operations
+// the transaction then pushes to the kernel.
+t.describe('network.wireguard_peers kernel apply', () => {
+	const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
+	const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
+
+	function op_tracking_handler(sink) {
+		return handler.make(wgp, {
+			tx: {
+				acquire: function() { return {}; },
+				release: function() {},
+				reload: function() { return null; },
+				check_services: function() { return null; },
+				wg_apply: function(conn, ops) { for (let o in ops) push(sink, o); return null; },
+				wg_reconcile: function() { return null; },
+			},
+		});
+	}
+
+	function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+
+	function with_wg() {
+		return ubus.stub({
+			uci: {
+				network: {
+					wg1: { '.type': 'interface', '.anonymous': false,
+					       proto: 'wireguard',
+					       private_key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' },
+					g_existing: {
+						'.type': 'wireguard_wg1', '.anonymous': false,
+						public_key: PK,
+						allowed_ips: ['10.42.0.2/32'],
+					},
+				},
+			},
+		});
+	}
+
+	t.it('POST emits a set for the parent interface', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).create(with_wg(), ctx(), {
+			interface: 'wg1', public_key: PK, allowed_ips: ['10.42.0.7/32'],
+			endpoint_host: '198.51.100.7', endpoint_port: 51820, persistent_keepalive: 25,
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(length(ops), 1);
+		t.assert_equal(ops[0].action, "set");
+		t.assert_equal(ops[0].iface, "wg1");
+		t.assert_equal(ops[0].public_key, PK);
+		t.assert_deep_equal(ops[0].allowed_ips, ['10.42.0.7/32']);
+		t.assert_equal(ops[0].endpoint_port, 51820);
+		t.assert_equal(ops[0].persistent_keepalive, 25);
+	});
+
+	// The read view masks preshared_key, so an op built from it would silently
+	// drop the secret and `wg set` would clear the key on the running tunnel.
+	t.it('a set carries the preshared key, which the read view masks', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).create(with_wg(), ctx(), {
+			interface: 'wg1', public_key: PK, allowed_ips: ['10.42.0.7/32'],
+			preshared_key: 'c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0MDA=',
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(ops[0].preshared_key, 'c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0MDA=');
+	});
+
+	t.it('PATCH emits a set for the parent read off the uci type', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).patch(with_wg(), ctx(), 'g_existing',
+		                                       { allowed_ips: ['10.42.0.6/32'] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(length(ops), 1);
+		t.assert_equal(ops[0].iface, "wg1");
+		t.assert_deep_equal(ops[0].allowed_ips, ['10.42.0.6/32']);
+	});
+
+	// Without removing the old key first the kernel keeps the previous peer under
+	// it, so rotating a key would leave the old peer installed and its access live.
+	t.it('rotating the public key removes the old peer before setting the new one', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).replace(with_wg(), ctx(), 'g_existing', {
+			interface: 'wg1', public_key: PK2, allowed_ips: ['10.42.0.5/32'],
+		});
+		t.assert_equal(r.status, 200);
+		t.assert_equal(length(ops), 2);
+		t.assert_equal(ops[0].action, "remove");
+		t.assert_equal(ops[0].public_key, PK);
+		t.assert_equal(ops[1].action, "set");
+		t.assert_equal(ops[1].public_key, PK2);
+	});
+
+	t.it('an unchanged public key emits only the set', () => {
+		let ops = [];
+		op_tracking_handler(ops).replace(with_wg(), ctx(), 'g_existing', {
+			interface: 'wg1', public_key: PK, allowed_ips: ['10.42.0.5/32'],
+		});
+		t.assert_equal(length(ops), 1);
+		t.assert_equal(ops[0].action, "set");
+	});
+
+	// netifd omits a disabled peer when it builds the config, so the kernel must
+	// not carry it either.
+	t.it('disabling a peer removes it from the kernel rather than setting it', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).patch(with_wg(), ctx(), 'g_existing',
+		                                       { disabled: true });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(length(ops), 1);
+		t.assert_equal(ops[0].action, "remove");
+		t.assert_equal(ops[0].public_key, PK);
+	});
+
+	// The parent is encoded in the uci section type, never stored as an option,
+	// and a DELETE has no body to read it from. Without this the peer stays live
+	// after a 204, so revoking access through the API does not revoke it.
+	t.it('DELETE emits a remove for the parent read off the uci type', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).remove(with_wg(), ctx(), 'g_existing');
+		t.assert_equal(r.status, 204);
+		t.assert_equal(length(ops), 1);
+		t.assert_equal(ops[0].action, "remove");
+		t.assert_equal(ops[0].iface, "wg1");
+		t.assert_equal(ops[0].public_key, PK);
+	});
+
+	t.it('a validation failure emits nothing, since nothing was written', () => {
+		let ops = [];
+		let r = op_tracking_handler(ops).create(with_wg(), ctx(), {
+			interface: 'wg1', public_key: 'tooshort', allowed_ips: ['10.42.0.7/32'],
+		});
+		t.assert_equal(r.status, 422);
+		t.assert_equal(length(ops), 0);
+	});
+
+	// /batch runs handlers in bare mode, which returns before any commit, so the
+	// apply cannot happen per sub-request. Sub-requests accumulate into one
+	// ordered sink that the outer multi_transaction applies once.
+	t.it('bare-mode writes accumulate in order into one shared sink', () => {
+		let h = handler.make(wgp, { tx: { bare: true } });
+		let c = with_wg();
+		let sink = [];
+		let batch_ctx = { request_id: "01hx0000000000000000000000.0", kernel_sink: sink };
+		for (let ip in ['10.42.0.11/32', '10.42.0.12/32']) {
+			let r = h.create(c, batch_ctx, {
+				interface: 'wg1', public_key: PK, allowed_ips: [ip],
+			});
+			t.assert_equal(r.status, 200);
+		}
+		t.assert_equal(length(sink), 2);
+		t.assert_deep_equal(sink[0].allowed_ips, ['10.42.0.11/32']);
+		t.assert_deep_equal(sink[1].allowed_ips, ['10.42.0.12/32']);
+	});
+
+	// The hook is opt-in, so every other resource keeps its reload-only apply.
+	t.it('a resource with no kernel_ops hook emits nothing', () => {
+		let ops = [];
+		let routes = loadfile('src/resources/network.routes.uc')();
+		let h = handler.make(routes, {
+			tx: {
+				acquire: function() { return {}; },
+				release: function() {},
+				reload: function() { return null; },
+				check_services: function() { return null; },
+				wg_apply: function(conn, o) { for (let x in o) push(ops, x); return null; },
+			},
+		});
+		let c = ubus.stub({ uci: { network: {
+			lan: { '.type': 'interface', proto: 'static' },
+		} } });
+		let r = h.create(c, ctx(), { target: '10.9.0.0/24', interface: 'lan', gateway: '10.0.0.1' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(length(ops), 0);
 	});
 });

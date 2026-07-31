@@ -91,6 +91,29 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
 
 ## Features (additive, future minor bumps in v2.x)
 
+- **`X-Kernel-Applied` response header.** The kernel-apply step added in 2.4.1
+  (`docs/architecture.md` § Transaction recipe, step 7) skips an interface that
+  is down or that netifd does not know, since there is no kernel state to sync
+  and `ifup` reads the peers from uci anyway. That means a client writing a peer
+  to a down tunnel gets a `200` whose config is in uci but not in the kernel,
+  with no way to tell it apart from a `200` that did reach the kernel. A header
+  naming what was actually applied, mirroring `X-Reload-Services`, closes that.
+  Held out of 2.4.1 because a new header is additive wire surface, which
+  `docs/versioning.md` puts outside a patch release.
+
+- **Upstream: make a peer edit count as an interface config change.** The
+  underlying defect is not uapi's and not LuCI's. netifd does not treat a
+  `wireguard_<iface>` section as part of interface `<iface>`'s config identity,
+  so `network reload` converges nothing, and the `config.change` event that
+  drives every apply carries only a package name. LuCI ships the workaround in
+  its peer form ("Restart wireguard interface to apply changes"). Two
+  contributions are possible: teach netifd to hash proto-declared dependent
+  sections, which fixes it for every consumer and would let uapi delete
+  `src/lib/wg.uc`; or a smaller LuCI-side change, since its client already
+  tracks changes per section and could trigger a per-interface apply after
+  saving. Neither removes the need for the local fix, which has to cover the
+  support window of current releases.
+
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` shipped in 2.3.0 cannot wrap a whole `terraform apply`: a DAG
   apply is N isolated provider RPCs with no apply-level begin/end hook, and

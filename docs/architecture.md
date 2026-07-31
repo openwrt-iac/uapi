@@ -118,25 +118,91 @@ without uci state change.
    `fs.popen`, exit code checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
    real child gives back the actual exit bit.
-7. **On reload non-zero:** `uci_import(<package>, snapshot)` →
-   `uci_commit(<package>)` → re-reload to restore prior daemon state. Then
-   `500 reload_failed_restored` with the captured stderr/exit summary. If the
-   restore itself fails, `500 reload_failed_unrecovered`.
-8. **On reload zero (success):** `200` with the refreshed resource.
+7. **Kernel apply.** For each peer operation the write collected (see below),
+   skip it unless `network.interface.<name>` reports `up`, then run the
+   matching `wg set`. Runs only after the reload returned zero, and reports the
+   same way, so a failure here follows the recipe below.
+8. **On reload or apply non-zero:** `uci_import(<package>, snapshot)` →
+   `uci_commit(<package>)` → reload, then **reconcile** each touched interface
+   against the restored uci. Then `500 reload_failed_restored` with the
+   captured stderr/exit summary. If the restore itself fails,
+   `500 reload_failed_unrecovered`.
+9. **On success:** `200` with the refreshed resource.
 
-### What "atomic" guarantees and does NOT
+### Why step 7 exists, and why it shells out to `wg`
 
-- Catches: reload script returning non-zero (e.g. fw4 ruleset parse error).
-  Snapshot-restore puts the daemon back on the prior config.
-- Does NOT catch: reload script exits zero but the daemon's *runtime
-  convergence* later fails. Init scripts have no way to know. Clients should
-  not assume `200 OK` means runtime convergence. GETs reflect
-  uci-configured state; ubus-derived state lives under `runtime: {...}` and
-  is marked `computed` so Terraform ignores it for drift.
+A reload converges a daemon only when the daemon notices its config changed.
+netifd reads WireGuard peers with `config_foreach wireguard_<iface>` *inside*
+the proto setup step, so editing a peer leaves the parent `interface` section
+untouched and `/etc/init.d/network reload` does nothing at all: the peer was
+committed to uci and never reached the kernel, and deleting one did not revoke
+it. `wireguard.sh` is the only proto handler under `/lib/netifd/proto/` that
+reads its own uci sections, so this affects exactly one resource.
 
-A future `commit-confirmed` mode (apply, wait N seconds, auto-revert unless
-client acks) would close the gap, but conflicts with the fork-per-request
-model (no place for a background timer). Documented in `docs/roadmap.md`.
+**This is a platform-wide defect, not a uapi one.** LuCI has it too, and says so
+in its peer form: *"Enable / Disable peer. Restart wireguard interface to apply
+changes."* Its Save and Apply resolves through
+`ubus call uci apply` → `/sbin/reload_config` → a `config.change` event carrying
+`{"package": "network"}` → `/etc/init.d/network reload` → `ubus call network
+reload`, which is the same call uapi makes. That chain is package-granular: it
+cannot express "interface wg3's peers changed", so a package-wide reload is the
+only action available to it. uapi knows which resource was written and therefore
+which interface is affected, so it can do better, and does.
+
+**Why not ask netifd to re-apply.** Measured on hardware:
+`ubus call network.interface.<i> renew` returns in 0 ms, so a failed apply is
+undetectable, and on failure `proto_wireguard_setup` calls `proto_setup_failed`,
+which takes the interface **down**. One peer with an unresolvable
+`endpoint_host` dropped a working tunnel and its healthy peers while the API
+answered `200`. A `down`+`up` restart behaves identically and additionally
+interrupts a healthy tunnel on every peer edit. Every netifd-mediated path
+applies the whole interface config as one unit, so one bad peer takes the
+innocent ones with it.
+
+`wg set` is the only per-peer path: it is atomic, so a bad endpoint fails that
+one command and changes nothing, it reports a real exit code, and it leaves the
+rest of the tunnel running. WireGuard exposes no ubus service for peers
+(`wireguard` offers only `status`/`genkey`/`genpsk`/`pubkey`), which is why
+netifd itself shells out to `wg syncconf` and LuCI's own backend shells out to
+`wg`. Running `wg` is therefore not a way around the platform's abstraction for
+peers, it is the platform's abstraction for peers. uci remains the only config
+writer, the kernel state is derived from committed uci rather than from the
+request, and nothing new runs in the background.
+
+The one caller-supplied value that reaches the shell is `endpoint_host`. It is
+quoted with the same idiom LuCI uses rather than validated, so no previously
+accepted payload starts being rejected. Public keys and addresses are pattern
+checked instead, since their charsets carry no shell metacharacters. A preshared
+key is passed as a `0600` file on tmpfs, never as an argument, so it never
+appears in `ps`.
+
+`route_allowed_ips` asks for a route per allowed IP, which netifd installs from
+the proto handler, so the apply installs them too: without that the peer is in
+the kernel with no path to it and the flag only half works. They are spelled to
+match netifd exactly (`proto static`, `scope link` on v4) and go into `ip4table`
+/ `ip6table` when the interface sets one, since netifd puts them there rather
+than in main. A prefix is only withdrawn when no remaining peer and no `config
+route` section still wants it, because two peers can carry overlapping
+`allowed_ips`. The kernel is never scanned for strays on the request path, only
+on the reconcile that follows a rollback, so a route uapi did not install is not
+at risk.
+
+One consequence to know: netifd reports the routes it installs in
+`network.interface.<name> status`, and routes installed here are not in that
+list until the next `ifup`. The kernel is correct; netifd's bookkeeping lags.
+
+A resource opts in with a `kernel_ops(kind, opts, sec_type, existing)` hook
+returning the operations to apply. It reads the uci options rather than the
+resource view because the view masks `preshared_key`, and the parent interface
+off the section type because it is not stored as an option, so a `DELETE` can
+only learn it from the section it is about to remove. A rotated public key emits
+a remove for the old key before the set, or the kernel would keep the previous
+peer and its access. A disabled peer is removed, matching what netifd omits when
+it builds the config.
+
+An interface that is down, or that netifd does not know, is skipped: there is no
+kernel state to sync and `ifup` reads the peers from uci anyway. That is also
+what keeps a peer orphaned by deleting its parent interface deletable.
 
 ## Multi-package transactions (`/batch`)
 
@@ -155,8 +221,12 @@ model (no place for a background timer). Documented in `docs/roadmap.md`.
    return `{ code: "batch_partial_failure", aborted_at_index, error: ..., reverted: true }`
    with the failing sub's status.
 7. All sub-requests 2xx → `uci_commit()` each package, run the union of
-   reload services. Same reload-failure recipe as the single-package
-   transaction.
+   reload services, then the collected kernel operations. Same failure recipe
+   as the single-package transaction. Sub-requests accumulate into one ordered
+   operation list shared through their sub-context, so a batch touching the same
+   peer twice ends on its last state, and the restore reconciles rather than
+   replaying, since a batch can apply several peers before failing on a later
+   one.
 
 ## Schema layer
 

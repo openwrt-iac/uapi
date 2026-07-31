@@ -21902,7 +21902,8 @@
 						"type": "array",
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host"
 					},
 					"endpoint_host": {
 						"type": [
