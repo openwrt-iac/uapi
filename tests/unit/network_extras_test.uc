@@ -73,6 +73,25 @@ t.describe('network.rules.validate', () => {
 		let errs = rules.validate({}, null);
 		t.assert_equal(errs[0].code, "required");
 	});
+
+	// Verified against netifd: a rule carrying only mark/lookup/priority
+	// installs as `from all fwmark 0x43 lookup 43`, so requiring a source
+	// alongside it rejected working configuration and forced the caller to
+	// write `src: "0.0.0.0/0"`, which is what a mark-only rule already means.
+	t.it('accepts a mark as the only selector', () => {
+		let errs = rules.validate({ mark: '0x43', lookup: 43, priority: 29000 }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('still rejects a body carrying only non-selector fields', () => {
+		let errs = rules.validate({ lookup: 43, priority: 29000 }, null);
+		t.assert_equal(filter(errs, function(e) { return e.code == "required"; })[0].field, "");
+	});
+
+	t.it('treats an empty mark as absent, like the other selectors', () => {
+		let errs = rules.validate({ mark: '', lookup: 43 }, null);
+		t.assert_equal(filter(errs, function(e) { return e.code == "required"; })[0].code, "required");
+	});
 	t.it('rejects priority out of range', () => {
 		let errs = full_validate(rules, { src: '192.168.1.0/24', priority: 99999, lookup: 42 }, null);
 		let pe = filter(errs, function(e) { return e.field == "priority"; });
