@@ -33,10 +33,10 @@ concurrency:
         && github.event_name != 'workflow_dispatch' }}
 
 env:
-  OPENWRT_VERSION: 25.12.4
-  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.4-x86-64-ext4-combined
-  OPENWRT_SDK_CACHE_KEY: openwrt-sdk-25.12.4-x86_64
-  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+  OPENWRT_VERSION: 25.12.5
+  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.5-x86-64-ext4-combined
+  OPENWRT_SDK_CACHE_KEY: openwrt-sdk-25.12.5-x86_64
+  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
 
 jobs:
   unit:
@@ -327,11 +327,11 @@ jobs:
       matrix:
         include:
           - arch: aarch64_generic
-            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/armsr/armv8/openwrt-sdk-25.12.4-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/armsr/armv8/openwrt-sdk-25.12.5-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
           - arch: arm_cortex-a7
-            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/mediatek/mt7622/openwrt-sdk-25.12.4-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/mediatek/mt7622/openwrt-sdk-25.12.5-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
           - arch: mips_24kc
-            sdk_url: https://downloads.openwrt.org/releases/25.12.4/targets/ath79/generic/openwrt-sdk-25.12.4-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/ath79/generic/openwrt-sdk-25.12.5-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
     steps:
       - uses: actions/checkout@v7
 
@@ -346,7 +346,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/sdk-${{ matrix.arch }}
-          key: openwrt-sdk-25.12.4-${{ matrix.arch }}
+          key: openwrt-sdk-25.12.5-${{ matrix.arch }}
 
       - name: Verify per-arch SDK pin
         run: |

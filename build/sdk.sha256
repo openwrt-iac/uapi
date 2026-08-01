@@ -1,4 +1,4 @@
-28e004c1be4d215d19c1f12a6aa4c8d8f80689549eb707d0ff5a71f16fa8d05f  openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-20c94ee1d8b8572558e42a0d222bfa1c782db0ecba14860824c3e9fdd7b95665  openwrt-sdk-25.12.4-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-ce85e088ba89da7c7d59f426dbb22961c73ef56deba95bfcdcc66130b4343a23  openwrt-sdk-25.12.4-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-001468f22df86efd13344863b6fcd705e99e92a7c402ddaf69d82f1648c74850  openwrt-sdk-25.12.4-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+0c8df0151a1e88feb7c03d694d61f6a18d51872815b7c811d76e2b77504d5e9c  openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+1b0316604a3e820b2b008a1baff3f9dac6716af942bef800930e58c7de98c98b  openwrt-sdk-25.12.5-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+0bd25a391256dbe9ad1f9c6f313364b1f9eddcc0e280c829d644034981ad8306  openwrt-sdk-25.12.5-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+bc4307ae2065c0c0b7c84627356e9f3d368a5a803c81552fcb77aa034a843f5a  openwrt-sdk-25.12.5-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst

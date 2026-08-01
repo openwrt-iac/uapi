@@ -2,8 +2,8 @@
 set -eu
 cd "$(dirname "$0")"
 
-IMAGE_URL=https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-25.12.4-x86-64-generic-ext4-combined.img.gz
-IMAGE_GZ=openwrt-25.12.4.img.gz
+IMAGE_URL=https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-25.12.5-x86-64-generic-ext4-combined.img.gz
+IMAGE_GZ=openwrt-25.12.5.img.gz
 IMAGE=openwrt.img
 KEY=id_ed25519
 

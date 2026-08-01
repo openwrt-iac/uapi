@@ -31,7 +31,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 # 25.12 feed) but the uci config and the resource paths are 'vnstat'.
 
 # Coverage scope: every curated resource whose package ships in the bare
-# OpenWrt 25.12.4 image. Resources for packages outside the bare image
+# OpenWrt 25.12.5 image. Resources for packages outside the bare image
 # (snmpd, lldpd, vnstat, mwan3, unbound, sqm, usteer, prometheus_node_
 # exporter_lua, openvpn) are deferred to a follow-up that wires the apk
 # install at VM-setup time instead of inside an integration test. Earlier
