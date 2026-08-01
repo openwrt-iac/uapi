@@ -58,6 +58,35 @@ arch's QEMU VM or live router.
 
 Bump `VERSION`, regenerate `build/openapi.json` via `make openapi`, commit.
 
+## Candidate sweep before a version number is fixed
+
+Once a release number is on the table, sweep for work that belongs in it before
+cutting the branch. The point is not to pad the release: it is that the bracket
+the number implies is decided at that moment, and something eligible left behind
+usually waits a whole cycle, while something ineligible slipped in forces a
+retag.
+
+Look at least at the open issues, the open PRs, `docs/roadmap.md`, and whatever
+is already sitting under `## [Unreleased]` in `CHANGELOG.md`. Also worth a
+glance: `docs/deprecations.md` when a removal window has come due, and anything
+previously parked as blocked upstream, since the blocker may have cleared.
+
+Filter each candidate through the bracket in `docs/versioning.md` rather than by
+how useful it is. A patch takes bug fixes with no surface change, plus the
+carve-out for a tightening whose old behaviour produced state no caller could
+rely on. A minor takes anything additive. Field deprecations are additive spec
+surface and belong in a minor even when the fix they accompany is a patch.
+
+Two things this catches, both seen in practice. Roadmap entries go stale: the
+hardening section once listed four items as outstanding that had all shipped,
+one of them a release earlier. And a fix can look patch-sized while carrying a
+minor-sized companion, which is how a header meant to report an apply outcome
+nearly rode along with the bug fix it belonged to.
+
+Record the outcome even when it is empty. "Swept, nothing eligible" is worth
+saying, because the next reader cannot tell a sweep that found nothing from a
+sweep that never happened.
+
 ## Release flow
 
 ### Major versions ship as `-rc` first
@@ -183,6 +212,8 @@ a list of `feat:` / `fix:` lines that any reader could compose from
 
 Before tagging:
 
+- [ ] Candidate sweep done for this version number (see above), and its
+  outcome noted even if nothing was eligible.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
 - [ ] `CHANGELOG.md` has the entry for this version.
