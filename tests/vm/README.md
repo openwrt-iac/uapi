@@ -1,12 +1,12 @@
 # Integration VM
 
-Boots a real OpenWrt 25.12.4 x86_64 QEMU VM for integration testing.
+Boots a real OpenWrt 25.12.5 x86_64 QEMU VM for integration testing.
 
 ## Pinned versions
 
-- OpenWrt release: **25.12.4**
-- Image: `openwrt-25.12.4-x86-64-generic-ext4-combined.img.gz`
-- Source: `https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/`
+- OpenWrt release: **25.12.5**
+- Image: `openwrt-25.12.5-x86-64-generic-ext4-combined.img.gz`
+- Source: `https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/`
 
 When bumping the OpenWrt target, update `IMAGE_URL` and `IMAGE_NAME` in `setup.sh` and update this file.
 

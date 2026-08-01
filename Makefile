@@ -23,7 +23,7 @@ help:
 	@echo "  openapi-validate   conformance-check the spec (needs python3 + openapi-spec-validator)"
 	@echo "  stage              populate build/openwrt/uapi/files/ for SDK package build"
 	@echo "  sbom               emit SPDX 2.3 SBOM (build/sbom.spdx.json); APK=<path> attaches built APK sha256"
-	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.4 QEMU VM"
+	@echo "  vm-setup/start/wait/stop   manage the OpenWrt 25.12.5 QEMU VM"
 
 test: lint test-unit
 

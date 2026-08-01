@@ -2,7 +2,7 @@
 
 The version comes from a single source: the `VERSION` file at the repo root (semver, e.g. `1.0.0-rc1`). The OpenWrt Makefile translates that to apk-style `PKG_VERSION` (hyphens become underscores), and `make stage` ships a copy to `/usr/share/uapi/VERSION` so `main.uc` and `/healthz` report the same string.
 
-This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.4 using the official OpenWrt SDK. Substitute the actual version from the `VERSION` file (or the release page) wherever you see `<version>` below.
+This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.5 using the official OpenWrt SDK. Substitute the actual version from the `VERSION` file (or the release page) wherever you see `<version>` below.
 
 ## Package contract
 
@@ -61,7 +61,7 @@ rpcd-mod-iwinfo
 ### 1. Get the matching OpenWrt SDK
 
 ```sh
-SDK_URL=https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-sdk-25.12.4-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+SDK_URL=https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
 mkdir -p build/sdk
 curl -L "$SDK_URL" | tar --use-compress-program=unzstd -xvf - -C build/sdk --strip-components=1
 ```
