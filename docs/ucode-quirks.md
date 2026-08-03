@@ -109,6 +109,10 @@ fd.lock("u")    // LOCK_UN
 
 Returns `true` on success, `null` on `EWOULDBLOCK` (with `fs.error()` set). See `transaction.uc::_lock_one()`.
 
+### `network.interface.<x>` `renew` re-applies the config the handler already had
+
+netifd gives a proto handler a copy of the interface config taken when the proto state was attached, and `renew` does not refresh it. A renew issued after a uci write therefore re-applies what was already running, and returns success. netifd also tears the interface down and back up for any proto-config change, so editing a wireguard peer destroys a working tunnel before the new peer list has been validated. uapi applies wireguard peers with `wg` directly for both reasons; see `src/lib/wg.uc`.
+
 ### Real `ubus` and `uci` modules are `.so` packages
 
 They live in the default `REQUIRE_SEARCH_PATH` ahead of any project paths. Naming a local lib `ubus.uc` shadows nothing because the `.so` wins. uapi calls its abstraction `bus.uc` to avoid the collision.
