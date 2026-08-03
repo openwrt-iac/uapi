@@ -83,11 +83,54 @@ Why deferred rather than shipped:
 The dependency is not the blocker: `apply-confirm` 0.1.0 is released and on
 the apk feed. The hold is the wire-contract commitment.
 
-Plan: ship the whole feature once, coherently, in a 2.4.0 (per-write
+Plan: ship the whole feature once, coherently, in one minor (per-write
 `?confirm` plus the standalone `POST /confirm` arm under Features below,
 with one reviewed authz model), gated on a settled authz model and a
-concrete consumer. Design reference: `docs/commit-confirm.md`.
+concrete consumer. 2.4.0 was the original target and passed without it, so
+the next step is a decision rather than a new target date; see the 2.5.0
+scope. Design reference: `docs/commit-confirm.md`.
 
+
+## 2.5.0 scope
+
+The next release is a minor, and its job is as much to make a clean 3.0.0
+possible as to ship features. v3 has three things queued: removing the `name`
+create input, removing `ipaddr` as a write input, and reading absent lists back
+as `null`. Only the first has served the notice `docs/deprecations.md` requires,
+so cutting a major before a minor announces the other two would break clients
+with no window, spend the major, and still leave the changes unmade.
+
+Committed, in rough dependency order:
+
+1. **Announce the two v3 changes.** Done ahead of the rest, since the window
+   runs from the release that ships it, not from the release that removes:
+   `ipaddr` deprecated as a write input, and the list-reads-`null` convention
+   change recorded under "Announced response-shape changes". The `ipaddr` case
+   carries no `deprecated: true` flag on purpose; the reasoning is in the
+   deprecations log.
+2. **`X-Kernel-Applied` response header.** Held out of 2.4.1 only because a new
+   header is additive. It closes the one gap the kernel apply left: a client
+   writing a peer to a down tunnel gets a `200` it cannot distinguish from one
+   that reached the kernel. Details under Features below.
+3. **`disabled` on `network/interfaces`, `network/routes` and `network/rules`**
+   ([#64](https://github.com/openwrt-iac/uapi/issues/64)), gated on netifd's
+   `disabled`-parsing fix reaching a stable OpenWrt tag. Ships if the tag lands
+   in time and slips to 2.6.0 if not, since the interface read is
+   version-sensitive without it.
+
+Needs a decision before it can be scoped:
+
+- **Commit-confirmed apply.** The plan under "Needs more reflection" still names
+  2.4.0 as the target, which has passed, so this needs deciding rather than
+  re-dating. It is the largest candidate here and remains gated on a settled
+  authz model and a concrete consumer. The authz question is the reason it
+  matters now: that section warns that freezing the current model would cost a
+  major to change, so if it ships at all it should ship with the model resolved
+  in a minor, not carried into v3.
+
+Deliberately not in 2.5.0: the mirrored-name retirement itself (only its
+announcement lands here, the removal is v3), and anything under Hardening, which
+carries no wire surface and needs no release to take effect.
 
 ## Features (additive, future minor bumps in v2.x)
 
