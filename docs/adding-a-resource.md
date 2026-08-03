@@ -38,6 +38,7 @@ return {
 
     // Optional, less common:
     merge_for_patch: function(existing, existing_json, body) { ... },  // nested-object merge
+    resolve_for_replace: function(body) { ... },   // PUT only; resolve two wire names for one uci option. See "Mirrored field pairs" below.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
     id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
@@ -239,6 +240,39 @@ from the request body.
 
 Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.
+
+### Mirrored field pairs
+
+When one uci option is exposed under two wire names, every write path has
+to tolerate a faithful full replace that changes only one of them.
+`network/interfaces` is the only resource that does this today: it
+mirrors the first entry of `list ipaddr` into `ipaddr` alongside the full
+`ipaddrs`. Prefer not to add a second one.
+
+The read mirror puts both names into the caller's state, so a
+full-replace client sends both back whether or not its own config named
+them, with the one it did not change now stale. Rejecting the pair on
+that ground makes the field unwritable for every such client, which is
+the failure `ipaddrs` hit in 2.4.1.
+
+It belongs to a wider family: a full replace destroys or blocks whatever
+the read view does not faithfully return. 2.4.0 fixed two other members,
+an unmodelled `src_dip` dropped from every SNAT redirect it round-tripped
+and masked write-only secrets erased by any PUT that omitted them.
+
+The three methods need different answers:
+
+- **PATCH**: `merge_for_patch` knows which name the body carried, so drop
+  the other rather than letting the read view resurrect it.
+- **PUT**: no notion of "did not name" exists, so `resolve_for_replace`
+  drops the losing name and lets the documented winner through. It runs
+  before validation, so `validate` never sees the pair.
+- **POST**: no prior read to have carried a stale value back, so a
+  contradiction is a real one. Report it.
+
+Resolving silently on PUT is only safe when the winner is documented and
+`toUci` already prefers it, so the resolution changes no uci outcome. If
+that is not true for a new pair, fix the precedence first.
 
 ## 4. Add unit tests
 

@@ -1194,3 +1194,68 @@ t.describe('handler.create unique_field uniqueness', () => {
 		t.assert_equal(length(errs), 1);
 	});
 });
+
+// A full-replace client cannot avoid sending both wire names for `list ipaddr`
+// with the scalar stale: the read mirrors the first entry into `ipaddr`, so it
+// sits in client state even when the config named only `ipaddrs`, and the PUT
+// carries it back beside the changed list. Rejecting that made `ipaddrs`
+// unchangeable through any such client.
+t.describe('handler.replace ipaddr / ipaddrs full replace', () => {
+	let ifaces_mod = loadfile('src/resources/network.interfaces.uc')();
+	let ifaces = handler.make(ifaces_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function ictx() { return { request_id: "01hx0000000000000000000000" }; }
+	function seeded() {
+		return ubus.stub({ uci: { network: {
+			tfprobe: { '.type': 'interface', '.anonymous': false,
+			           proto: 'static', ipaddr: ['192.168.77.1/24'] },
+		} } });
+	}
+
+	t.it('accepts a stale scalar beside a changed list and applies the list', () => {
+		let c = seeded();
+		let r = ifaces.replace(c, ictx(), 'tfprobe',
+			{ proto: 'static', ipaddr: '192.168.77.1/24', ipaddrs: ['192.168.78.1/24'] });
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(c._state.uci.network.tfprobe.ipaddr, ['192.168.78.1/24']);
+		t.assert_equal(r.body.ipaddr, '192.168.78.1/24');
+	});
+
+	// The scalar is still the only name a v1 client knows, so a PUT that names
+	// it alone has to keep writing it.
+	t.it('a PUT naming only the scalar still writes it', () => {
+		let c = seeded();
+		let r = ifaces.replace(c, ictx(), 'tfprobe',
+			{ proto: 'static', ipaddr: '10.9.9.9/24' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.network.tfprobe.ipaddr, '10.9.9.9/24');
+	});
+
+	// Replaying an identical PUT must land on the same address rather than
+	// flipping back to the scalar it carried.
+	t.it('is idempotent when the same body is applied twice', () => {
+		let c = seeded();
+		let body = { proto: 'static', ipaddr: '192.168.77.1/24', ipaddrs: ['192.168.78.1/24'] };
+		ifaces.replace(c, ictx(), 'tfprobe', body);
+		let r = ifaces.replace(c, ictx(), 'tfprobe', body);
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(c._state.uci.network.tfprobe.ipaddr, ['192.168.78.1/24']);
+	});
+
+	// POST has no prior read to have carried a stale scalar back, so naming both
+	// there is a real contradiction and keeps the 422.
+	t.it('POST still refuses a body whose scalar disagrees with the list', () => {
+		let c = ubus.stub({ uci: { network: {} } });
+		let r = ifaces.create(c, ictx(),
+			{ id: 'tfprobe2', proto: 'static', ipaddr: '10.9.9.9/24',
+			  ipaddrs: ['192.168.78.1/24'] });
+		t.assert_equal(r.status, 422);
+		let errs = filter(r.body.errors,
+			function(e) { return e.field == "ipaddr" && e.code == "conflict"; });
+		t.assert_equal(length(errs), 1);
+	});
+});

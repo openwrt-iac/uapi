@@ -612,6 +612,8 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				let write_body = carry_write_only(resource, body, existing);
+				if (resource.resolve_for_replace != null)
+					write_body = resource.resolve_for_replace(write_body);
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };

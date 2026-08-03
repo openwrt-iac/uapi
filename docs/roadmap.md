@@ -130,6 +130,25 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
 
+- **Stop mirroring one uci option into two writable wire names.** `ipaddr` /
+  `ipaddrs` on `network/interfaces` is the only case, and the only one there
+  should be. One uci `list ipaddr` is exposed under two names that are both
+  readable and both writable, so a full-replace client carries both back with
+  one of them stale, and every write path has to guess which the caller meant.
+  `resolve_for_replace` and `merge_for_patch` decide that per method
+  ([#60](https://github.com/openwrt-iac/uapi/issues/60),
+  [#65](https://github.com/openwrt-iac/uapi/issues/65), both in 2.4.1, the
+  second caused by the fix for the first) rather than removing the cause.
+
+  The durable fix is one writable name per uci option. The list form is the
+  general one, so `ipaddr` becomes read-only: still surfaced for the v1.0
+  contract and for clients that only understand a scalar, but no longer
+  accepted on write, with `ipaddrs` the only input.
+  That is a removal from the write surface, so it needs a deprecation window
+  (`docs/deprecations.md`) announced in a minor and completed in v3, not a
+  patch. Until then the per-method resolution stays, and a new mirrored pair
+  should not be added: see `docs/adding-a-resource.md` § Mirrored field pairs.
+
 - **`disabled` on `network/interfaces`, `network/routes` and `network/rules`.**
   Filed as [openwrt-iac/uapi#64](https://github.com/openwrt-iac/uapi/issues/64).
   uci carries `option disabled` on all three section types and netifd honours it

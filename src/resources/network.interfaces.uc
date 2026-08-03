@@ -174,6 +174,25 @@ function merge_for_patch(existing_section, existing_json, body) {
 	return merged;
 }
 
+// A full-replace caller cannot avoid sending both names disagreeing. fromUci
+// mirrors the first list entry into `ipaddr`, so the scalar is in the caller's
+// state even when its own config named only `ipaddrs`, and a PUT carries every
+// field it knows. Refusing that body made `ipaddrs` unchangeable through any
+// full-replace client. The list is the documented winner and toUci already
+// prefers it, so resolve to it here instead. PATCH has `merge_for_patch` to
+// express "did not name", and POST has no prior read to have carried a stale
+// scalar back, so both keep the 422.
+function resolve_for_replace(body) {
+	if (type(body) != "object" || type(body.ipaddrs) != "array"
+	    || length(body.ipaddrs) == 0 || body.ipaddr == null
+	    || body.ipaddr == "" || body.ipaddr == body.ipaddrs[0])
+		return body;
+
+	let out = { ...body };
+	delete out.ipaddr;
+	return out;
+}
+
 function validate(json, conn, id) {
 	let errs = [];
 
@@ -302,6 +321,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	merge_for_patch: merge_for_patch,
+	resolve_for_replace: resolve_for_replace,
 	// Caller-supplied name wins. proto=wireguard falls back to a 14-char
 	// wg_<rand> (netifd's IFNAMSIZ constraint); other protos return null
 	// so handler.create emits the standard 28-char ULID.
@@ -353,9 +373,9 @@ return {
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],
-		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty, so send one or the other rather than both with different values." },
+		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice." },
 		ipaddrs:   { type: "array", items: { type: "string" },
-		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`; a body carrying both with a differing `ipaddr` is rejected." },
+		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`. On PUT that precedence is applied silently; on POST and PATCH a body carrying both with a differing `ipaddr` is rejected." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,

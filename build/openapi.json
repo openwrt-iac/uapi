@@ -21246,14 +21246,14 @@
 							"string",
 							"null"
 						],
-						"description": "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty, so send one or the other rather than both with different values."
+						"description": "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice."
 					},
 					"ipaddrs": {
 						"type": "array",
 						"items": {
 							"type": "string"
 						},
-						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`; a body carrying both with a differing `ipaddr` is rejected."
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`. On PUT that precedence is applied silently; on POST and PATCH a body carrying both with a differing `ipaddr` is rejected."
 					},
 					"netmask": {
 						"type": [
