@@ -1257,8 +1257,27 @@ First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a s
 - uci-defaults install hook wires `uhttpd.main.ucode_prefix` and self-deletes; pre-remove hook unwires it.
 - Release-tier CI builds the APK and runs a full install/use/remove smoke test in a fresh QEMU VM.
 
-[Unreleased]: https://github.com/raspbeguy/uapi/compare/v1.0.1...HEAD
-[1.0.1]: https://github.com/raspbeguy/uapi/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc2...v1.0.0
-[1.0.0-rc2]: https://github.com/raspbeguy/uapi/compare/v1.0.0-rc1...v1.0.0-rc2
-[1.0.0-rc1]: https://github.com/raspbeguy/uapi/releases/tag/v1.0.0-rc1
+[Unreleased]: https://github.com/openwrt-iac/uapi/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/openwrt-iac/uapi/compare/v2.4.0...v2.4.1
+[2.4.0]: https://github.com/openwrt-iac/uapi/compare/v2.3.0...v2.4.0
+[2.3.0]: https://github.com/openwrt-iac/uapi/compare/v2.2.3...v2.3.0
+[2.2.3]: https://github.com/openwrt-iac/uapi/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/openwrt-iac/uapi/compare/v2.2.1...v2.2.2
+[2.2.1]: https://github.com/openwrt-iac/uapi/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/openwrt-iac/uapi/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/openwrt-iac/uapi/compare/v2.0.2...v2.1.0
+[2.0.2]: https://github.com/openwrt-iac/uapi/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/openwrt-iac/uapi/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/openwrt-iac/uapi/compare/v2.0.0-rc4...v2.0.0
+[2.0.0-rc4]: https://github.com/openwrt-iac/uapi/compare/v2.0.0-rc3...v2.0.0-rc4
+[2.0.0-rc3]: https://github.com/openwrt-iac/uapi/compare/v2.0.0-rc2...v2.0.0-rc3
+[2.0.0-rc2]: https://github.com/openwrt-iac/uapi/compare/v2.0.0-rc1...v2.0.0-rc2
+[2.0.0-rc1]: https://github.com/openwrt-iac/uapi/compare/v1.2.1...v2.0.0-rc1
+[1.2.1]: https://github.com/openwrt-iac/uapi/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/openwrt-iac/uapi/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/openwrt-iac/uapi/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/openwrt-iac/uapi/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/openwrt-iac/uapi/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/openwrt-iac/uapi/compare/v1.0.0-rc2...v1.0.0
+[1.0.0-rc2]: https://github.com/openwrt-iac/uapi/compare/v1.0.0-rc1...v1.0.0-rc2
+[1.0.0-rc1]: https://github.com/openwrt-iac/uapi/releases/tag/v1.0.0-rc1

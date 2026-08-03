@@ -32,7 +32,7 @@ packages are deliberately not pulled in.
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. Optional `name` (1-15 chars, uci section-name charset) picks the section id at create time; absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). |
+| `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. Optional `id` picks the section name at create time (uci section-name charset, 32 chars, tightened to 15 for `proto=wireguard` because netifd uses it as the kernel netdev name); absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `name` is the deprecated 2.1.0-era spelling of the same input, accepted until v3 (`docs/deprecations.md`). `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). |
 | `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. |
 | `network/routes` | `config route` | Static routes; cross-refs interface. |
 | `network/rules` | `config rule` | Policy routing. |

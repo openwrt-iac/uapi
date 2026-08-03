@@ -81,7 +81,7 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `invalid_format` | Failed format validator (CIDR, MAC, IP, etc.)                 |
 | `out_of_range`   | Numeric or length bound exceeded                              |
 | `not_in_enum`    | Value not in the allowed set                                  |
-| `conflict`       | References a missing or incompatible resource                 |
+| `conflict`       | References a missing or incompatible resource, or two fields naming one option disagree |
 | `read_only`      | Field is computed/runtime and can't be set                    |
 
 ## Field paths
