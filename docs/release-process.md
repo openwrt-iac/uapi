@@ -217,6 +217,13 @@ Before tagging:
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
 - [ ] `CHANGELOG.md` has the entry for this version.
+- [ ] Any version number a doc announced ahead of time now matches reality.
+  `docs/deprecations.md` carries a target release in its "Deprecated since"
+  column before that release exists, and the roadmap names target versions
+  too. Both go stale the moment a number moves or a scope slips, which is how
+  the commit-confirm plan ended up still naming 2.4.0 after 2.4.0 shipped
+  without it. Grep the docs for the version being cut and for the one before
+  it.
 - [ ] `make test coverage` green.
 - [ ] CI on `main` green for the commit that will be tagged.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Deprecated
+
+- `network/interfaces.ipaddr` is deprecated as a **write** input; send `ipaddrs` instead. Both name the same uci `list ipaddr` and the list already wins on write, so migrating means dropping the scalar from request bodies rather than changing any value. Reads are unaffected now and after removal: `ipaddr` keeps carrying the first entry of the list, and v3 marks it `readOnly` rather than deleting it. That read half is why the property is not flagged `deprecated: true` in the spec, since the flag has no read/write split and would tell a generator the field is disappearing; the announcement is in the field's `description` and in `docs/deprecations.md` instead. Announced now because a full-replace client cannot avoid sending both names, which is what [#60](https://github.com/openwrt-iac/uapi/issues/60) and [#65](https://github.com/openwrt-iac/uapi/issues/65) each cost a release to work around; one writable name per uci option removes the cause rather than resolving it per method.
+
+- List-valued fields will read back `null` instead of `[]` when the underlying uci key is absent, targeted at v3 ([#39](https://github.com/openwrt-iac/uapi/issues/39)). uci cannot store an empty list, so `[]` already means "absent" and distinguishes nothing. This is a convention change across every curated resource and it breaks response validation for clients generated against the current `{"type": "array"}` schema, so it is announced here a major ahead rather than staged per field. Nothing changes in this release.
+
 ## [2.4.1] - 2026-08-03
 
 ### Fixed

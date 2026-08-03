@@ -373,7 +373,7 @@ return {
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],
-		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice." },
+		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice. DEPRECATED as a write input: send `ipaddrs`. Reads keep this field, which is why it is not flagged `deprecated`, but v3 makes it read-only. See docs/deprecations.md." },
 		ipaddrs:   { type: "array", items: { type: "string" },
 		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`. On PUT that precedence is applied silently; on POST and PATCH a body carrying both with a differing `ipaddr` is rejected." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
