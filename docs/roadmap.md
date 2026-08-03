@@ -130,6 +130,35 @@ concrete consumer. Design reference: `docs/commit-confirm.md`.
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
 
+- **`disabled` on `network/interfaces`, `network/routes` and `network/rules`.**
+  Filed as [openwrt-iac/uapi#64](https://github.com/openwrt-iac/uapi/issues/64).
+  uci carries `option disabled` on all three section types and netifd honours it
+  (`config.c` skips a disabled interface, `interface-ip.c` and `iprule.c` declare
+  the attribute), but none of the three models it, so an inert section reads back
+  as ordinary active config and a declarative client sees a converged resource
+  set with nothing to apply. It also cannot be cleared through the API, because a
+  `PUT` cannot unset a field the model does not have. `network/wireguard_peers`
+  already models it and is the shape to copy. Add it next to `auto` on
+  `network/interfaces` rather than in place of it: `auto '0'` leaves the
+  interface configured but not started at boot, `disabled '1'` makes netifd
+  ignore the section outright.
+
+  **Waits for a stable OpenWrt tag.** netifd parses the interface flag with a
+  literal compare against `"1"` while route and rule go through the boolean blob
+  converter, which also takes `true`, `on` and `yes`. So on 25.12.5
+  `option disabled 'true'` disables a route or a rule and leaves an interface
+  running, and reading it with one truthy parse would report an interface as
+  disabled while it is up. That is the same lie as the bug being fixed, inverted.
+  Upstream closed the asymmetry in netifd `e97e36f` (2026-07-16, "config: accept
+  'true' for the interface disabled option"), which is in master and not in any
+  stable release yet. Implementing before that lands would mean either a
+  version-dependent read or replicating the literal compare and flipping its
+  meaning later.
+
+  Additive, so a minor bump. `terraform-provider-uapi` needs matching attributes
+  on `uapi_network_interface`, `uapi_network_route` and `uapi_network_rule` once
+  the fields exist.
+
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` shipped in 2.3.0 cannot wrap a whole `terraform apply`: a DAG
   apply is N isolated provider RPCs with no apply-level begin/end hook, and
