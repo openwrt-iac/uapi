@@ -83,6 +83,23 @@ const CASES = [
 		} },
 	},
 	{
+		file: "dhcp.hosts.uc", id: "h1",
+		why: "a scalar tag must not be normalized into a list behind the client",
+		seed: { dhcp: {
+			h1: { '.type': 'host', '.anonymous': false, mac: '00:11:22:33:44:55',
+			      ip: '192.168.1.50', tag: 'guest iot' },
+		} },
+	},
+	{
+		file: "dhcp.hosts.uc", id: "h2",
+		why: "and a list tag, which is the shape LuCI writes, must stay a list",
+		modify: { key: "tag", value: ["guest", "iot", "lab"] },
+		seed: { dhcp: {
+			h2: { '.type': 'host', '.anonymous': false, mac: '00:11:22:33:44:66',
+			      ip: '192.168.1.51', tag: ['guest', 'iot'] },
+		} },
+	},
+	{
 		file: "openvpn.instances.uc", id: "vpn0",
 		why: "three masked credentials and a merge hook",
 		seed: { openvpn: {

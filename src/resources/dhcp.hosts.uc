@@ -153,13 +153,16 @@ return {
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation" },
-		// `tag` is deliberately NOT declared here yet. dnsmasq reads it with a
-		// scalar config_get and then word-splits it, so `option tag 'a b'` and
-		// `list tag` are equivalent to the daemon; the ubus uci API surfaces the
-		// list form as an array, so the field reads back as either shape today.
-		// The array won, matching LuCI's DynamicList and the multi-tag semantics,
-		// but narrowing the read to array-only is a response type change and so
-		// waits for v3. See docs/deprecations.md.
+		// The union is temporary, and it is the honest shape until v3. dnsmasq
+		// word-splits whatever it reads, so `option tag 'a b'` and `list tag` are
+		// the same configuration to it and uci holds either; a scalar therefore
+		// reads back as a string and a list as an array. Writes persist the shape
+		// they were given rather than normalizing, so a body written back
+		// unchanged stays unchanged. v3 narrows the read to an array by splitting
+		// a stored scalar, which is why storage does not have to converge first.
+		// See docs/deprecations.md.
+		tag:           { type: ["string", "array", "null"], items: { type: "string" },
+		               description: "dnsmasq tags for this reservation; a request must match all of them. Send an array; a space-separated string is accepted and reads back as one until v3" },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.

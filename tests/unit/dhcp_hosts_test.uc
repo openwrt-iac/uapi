@@ -225,11 +225,44 @@ t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
 		t.assert_equal(length(types({ name: null })), 0);
 	});
 
-	// `tag` stays undeclared on purpose: dnsmasq word-splits a scalar tag, so a uci
-	// `list tag` is working configuration that the ubus API surfaces as an array. A
-	// string schema would reject it, and this pins that it does not.
-	t.it('leaves a list-shaped tag accepted', () => {
+	// `tag` declares a union because uci genuinely holds either shape: dnsmasq
+	// word-splits a scalar, so `option tag 'a b'` and `list tag` are the same
+	// configuration and a string-only schema would reject what LuCI writes. The
+	// union is what v3 narrows to an array.
+	t.it('accepts both shapes uci can hold, and null', () => {
 		t.assert_equal(length(types({ tag: ["a", "b"] })), 0);
 		t.assert_equal(length(types({ tag: "a b" })), 0);
+		t.assert_equal(length(types({ tag: null })), 0);
+	});
+
+	// Undeclared meant unchecked, and unchecked meant an object reached toUci and
+	// was handed to uci as an option value.
+	t.it('rejects shapes uci cannot hold', () => {
+		t.assert_true(has(types({ tag: 123 }), "tag", "invalid_type"));
+		t.assert_true(has(types({ tag: { a: 1 } }), "tag", "invalid_type"));
+	});
+
+	t.it('rejects a non-string inside the list', () => {
+		t.assert_true(has(types({ tag: ["ok", 7] }), "tag[1]", "invalid_type"));
+	});
+});
+
+// Writes persist the shape they were given. Normalizing a scalar into a list would
+// make a body written back unchanged come back changed, which is the one thing the
+// read-honesty property forbids; v3 reconciles the shapes on the read side instead.
+t.describe('dhcp.hosts tag write shape', () => {
+	t.it('keeps an array an array, so uci gets a list', () => {
+		let u = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
+		                      tag: ['guest', 'iot'] });
+		t.assert_equal(type(u.tag), 'array');
+		t.assert_equal(u.tag[0], 'guest');
+		t.assert_equal(u.tag[1], 'iot');
+	});
+
+	t.it('keeps a scalar a scalar, so a verbatim round trip does not rewrite it', () => {
+		let u = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
+		                      tag: 'guest iot' });
+		t.assert_equal(type(u.tag), 'string');
+		t.assert_equal(u.tag, 'guest iot');
 	});
 });
