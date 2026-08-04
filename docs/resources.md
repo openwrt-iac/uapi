@@ -39,6 +39,24 @@ packages are deliberately not pulled in.
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
 | `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. |
 
+**`option disabled` is not modelled on `network/interfaces`, `network/routes` or
+`network/rules`.** uci carries it on all three and netifd honours it, so a section
+disabled by hand or by another tool is inert on the router while these resources
+report it as ordinary active configuration: a `GET` shows the interface, route or
+rule as present and correct, and a declarative client sees nothing to apply. It
+also cannot be cleared through the API, because a `PUT` cannot unset a field the
+model does not have; deleting and recreating the section is the way back, since
+that rewrites it from the declared configuration.
+
+Until it is modelled, `runtime` is the check that does not lie. An interface with
+`runtime.up` false while nothing in its configuration explains why is the signal
+to read `/etc/config/network` directly. `network/wireguard_peers` does model
+`disabled`, so peers are unaffected.
+
+This is deferred rather than overlooked, on an upstream fix with no release date;
+[#64](https://github.com/openwrt-iac/uapi/issues/64) and `docs/roadmap.md` carry
+the reasoning and the alternatives that were turned down.
+
 Reload: `network` (netifd).
 
 **Editing the interface that backs your management connection is dangerous.**
