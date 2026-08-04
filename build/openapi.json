@@ -22210,7 +22210,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "Hostname dnsmasq answers for this reservation"
 					},
 					"mac": {
 						"type": [
@@ -22259,7 +22260,9 @@
 						]
 					},
 					"dns": {
-						"type": "boolean"
+						"type": "boolean",
+						"default": false,
+						"description": "Answer DNS queries for this reservation's hostname"
 					},
 					"broadcast": {
 						"type": "boolean",

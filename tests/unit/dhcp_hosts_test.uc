@@ -194,3 +194,42 @@ t.describe('dhcp.hosts v1.2 parity additions', () => {
 		t.assert_true(conflict_for_wrong);
 	});
 });
+
+// name, tag and dns were written by toUci but absent from schema_properties, so the
+// central type gate never saw them: `dns: "0"` was a truthy string in ucode and wrote
+// dns=1, the inverse of the request. These assert the gate now covers them.
+t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
+	let handler = require('handler');
+	function types(body) { return handler.check_schema_types(hosts.schema_properties, body); }
+	function has(errs, field, code) {
+		for (let e in errs) if (e.field == field && e.code == code) return true;
+		return false;
+	}
+
+	// The inverted write: a string "0" asked for dns off and got dns=1.
+	t.it('rejects a stringly-typed dns instead of coercing it', () => {
+		t.assert_true(has(types({ dns: "0" }), "dns", "invalid_type"));
+	});
+
+	t.it('still accepts a real boolean dns', () => {
+		t.assert_equal(length(types({ dns: false })), 0);
+		t.assert_equal(length(types({ dns: true })), 0);
+	});
+
+	t.it('rejects a non-string name', () => {
+		t.assert_true(has(types({ name: 123 }), "name", "invalid_type"));
+	});
+
+	t.it('accepts the null and string forms name declares', () => {
+		t.assert_equal(length(types({ name: "host.lan" })), 0);
+		t.assert_equal(length(types({ name: null })), 0);
+	});
+
+	// `tag` stays undeclared on purpose: dnsmasq word-splits a scalar tag, so a uci
+	// `list tag` is working configuration that the ubus API surfaces as an array. A
+	// string schema would reject it, and this pins that it does not.
+	t.it('leaves a list-shaped tag accepted', () => {
+		t.assert_equal(length(types({ tag: ["a", "b"] })), 0);
+		t.assert_equal(length(types({ tag: "a b" })), 0);
+	});
+});

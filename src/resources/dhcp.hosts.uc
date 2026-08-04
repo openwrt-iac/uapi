@@ -151,5 +151,17 @@ return {
 		               description: "Force broadcast replies for clients that need it" },
 		instance:    { type: ["string", "null"],
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
+		name:          { type: ["string", "null"],
+		               description: "Hostname dnsmasq answers for this reservation" },
+		// `tag` is deliberately NOT declared. dnsmasq reads it with a scalar
+		// config_get and then word-splits it, so `option tag 'a b'` and
+		// `list tag` are equivalent and both work; the ubus uci API surfaces the
+		// list form as an array, which a string schema would reject. Declaring it
+		// needs a decision about which shape the wire uses, not just a type.
+		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
+		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
+		// which accepts the wide spelling set, so normalize_bool stays the reader.
+		dns:           { type: "boolean", default: false,
+		               description: "Answer DNS queries for this reservation's hostname" },
 	},
 };
