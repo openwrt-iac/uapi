@@ -360,6 +360,13 @@ function tokens_translate(ctx, r) {
 			"Requested scopes are not a subset of the caller's scopes");
 	if (r.kind == "locked")
 		return errors.locked_from(ctx, 1, r);
+	// Token writes go through transaction(), which emits this when the lock file
+	// itself cannot be opened. Without the branch it fell to the catch-all below and
+	// reported "unknown kind", sending the reader after a nonexistent code path
+	// instead of an unwritable /var/lock.
+	if (r.kind == "lock_unavailable")
+		return errors.error(ctx, "internal_error",
+			sprintf("transaction lock file not available: %s", r.error));
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);
 	if (r.kind == "reload_failed_restored")
