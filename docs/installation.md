@@ -32,9 +32,10 @@ curl -k https://localhost/api/v2/healthz
 The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages are RSA-4096 signed; the public key is served from the feed root at <https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The feed aggregates stable releases from every repo under the `openwrt-iac` org (uapi, unbound-uci-ext, ...), so one `apk` repositories line installs any of them.
 
 ```sh
-# Trust the feed's signing key (one-time)
-curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem \
-    | tee /etc/apk/keys/uapi-feed.pub.pem > /dev/null
+# Trust the feed's signing key (one-time). uclient-fetch ships with OpenWrt;
+# curl does not, so a stock router cannot run a curl-based instruction.
+uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
+    https://openwrt-iac.github.io/feed/uapi-feed.pub.pem
 
 # Register the feed
 echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
