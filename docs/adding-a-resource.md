@@ -298,11 +298,13 @@ let errs = mod.validate({ ... }, c);
 
 ## 5. Register the resource
 
-`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry (single-section types like `system`). Both use the two-arg `load_resource` form so the source module is registered into `RESOURCE_SOURCES` (which backs `/schema/<...>`):
+`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry (single-section types like `system`). Both go through `load_resource`, which registers the source module into `RESOURCE_SOURCES` (the thing backing `/schema/<...>`) and derives the filename from the key by swapping `:` for `.`:
 
 ```ucode
-"<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>", "<package>.<plural-type>.uc")),
+"<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>")),
 ```
+
+So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 45 resources already do; the filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
 for read-only runtime lists. Writable resources also automatically

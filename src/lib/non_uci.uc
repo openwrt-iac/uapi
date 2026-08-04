@@ -31,8 +31,7 @@ function with_lock_translated(ctx, fn, kind_messages, lock_opts) {
 	if (r.kind == "locked")
 		return { envelope: errors.locked_from(ctx, null, r) };
 	if (r.kind == "lock_unavailable")
-		return { envelope: errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error)) };
+		return { envelope: errors.lock_unavailable(ctx, r.error) };
 
 	// A known kind always becomes an envelope. A missing caller-supplied
 	// message falls back to a generic line rather than silently treating
