@@ -23,61 +23,65 @@ let error_ring = require("error_ring");
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
 
-function load_resource(key, file) {
-	let src = loadfile("/usr/share/uapi/resources/" + file, { raw_mode: true })();
+// The module filename is the key with `:` swapped for `.`, for all 45 resources.
+// Passing it separately meant writing the key twice per entry and left room for the
+// two to disagree.
+function load_resource(key) {
+	let src = loadfile("/usr/share/uapi/resources/" + replace(key, ":", ".") + ".uc",
+	                   { raw_mode: true })();
 	RESOURCE_SOURCES[key] = src;
 	return src;
 }
 
 const RESOURCES = {
-	"firewall:rules":        handler.make(load_resource("firewall:rules", "firewall.rules.uc")),
-	"firewall:zones":        handler.make(load_resource("firewall:zones", "firewall.zones.uc")),
-	"firewall:redirects":    handler.make(load_resource("firewall:redirects", "firewall.redirects.uc")),
-	"firewall:nat":          handler.make(load_resource("firewall:nat", "firewall.nat.uc")),
-	"firewall:forwardings":  handler.make(load_resource("firewall:forwardings", "firewall.forwardings.uc")),
-	"network:interfaces":    handler.make(load_resource("network:interfaces", "network.interfaces.uc")),
-	"network:devices":       handler.make(load_resource("network:devices", "network.devices.uc")),
-	"network:routes":        handler.make(load_resource("network:routes", "network.routes.uc")),
-	"network:rules":         handler.make(load_resource("network:rules", "network.rules.uc")),
-	"network:bridge_vlans":  handler.make(load_resource("network:bridge_vlans", "network.bridge_vlans.uc")),
-	"network:wireguard_peers": handler.make(load_resource("network:wireguard_peers", "network.wireguard_peers.uc")),
-	"system:timeservers":  handler.make(load_resource("system:timeservers", "system.timeservers.uc")),
-	"dropbear:instances":  handler.make(load_resource("dropbear:instances", "dropbear.instances.uc")),
-	"uhttpd:instances":    handler.make(load_resource("uhttpd:instances", "uhttpd.instances.uc")),
-	"uhttpd:certs":        handler.make(load_resource("uhttpd:certs", "uhttpd.certs.uc")),
-	"wireless:devices":    handler.make(load_resource("wireless:devices", "wireless.devices.uc")),
-	"wireless:interfaces": handler.make(load_resource("wireless:interfaces", "wireless.interfaces.uc")),
-	"dhcp:hosts":          handler.make(load_resource("dhcp:hosts", "dhcp.hosts.uc")),
-	"dhcp:leases":         handler.make_collection(load_resource("dhcp:leases", "dhcp.leases.uc")),
-	"dhcp:leases6":        handler.make_collection(load_resource("dhcp:leases6", "dhcp.leases6.uc")),
-	"dhcp:servers":        handler.make(load_resource("dhcp:servers", "dhcp.servers.uc")),
-	"sqm:queues":          handler.make(load_resource("sqm:queues", "sqm.queues.uc")),
-	"snmpd:agents":        handler.make(load_resource("snmpd:agents", "snmpd.agents.uc")),
-	"snmpd:com2secs":      handler.make(load_resource("snmpd:com2secs", "snmpd.com2secs.uc")),
-	"snmpd:groups":        handler.make(load_resource("snmpd:groups", "snmpd.groups.uc")),
-	"snmpd:accesses":      handler.make(load_resource("snmpd:accesses", "snmpd.accesses.uc")),
-	"vnstat:interfaces":   handler.make(load_resource("vnstat:interfaces", "vnstat.interfaces.uc")),
-	"mwan3:interfaces":   handler.make(load_resource("mwan3:interfaces", "mwan3.interfaces.uc")),
-	"mwan3:members":      handler.make(load_resource("mwan3:members", "mwan3.members.uc")),
-	"mwan3:policies":     handler.make(load_resource("mwan3:policies", "mwan3.policies.uc")),
-	"mwan3:rules":        handler.make(load_resource("mwan3:rules", "mwan3.rules.uc")),
-	"openvpn:instances":  handler.make(load_resource("openvpn:instances", "openvpn.instances.uc")),
+	"firewall:rules":        handler.make(load_resource("firewall:rules")),
+	"firewall:zones":        handler.make(load_resource("firewall:zones")),
+	"firewall:redirects":    handler.make(load_resource("firewall:redirects")),
+	"firewall:nat":          handler.make(load_resource("firewall:nat")),
+	"firewall:forwardings":  handler.make(load_resource("firewall:forwardings")),
+	"network:interfaces":    handler.make(load_resource("network:interfaces")),
+	"network:devices":       handler.make(load_resource("network:devices")),
+	"network:routes":        handler.make(load_resource("network:routes")),
+	"network:rules":         handler.make(load_resource("network:rules")),
+	"network:bridge_vlans":  handler.make(load_resource("network:bridge_vlans")),
+	"network:wireguard_peers": handler.make(load_resource("network:wireguard_peers")),
+	"system:timeservers":  handler.make(load_resource("system:timeservers")),
+	"dropbear:instances":  handler.make(load_resource("dropbear:instances")),
+	"uhttpd:instances":    handler.make(load_resource("uhttpd:instances")),
+	"uhttpd:certs":        handler.make(load_resource("uhttpd:certs")),
+	"wireless:devices":    handler.make(load_resource("wireless:devices")),
+	"wireless:interfaces": handler.make(load_resource("wireless:interfaces")),
+	"dhcp:hosts":          handler.make(load_resource("dhcp:hosts")),
+	"dhcp:leases":         handler.make_collection(load_resource("dhcp:leases")),
+	"dhcp:leases6":        handler.make_collection(load_resource("dhcp:leases6")),
+	"dhcp:servers":        handler.make(load_resource("dhcp:servers")),
+	"sqm:queues":          handler.make(load_resource("sqm:queues")),
+	"snmpd:agents":        handler.make(load_resource("snmpd:agents")),
+	"snmpd:com2secs":      handler.make(load_resource("snmpd:com2secs")),
+	"snmpd:groups":        handler.make(load_resource("snmpd:groups")),
+	"snmpd:accesses":      handler.make(load_resource("snmpd:accesses")),
+	"vnstat:interfaces":   handler.make(load_resource("vnstat:interfaces")),
+	"mwan3:interfaces":   handler.make(load_resource("mwan3:interfaces")),
+	"mwan3:members":      handler.make(load_resource("mwan3:members")),
+	"mwan3:policies":     handler.make(load_resource("mwan3:policies")),
+	"mwan3:rules":        handler.make(load_resource("mwan3:rules")),
+	"openvpn:instances":  handler.make(load_resource("openvpn:instances")),
 };
 
 const SINGLETONS = {
-	"system":             handler.make_singleton(load_resource("system", "system.uc")),
-	"dhcp:dnsmasq":       handler.make_singleton(load_resource("dhcp:dnsmasq", "dhcp.dnsmasq.uc")),
-	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp:odhcpd", "dhcp.odhcpd.uc")),
-	"firewall:defaults":  handler.make_singleton(load_resource("firewall:defaults", "firewall.defaults.uc")),
-	"unbound:server":     handler.make_singleton(load_resource("unbound:server", "unbound.server.uc")),
-	"unbound:srv":        handler.make_singleton(load_resource("unbound:srv", "unbound.srv.uc")),
-	"unbound:ext":        handler.make_singleton(load_resource("unbound:ext", "unbound.ext.uc")),
-	"snmpd:system":       handler.make_singleton(load_resource("snmpd:system", "snmpd.system.uc")),
-	"lldpd:config":       handler.make_singleton(load_resource("lldpd:config", "lldpd.config.uc")),
-	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config", "prometheus_node_exporter_lua.config.uc")),
-	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config", "vnstat.config.uc")),
-	"mwan3:globals":      handler.make_singleton(load_resource("mwan3:globals", "mwan3.globals.uc")),
-	"usteer:config":      handler.make_singleton(load_resource("usteer:config", "usteer.config.uc")),
+	"system":             handler.make_singleton(load_resource("system")),
+	"dhcp:dnsmasq":       handler.make_singleton(load_resource("dhcp:dnsmasq")),
+	"dhcp:odhcpd":        handler.make_singleton(load_resource("dhcp:odhcpd")),
+	"firewall:defaults":  handler.make_singleton(load_resource("firewall:defaults")),
+	"unbound:server":     handler.make_singleton(load_resource("unbound:server")),
+	"unbound:srv":        handler.make_singleton(load_resource("unbound:srv")),
+	"unbound:ext":        handler.make_singleton(load_resource("unbound:ext")),
+	"snmpd:system":       handler.make_singleton(load_resource("snmpd:system")),
+	"lldpd:config":       handler.make_singleton(load_resource("lldpd:config")),
+	"prometheus_node_exporter_lua:config": handler.make_singleton(load_resource("prometheus_node_exporter_lua:config")),
+	"vnstat:config":      handler.make_singleton(load_resource("vnstat:config")),
+	"mwan3:globals":      handler.make_singleton(load_resource("mwan3:globals")),
+	"usteer:config":      handler.make_singleton(load_resource("usteer:config")),
 };
 
 // BARE variants run inside /batch's outer multi_transaction (skip own lock,
@@ -365,8 +369,7 @@ function tokens_translate(ctx, r) {
 	// reported "unknown kind", sending the reader after a nonexistent code path
 	// instead of an unwritable /var/lock.
 	if (r.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-			sprintf("transaction lock file not available: %s", r.error));
+		return errors.lock_unavailable(ctx, r.error);
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);
 	if (r.kind == "reload_failed_restored")
@@ -600,6 +603,9 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		return errors.reload_failed_unrecovered(ctx, r.reload_error, r.restore_error);
 	if (r.kind == "locked")
 		return errors.locked_from(ctx, null, r);
+	// Not errors.lock_unavailable: this is the batch multi-package acquisition, and
+	// the message says which lock failed. Switching to the shared helper would drop
+	// that distinction from the response body.
 	if (r.kind == "lock_unavailable")
 		return errors.error(ctx, "internal_error",
 			sprintf("batch lock unavailable: %s", r.error));
@@ -806,6 +812,17 @@ function dispatch(env) {
 		                                 "ubus unreachable") };
 	}
 
+	// Authentication boundary. Everything routed above this line is reachable without a
+	// bearer token, and today that is exactly three endpoints: `/openapi.json`,
+	// `/healthz`, and anything under `/schema`. An endpoint added above here is public,
+	// whether or not that was the intent, so add new routes below unless the intent is
+	// public and tests/integration asserts it (10_openapi, 02_api_skeleton and
+	// 31_batch4_endpoints each pin one of the three unauthenticated).
+	//
+	// Not the same thing as "nothing happens before auth": the TLS check, the request
+	// body parse and the ubus connect all run above this for every path, so an
+	// unauthenticated caller can also receive tls_required, bad_request or
+	// service_unavailable. See docs/security.md § Public endpoints.
 	let tokens = load_tokens(conn);
 	let now_epoch;
 	try { now_epoch = time(); } catch (_) { now_epoch = null; }

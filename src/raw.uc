@@ -100,8 +100,7 @@ function translate_raw_tx(ctx, result) {
 	if (result.kind == "locked")
 		return errors.locked_from(ctx, null, result);
 	if (result.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-		                    sprintf("transaction lock file not available: %s", result.error));
+		return errors.lock_unavailable(ctx, result.error);
 	if (result.kind == "not_found")
 		return errors.error(ctx, "not_found", result.message);
 	if (result.kind == "conflict")

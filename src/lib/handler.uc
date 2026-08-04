@@ -346,8 +346,7 @@ function translate_tx(ctx, result) {
 	if (result.kind == "locked")
 		return errors.locked_from(ctx, null, result);
 	if (result.kind == "lock_unavailable")
-		return errors.error(ctx, "internal_error",
-		                    sprintf("transaction lock file not available: %s", result.error));
+		return errors.lock_unavailable(ctx, result.error);
 	if (result.kind == "validation")
 		return errors.validation_failed(ctx, build_field_errors(result.errors));
 	if (result.kind == "not_found")

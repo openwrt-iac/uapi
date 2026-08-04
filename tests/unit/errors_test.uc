@@ -180,6 +180,20 @@ t.describe('errors.locked', () => {
 	});
 });
 
+t.describe('errors.lock_unavailable', () => {
+	let ctx = { request_id: "01hx0000000000000000000000" };
+
+	// 500, not the 423 `locked` above: a lock file that cannot be opened is a fault on
+	// this side, not another writer holding it.
+	t.it('is an internal_error carrying the underlying lock error', () => {
+		let r = errors.lock_unavailable(ctx, "Permission denied");
+		t.assert_equal(r.status, 500);
+		t.assert_equal(r.body.code, "internal_error");
+		t.assert_equal(r.body.message,
+		               "transaction lock file not available: Permission denied");
+	});
+});
+
 t.describe('errors.reload_failed_restored', () => {
 	let ctx = { request_id: "01hx0000000000000000000000" };
 

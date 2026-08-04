@@ -150,6 +150,14 @@ function locked_from(ctx, retry_after, result) {
 	              { lock_kind: result.lock_kind, package: result.package });
 }
 
+// A lock file that cannot be opened is an internal fault, not contention: `locked`
+// above is the 423 for a lock someone else holds. Four call sites built this envelope
+// by hand and one of them had drifted, which is the bug fixed in 2.4.1.
+function lock_unavailable(ctx, lock_error) {
+	return error(ctx, "internal_error",
+	             sprintf("transaction lock file not available: %s", lock_error));
+}
+
 function reload_failed_restored(ctx, reload_error) {
 	return error(ctx, "reload_failed_restored",
 	             "Service reload failed; prior configuration has been restored",
@@ -181,6 +189,7 @@ return {
 	validation_failed,
 	locked,
 	locked_from,
+	lock_unavailable,
 	reload_failed_restored,
 	reload_failed_unrecovered,
 	ok,
