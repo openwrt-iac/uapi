@@ -114,11 +114,12 @@ Committed, in rough dependency order:
    from one that reached the kernel. `values.platform_bool` landed alongside it,
    because reading a netifd boolean with `normalize_bool` reported the
    operator's intent rather than netifd's behaviour.
-3. **`disabled` on `network/interfaces`, `network/routes` and `network/rules`**
-   ([#64](https://github.com/openwrt-iac/uapi/issues/64)), gated on netifd's
-   `disabled`-parsing fix reaching a stable OpenWrt tag. Ships if the tag lands
-   in time and slips to 2.6.0 if not, since the interface read is
-   version-sensitive without it.
+3. **Not `disabled` on the network resources**
+   ([#64](https://github.com/openwrt-iac/uapi/issues/64)). Deferred with no
+   target release: the upstream fix it waits on is not pinned by any OpenWrt
+   branch, master included, so there is no date to plan against. See the Features
+   entry for the measurement and for the two alternatives that were weighed and
+   turned down.
 
 Needs a decision before it can be scoped:
 
@@ -197,18 +198,41 @@ carries no wire surface and needs no release to take effect.
   interface configured but not started at boot, `disabled '1'` makes netifd
   ignore the section outright.
 
-  **Waits for a stable OpenWrt tag.** netifd parses the interface flag with a
-  literal compare against `"1"` while route and rule go through the boolean blob
-  converter, which also takes `true` (and only `true`; `on` and `yes` are
+  **Deferred, and the wait is open-ended.** netifd parses the interface flag with
+  a literal compare against `"1"` while route and rule go through the boolean
+  blob converter, which also takes `true` (and only `true`; `on` and `yes` are
   accepted by neither, and uci drops the option instead). So on 25.12.5
   `option disabled 'true'` disables a route or a rule and leaves an interface
   running, and reading it with one truthy parse would report an interface as
   disabled while it is up. That is the same lie as the bug being fixed, inverted.
-  Upstream closed the asymmetry in netifd `e97e36f` (2026-07-16, "config: accept
-  'true' for the interface disabled option"), which is in master and not in any
-  stable release yet. Implementing before that lands would mean either a
-  version-dependent read or replicating the literal compare and flipping its
-  meaning later.
+
+  Upstream closed the asymmetry in netifd `e97e36f`, 2026-07-16, "config: accept
+  'true' for the interface disabled option". Measured 2026-08-04: the
+  `openwrt-25.12` branch pins netifd at `cbb83a18` (2026-02-26) and **master**
+  pins `6088f7b3` (2026-07-08), so the fix is in the netifd repository and not
+  yet pinned by any OpenWrt branch at all. It needs a pin bump in master, then
+  either a backport to 25.12, unlikely for a non-critical parsing fix, or the
+  next feature release. Re-measure those two pins before assuming this is close;
+  do not write a target release here until one of them carries the fix.
+
+  Two alternatives were weighed and turned down, recorded so they are not
+  re-argued from scratch:
+
+  - **Ship routes and rules now, defer interfaces.** They need nothing from
+    upstream, since `values.platform_bool` is exactly right for both netifd
+    versions there. Rejected because it delivers the harmless two thirds and
+    defers the dangerous one, the interface being where disabling takes the
+    addresses, routes and peers with it; because `disabled` on two of three
+    sibling resources is an asymmetry no operator can explain from outside; and
+    because the provider would add attributes twice for one issue.
+  - **Ship all three and let `runtime` carry the disagreement**, the way
+    `effective_proto` already exposes netifd running something other than what
+    uci asked for. Closer to the house pattern, and tempting. Rejected because
+    the signal is weaker than `effective_proto`'s: `disabled: true` with
+    `runtime.up: true` does prove the disagreement, but `disabled: true` with
+    `runtime.up: false` cannot separate disabled-and-honoured from
+    enabled-but-failed, which is the case an operator most needs told apart. If
+    the wait runs long enough to hurt, this is the option to revisit first.
 
   Additive, so a minor bump. `terraform-provider-uapi` needs matching attributes
   on `uapi_network_interface`, `uapi_network_route` and `uapi_network_rule` once
