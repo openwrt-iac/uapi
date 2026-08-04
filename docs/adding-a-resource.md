@@ -37,7 +37,7 @@ return {
     },
 
     // Optional, less common:
-    merge_for_patch: function(existing, existing_json, body) { ... },  // nested-object merge
+    merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
     resolve_for_replace: function(body) { ... },   // PUT only; resolve two wire names for one uci option. See "Mirrored field pairs" below.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
@@ -233,10 +233,12 @@ Examples:
 
 Implementation: `fromUci` masks the field (`key: null` or omit) and
 sets `has_key: section.key != null && section.key != ""`. `toUci`
-passes the field through when present. `merge_for_patch` carries the
-old value forward so an unrelated PATCH (e.g. changing `verb` on an
+passes the field through when present. The framework restores the old
+value after the merge, so an unrelated PATCH (e.g. changing `verb` on an
 openvpn instance) doesn't wipe the credential when the field is absent
-from the request body.
+from the request body. That is `carry_write_only` in `handler.uc`, not
+`merge_for_patch`: the merge only ever sees the masked read view, which
+is why the hook takes no uci section.
 
 Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.

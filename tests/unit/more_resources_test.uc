@@ -821,7 +821,7 @@ t.describe('network.interfaces ipaddr vs ipaddrs', () => {
 	// The default merge folded the read view in, so a PATCH naming only the scalar
 	// arrived carrying the ipaddrs just read and lost to it: 200, nothing changed.
 	t.it('a patch naming only the scalar drops the list read off the server', () => {
-		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
 		                                    { ipaddr: '10.9.9.9' });
 		t.assert_equal(merged.ipaddr, '10.9.9.9');
 		t.assert_equal(merged.ipaddrs, null);
@@ -829,14 +829,14 @@ t.describe('network.interfaces ipaddr vs ipaddrs', () => {
 	});
 
 	t.it('a patch naming only the list drops the stale scalar', () => {
-		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
 		                                    { ipaddrs: ['10.0.0.1', '10.0.0.2'] });
 		t.assert_equal(merged.ipaddr, null);
 		t.assert_deep_equal(ifaces.toUci(merged).ipaddr, ['10.0.0.1', '10.0.0.2']);
 	});
 
 	t.it('a patch naming both keeps both, so the conflict is still caught', () => {
-		let merged = ifaces.merge_for_patch({}, { ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
+		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
 		                                    { ipaddr: '10.9.9.9', ipaddrs: ['192.0.2.4'] });
 		t.assert_equal(length(conflicts({ ...merged, proto: 'static' })), 1);
 	});

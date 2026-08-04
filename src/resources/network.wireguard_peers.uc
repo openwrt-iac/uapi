@@ -96,7 +96,7 @@ function validate(json, conn) {
 	return errs;
 }
 
-function merge_for_patch(existing_section, existing_json, body) {
+function merge_for_patch(existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) {
 		if (type(merged[k]) == "object" && type(body[k]) == "object")
