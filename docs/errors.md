@@ -42,7 +42,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 409  | `unmanaged_resource`            | Tried to write to a section that needs to be adopted first   |
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
 | 412  | `precondition_failed`           | Stale `If-Match` ETag, or JSON Patch `test` op mismatch      |
-| 415  | `unsupported_media_type`        | Body wasn't `application/json` (or `application/json-patch+json` on PATCH) |
+| 415  | `unsupported_media_type`        | Reserved, never returned. See the note below before branching on it |
 | 422  | `validation_failed`             | Body parsed but failed schema or per-field rules             |
 | 423  | `locked`                        | Another write transaction holds a lock on the same package (or the global lock for a non-uci writer); retry. The response message names the specific lock. |
 | 429  | `too_many_requests`             | Per-token rate limit exceeded                                |
@@ -51,6 +51,15 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
+
+`unsupported_media_type` is reserved and never emitted. uapi does not inspect
+`Content-Type` on a request body at all: `text/plain`, or no header, is accepted
+and the write takes effect, so nothing can reach a 415. The code stays in the
+published `ErrorEnvelope.code` enum so a client that already branches on it does
+not have the value disappear, and no operation declares a 415 response. Enforcing
+it later would reject bodies that work today, which makes it a breaking change
+rather than a fix, and `POST /batch` sub-requests carry no per-item media type,
+so any rule could only apply to the outer request.
 
 `batch_partial_failure` is special: it appears only in the body of a
 `POST /batch` abort response, with the HTTP status taken from the failing

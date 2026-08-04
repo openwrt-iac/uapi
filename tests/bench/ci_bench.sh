@@ -1,7 +1,14 @@
 #!/bin/sh
-# CI perf bench: measures per-endpoint latency, emits structured JSON to
-# bench/run-<sha>.json. If bench/baseline.json exists, compares p99 per
-# endpoint and fails on >REGRESSION_PCT% regression (default 25).
+# CI perf bench: measures per-endpoint latency and emits structured JSON to
+# bench/run-<sha>.json. Measurement only in CI today, and deliberately so.
+#
+# The comparison below runs only when bench/baseline.json exists. No such file
+# has ever been committed and no CI step produces one, so in CI this script has
+# always taken the early exit and has never failed a run. Do not read the
+# threshold as calibrated: it was chosen against a baseline that never existed.
+# Committing one is not obviously right either, since a p99 recorded on one
+# GitHub runner class says little on another and the gate would flake rather
+# than catch anything. Whether to gate at all is tracked in docs/roadmap.md.
 set -eu
 
 cd "$(dirname "$0")/../.."
@@ -60,7 +67,7 @@ echo "wrote $OUT"
 cat "$OUT"
 
 if [ ! -f bench/baseline.json ]; then
-	echo "no bench/baseline.json yet; skipping regression check (run will be the seed)"
+	echo "no bench/baseline.json committed: measuring only, nothing is gated here"
 	exit 0
 fi
 

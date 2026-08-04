@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Fixed
 
+- CI no longer advertises checks it does not perform. The perf bench step was named a regression gate and the release process listed it as one, but the comparison it relies on runs only when `bench/baseline.json` exists; no such file has ever been committed and no step produces one, so the check has never executed and a latency regression of any size shipped green. It is now named and documented as measurement, which is what it does, and the threshold is marked uncalibrated rather than left looking tuned. `verify-arch-build`'s comment claimed it proved the APK is byte-identical across host arches and that a release should be held on divergence; it compares no digests and its matrix has no x86_64 leg to compare against. What it does enforce, and what 2.4.1 actually relied on, is that every arch's SDK tarball is pinned by checksum and that the package cross-builds under all three; the comment now says that. `415 unsupported_media_type` was documented as returned when a body is not JSON, but Content-Type is never inspected: `text/plain` and no header at all are both accepted and the write lands. It is now documented as reserved, since enforcing it would reject bodies that work today.
+
 - Booleans owned by netifd are read the way netifd reads them. netifd converts uci strings through uci's own converter, which accepts only `1`/`true` and `0`/`false` and **drops the option** for anything else, falling back to its own default; uapi read them with a helper that also accepts `on`/`yes`/`off`/`no`, so it reported the operator's intent instead of the daemon's behaviour. Concretely `option auto 'no'` on an interface read back as `auto: false` while netifd, having dropped the value, autostarted the interface. The affected reads are `auto`, `nohostroute`, `peerdns`, `defaultroute` and `delegate` on `network/interfaces`, `disabled` and `route_allowed_ips` on `network/wireguard_peers`, `invert` on `network/rules` and `ipv6` on `network/devices`. Only netifd-owned fields changed: fw4 and the shell init helpers do accept the wider set, so reading those the strict way would introduce the same bug mirrored, and `docs/ucode-quirks.md` now carries the per-daemon table. Writes are unchanged and still emit `"1"`/`"0"`, which every reader accepts.
 
 - A wireguard peer's `route_allowed_ips` routes are withdrawn even when the option was spelled `true` in uci. The kernel apply learns which routes the previous configuration installed from the peer's existing uci section, and that read accepted only `"1"`, so a section written by hand or by another tool with `true` was treated as having installed none: shrinking such a peer's `allowed_ips`, or deleting the peer, left its routes in the kernel directing traffic into the tunnel for prefixes it no longer had. Sections written through uapi were never affected, since uapi emits `"1"`/`"0"`.
@@ -550,8 +552,7 @@ entries below. As a contract summary:
   `/metrics`, `/tokens`, `/auth/whoami`, `/diagnostics`).
 - 665 unit tests, property-fuzz at 1000 iterations per resource per CI
   run, integration suite against a real OpenWrt 25.12 VM, soak test
-  with RSS/fd-leak watch, perf-regression gate against
-  `bench/baseline.json`.
+  with RSS/fd-leak watch, per-endpoint latency measurement.
 - Per-package locking with deadlock-free batch acquisition; global
   `with_lock` for non-uci writes only.
 - Optimistic concurrency via ETag + If-Match (header path through a
@@ -933,8 +934,8 @@ package installed. Migration table in `docs/migration-v1-to-v2.md`.
 - **Function-level coverage gate** in CI: ≥80% of lib exports unit-tested,
   100% module-level coverage required.
 - **Soak harness in CI** - short read-only sweep with RSS/fd-growth thresholds.
-- **Performance benchmark gate** - p99 latency baseline per release; CI fails
-  on >25% regression.
+- **Performance benchmark** - per-endpoint p99 measured and reported on every
+  CI run.
 - **Signed-tag verification** required on release tags
   (`.github/allowed-signers`).
 - **Reproducible SDK pin** - SHA256 checksum verified for the OpenWrt SDK

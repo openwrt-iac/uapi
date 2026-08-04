@@ -129,8 +129,10 @@ Per-release steps (operator does these in order):
    suite, so a green local `make test coverage` is necessary but not
    sufficient.
 5. **Open PR, get CI green**: lint + unit + coverage gate + integration +
-   soak (RSS/fd growth thresholds) + bench (p99 regression gate vs
-   `bench/baseline.json`).
+   soak (RSS/fd growth thresholds) + bench. The bench measures and reports
+   per-endpoint p99; it does not gate, because no baseline is committed. Read
+   the numbers in the run log or the `bench-run` artifact if a release is
+   expected to move latency.
 6. **Merge to main**.
 7. **Sign and push the tag**:
    ```
