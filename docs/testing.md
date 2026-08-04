@@ -29,6 +29,21 @@ Every regression in this list has cost a real debug round-trip at some point. Ke
 7. **APK install smoke test.** Fresh OpenWrt 25.12 → `apk add uapi` → init script wires uhttpd → curl works.
 8. **Stock-config compatibility round-trip** (`tests/integration/44_stock_config_test.sh`, 2.3.0+). For every curated CRUD resource whose package ships in the bare OpenWrt image: `GET` the section, adopt it if `managed: false`, `PUT` the body back verbatim, then `GET` again and diff the persistable shape. Singletons follow the same pattern with `PATCH` instead of `PUT` (singletons don't expose PUT, per `handler.make_singleton`). A 422 or a diff surfaces a regression where uapi rejects (or silently mutates) what OpenWrt itself ships. Catches the validation-stricter-than-the-platform class. Scope is limited to bare-image packages (firewall, network, dhcp, dropbear, system); resources from optional packages (snmpd, lldpd, vnstat, mwan3, etc.) are deferred to a follow-up that wires their install at VM-setup time. The test should remain the last-numbered integration test because PUT-self cumulatively rewrites the VM's `/etc/config/*` (`toUci` drops options not in `schema_properties`), and any later test depending on pristine stock state would see drift.
 
+## The read-honesty property
+
+`tests/unit/read_honesty_test.uc` (2.5.0+) is the unit-level statement of principle 4: read a section, write the body back, read again, and nothing may change or be rejected. It runs in two forms because they catch different defects.
+
+- **Body written back verbatim.** Catches a read the write path cannot reproduce. This is how 2.4.0 destroyed write-only credentials: the read masks them, so the body a client echoes cannot carry them, and the write dropped what it could not see.
+- **One field changed first, the rest left as read.** Catches a read whose fields are not independently writable, which the verbatim form structurally cannot see. This is how the `ipaddr` / `ipaddrs` pair became unwritable in 2.4.1: unmodified, the scalar agrees with the list, so the contradiction only appears once the list moves and the previously-read scalar travels beside it. It is also the shape of every real apply.
+
+Both forms were validated by re-introducing the bug they claim to catch, and each catches only its own: neutering `carry_write_only` fails four cases on the verbatim form; neutering `resolve_for_replace` fails one case, and only on the modified form.
+
+The case list cannot go stale, because a companion test derives the at-risk set from the resource modules themselves (any module declaring `writeOnly`, `merge_for_patch`, or `resolve_for_replace`) and fails naming what is uncovered.
+
+Relationship to the stock-config round-trip (layer 8 above): that test runs on a real box against real configuration, which this cannot, but it PUTs verbatim only and covers bare-image packages only. Neither the secret-destruction nor the mirror-field class is reachable from it, since both live in wireguard, wireless and openvpn.
+
+Neither test can see a uci option no resource models at all. PUT deliberately drops unmodelled options, so a view-level comparison cannot detect the loss; that is a curation-completeness question, and layer 8 is what answers it.
+
 ## Lint suite
 
 `make lint` chains these sub-targets:
