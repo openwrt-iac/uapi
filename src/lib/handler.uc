@@ -769,7 +769,41 @@ function make(resource, opts) {
 		return translate_tx(ctx, result);
 	}
 
-	return { list, get_one, create, replace, patch, remove, adopt };
+	// The same pre-validate path a write takes, run over what is already in uci.
+	// Both steps matter and neither is obvious: carry_write_only, or every section
+	// holding a masked secret reports its own secret as missing, which on a
+	// wireguard-heavy router condemns the most important sections on the box; and
+	// check_schema_types, because enum and range constraints live in
+	// schema_properties rather than in validate(), so skipping it would miss a
+	// whole class of tightening while looking thorough.
+	//
+	// carry_write_only makes this the only path that puts a real secret into a body
+	// whose error messages are returned to a caller holding just `:ro`, which the
+	// masked read view never exposes. So no validate() message may interpolate a
+	// writeOnly value; see docs/adding-a-resource.md § Write-only fields.
+	function sweep(conn) {
+		let out = [];
+		conn.uci_foreach(pkg, null, function(s) {
+			if (!type_predicate(s['.type'])) return;
+			let id = s['.name'];
+			let view, errs;
+			try {
+				view = resource.fromUci(s, conn);
+				let body = carry_write_only(resource, view, s);
+				errs = _validate_with_schema(resource, body, body, conn, id);
+			} catch (e) {
+				// A resource that throws on a section it cannot read is itself a
+				// finding, and must not take the whole sweep down with it.
+				errs = [ { field: "", code: "unreadable", message: "" + e } ];
+			}
+			if (length(errs ?? []) > 0)
+				push(out, { id: id, managed: (view != null) ? !!view.managed : null,
+				            errors: errs });
+		});
+		return out;
+	}
+
+	return { list, get_one, create, replace, patch, remove, adopt, sweep };
 }
 
 function make_singleton(resource, opts) {
@@ -861,7 +895,28 @@ function make_singleton(resource, opts) {
 		return translate_tx(ctx, result);
 	}
 
-	return { get, patch };
+	// Same reasoning as the CRUD sweep above; a singleton has one section to check.
+	function sweep(conn) {
+		// By type, via the same finder `get` uses. Looking it up by
+		// singleton_section_name misses every singleton whose uci section is not
+		// called `main`, which includes firewall/defaults.
+		let s = null;
+		try { s = find(conn); } catch (e) { return []; }
+		if (!s) return [];
+		let id = s['.name'] ?? singleton_section_name;
+		let view, errs;
+		try {
+			view = resource.fromUci(s, conn);
+			let body = carry_write_only(resource, view, s);
+			errs = _validate_with_schema(resource, body, body, conn, id);
+		} catch (e) {
+			errs = [ { field: "", code: "unreadable", message: "" + e } ];
+		}
+		if (length(errs ?? []) == 0) return [];
+		return [ { id: id, managed: true, errors: errs } ];
+	}
+
+	return { get, patch, sweep };
 }
 
 function make_collection(resource) {

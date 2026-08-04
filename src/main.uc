@@ -622,7 +622,50 @@ function metrics_response(ctx) {
 	};
 }
 
-function diagnostics_response(ctx) {
+// Opt-in because it walks every section of every package the caller may read and
+// runs the write path's validation over each, which is real work on constrained
+// hardware and /diagnostics is what a monitoring system polls on an interval.
+//
+// Scoped per resource, not just by uapi:diagnostics:ro: the findings carry
+// section names and validation messages that quote configured values, so a
+// diagnostics token must not become a universal config reader. What was left out
+// for want of scope is named rather than silently omitted, or an operator reads
+// an empty result as "nothing wrong" when it means "not allowed to look".
+function validation_sweep(conn, scopes) {
+	let invalid = [], swept = [], skipped = [];
+	let all = {};
+	// Singletons are registered separately and are just as capable of holding a
+	// section a write would now reject, so both registries are swept.
+	for (let k in RESOURCES) all[k] = RESOURCES[k];
+	for (let k in SINGLETONS) all[k] = SINGLETONS[k];
+	let keys = [];
+	for (let k in all) push(keys, k);
+	sort(keys);
+
+	for (let key in keys) {
+		let h = all[key];
+		if (h == null || h.sweep == null) continue;
+		let segments = split(key, ":");
+		if (!scope.permits(scopes, segments, "ro")) { push(skipped, key); continue; }
+		push(swept, key);
+		let found;
+		// A sweep that throws must say so. Swallowing it into an empty list reports
+		// "nothing wrong" for a resource that was never actually checked, which is
+		// the one answer this endpoint must never give.
+		try { found = h.sweep(conn); }
+		catch (e) {
+			found = [ { id: null, managed: null,
+			            errors: [ { field: "", code: "sweep_failed", message: "" + e } ] } ];
+		}
+		for (let f in found ?? [])
+			push(invalid, { resource: replace(key, ":", "/"), id: f.id,
+			                managed: f.managed, errors: f.errors });
+	}
+	return { invalid_sections: invalid, swept_resources: swept,
+	         skipped_for_scope: skipped };
+}
+
+function diagnostics_response(ctx, conn, scopes, want_validate) {
 	let resources_loaded = [];
 	for (let k in RESOURCE_SOURCES) push(resources_loaded, k);
 	sort(resources_loaded);
@@ -646,14 +689,23 @@ function diagnostics_response(ctx) {
 			pkg_held[substr(name, 9, length(name) - 14)] = true;
 	}
 
-	return errors.ok(ctx, {
+	let body = {
 		version: VERSION,
 		uptime_seconds: uptime_s,
 		resources_loaded,
 		lock_state: { global_held, per_package: pkg_held },
 		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
-	});
+	};
+
+	if (want_validate && conn != null) {
+		let sweep = validation_sweep(conn, scopes);
+		body.invalid_sections = sweep.invalid_sections;
+		body.swept_resources = sweep.swept_resources;
+		body.skipped_for_scope = sweep.skipped_for_scope;
+	}
+
+	return errors.ok(ctx, body);
 }
 
 function maybe_304(resp, ctx) {
@@ -834,7 +886,8 @@ function dispatch(env) {
 		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "diagnostics"], "ro",
 			"reading uapi/diagnostics");
 		if (denied != null) return { ctx, token, resp: denied };
-		return { ctx, token, resp: diagnostics_response(ctx) };
+		return { ctx, token,
+		         resp: diagnostics_response(ctx, conn, token.scopes, query.validate == "1") };
 	}
 
 	if (length(parts) >= 1 && parts[0] == "auth") {

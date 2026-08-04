@@ -121,6 +121,9 @@ Committed, in rough dependency order:
    entry for the measurement and for the two alternatives that were weighed and
    turned down.
 
+4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
+   sections a write would now reject, before a write finds them one at a time.
+
 Needs a decision before it can be scoped:
 
 - **Commit-confirmed apply.** The plan under "Needs more reflection" still names
