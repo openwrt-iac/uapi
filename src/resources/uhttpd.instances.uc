@@ -65,11 +65,6 @@ function uapi_prefix_present(json) {
 
 function validate(json, conn, id) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 
 	// Self-lockout protection: refuse a write to the 'main' instance that
 	// would strip uapi's own ucode_prefix entry. Applies to PUT and PATCH

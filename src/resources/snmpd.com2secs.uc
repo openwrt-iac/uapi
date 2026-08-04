@@ -20,11 +20,6 @@ function toUci(json) {
 
 function validate(json) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	if (json.secname == null || json.secname == "")
 		push(errs, { field: "secname", code: "required", message: "is required" });
 	if (json.source == null || json.source == "")

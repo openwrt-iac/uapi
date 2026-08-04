@@ -260,6 +260,35 @@ t.describe('handler.create', () => {
 	});
 });
 
+// The object guard used to be 43 copies inside the resource modules; it is one check in
+// _validate_with_schema now, so it is tested once, here, where it lives. The module-level
+// copies of this assertion in firewall_rules/nat/forwardings went away with them.
+t.describe('handler object guard', () => {
+	t.it('answers 422 invalid_type for a body that is not an object', () => {
+		for (let body in [ "a string", 42, [ "an", "array" ] ]) {
+			let r = rules.create(with_zones(), ctx(), body);
+			t.assert_equal(r.status, 422);
+			t.assert_equal(r.body.errors[0].code, "invalid_type");
+			t.assert_equal(r.body.errors[0].message, "body must be a JSON object");
+		}
+	});
+
+	// The guard deliberately tests the merged body and not the request body, because a
+	// PATCH with an empty body arrives here as null and has always been a no-op. Guarding
+	// the request body instead would turn it into a 422.
+	t.it('leaves an empty PATCH body a no-op rather than a 422', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_guard = {
+			'.type': 'rule', '.anonymous': false,
+			target: 'ACCEPT', src: 'wan', dest_port: ['22'], proto: ['tcp'],
+		};
+		let r = rules.patch(c, ctx(), 'r_guard', null);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.target, 'ACCEPT');
+		t.assert_equal(r.body.match.src_zone, 'wan');
+	});
+});
+
 t.describe('handler.replace', () => {
 	function with_existing() {
 		let c = with_zones();

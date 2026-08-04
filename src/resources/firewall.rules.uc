@@ -134,12 +134,6 @@ function check_target_coupling(json, errs) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
-
 	if (json.target == null)
 		push(errs, { field: "target", code: "required", message: "is required" });
 

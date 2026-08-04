@@ -32,11 +32,6 @@ function _load_iface_names(conn) {
 
 function validate(json, conn) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	if (json.interface == null || json.interface == "") {
 		push(errs, { field: "interface", code: "required", message: "is required" });
 	} else if (conn != null) {

@@ -197,11 +197,6 @@ function resolve_for_replace(body) {
 function validate(json, conn, id) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type", message: "body must be a JSON object" });
-		return errs;
-	}
-
 	// `ipaddr` and `ipaddrs` are two wire names for the same `list ipaddr`, and
 	// toUci prefers the list whenever it is non-empty. A body carrying both, with
 	// the scalar naming a different address, is a contradiction: half of it was

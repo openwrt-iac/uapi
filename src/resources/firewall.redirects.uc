@@ -73,11 +73,6 @@ function toUci(json) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type", message: "body must be a JSON object" });
-		return errs;
-	}
-
 	let m = json.match ?? {};
 	if (type(m) != "object") {
 		push(errs, { field: "match", code: "invalid_type", message: "must be an object" });

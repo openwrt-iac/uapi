@@ -249,6 +249,17 @@ check_schema_types = function(schema_properties, body, prefix) {
 // checking the merge would falsely 422 on any patch that didn't touch the
 // integer field. Schema-check the delta only.
 function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
+	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
+	// module that forgot it would fault instead of returning 422. It is a guarantee here
+	// now: validate() is only ever called with an object.
+	//
+	// It has to test validate_body and not schema_body. At the two merge-patch call sites
+	// schema_body is the raw PATCH body, which is legitimately null when the request body
+	// is empty; check_schema_types already returns [] for a non-object, so such a PATCH is
+	// a no-op today, and guarding schema_body would start answering 422 instead.
+	if (type(validate_body) != "object")
+		return [ { field: "", code: "invalid_type",
+		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
 	let val_errs = resource.validate(validate_body, conn, id);
 	let seen = {};

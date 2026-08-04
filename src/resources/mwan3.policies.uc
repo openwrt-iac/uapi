@@ -36,11 +36,6 @@ function _load_member_names(conn) {
 
 function validate(json, conn) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	if (type(json.use_members) != "array" || length(json.use_members) == 0) {
 		push(errs, { field: "use_members", code: "required",
 		             message: "must list at least one mwan3:members entry" });
