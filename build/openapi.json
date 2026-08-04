@@ -22256,8 +22256,13 @@
 					"tag": {
 						"type": [
 							"string",
+							"array",
 							"null"
-						]
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "dnsmasq tags for this reservation; a request must match all of them. Send an array; a space-separated string is accepted and reads back as one until v3"
 					},
 					"dns": {
 						"type": "boolean",

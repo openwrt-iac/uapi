@@ -110,12 +110,14 @@ Committed, in rough dependency order:
    changes". The `ipaddr` case carries no `deprecated: true` flag on purpose; the
    reasoning is in the deprecations log.
 
-   `tag` carries work for this release beyond the announcement, because the
-   schema currently promises a string the resource does not always return: a
-   `list tag`, which is what LuCI writes, already reads back as an array. So the
-   minor also widens writes to accept either shape while persisting `list tag`,
-   and corrects the schema to the union actually emitted. Both are additive; only
-   narrowing the read to array-only waits for v3.
+   `tag` carried work beyond the announcement, because the schema promised a
+   string the resource does not always return: a `list tag`, which is what LuCI
+   writes, already read back as an array. Done: the schema declares the union
+   actually emitted, and the field is type-checked, which it never was. Writes
+   persist the shape they were given rather than normalizing to `list tag`, since
+   normalizing would make a body written back unchanged come back changed; v3
+   reconciles the two shapes on the read side instead. Only that narrowing waits
+   for the major.
 2. **Kernel-apply reporting.** Done: `X-Kernel-Status` and `X-Kernel-Applied`,
    mirroring the reload pair. Closes the gap the kernel apply left, where a
    client writing a peer to a down tunnel got a `200` it could not distinguish

@@ -58,11 +58,22 @@ before the major that makes them.
   preference. v3 settles the field on `["array", "null"]`, matching both the
   semantics and LuCI.
 
-  Two halves of this do not need the major and should land in the minor that
-  announces it: writes accept either shape and always persist `list tag`, so
-  stored configuration converges early; and the schema stops promising a string
-  it does not always return. Neither changes what an existing client receives for
-  configuration it already round-trips.
+  Two halves of this did not need the major and have landed ahead of it. The
+  schema declares the union the resource actually returns,
+  `["string", "array", "null"]`, so a generated client stops being wrong about
+  the list case. And the field is type-checked for the first time, which is what
+  stops an object or a number reaching uci as an option value; that half is a
+  tightening under the `docs/versioning.md` carve-out, since the payloads it now
+  rejects could only ever have produced configuration no caller could rely on.
+
+  Writes deliberately persist the shape they were given instead of normalizing
+  every write to `list tag`. Normalizing looks tidier and was the original plan,
+  but it would convert a stored scalar the first time any client wrote the
+  section back, so a body read and written back unchanged would come back
+  changed, which is the one thing the read-honesty property forbids. Storage does
+  not need to converge for the v3 read in any case: splitting a stored scalar on
+  the read side arrives at the same place without rewriting configuration nobody
+  asked us to touch.
 
 ## Removed in past releases
 
