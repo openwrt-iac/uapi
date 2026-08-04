@@ -235,6 +235,62 @@ parent uhttpd VM. Scope: `uapi:diagnostics:ro`.
 }
 ```
 
+### Finding sections a write would reject (`?validate=1`)
+
+`GET /api/v2/diagnostics?validate=1` adds a validation sweep: every section of
+every resource the token may read is run through the same path a write takes, and
+the ones that would be rejected are reported with the reason.
+
+```json
+{
+  "invalid_sections": [
+    { "resource": "firewall/rules", "id": "sweepbad", "managed": true,
+      "errors": [ { "field": "match.proto", "code": "conflict",
+                    "message": "firewall4 keeps a port match only on tcp or udp, so this rule would match the whole protocol instead" } ] }
+  ],
+  "swept_resources": ["firewall:defaults", "firewall:rules", "..."],
+  "skipped_for_scope": []
+}
+```
+
+It answers "which sections on this router will stop being accepted" before an
+upgrade, rather than one `422` at a time during a write. Every section it reports
+is already broken on the router: the rule above is already matching a whole
+protocol rather than a port. The sweep is the first time anyone is told.
+
+Three things worth knowing:
+
+- **Opt-in on purpose.** Each resource walks its own uci package, so a package is
+  traversed once per resource that lives in it, six times for `firewall` and
+  `network`. The cost therefore scales with the number of sections in the
+  configuration, not with a fixed overhead: 43 resources over a stock-sized
+  configuration measured about 90 ms, and a router with a large firewall will be
+  slower. `/diagnostics` is what a monitoring system polls on an interval, so
+  without `?validate=1` the response is unchanged and costs nothing extra.
+- **Scoped per resource.** The endpoint needs `uapi:diagnostics:ro`, and each
+  resource is included only if the token also permits `:ro` on it, because the
+  findings name sections and quote configured values. A token with only
+  `uapi:diagnostics:ro` therefore sweeps nothing, which is why
+  `skipped_for_scope` exists: an empty `invalid_sections` with a long
+  `skipped_for_scope` means "not allowed to look", not "nothing wrong".
+- **Read-only and side-effect free**, so it is safe to run against production,
+  which is exactly when it is most wanted.
+
+One finding shape differs. If a resource's sweep itself fails, the entry reports
+`code: "sweep_failed"` with `id` and `managed` both `null`, because there is no
+section to name:
+
+```json
+{ "resource": "firewall/rules", "id": null, "managed": null,
+  "errors": [ { "field": "", "code": "sweep_failed", "message": "..." } ] }
+```
+
+That is deliberately a finding rather than a failed request: a resource that could
+not be checked must not be reported as clean.
+
+`dhcp/leases` and `dhcp/leases6` are not swept. They are read-only views of
+daemon state with no validation to run.
+
 The `recent_errors` ring is best-effort: writes to `/tmp/uapi-error-ring/`
 must never disrupt the actual response, so a disk-full or permission
 failure simply produces an empty ring rather than a 5xx on the original

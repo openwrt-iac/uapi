@@ -241,6 +241,14 @@ from the request body.
 Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.
 
+**Never interpolate a write-only value into a `validate()` message.** The
+validation sweep behind `GET /diagnostics?validate=1` restores masked secrets
+before validating, because otherwise every section holding one reports its own
+secret as missing. That makes error messages the one channel where a real secret
+can reach a caller who holds only `:ro` on the resource and can never see it
+through a `GET`. Name the field and describe the expected shape
+("must be a 44-char base64 WireGuard private key"), never the value.
+
 ### Mirrored field pairs
 
 When one uci option is exposed under two wire names, every write path has

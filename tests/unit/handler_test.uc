@@ -1329,3 +1329,143 @@ t.describe('handler kernel-apply headers', () => {
 		t.assert_equal(r.headers["X-Kernel-Applied"], null);
 	});
 });
+
+// The sweep exists so an operator can find sections a write would reject before
+// a write finds them. It has to be the write path, not a simplified copy of it.
+t.describe('handler.sweep', () => {
+	let ifaces_mod = loadfile('src/resources/network.interfaces.uc')();
+	let ifaces = handler.make(ifaces_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+
+	t.it('reports nothing for a section a write would accept', () => {
+		let c = ubus.stub({ uci: { network: {
+			lan: { '.type': 'interface', '.anonymous': false,
+			       proto: 'static', ipaddr: '192.168.1.1', netmask: '255.255.255.0' },
+		} } });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+	});
+
+	t.it('reports a section a write would reject, with the reason', () => {
+		let c = ubus.stub({ uci: { network: {
+			broken: { '.type': 'interface', '.anonymous': false, proto: 'nonsense' },
+		} } });
+		let found = ifaces.sweep(c);
+		t.assert_equal(length(found), 1);
+		t.assert_equal(found[0].id, 'broken');
+		let codes = [];
+		for (let e in found[0].errors) push(codes, e.field + ":" + e.code);
+		t.assert_true(length(codes) > 0);
+	});
+
+	// The constraint that is invisible from the outside: the read view masks
+	// write-only secrets, so validating it naively reports every secret-holding
+	// section as missing its own secret. On a wireguard-heavy router that
+	// condemns the most important sections on the box.
+	t.it('does not flag a wireguard interface whose key is set but masked on read', () => {
+		let c = ubus.stub({ uci: { network: {
+			wg0: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+			       addresses: ['10.9.0.1/24'],
+			       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=' },
+		} } });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+	});
+
+	// Enum and range constraints live in schema_properties, enforced by
+	// check_schema_types rather than validate(), so a sweep that ran only
+	// validate() would miss a whole class of tightening while looking thorough.
+	t.it('catches a schema-level violation, not just validate() failures', () => {
+		let ovpn_mod = loadfile('src/resources/openvpn.instances.uc')();
+		let ovpn = handler.make(ovpn_mod, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let c = ubus.stub({ uci: { openvpn: {
+			vpn0: { '.type': 'openvpn', '.anonymous': false, enabled: '1', proto: 'carrier-pigeon' },
+		} } });
+		let found = ovpn.sweep(c);
+		t.assert_equal(length(found), 1);
+		let seen = false;
+		for (let e in found[0].errors)
+			if (e.code == "not_in_enum") seen = true;
+		t.assert_true(seen);
+	});
+
+	// A resource that throws on a section it cannot read is itself a finding, and
+	// must not take the rest of the sweep down with it.
+	t.it('turns a throwing resource into a finding rather than an exception', () => {
+		let angry = {
+			package: "network", type: "interface",
+			fromUci: function() { die("cannot read this section"); },
+			toUci: function(j) { return {}; },
+			validate: function() { return []; },
+			schema_properties: {},
+		};
+		let h = handler.make(angry, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let c = ubus.stub({ uci: { network: {
+			lan: { '.type': 'interface', '.anonymous': false, proto: 'static' },
+		} } });
+		let found = h.sweep(c);
+		t.assert_equal(length(found), 1);
+		t.assert_equal(found[0].errors[0].code, "unreadable");
+	});
+
+	t.it('reports an anonymous section as unmanaged rather than skipping it', () => {
+		let c = ubus.stub({ uci: { network: {
+			cfg0abc: { '.type': 'interface', '.anonymous': true, proto: 'nonsense' },
+		} } });
+		let found = ifaces.sweep(c);
+		t.assert_equal(length(found), 1);
+		t.assert_false(found[0].managed);
+	});
+});
+
+// The singleton sweep is a separate code path from the CRUD one and was, at one
+// point, dead: written, registered nowhere, and reachable only through a caller
+// that swallows exceptions. Both halves are covered here so a throw or a wrong
+// binding cannot masquerade as "nothing wrong".
+t.describe('handler.make_singleton sweep', () => {
+	let defaults_mod = loadfile('src/resources/firewall.defaults.uc')();
+	let defaults = handler.make_singleton(defaults_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+
+	t.it('reports nothing for a singleton a write would accept', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			defaults: { '.type': 'defaults', '.anonymous': false,
+			            input: 'ACCEPT', output: 'ACCEPT', forward: 'REJECT' },
+		} } });
+		t.assert_deep_equal(defaults.sweep(c), []);
+	});
+
+	t.it('reports a singleton a write would reject', () => {
+		let c = ubus.stub({ uci: { firewall: {
+			defaults: { '.type': 'defaults', '.anonymous': false,
+			            input: 'MAYBE', output: 'ACCEPT', forward: 'REJECT' },
+		} } });
+		let found = defaults.sweep(c);
+		t.assert_equal(length(found), 1);
+		t.assert_equal(found[0].id, 'defaults');
+		let seen = false;
+		for (let e in found[0].errors)
+			if (e.field == "input") seen = true;
+		t.assert_true(seen);
+	});
+
+	t.it('reports nothing when the section is absent rather than throwing', () => {
+		t.assert_deep_equal(defaults.sweep(ubus.stub({ uci: { firewall: {} } })), []);
+	});
+});
