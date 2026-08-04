@@ -31,8 +31,9 @@ Target platform: **OpenWrt 25.12+** (apk-based releases).
 Signed APK feed (recommended):
 
 ```sh
-curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem \
-    > /etc/apk/keys/uapi-feed.pub.pem
+# uclient-fetch ships with OpenWrt; curl does not, so it is used here
+uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
+    https://openwrt-iac.github.io/feed/uapi-feed.pub.pem
 echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
     > /etc/apk/repositories.d/uapi.list
 apk update && apk add uapi

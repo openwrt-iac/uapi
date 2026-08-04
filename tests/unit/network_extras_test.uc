@@ -211,6 +211,8 @@ t.describe('network.interfaces wireguard addresses accept both families', () => 
 		for (let e in errs) if (e.field == "ipaddr" && e.code == "invalid_format") found = true;
 		t.assert_true(found);
 	});
+});
+
 // The resource-level dns guard was deleted because its condition
 // (!is_valid_ipv4(x) && type(x) != "string") could only ever fire for a non-string,
 // which the central items:{type:"string"} check already rejects with a better message.

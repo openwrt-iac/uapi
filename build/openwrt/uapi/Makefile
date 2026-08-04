@@ -77,11 +77,14 @@ cat <<EOF
 
 uapi installed. Bootstrap:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
-  2. Verify reachable:  curl -H "Authorization: Bearer <token>" https://<router>/api/v2/system
+  2. Verify reachable:  uclient-fetch -qO - --no-check-certificate \
+                          --header="Authorization: Bearer <token>" \
+                          https://127.0.0.1/api/v2/system
   3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v2/openapi.json)
 
 Future upgrades from the project feed:
-  curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem > /etc/apk/keys/uapi-feed.pub.pem
+  uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
+    https://openwrt-iac.github.io/feed/uapi-feed.pub.pem
   echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' > /etc/apk/repositories.d/uapi.list
   apk update && apk upgrade uapi
 
