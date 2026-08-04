@@ -493,8 +493,6 @@ t.describe('network.interfaces proto=dhcpv6 client fields', () => {
 	});
 });
 
-let redirects = loadfile('src/resources/firewall.redirects.uc')();
-
 t.describe('firewall.redirects reflection', () => {
 	t.it('fromUci surfaces reflection as null when uci has nothing set (preserves daemon default on PATCH)', () => {
 		let r = redirects.fromUci({
