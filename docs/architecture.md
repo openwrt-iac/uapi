@@ -121,7 +121,11 @@ without uci state change.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. Runs only after the reload returned zero, and reports the
-   same way, so a failure here follows the recipe below.
+   same way, so a failure here follows the recipe below. The interfaces actually
+   applied are recorded and reported on the response as `X-Kernel-Status` and
+   `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
+   leaves the peer in uci alone and a caller otherwise cannot tell that from a
+   write that reached the kernel.
 8. **On reload or apply non-zero:** `uci_import(<package>, snapshot)` →
    `uci_commit(<package>)` → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the

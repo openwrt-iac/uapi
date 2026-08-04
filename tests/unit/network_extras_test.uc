@@ -148,3 +148,32 @@ t.describe('network.bridge_vlans.validate', () => {
 		t.assert_equal(length(errs), 0);
 	});
 });
+
+// netifd drops a boolean it cannot parse and falls back to its own default, so a
+// read has to report what netifd will do rather than what the operator wrote.
+// `option auto 'no'` used to read back as false while the interface autostarted.
+t.describe('network.interfaces netifd boolean fidelity', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	function auto_of(val) {
+		let s = { '.name': 'lan', '.anonymous': false, proto: 'static' };
+		if (val != null) s.auto = val;
+		return ifaces.fromUci(s, null).auto;
+	}
+
+	t.it('honours the spellings netifd accepts', () => {
+		t.assert_equal(auto_of('0'), false);
+		t.assert_equal(auto_of('false'), false);
+		t.assert_equal(auto_of('1'), true);
+		t.assert_equal(auto_of('true'), true);
+	});
+
+	t.it('reports the netifd default for a value netifd drops', () => {
+		t.assert_equal(auto_of('no'), true);
+		t.assert_equal(auto_of('off'), true);
+		t.assert_equal(auto_of('disabled'), true);
+	});
+
+	t.it('still defaults to true when the option is absent', () => {
+		t.assert_equal(auto_of(null), true);
+	});
+});

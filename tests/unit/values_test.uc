@@ -20,6 +20,34 @@ t.describe('values.normalize_bool', () => {
 	});
 });
 
+// netifd takes only these four spellings and drops the option for anything else,
+// so a value it ignores has to read back as the daemon's default rather than as
+// what the operator wrote. normalize_bool is deliberately looser and stays that
+// way for fw4 and the shell helpers, which do accept the wider set.
+t.describe('values.platform_bool', () => {
+	t.it('honours the spellings netifd accepts', () => {
+		for (let s in [true, "1", "true"])
+			t.assert_equal(v.platform_bool(s, false), true);
+		for (let s in [false, "0", "false"])
+			t.assert_equal(v.platform_bool(s, true), false);
+	});
+
+	// The divergence that made this helper necessary: `option auto 'no'` had uapi
+	// reporting false while netifd dropped the option and autostarted anyway.
+	t.it('returns the default for spellings netifd drops', () => {
+		for (let s in ["on", "yes", "enabled"])
+			t.assert_equal(v.platform_bool(s, false), false);
+		for (let s in ["off", "no", "disabled"])
+			t.assert_equal(v.platform_bool(s, true), true);
+	});
+
+	t.it('returns the default for null and for junk', () => {
+		t.assert_equal(v.platform_bool(null, true), true);
+		t.assert_equal(v.platform_bool("maybe", false), false);
+		t.assert_equal(v.platform_bool(42, "x"), "x");
+	});
+});
+
 t.describe('values.as_list', () => {
 	t.it('returns the array as-is when already an array', () => {
 		t.assert_deep_equal(v.as_list(["a", "b"]), ["a", "b"]);

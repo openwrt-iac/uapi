@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let as_int = values.as_int;
@@ -20,7 +20,7 @@ function fromUci(section) {
 		lookup: as_int(section.lookup),
 		goto: as_int(section['goto']),
 		action: section.action ?? "lookup",
-		invert: normalize_bool(section.invert, false),
+		invert: platform_bool(section.invert, false),
 		mark: section.mark ?? null,
 		runtime: {},
 	};

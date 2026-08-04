@@ -454,3 +454,88 @@ t.describe('transaction, per-package + global flock layout', () => {
 		t.assert_true(type(h) == "object" && h.unavailable != null);
 	});
 });
+
+// A write that reached the kernel and one that only reached uci both answer 200,
+// so the result has to say which happened. Skipping is normal: a down interface
+// holds no peer state and ifup reads the peers from uci.
+t.describe('transaction kernel_status', () => {
+	function applier(names) {
+		return function(c, o, applied) {
+			for (let n in names) push(applied, n);
+			return null;
+		};
+	}
+
+	function run(ops_to_add, apply_fn) {
+		let conn = ubus.stub({ uci: { fw: {} } });
+		let ops = [];
+		return tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: ops, wg_apply: apply_fn,
+			fn: function(c, pkg) {
+				for (let o in ops_to_add) push(ops, o);
+				return { ok: true, body: {} };
+			},
+		}));
+	}
+
+	t.it('reports no_kernel when the write collected no kernel operations', () => {
+		let r = run([], applier([]));
+		t.assert_true(r.ok);
+		t.assert_equal(r.kernel_status, "no_kernel");
+		t.assert_deep_equal(r.kernel_applied, []);
+	});
+
+	t.it('reports ok and names the interface when every target was applied', () => {
+		let r = run([{ iface: "wg0", action: "set" }], applier(["wg0"]));
+		t.assert_equal(r.kernel_status, "ok");
+		t.assert_deep_equal(r.kernel_applied, ["wg0"]);
+	});
+
+	t.it('reports skipped when a target existed and none was applied', () => {
+		let r = run([{ iface: "wg0", action: "set" }], applier([]));
+		t.assert_equal(r.kernel_status, "skipped");
+		t.assert_deep_equal(r.kernel_applied, []);
+	});
+
+	t.it('reports partial when one of two interfaces was down', () => {
+		let r = run([{ iface: "wg0", action: "set" }, { iface: "wg1", action: "set" }],
+		            applier(["wg0"]));
+		t.assert_equal(r.kernel_status, "partial");
+		t.assert_deep_equal(r.kernel_applied, ["wg0"]);
+	});
+
+	// Two peers on one tunnel are one target, not two, or a multi-peer write to a
+	// single up interface would report partial.
+	t.it('counts interfaces rather than operations', () => {
+		let r = run([{ iface: "wg0", action: "set" }, { iface: "wg0", action: "remove", public_key: "k" }],
+		            applier(["wg0"]));
+		t.assert_equal(r.kernel_status, "ok");
+	});
+});
+
+// The applied list is recorded on the up/down decision, so it can name an
+// interface whose later operation failed. That must never surface: a failed apply
+// routes into the restore recipe, whose result carries no kernel fields at all.
+t.describe('transaction kernel fields on a failed apply', () => {
+	t.it('reports no kernel status or applied list when the apply failed', () => {
+		let conn = ubus.stub({ uci: { fw: {} } });
+		let ops = [];
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			wg_ops: ops,
+			wg_apply: function(c, o, applied) {
+				push(applied, "wg0");
+				return "wg set on wg0 failed: bad endpoint";
+			},
+			fn: function(c, pkg) {
+				push(ops, { iface: "wg0", action: "set" });
+				return { ok: true, body: {} };
+			},
+		}));
+		t.assert_false(r.ok);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(r.kernel_status, null);
+		t.assert_equal(r.kernel_applied, null);
+	});
+});

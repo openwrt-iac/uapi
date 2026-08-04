@@ -331,6 +331,10 @@ function attach_reload_headers(resp, result) {
 		resp.headers["X-Reload-Status"] = result.reload_status;
 	if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
 		resp.headers["X-Reload-Services"] = join(",", result.reload_services);
+	if (result.kernel_status != null)
+		resp.headers["X-Kernel-Status"] = result.kernel_status;
+	if (type(result.kernel_applied) == "array" && length(result.kernel_applied) > 0)
+		resp.headers["X-Kernel-Applied"] = join(",", result.kernel_applied);
 	return resp;
 }
 

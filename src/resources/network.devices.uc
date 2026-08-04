@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_list = values.as_list;
 let as_int = values.as_int;
 
@@ -20,7 +20,7 @@ function fromUci(section) {
 		ifname: section.ifname ?? null,
 		mtu: as_int(section.mtu),
 		macaddr: section.macaddr ?? null,
-		ipv6: normalize_bool(section.ipv6, true),
+		ipv6: platform_bool(section.ipv6, true),
 		runtime: {},
 	};
 }

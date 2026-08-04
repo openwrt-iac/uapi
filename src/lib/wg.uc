@@ -54,7 +54,7 @@ function peer_sections(conn, iface) {
 		if (s['.type'] != want) return;
 		// A disabled peer is one netifd omits when it builds the config, so the
 		// kernel should not carry it either.
-		if (s.disabled == "1" || s.disabled == "true") return;
+		if (values.platform_bool(s.disabled, false)) return;
 		push(out, s);
 	});
 	return out;
@@ -167,7 +167,7 @@ function routes_from(allowed_ips, enabled) {
 
 function peer_routes(section) {
 	return routes_from(to_peer(section).allowed_ips,
-	                   section.route_allowed_ips == "1" || section.route_allowed_ips == "true");
+	                   values.platform_bool(section.route_allowed_ips, false));
 }
 
 // netifd puts an interface's routes in ip4table / ip6table when those are set,
@@ -330,13 +330,24 @@ function reconcile(conn, interfaces) {
 // ops are {iface, action: "set"|"remove", ...peer fields}, in the order the
 // request produced them, so a batch that touches one peer twice ends on its last
 // state.
-function apply(conn, ops) {
+// `applied` collects the interfaces this call found live and therefore applied
+// to, so the response can say which ones a write reached. Recorded on the
+// up/down decision rather than per operation: the two only differ when an
+// operation fails, and a failure returns an error, which routes the request into
+// the restore recipe whose result carries no kernel fields at all. Skipping is
+// normal rather than a failure, and without this the caller cannot tell a write
+// that landed in the kernel from one that only landed in uci.
+function apply(conn, ops, applied) {
 	let up = {};
 	for (let op in ops) {
 		let iface = op.iface;
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE))
 			return sprintf("refusing to apply to interface %J", iface);
-		if (up[iface] == null) up[iface] = is_up(conn, iface);
+		if (up[iface] == null) {
+			up[iface] = is_up(conn, iface);
+			if (up[iface] && type(applied) == "array")
+				push(applied, iface);
+		}
 		if (!up[iface]) continue;
 
 		let previous = routes_from(op.prev_allowed_ips, op.prev_route_allowed_ips);

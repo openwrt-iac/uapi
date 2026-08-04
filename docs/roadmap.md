@@ -108,10 +108,12 @@ Committed, in rough dependency order:
    change recorded under "Announced response-shape changes". The `ipaddr` case
    carries no `deprecated: true` flag on purpose; the reasoning is in the
    deprecations log.
-2. **`X-Kernel-Applied` response header.** Held out of 2.4.1 only because a new
-   header is additive. It closes the one gap the kernel apply left: a client
-   writing a peer to a down tunnel gets a `200` it cannot distinguish from one
-   that reached the kernel. Details under Features below.
+2. **Kernel-apply reporting.** Done: `X-Kernel-Status` and `X-Kernel-Applied`,
+   mirroring the reload pair. Closes the gap the kernel apply left, where a
+   client writing a peer to a down tunnel got a `200` it could not distinguish
+   from one that reached the kernel. `values.platform_bool` landed alongside it,
+   because reading a netifd boolean with `normalize_bool` reported the
+   operator's intent rather than netifd's behaviour.
 3. **`disabled` on `network/interfaces`, `network/routes` and `network/rules`**
    ([#64](https://github.com/openwrt-iac/uapi/issues/64)), gated on netifd's
    `disabled`-parsing fix reaching a stable OpenWrt tag. Ships if the tag lands
@@ -133,16 +135,6 @@ announcement lands here, the removal is v3), and anything under Hardening, which
 carries no wire surface and needs no release to take effect.
 
 ## Features (additive, future minor bumps in v2.x)
-
-- **`X-Kernel-Applied` response header.** The kernel-apply step added in 2.4.1
-  (`docs/architecture.md` § Transaction recipe, step 7) skips an interface that
-  is down or that netifd does not know, since there is no kernel state to sync
-  and `ifup` reads the peers from uci anyway. That means a client writing a peer
-  to a down tunnel gets a `200` whose config is in uci but not in the kernel,
-  with no way to tell it apart from a `200` that did reach the kernel. A header
-  naming what was actually applied, mirroring `X-Reload-Services`, closes that.
-  Held out of 2.4.1 because a new header is additive wire surface, which
-  `docs/versioning.md` puts outside a patch release.
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
@@ -207,7 +199,8 @@ carries no wire surface and needs no release to take effect.
 
   **Waits for a stable OpenWrt tag.** netifd parses the interface flag with a
   literal compare against `"1"` while route and rule go through the boolean blob
-  converter, which also takes `true`, `on` and `yes`. So on 25.12.5
+  converter, which also takes `true` (and only `true`; `on` and `yes` are
+  accepted by neither, and uci drops the option instead). So on 25.12.5
   `option disabled 'true'` disables a route or a rule and leaves an interface
   running, and reading it with one truthy parse would report an interface as
   disabled while it is up. That is the same lie as the bug being fixed, inverted.
