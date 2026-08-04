@@ -211,4 +211,26 @@ t.describe('network.interfaces wireguard addresses accept both families', () => 
 		for (let e in errs) if (e.field == "ipaddr" && e.code == "invalid_format") found = true;
 		t.assert_true(found);
 	});
+// The resource-level dns guard was deleted because its condition
+// (!is_valid_ipv4(x) && type(x) != "string") could only ever fire for a non-string,
+// which the central items:{type:"string"} check already rejects with a better message.
+// This is the assertion that makes that deletion safe to have made.
+t.describe('network.interfaces dns items stay type-checked centrally', () => {
+	let handler = require('handler');
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+
+	t.it('rejects a non-string dns entry', () => {
+		let errs = handler.check_schema_types(ifaces.schema_properties,
+		                                     { proto: 'static', dns: [42] });
+		let found = false;
+		for (let e in errs)
+			if (e.field == "dns[0]" && e.code == "invalid_type") found = true;
+		t.assert_true(found);
+	});
+
+	t.it('accepts a string dns entry', () => {
+		let errs = handler.check_schema_types(ifaces.schema_properties,
+		                                     { proto: 'static', dns: ['1.1.1.1'] });
+		t.assert_equal(length(errs), 0);
+	});
 });

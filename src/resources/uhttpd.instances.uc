@@ -84,17 +84,6 @@ function validate(json, conn, id) {
 	return errs;
 }
 
-function merge_for_patch(existing_section, existing_json, body) {
-	let merged = { ...existing_json };
-	for (let k in body) {
-		if (type(merged[k]) == "object" && type(body[k]) == "object")
-			merged[k] = { ...merged[k], ...body[k] };
-		else
-			merged[k] = body[k];
-	}
-	return merged;
-}
-
 return {
 	package: "uhttpd",
 	type: "uhttpd",
@@ -103,7 +92,6 @@ return {
 	toUci: toUci,
 	validate: validate,
 	openapi_singular: "uhttpd instance",
-	merge_for_patch: merge_for_patch,
 	schema_properties: {
 		listen_http:     { type: "array", items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
 		listen_https:    { type: "array", items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },

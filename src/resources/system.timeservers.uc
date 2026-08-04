@@ -39,10 +39,6 @@ function validate(json) {
 	if (!use_dhcp && length(servers) == 0)
 		push(errs, { field: "server", code: "required",
 		             message: "at least one NTP server is required when use_dhcp is false" });
-	let want_server = (json.enable_server == null) ? false : !!json.enable_server;
-	if (want_server && length(servers) == 0 && !use_dhcp)
-		push(errs, { field: "server", code: "required",
-		             message: "enable_server=true with no upstream servers is unworkable" });
 	return errs;
 }
 

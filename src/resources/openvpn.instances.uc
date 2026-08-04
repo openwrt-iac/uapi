@@ -2,7 +2,6 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 let as_int = values.as_int;
-let is_valid_cidr = values.is_valid_cidr;
 let is_valid_ip = values.is_valid_ip;
 
 // openvpn's --proto takes a family-agnostic form plus explicit v4 and v6
@@ -18,7 +17,6 @@ const VALID_PROTO = {
 	"udp6": true, "tcp6": true, "tcp6-client": true, "tcp6-server": true,
 };
 const VALID_DEV   = { "tun": true, "tap": true };
-const VALID_TLS   = { "tls-server": true, "tls-client": true, "tls-auth": true };
 // Filesystem paths on the router. The shape excludes shell meta + relative
 // paths so a malformed value cannot break out of /etc/openvpn or smuggle
 // arguments past the daemon's argv handling.

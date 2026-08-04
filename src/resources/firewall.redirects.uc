@@ -12,10 +12,9 @@ const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 // `config redirect`; the rest are scalars, and its parse_opt refuses a list
 // outright, discarding the whole section. These stay arrays on the wire
 // (changing the type would break clients) but may carry at most one value.
-const SCALAR_MATCH_KEYS = {
-	src_ip: "src_ip", src_port: "src_port", src_dport: "src_dport",
-	src_dip: "src_dip", dest_ip: "dest_ip", dest_port: "dest_port",
-};
+const SCALAR_MATCH_KEYS = [
+	"src_ip", "src_port", "src_dport", "src_dip", "dest_ip", "dest_port",
+];
 
 function is_set(v) {
 	return type(v) == "string" && v != "";
