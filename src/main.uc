@@ -394,7 +394,7 @@ function if_none_match_matches(if_none_match, current_etag) {
 // digests) become `<id>`; named segments (resource, package, sub) pass
 // through. Without this, `uapi_requests_total` would grow unbounded as
 // clients create resources.
-function path_template(method, parts) {
+function path_template(parts) {
 	if (length(parts) == 0) return "/";
 	let top = parts[0];
 	// Top-level resources whose second segment is the resource id (not a
@@ -429,7 +429,7 @@ function path_template(method, parts) {
 
 function record_metrics_for(method, path, status, duration_ms, token) {
 	let parts = split_path(path);
-	let tpl = path_template(method, parts);
+	let tpl = path_template(parts);
 	if (tpl == "/healthz" || tpl == "/metrics") return;
 	let token_id = (token != null) ? token.name : null;
 	metrics.record_request(method, tpl, status, duration_ms, token_id);
@@ -439,9 +439,7 @@ function record_metrics_for(method, path, status, duration_ms, token) {
 // the path does not target a writable, batch-eligible resource.
 function batch_resolve_target(parts) {
 	if (length(parts) < 1) return null;
-	let key, kind;
-	if (length(parts) == 1) { key = parts[0]; kind = "singleton"; }
-	else { key = parts[0] + ":" + parts[1]; }
+	let key = (length(parts) == 1) ? parts[0] : parts[0] + ":" + parts[1];
 	if (BARE_SINGLETONS[key]) {
 		let src = RESOURCE_SOURCES[key];
 		return { kind: "singleton", key, h: BARE_SINGLETONS[key],

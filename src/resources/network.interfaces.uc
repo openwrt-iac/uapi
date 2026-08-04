@@ -296,13 +296,6 @@ function validate(json, conn, id) {
 		}
 	}
 
-	let dns = as_list(json.dns);
-	for (let i = 0; i < length(dns); i++) {
-		if (!is_valid_ipv4(dns[i]) && type(dns[i]) != "string")
-			push(errs, { field: sprintf("dns[%d]", i), code: "invalid_format",
-			             message: "must be an IP address" });
-	}
-
 	if (json.proto == "dhcpv6") {
 		if (json.ip6hint != null && json.ip6hint != ""
 		    && !match(json.ip6hint, IPV6_PREFIX_RE))

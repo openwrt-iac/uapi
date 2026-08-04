@@ -3,7 +3,6 @@ let fs = require('fs');
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 const TIME_LEN = 10;
 const RAND_LEN = 16;
-const ULID_LEN = TIME_LEN + RAND_LEN;
 
 function now_ms() {
 	let c = clock();
