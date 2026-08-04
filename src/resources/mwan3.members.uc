@@ -22,12 +22,7 @@ function toUci(json) {
 }
 
 function _load_iface_names(conn) {
-	let names = {};
-	if (conn == null) return names;
-	conn.uci_foreach("mwan3", "interface", function(s) {
-		if (s['.name'] != null) names[s['.name']] = true;
-	});
-	return names;
+	return values.section_index(conn, "mwan3", "interface", '.name');
 }
 
 function validate(json, conn) {

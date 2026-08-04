@@ -47,11 +47,8 @@ function toUci(json) {
 }
 
 function interface_exists_with_wg_proto(conn, name) {
-	let found = false;
-	conn.uci_foreach('network', 'interface', function(s) {
-		if (s['.name'] == name && s.proto == "wireguard") { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'network', 'interface', '.name',
+	                            function(s) { return s.proto == "wireguard"; })[name] != null;
 }
 
 function validate(json, conn) {

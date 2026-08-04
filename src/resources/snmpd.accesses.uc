@@ -1,3 +1,5 @@
+let values = require('values');
+
 const VALID_VERSIONS = { "any": true, "v1": true, "v2c": true, "usm": true };
 const VALID_LEVELS = { "noauth": true, "auth": true, "priv": true };
 const VALID_PREFIXES = { "exact": true, "prefix": true };
@@ -33,17 +35,12 @@ function toUci(json) {
 }
 
 function group_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('snmpd', 'group', function(s) {
-		if (s.group == name) { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'snmpd', 'group', 'group')[name] != null;
 }
 
 function validate(json, conn) {
 	let errs = [];
-	if (json.group == null || json.group == "")
-		push(errs, { field: "group", code: "required", message: "is required" });
+	values.require_present(errs, json, "group");
 	if (conn != null && json.group != null && json.group != "") {
 		if (!group_exists(conn, json.group))
 			push(errs, { field: "group", code: "conflict",

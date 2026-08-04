@@ -146,8 +146,7 @@ function validate(json, conn) {
 		             message: sprintf("%J exceeds the maximum of %d", m.mark, values.MARK_MAX) });
 
 	if (conn != null && is_set(m.src_zone) && m.src_zone != "*") {
-		let zones = {};
-		conn.uci_foreach('firewall', 'zone', function(s) { if (s.name) zones[s.name] = true; });
+		let zones = values.section_index(conn, 'firewall', 'zone', 'name');
 		if (!zones[m.src_zone])
 			push(errs, { field: "match.src_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.src_zone) });

@@ -26,12 +26,7 @@ function toUci(json) {
 }
 
 function _load_member_names(conn) {
-	let names = {};
-	if (conn == null) return names;
-	conn.uci_foreach("mwan3", "member", function(s) {
-		if (s['.name'] != null) names[s['.name']] = true;
-	});
-	return names;
+	return values.section_index(conn, "mwan3", "member", '.name');
 }
 
 function validate(json, conn) {

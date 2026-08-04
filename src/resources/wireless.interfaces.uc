@@ -97,8 +97,7 @@ function toUci(json) {
 function validate(json) {
 	let errs = [];
 
-	if (json.device == null || json.device == "")
-		push(errs, { field: "device", code: "required", message: "is required" });
+	values.require_present(errs, json, "device");
 
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",

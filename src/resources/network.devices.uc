@@ -41,8 +41,7 @@ function toUci(json) {
 function validate(json) {
 	let errs = [];
 
-	if (json.name == null || json.name == "")
-		push(errs, { field: "name", code: "required", message: "is required" });
+	values.require_present(errs, json, "name");
 
 	// type is optional: a `config device` section with only name + options
 	// (e.g. a macaddr/mtu override on an existing kernel device) is valid uci

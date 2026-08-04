@@ -211,8 +211,7 @@ function validate(json, conn, id) {
 		               "conflicts with ipaddrs[0] (%J): both name the same uci option, so send one or the other",
 		               ips[0]) });
 
-	if (json.proto == null || json.proto == "")
-		push(errs, { field: "proto", code: "required", message: "is required" });
+	values.require_present(errs, json, "proto");
 
 	// Both `id` (the universal section-name input, since 2.2.0) and `name`
 	// (the original 2.1.0 wireguard-era field) are accepted at create. If

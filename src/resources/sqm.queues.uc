@@ -38,17 +38,12 @@ function toUci(json) {
 }
 
 function interface_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('network', 'interface', function(s) {
-		if (s['.name'] == name) { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'network', 'interface', '.name')[name] != null;
 }
 
 function validate(json, conn) {
 	let errs = [];
-	if (json.interface == null || json.interface == "")
-		push(errs, { field: "interface", code: "required", message: "is required" });
+	values.require_present(errs, json, "interface");
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists(conn, json.interface))
 			push(errs, { field: "interface", code: "conflict",

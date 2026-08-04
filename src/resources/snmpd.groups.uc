@@ -1,3 +1,5 @@
+let values = require('values');
+
 const VALID_VERSIONS = { "v1": true, "v2c": true, "usm": true };
 
 function fromUci(section) {
@@ -22,8 +24,7 @@ function toUci(json) {
 
 function validate(json) {
 	let errs = [];
-	if (json.group == null || json.group == "")
-		push(errs, { field: "group", code: "required", message: "is required" });
+	values.require_present(errs, json, "group");
 	return errs;
 }
 
