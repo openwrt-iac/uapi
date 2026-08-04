@@ -177,3 +177,38 @@ t.describe('network.interfaces netifd boolean fidelity', () => {
 		t.assert_equal(auto_of(null), true);
 	});
 });
+
+// A wireguard tunnel's own address list is routinely v6 or dual-stack and netifd parses
+// either, but this field was validated with the v4-only CIDR check, so no v6-only or
+// dual-stack tunnel could be configured through the API. Same class as the allowed_ips
+// fix in 2.4.1, which missed the interface's own addresses.
+t.describe('network.interfaces wireguard addresses accept both families', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	const WG = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+	function addr_errs(addresses) {
+		let errs = ifaces.validate({ proto: 'wireguard', private_key: WG,
+		                             addresses: addresses }, null) ?? [];
+		return filter(errs, function(e) { return substr(e.field, 0, 9) == "addresses"; });
+	}
+
+	t.it('accepts an IPv6 CIDR', () => {
+		t.assert_deep_equal(addr_errs(['fd00::1/64']), []);
+	});
+
+	t.it('accepts a dual-stack list', () => {
+		t.assert_deep_equal(addr_errs(['10.9.0.1/24', 'fd00::1/64']), []);
+	});
+
+	t.it('still accepts IPv4 and still rejects nonsense', () => {
+		t.assert_deep_equal(addr_errs(['10.9.0.1/24']), []);
+		t.assert_equal(length(addr_errs(['not-an-address'])), 1);
+	});
+
+	// The static-proto v4 fields must not have been widened along with it.
+	t.it('leaves ipaddr and ipaddrs IPv4-only', () => {
+		let errs = ifaces.validate({ proto: 'static', ipaddr: 'fd00::1/64' }, null) ?? [];
+		let found = false;
+		for (let e in errs) if (e.field == "ipaddr" && e.code == "invalid_format") found = true;
+		t.assert_true(found);
+	});
+});

@@ -40,10 +40,10 @@
 
 import * as fs from 'fs';
 
-const ALLOWLIST = {
-	// fromUci field not exposed in schema_properties (not a managed input).
-	"dhcp.hosts.uc:dns": "fromUci-internal, not surfaced in schema_properties",
-};
+// Empty on purpose: its only entry excused dhcp.hosts.uc:dns as "not surfaced in
+// schema_properties", which toUci contradicted by writing it. Kept as the seam for a
+// field that genuinely is fromUci-internal.
+const ALLOWLIST = {};
 
 function read_file(path) {
 	let f = fs.open(path, "r");

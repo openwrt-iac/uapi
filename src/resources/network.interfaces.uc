@@ -4,6 +4,7 @@ let platform_bool = values.platform_bool;
 let as_list = values.as_list;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
+let is_valid_cidr_any = values.is_valid_cidr_any;
 let as_int = values.as_int;
 
 const PKG = "network";
@@ -286,9 +287,12 @@ function validate(json, conn, id) {
 			push(errs, { field: "addresses", code: "required",
 			             message: "is required when proto is wireguard (list of CIDRs)" });
 		for (let i = 0; i < length(addrs); i++) {
-			if (!is_valid_cidr(addrs[i]))
+			// Both families: a wireguard tunnel's own address list is routinely v6 or
+			// dual-stack, netifd's handler parses either, and `ipaddr`/`ipaddrs` above
+			// stay v4-only because those are the static-proto v4 fields.
+			if (!is_valid_cidr_any(addrs[i]))
 				push(errs, { field: sprintf("addresses[%d]", i), code: "invalid_format",
-				             message: "must be a valid IPv4 CIDR" });
+				             message: "must be a valid IPv4 or IPv6 CIDR" });
 		}
 	}
 
