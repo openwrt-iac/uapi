@@ -174,10 +174,11 @@ function validate(json) {
 	return errs;
 }
 
-// PATCH that omits key/tls_auth/pkcs12 must NOT wipe the existing values:
-// those are write-only on the wire (fromUci surfaces only has_<field>) and
-// the merge needs the original uci section to carry them forward.
-function merge_for_patch(existing_section, existing_json, body) {
+// PATCH that omits key/tls_auth/pkcs12 must NOT wipe the existing values: they are
+// write-only on the wire, so fromUci surfaces only has_<field> and the merged body
+// cannot carry them. The framework's carry_write_only restores them from the uci
+// section after this runs, which is why the merge itself never sees it.
+function merge_for_patch(existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) merged[k] = body[k];
 	delete merged.has_key;

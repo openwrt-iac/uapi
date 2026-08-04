@@ -456,14 +456,14 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		              ? patch_touched_fields(body, post) : null;
 		if (touched != null)
 			post = carry_write_only(resource,
-			                        resource.merge_for_patch(existing, post, touched), existing);
+			                        resource.merge_for_patch(post, touched), existing);
 		return { ok: true, merged: post, schema_body: post };
 	}
-	return { ok: true, merged: carry_write_only(resource, merge_fn(existing, existing_view, body), existing),
+	return { ok: true, merged: carry_write_only(resource, merge_fn(existing_view, body), existing),
 	         schema_body: body };
 }
 
-function default_merge_for_patch(existing_section, existing_json, body) {
+function default_merge_for_patch(existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) {
 		if (type(merged[k]) == "object" && type(body[k]) == "object")
@@ -869,7 +869,7 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
 
-				let singleton_merge = function(_e, view, b) {
+				let singleton_merge = function(view, b) {
 					let merged = { ...view };
 					for (let k in b) merged[k] = b[k];
 					return merged;

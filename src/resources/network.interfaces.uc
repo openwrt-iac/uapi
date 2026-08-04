@@ -160,7 +160,7 @@ function toUci(json) {
 // preferred that list: the patch answered 200 and changed nothing. Whichever of
 // the two the caller actually named wins, and the other is dropped rather than
 // resurrected from the server's own read.
-function merge_for_patch(existing_section, existing_json, body) {
+function merge_for_patch(existing_json, body) {
 	let merged = { ...existing_json };
 	for (let k in body) {
 		if (type(merged[k]) == "object" && type(body[k]) == "object")
