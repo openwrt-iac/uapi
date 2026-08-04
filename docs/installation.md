@@ -44,9 +44,27 @@ apk update
 apk add uapi
 ```
 
+To move an existing install to a newer release, `upgrade` rather than `add`:
+
+```sh
+apk update
+apk upgrade uapi
+```
+
+`apk add uapi` does **not** upgrade a package that is already installed. On
+apk-tools 3.0.5, as shipped in OpenWrt 25.12.x, it resolves to the installed
+version, reinstalls it, and reports `OK`, so an operator who reaches for `add`
+sees success and no new version and is likely to conclude the feed is stale.
+`apk list uapi` shows what the feed actually offers, marking a newer one
+`upgradable from: <installed>`.
+
+This applies to `apk add <name>`, resolving from a repository. `apk add
+<file.apk>`, the local-file form at the top of this page, does upgrade: it
+installs the version in that file whether or not an older one is present.
+
 The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`, `-beta`, `-pre`) are intentionally excluded so that `apk add uapi` and `apk upgrade uapi` never resolve to a not-yet-ready build. RC APKs land on the GitHub Release page (marked Pre-release); to install one, download it manually and `apk add --allow-untrusted /tmp/uapi-<rc>.apk`.
 
-The stable line currently is `1.2.x` (`v2.0.0` is in RC at time of writing). `v1.2.1` stays available indefinitely for operators who need to pin to the v1 wire contract; `apk add 'uapi<2.0.0'` (or `apk add uapi=1.2.1-r1`) gets you there.
+Every stable release stays available indefinitely, so pinning works: `apk add 'uapi<3.0.0'` holds a client to the v2 wire contract, and `apk add uapi=<version>-r1` pins an exact build. `CHANGELOG.md` and the GitHub Releases page are the sources of truth for what the current line is; this page deliberately does not name it, because a version written here goes stale the moment the next one ships.
 
 ## TLS
 
