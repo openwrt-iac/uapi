@@ -64,11 +64,6 @@ function toUci(json) {
 
 function validate(json) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	if (type(json.track_ip) == "array") {
 		for (let i = 0; i < length(json.track_ip); i++) {
 			if (!is_valid_ip(json.track_ip[i]))

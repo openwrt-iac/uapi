@@ -155,11 +155,6 @@ t.describe('firewall.rules round-trip', () => {
 });
 
 t.describe('firewall.rules.validate, required fields', () => {
-	t.it('rejects body that is not an object', () => {
-		let errs = rules.validate(null, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_equal(errs[0].code, "invalid_type");
-	});
 
 	t.it('rejects missing target', () => {
 		let errs = rules.validate({ match: { src_zone: 'wan' } }, null);

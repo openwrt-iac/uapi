@@ -42,11 +42,6 @@ function group_exists(conn, name) {
 
 function validate(json, conn) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	if (json.group == null || json.group == "")
 		push(errs, { field: "group", code: "required", message: "is required" });
 	if (conn != null && json.group != null && json.group != "") {

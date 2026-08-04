@@ -44,12 +44,6 @@ function toUci(json) {
 function validate(json) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
-
 	// A mark is a selector in its own right, and the one that matters for policy
 	// routing reply traffic: firewall4 marks in mangle prerouting and the rule
 	// sends the mark to a table, with no source or destination knowable in

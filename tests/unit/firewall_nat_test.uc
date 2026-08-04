@@ -85,11 +85,6 @@ t.describe('firewall.nat round-trip', () => {
 });
 
 t.describe('firewall.nat.validate', () => {
-	t.it('rejects body that is not an object', () => {
-		let errs = nat.validate(null, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_equal(errs[0].code, "invalid_type");
-	});
 
 	// fw4 discards a SNAT section carrying neither, so accepting it would be a
 	// silent no-op.

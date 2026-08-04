@@ -34,11 +34,6 @@ function toUci(json) {
 
 function validate(json) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	check_lines("interface_bind", json.interface_bind, errs);
 	check_lines("interface_outgoing", json.interface_outgoing, errs);
 	check_lines("srv_line", json.srv_line, errs);

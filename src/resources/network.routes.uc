@@ -52,12 +52,6 @@ function interface_exists(conn, name) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
-
 	if (json.target == null || json.target == "")
 		push(errs, { field: "target", code: "required", message: "is required" });
 	else if (!is_valid_ipv4(json.target) && !is_valid_cidr(json.target))

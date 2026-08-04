@@ -69,12 +69,6 @@ function dnsmasq_instance_exists(conn, name) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
-
 	let has_mac = json.mac != null && json.mac != "";
 	let has_duid = json.duid != null && json.duid != "";
 	if (!has_mac && !has_duid)

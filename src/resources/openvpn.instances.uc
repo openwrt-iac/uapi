@@ -152,11 +152,6 @@ function _check_path(errs, field, value) {
 
 function validate(json) {
 	let errs = [];
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
 	_check_path(errs, "ca",       json.ca);
 	_check_path(errs, "cert",     json.cert);
 	_check_path(errs, "key",      json.key);

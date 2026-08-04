@@ -74,11 +74,6 @@ t.describe('firewall.forwardings.toUci', () => {
 });
 
 t.describe('firewall.forwardings.validate', () => {
-	t.it('rejects body that is not an object', () => {
-		let errs = fwd.validate(null, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_equal(errs[0].code, "invalid_type");
-	});
 
 	t.it('rejects missing src and dest together (all errors at once)', () => {
 		let errs = fwd.validate({}, null);

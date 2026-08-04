@@ -36,12 +36,6 @@ function load_zones(conn) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (type(json) != "object") {
-		push(errs, { field: "", code: "invalid_type",
-		             message: "body must be a JSON object" });
-		return errs;
-	}
-
 	if (json.src == null || json.src == "")
 		push(errs, { field: "src", code: "required", message: "is required" });
 
