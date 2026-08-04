@@ -44,6 +44,26 @@ before the major that makes them.
   leaving the surface inconsistent, which is why it waits for a major instead of
   arriving piecemeal.
 
+- **`dhcp/hosts.tag` will read back as an array of strings, not a
+  space-separated string**, targeted at v3. dnsmasq's tag construct is
+  multi-valued: several tags may be set on one reservation, and a request has to
+  match all of them. LuCI writes that form (`list tag`, from a `DynamicList`
+  widget) and dnsmasq's host handler word-splits the option it reads, so
+  `option tag 'a b'` and `list tag` are the same configuration to the daemon.
+  uapi passes whichever shape uci holds straight through, so today the field
+  reads back as `["a","b"]` for LuCI-authored config and `"a b"` for a
+  hand-written scalar, while the published schema declares only
+  `["string", "null"]`. A generated client therefore fails on configuration the
+  stock OpenWrt UI produces, which makes this a correction rather than a
+  preference. v3 settles the field on `["array", "null"]`, matching both the
+  semantics and LuCI.
+
+  Two halves of this do not need the major and should land in the minor that
+  announces it: writes accept either shape and always persist `list tag`, so
+  stored configuration converges early; and the schema stops promising a string
+  it does not always return. Neither changes what an existing client receives for
+  configuration it already round-trips.
+
 ## Removed in past releases
 
 (none yet; uapi has not cut a v3.)
