@@ -15,6 +15,23 @@ function normalize_bool(v, default_val) {
 	return default_val;
 }
 
+// netifd converts uci strings to blob booleans through uci's own converter,
+// which accepts only "1"/"true" and "0"/"false" and DROPS the option for
+// anything else, so the daemon falls back to its own default. Reading such a
+// field with normalize_bool reports the operator's intent instead of what
+// netifd will do: `option auto 'no'` read back as false while the interface
+// autostarts. The default passed here must therefore be the daemon's default,
+// not a uapi-chosen one.
+//
+// Only for fields netifd parses. fw4 and the shell helpers accept the wider
+// set, so normalize_bool is correct for those and using this would introduce
+// the mirror-image misreport.
+function platform_bool(v, default_val) {
+	if (v === true || v === "1" || v === "true") return true;
+	if (v === false || v === "0" || v === "false") return false;
+	return default_val;
+}
+
 function as_list(v) {
 	if (v == null) return [];
 	if (type(v) == "array") return v;
@@ -420,7 +437,7 @@ function port_proto_conflict(protos, wildcard_rewrites) {
 }
 
 return {
-	normalize_bool, as_list, as_int,
+	normalize_bool, platform_bool, as_list, as_int,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,

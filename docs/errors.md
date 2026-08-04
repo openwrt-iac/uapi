@@ -108,6 +108,8 @@ Every response carries:
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
 | `X-Reload-Status`            | 2xx on writes                       | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
 | `X-Reload-Services`          | 2xx on writes when status=ok        | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
+| `X-Kernel-Status`            | 2xx on writes                       | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
+| `X-Kernel-Applied`           | 2xx on writes when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
 
 ## Retry-After
 

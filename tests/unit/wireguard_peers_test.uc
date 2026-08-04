@@ -272,6 +272,35 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		});
 	}
 
+	// `route_allowed_ips` routes are withdrawn only if the op says the previous
+	// config installed them, so reading that flag off the raw uci section has to
+	// accept every spelling netifd accepts. A section written by hand or by another
+	// tool can carry `true`, and reading it as false left the routes installed for
+	// prefixes the peer no longer wants.
+	t.it('carries prev_route_allowed_ips for an existing section spelled true', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.route_allowed_ips = 'true';
+		let ops = [];
+		let r = op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
+		t.assert_equal(r.status, 204);
+		t.assert_equal(length(ops), 1);
+		t.assert_true(ops[0].prev_route_allowed_ips);
+	});
+
+	t.it('carries prev_route_allowed_ips for the "1" spelling too', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.route_allowed_ips = '1';
+		let ops = [];
+		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
+		t.assert_true(ops[0].prev_route_allowed_ips);
+	});
+
+	t.it('leaves prev_route_allowed_ips false when the option is absent', () => {
+		let ops = [];
+		op_tracking_handler(ops).remove(with_wg(), ctx(), 'g_existing');
+		t.assert_false(ops[0].prev_route_allowed_ips);
+	});
+
 	t.it('POST emits a set for the parent interface', () => {
 		let ops = [];
 		let r = op_tracking_handler(ops).create(with_wg(), ctx(), {

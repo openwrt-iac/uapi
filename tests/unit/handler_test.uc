@@ -1259,3 +1259,73 @@ t.describe('handler.replace ipaddr / ipaddrs full replace', () => {
 		t.assert_equal(length(errs), 1);
 	});
 });
+
+// The headers are the only way a client can tell a peer that reached the kernel
+// from one that reached uci alone, so a write that skipped everything has to say
+// so rather than looking identical to a write with no kernel path.
+t.describe('handler kernel-apply headers', () => {
+	let peers_mod = loadfile('src/resources/network.wireguard_peers.uc')();
+	function peers_with(apply_fn) {
+		return handler.make(peers_mod, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+				wg_apply: apply_fn,
+			},
+		});
+	}
+	function kctx() { return { request_id: "01hx0000000000000000000000" }; }
+	function seeded() {
+		return ubus.stub({ uci: { network: {
+			wg0: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
+		} } });
+	}
+	const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
+	function body() {
+		return { interface: 'wg0', public_key: PK, allowed_ips: ['10.0.0.2/32'] };
+	}
+
+	t.it('names the interface a peer write reached', () => {
+		let h = peers_with(function(c, o, applied) { push(applied, "wg0"); return null; });
+		let r = h.create(seeded(), kctx(), body());
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers["X-Kernel-Status"], "ok");
+		t.assert_equal(r.headers["X-Kernel-Applied"], "wg0");
+	});
+
+	// A down tunnel: the peer is in uci and will be picked up by ifup, which is
+	// correct, but the client must not read that as having reached the kernel.
+	t.it('reports skipped without an applied list when the tunnel is down', () => {
+		let h = peers_with(function(c, o, applied) { return null; });
+		let r = h.create(seeded(), kctx(), body());
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers["X-Kernel-Status"], "skipped");
+		t.assert_equal(r.headers["X-Kernel-Applied"], null);
+	});
+
+	// A batch can touch two tunnels with only one up. The header must name the
+	// subset that landed rather than implying the whole write reached the kernel.
+	t.it('lists only the applied subset when one of two tunnels is down', () => {
+		let c = ubus.stub({ uci: { network: {
+			wg0: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
+			p_old: { '.type': 'wireguard_wg1', '.anonymous': false,
+			         public_key: PK, allowed_ips: ['10.0.0.9/32'] },
+		} } });
+		let h = peers_with(function(cc, o, applied) { push(applied, "wg0"); return null; });
+		let r = h.create(c, kctx(), body());
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers["X-Kernel-Applied"], "wg0");
+	});
+
+	t.it('reports no_kernel for a resource with no kernel path', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_existing = {
+			'.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan',
+		};
+		let r = rules.replace(c, ctx(), 'r_existing', { target: 'DROP', match: { src_zone: 'wan' } });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers["X-Kernel-Status"], "no_kernel");
+		t.assert_equal(r.headers["X-Kernel-Applied"], null);
+	});
+});

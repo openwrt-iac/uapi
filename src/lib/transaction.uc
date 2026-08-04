@@ -103,14 +103,26 @@ function default_release_pkg(handle) {
 	_release_one(handle._g);
 }
 
+// A write with no kernel path at all is distinct from one whose every target was
+// skipped: without that distinction an absent header cannot tell a caller which
+// of the two it got, which is the whole point of reporting this.
+function _kernel_status(ops, applied) {
+	let targets = wg.interfaces_of(ops);
+	if (length(targets) == 0) return "no_kernel";
+	if (length(applied) == 0) return "skipped";
+	return (length(applied) == length(targets)) ? "ok" : "partial";
+}
+
 // Shape the post-reload result: success on reload_err == null, otherwise run
 // restore_fn (which performs uci_import + uci_commit + reload) and classify
 // as reload_failed_restored / reload_failed_unrecovered.
-function _finalize_after_reload(reload_err, restore_fn, body, services) {
+function _finalize_after_reload(reload_err, restore_fn, body, services, ops, applied) {
 	if (reload_err == null) {
 		return { ok: true, body: body,
 		         reload_services: services,
-		         reload_status: (length(services) > 0) ? "ok" : "no_reload" };
+		         reload_status: (length(services) > 0) ? "ok" : "no_reload",
+		         kernel_applied: applied ?? [],
+		         kernel_status: _kernel_status(ops ?? [], applied ?? []) };
 	}
 
 	let restore_err = null;
@@ -128,7 +140,7 @@ function _finalize_after_reload(reload_err, restore_fn, body, services) {
 	         reload_error: reload_err };
 }
 
-function run_inner(conn, pkg, services, fn, snapshot, apply, restore) {
+function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, applied) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -142,7 +154,7 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore) {
 		conn.uci_import(pkg, snapshot);
 		conn.uci_commit(pkg);
 		return restore();
-	}, result.body, services);
+	}, result.body, services, ops, applied);
 }
 
 // Reload the declared services, then push the wireguard peer changes the write
@@ -151,11 +163,11 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore) {
 // re-apply, and report reload_failed_restored. `ops` is read here rather than
 // captured by value because the handler fills it while fn runs, and fn has
 // already returned by the time this is called.
-function _make_apply(conn, reload, services, wg_apply, ops) {
+function _make_apply(conn, reload, services, wg_apply, ops, applied) {
 	return function() {
 		let err = reload(services);
 		if (err != null) return err;
-		return wg_apply(conn, ops);
+		return wg_apply(conn, ops, applied);
 	};
 }
 
@@ -182,6 +194,7 @@ function transaction(conn, params) {
 	let wg_apply = params.wg_apply ?? wg.apply;
 	let wg_reconcile = params.wg_reconcile ?? wg.reconcile;
 	let wg_ops = params.wg_ops ?? [];
+	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
@@ -212,8 +225,9 @@ function transaction(conn, params) {
 	try {
 		let snapshot = conn.uci_export(pkg);
 		result = run_inner(conn, pkg, services, fn, snapshot,
-		                   _make_apply(conn, reload, services, wg_apply, wg_ops),
-		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops));
+		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied),
+		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops),
+		                   wg_ops, wg_applied);
 	} catch (e) {
 		caught = e;
 	}
@@ -235,7 +249,8 @@ function multi_transaction(conn, params) {
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
-	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops);
+	let wg_applied = [];
+	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops, wg_applied);
 	let restore_apply = _make_restore(conn, reload, services,
 	                                  params.wg_reconcile ?? wg.reconcile, wg_ops);
 	let check_services = params.check_services ?? default_check_services;
@@ -311,7 +326,7 @@ function multi_transaction(conn, params) {
 					conn.uci_commit(pkg);
 				}
 				return restore_apply();
-			}, inner.body, services);
+			}, inner.body, services, wg_ops, wg_applied);
 		}
 	} catch (e) { caught = e; }
 

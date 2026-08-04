@@ -113,6 +113,24 @@ Returns `true` on success, `null` on `EWOULDBLOCK` (with `fs.error()` set). See 
 
 netifd gives a proto handler a copy of the interface config taken when the proto state was attached, and `renew` does not refresh it. A renew issued after a uci write therefore re-applies what was already running, and returns success. netifd also tears the interface down and back up for any proto-config change, so editing a wireguard peer destroys a working tunnel before the new peer list has been validated. uapi applies wireguard peers with `wg` directly for both reasons; see `src/lib/wg.uc`.
 
+### Every daemon parses uci booleans differently
+
+Read a boolean the way its owning daemon reads it, or a GET reports the
+operator's intent instead of the daemon's behaviour. The sets do not match, and
+netifd's is the strict one:
+
+| Reader | true | false | anything else |
+|---|---|---|---|
+| netifd, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies |
+| fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default |
+| shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default |
+
+So `option auto 'no'` on an interface does not disable autostart: netifd drops
+the value and uses its own `true`. `values.platform_bool` is the reader for
+netifd-owned fields and `values.normalize_bool` for the rest; using the wrong one
+produces a misreport in whichever direction. Writes should emit `"1"` / `"0"`,
+which every reader above accepts.
+
 ### Real `ubus` and `uci` modules are `.so` packages
 
 They live in the default `REQUIRE_SEARCH_PATH` ahead of any project paths. Naming a local lib `ubus.uc` shadows nothing because the `.so` wins. uapi calls its abstraction `bus.uc` to avoid the collision.

@@ -1,6 +1,6 @@
 let values = require('values');
 let ids = require('ids');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_list = values.as_list;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
@@ -77,13 +77,13 @@ function fromUci(section, conn) {
 		dns: as_list(section.dns),
 		ip6assign: as_int(section.ip6assign),
 		mtu: as_int(section.mtu),
-		auto: normalize_bool(section.auto, true),
+		auto: platform_bool(section.auto, true),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (proto == "wireguard") {
 		view.listen_port = as_int(section.listen_port);
 		view.addresses = as_list(section.addresses);
-		view.nohostroute = normalize_bool(section.nohostroute, false);
+		view.nohostroute = platform_bool(section.nohostroute, false);
 		view.ip4table = section.ip4table ?? null;
 		view.ip6table = section.ip6table ?? null;
 		view.has_private_key = (section.private_key != null && section.private_key != "");
@@ -93,19 +93,19 @@ function fromUci(section, conn) {
 	// patch merge write those defaults into uci on the next PATCH, silently
 	// changing the section's surface area for the client.
 	if (proto == "dhcp") {
-		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
-		view.defaultroute = (section.defaultroute != null) ? normalize_bool(section.defaultroute, true) : null;
+		view.peerdns = (section.peerdns != null) ? platform_bool(section.peerdns, true) : null;
+		view.defaultroute = (section.defaultroute != null) ? platform_bool(section.defaultroute, true) : null;
 		view.metric = as_int(section.metric);
 		view.hostname = section.hostname ?? null;
 		view.clientid = section.clientid ?? null;
 	}
 	if (proto == "dhcpv6") {
-		view.peerdns = (section.peerdns != null) ? normalize_bool(section.peerdns, true) : null;
+		view.peerdns = (section.peerdns != null) ? platform_bool(section.peerdns, true) : null;
 		view.reqprefix = section.reqprefix ?? null;
 		view.reqaddress = section.reqaddress ?? null;
 		view.ip6hint = section.ip6hint ?? null;
 		view.ip6ifaceid = section.ip6ifaceid ?? null;
-		view.delegate = (section.delegate != null) ? normalize_bool(section.delegate, true) : null;
+		view.delegate = (section.delegate != null) ? platform_bool(section.delegate, true) : null;
 	}
 	return view;
 }

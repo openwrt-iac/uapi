@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_list = values.as_list;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
@@ -24,8 +24,8 @@ function fromUci(section) {
 		endpoint_host: section.endpoint_host ?? null,
 		endpoint_port: as_int(section.endpoint_port),
 		persistent_keepalive: as_int(section.persistent_keepalive),
-		route_allowed_ips: normalize_bool(section.route_allowed_ips, false),
-		disabled: normalize_bool(section.disabled, false),
+		route_allowed_ips: platform_bool(section.route_allowed_ips, false),
+		disabled: platform_bool(section.disabled, false),
 		runtime: {},
 	};
 }
@@ -128,6 +128,8 @@ return {
 	// that, a PUT that changes the key leaves the previous peer installed and its
 	// access intact. A disabled peer is one netifd omits when it builds the
 	// config, so it is removed rather than set.
+	// `opts` is always toUci output, so its booleans are "1"/"0" and can be
+	// compared literally. `existing` is a raw uci section and cannot.
 	kernel_ops: function(kind, opts, sec_type, existing) {
 		let iface = parent_from_type(sec_type);
 		if (iface == null || iface == "") return [];
@@ -135,7 +137,11 @@ return {
 		// route_allowed_ips routes outlive the peer, and the apply needs the previous
 		// allowed_ips to know which prefixes this write may have orphaned.
 		let prev_ips = (existing != null) ? as_list(existing.allowed_ips) : [];
-		let prev_routes = (existing != null) && (existing.route_allowed_ips == "1");
+		// `existing` is the raw uci section, so this needs the netifd-faithful read:
+		// a section written by hand or by another tool can carry `true`, and reading
+		// that as false tells the apply the old config installed no routes, so the
+		// ones it did install are never withdrawn.
+		let prev_routes = (existing != null) && platform_bool(existing.route_allowed_ips, false);
 
 		if (kind == "remove") {
 			if (existing?.public_key == null) return [];
