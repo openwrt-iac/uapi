@@ -94,20 +94,28 @@ scope. Design reference: `docs/commit-confirm.md`.
 ## 2.5.0 scope
 
 The next release is a minor, and its job is as much to make a clean 3.0.0
-possible as to ship features. v3 has three things queued: removing the `name`
-create input, removing `ipaddr` as a write input, and reading absent lists back
-as `null`. Only the first has served the notice `docs/deprecations.md` requires,
-so cutting a major before a minor announces the other two would break clients
-with no window, spend the major, and still leave the changes unmade.
+possible as to ship features. v3 has four things queued: removing the `name`
+create input, removing `ipaddr` as a write input, reading absent lists back as
+`null`, and `dhcp/hosts.tag` reading back as an array. Only the first has served
+the notice `docs/deprecations.md` requires, so cutting a major before a minor
+announces the rest would break clients with no window, spend the major, and
+still leave the changes unmade.
 
 Committed, in rough dependency order:
 
-1. **Announce the two v3 changes.** Done ahead of the rest, since the window
+1. **Announce the three v3 changes.** Done ahead of the rest, since the window
    runs from the release that ships it, not from the release that removes:
-   `ipaddr` deprecated as a write input, and the list-reads-`null` convention
-   change recorded under "Announced response-shape changes". The `ipaddr` case
-   carries no `deprecated: true` flag on purpose; the reasoning is in the
-   deprecations log.
+   `ipaddr` deprecated as a write input, and the list-reads-`null` and
+   `dhcp/hosts.tag` convention changes recorded under "Announced response-shape
+   changes". The `ipaddr` case carries no `deprecated: true` flag on purpose; the
+   reasoning is in the deprecations log.
+
+   `tag` carries work for this release beyond the announcement, because the
+   schema currently promises a string the resource does not always return: a
+   `list tag`, which is what LuCI writes, already reads back as an array. So the
+   minor also widens writes to accept either shape while persisting `list tag`,
+   and corrects the schema to the union actually emitted. Both are additive; only
+   narrowing the read to array-only waits for v3.
 2. **Kernel-apply reporting.** Done: `X-Kernel-Status` and `X-Kernel-Applied`,
    mirroring the reload pair. Closes the gap the kernel apply left, where a
    client writing a peer to a down tunnel got a `200` it could not distinguish
@@ -139,6 +147,12 @@ announcement lands here, the removal is v3), and anything under Hardening, which
 carries no wire surface and needs no release to take effect.
 
 ## Features (additive, future minor bumps in v2.x)
+
+- **`dhcp/hosts.match_tag`.** Not modelled, though LuCI exposes it on the same
+  form as `tag` and dnsmasq's host handler reads it with `config_list_foreach`,
+  so it is a list on both sides with none of the scalar ambiguity `tag` carries.
+  Found while settling the `tag` shape. Additive, and it should be declared an
+  array from the start per that decision.
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).

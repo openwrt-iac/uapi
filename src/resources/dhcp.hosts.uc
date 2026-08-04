@@ -153,11 +153,13 @@ return {
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation" },
-		// `tag` is deliberately NOT declared. dnsmasq reads it with a scalar
-		// config_get and then word-splits it, so `option tag 'a b'` and
-		// `list tag` are equivalent and both work; the ubus uci API surfaces the
-		// list form as an array, which a string schema would reject. Declaring it
-		// needs a decision about which shape the wire uses, not just a type.
+		// `tag` is deliberately NOT declared here yet. dnsmasq reads it with a
+		// scalar config_get and then word-splits it, so `option tag 'a b'` and
+		// `list tag` are equivalent to the daemon; the ubus uci API surfaces the
+		// list form as an array, so the field reads back as either shape today.
+		// The array won, matching LuCI's DynamicList and the multi-tag semantics,
+		// but narrowing the read to array-only is a response type change and so
+		// waits for v3. See docs/deprecations.md.
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.
