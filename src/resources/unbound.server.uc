@@ -91,10 +91,10 @@ function validate(json) {
 		             message: "must be default, passive, or aggressive" });
 	if (json.resource_limits != null && !VALID_RESOURCE[json.resource_limits])
 		push(errs, { field: "resource_limits", code: "not_in_enum",
-		             message: "must be tiny, small, medium, large, big, or huge" });
+		             message: "must be one of " + join(", ", keys(VALID_RESOURCE)) });
 	if (json.protocol != null && !VALID_PROTOCOL[json.protocol])
 		push(errs, { field: "protocol", code: "not_in_enum",
-		             message: "must be auto, ip4_only, ip6_only, or mixed" });
+		             message: "must be one of " + join(", ", keys(VALID_PROTOCOL)) });
 	if (json.rebind_protection != null && !VALID_REBIND["" + json.rebind_protection])
 		push(errs, { field: "rebind_protection", code: "not_in_enum",
 		             message: "must be 0 (off), 1 (private nets), or 2 (all)" });

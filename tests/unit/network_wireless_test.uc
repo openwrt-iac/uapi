@@ -167,3 +167,46 @@ t.describe('wireless.interfaces', () => {
 		t.assert_equal(c._state.uci.wireless.w1.key, 'new');
 	});
 });
+
+// has_key was set only when a key existed, so the member was absent rather than false
+// while the published schema declares a non-nullable boolean: a keyless section violated
+// the spec the server ships. An empty key also reported true, claiming a key that is not
+// there.
+t.describe('wireless.interfaces has_key is always present and honest', () => {
+	let wiface = loadfile('src/resources/wireless.interfaces.uc')();
+	function has_key_of(key) {
+		let s = { '.name': 'w1', '.anonymous': false, device: 'radio0', ssid: 'x' };
+		if (key != null) s.key = key;
+		return wiface.fromUci(s, null).has_key;
+	}
+
+	t.it('reports false rather than absent when no key is set', () => {
+		t.assert_equal(has_key_of(null), false);
+	});
+
+	// uci does not store an empty option value, so this is unreachable through uci
+	// (verified on a device, by `uci set key=""` and by hand-editing the config file:
+	// the section arrives with no key member at all). Kept because every sibling flag
+	// spells the check this way, and a reader comparing the five should not find one
+	// subtly different.
+	t.it('treats an empty key as no key', () => {
+		t.assert_equal(has_key_of(""), false);
+	});
+
+	t.it('still reports true for a real key', () => {
+		t.assert_equal(has_key_of("correcthorse"), true);
+	});
+
+	// The spec promises a boolean, so the read must satisfy its own published schema.
+	t.it('satisfies the published non-nullable boolean schema', () => {
+		let handler = require('handler');
+		for (let k in [null, "", "pw"]) {
+			let s = { '.name': 'w1', '.anonymous': false, device: 'radio0', ssid: 'x' };
+			if (k != null) s.key = k;
+			let view = wiface.fromUci(s, null);
+			t.assert_equal(type(view.has_key), "bool");
+			t.assert_equal(length(handler.check_schema_types(wiface.schema_properties,
+			                                                 { has_key: view.has_key })), 0);
+		}
+	});
+});

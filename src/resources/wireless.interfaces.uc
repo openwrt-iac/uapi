@@ -71,8 +71,12 @@ function fromUci(section, conn) {
 		hidden: normalize_bool(section.hidden, false),
 		isolate: normalize_bool(section.isolate, false),
 		runtime: fetch_runtime(conn, section['.name']),
+		// Always present, and an empty key is not a key. The published schema declares
+		// a non-nullable boolean, so the previous absent-or-true form meant a keyless
+		// section violated the spec this server ships. Same shape as every sibling
+		// write-only flag (openvpn.instances, network.wireguard_peers).
+		has_key: (section.key != null && section.key != ""),
 	};
-	if (section.key != null) view.has_key = true;
 	return view;
 }
 
