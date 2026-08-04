@@ -106,7 +106,10 @@ jobs:
       - name: Soak test (60s read-only with RSS/fd leak watch)
         run: DURATION=60 PARALLEL=2 tests/soak/ci_soak.sh
 
-      - name: Perf bench + regression gate
+      # Measurement, not a gate: no bench/baseline.json is committed, so the
+      # script's comparison never runs. Named honestly so a green run is not
+      # mistaken for a latency check. See tests/bench/ci_bench.sh.
+      - name: Perf bench (measurement only)
         run: N=50 tests/bench/ci_bench.sh
 
       - name: Upload bench result
@@ -304,13 +307,22 @@ jobs:
       # of its own; attaching the APK to this GitHub Release is the whole
       # job, and the aggregator picks it up on its next run.
 
-  # Multi-arch build verification. uapi is PKGARCH:=all (pure ucode + shell;
-  # no compiled code), so the resulting APK is byte-identical across host
-  # archs - this job exists to PROVE that invariant, not to ship per-arch
-  # artifacts. If any arch's APK diverges from the x86_64 reference,
-  # something arch-specific snuck into the build and the release should be
-  # held. Runs on tag push in parallel with release-apk so neither blocks
-  # the other.
+  # Multi-arch build verification. uapi is PKGARCH:=all (pure ucode + shell, no
+  # compiled code), so the APK is expected to be arch-independent. This job does
+  # NOT prove that: it compares no digests, and the matrix has no x86_64 leg to
+  # compare against, so there is no reference build here. `sha256sum` in the
+  # find-APK step prints a digest for a human to read; nothing enforces it.
+  #
+  # What it does enforce, by hard-failing, is what the 2.4.1 release actually
+  # relied on: every arch in the matrix has its SDK tarball pinned by checksum in
+  # build/sdk.sha256, the downloaded tarball matches that pin, the package
+  # cross-builds under all three SDKs, and each build yields an .apk. That is
+  # worth keeping on its own; a build that breaks under one arch's SDK fails here
+  # rather than at an operator's `apk add`.
+  #
+  # Making it prove arch-independence would mean adding an x86_64 leg and
+  # comparing digests across legs. Runs on tag push in parallel with release-apk
+  # so neither blocks the other.
   #
   # To enable additional arches: add an entry to the matrix below and a
   # corresponding sha256 line to build/sdk.sha256 (per-arch SDK tarball

@@ -20,8 +20,8 @@ catalog in `CHANGELOG.md`'s v2.0.0 section; migration table in
 - `POST /batch` (multi-package all-or-nothing), JSON Patch (RFC 6902),
   per-resource ETags + `If-Match` optimistic concurrency.
 - Non-uci base library, lock-and-state audit, function-level coverage gate,
-  soak harness in CI, performance benchmark gate, signed-tag verification,
-  reproducible SDK pin.
+  soak harness in CI, per-endpoint latency measurement in CI, signed-tag
+  verification, reproducible SDK pin.
 
 ## Shipped in v1.x
 
@@ -330,6 +330,19 @@ carries no wire surface and needs no release to take effect.
   `docs/non-uci-state.md`; only if option (a) genuinely stalls).
 
 ## Hardening (next, no new wire surface)
+
+- **Decide whether the perf bench should gate, and on what.** It measures
+  per-endpoint p99 on every CI run and gates nothing: the comparison in
+  `tests/bench/ci_bench.sh` runs only against a committed `bench/baseline.json`,
+  which has never existed, so any size of latency regression has always shipped
+  green. The naive fix is to commit a baseline, and it is probably wrong: a p99
+  recorded on one GitHub runner class says little on another, so a percentage
+  threshold would flake instead of catching anything, and a flaky gate gets
+  ignored and then removed. The options worth weighing are an absolute ceiling
+  loose enough to survive runner variance while still catching an order-of-
+  magnitude regression, or leaving it as measurement and reading the numbers at
+  release time. Deciding needs a few runs' worth of variance data across runners,
+  which nobody has gathered. Until then the tree says measurement, not gate.
 
 - **Derive the property-fuzz resource list from the resource registry.**
   `tests/unit/property_test.uc` keeps `RESOURCES` as a hand-written literal, so a
