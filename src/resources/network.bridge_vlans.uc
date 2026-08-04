@@ -24,18 +24,14 @@ function toUci(json) {
 }
 
 function bridge_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('network', 'device', function(s) {
-		if (s.name == name && s.type == "bridge") { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'network', 'device', 'name',
+	                            function(s) { return s.type == "bridge"; })[name] != null;
 }
 
 function validate(json, conn) {
 	let errs = [];
 
-	if (json.device == null || json.device == "")
-		push(errs, { field: "device", code: "required", message: "is required" });
+	values.require_present(errs, json, "device");
 
 	if (json.vlan == null)
 		push(errs, { field: "vlan", code: "required", message: "is required" });

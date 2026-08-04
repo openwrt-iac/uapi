@@ -481,3 +481,65 @@ t.describe('values nftables string and range limits', () => {
 		t.assert_equal(v.DEVICE_MAX, 15);
 	});
 });
+
+t.describe('values.require_present', () => {
+	// uci cannot store an empty option value, so "" is a field the daemon never sees.
+	// Several resources spelled only the null half of that before this was shared.
+	t.it('treats absent and empty as the same missing field', () => {
+		for (let body in [ {}, { iface: null }, { iface: "" } ]) {
+			let errs = [];
+			t.assert_equal(v.require_present(errs, body, "iface"), false);
+			t.assert_equal(length(errs), 1);
+			t.assert_equal(errs[0].field, "iface");
+			t.assert_equal(errs[0].code, "required");
+			t.assert_equal(errs[0].message, "is required");
+		}
+	});
+
+	t.it('pushes nothing and reports true when the field is set', () => {
+		let errs = [];
+		t.assert_equal(v.require_present(errs, { iface: "lan" }, "iface"), true);
+		t.assert_equal(length(errs), 0);
+	});
+
+	// The return value is what lets a caller chain a format check that must not run on
+	// an absent field, which is how network/routes and wireless/devices read.
+	t.it('reports a nested wire name when the field sits under a prefix', () => {
+		let errs = [];
+		v.require_present(errs, { src_zone: "" }, "src_zone", "match.src_zone");
+		t.assert_equal(errs[0].field, "match.src_zone");
+	});
+});
+
+t.describe('values.section_index', () => {
+	function stub(sections) {
+		return { uci_foreach: function(pkg, sec_type, cb) {
+			for (let s in sections) if (s['.type'] == sec_type) cb(s);
+		} };
+	}
+
+	t.it('indexes by section name or by an option, whichever identifies it', () => {
+		let c = stub([ { '.type': 'zone', '.name': 'cfg01', name: 'lan' },
+		               { '.type': 'zone', '.name': 'cfg02', name: 'wan' } ]);
+		let by_option = v.section_index(c, 'firewall', 'zone', 'name');
+		t.assert_true(by_option.lan && by_option.wan);
+		let by_name = v.section_index(c, 'firewall', 'zone', '.name');
+		t.assert_true(by_name.cfg01 && by_name.cfg02);
+	});
+
+	t.it('applies the filter, so a second option can be required to match', () => {
+		let c = stub([ { '.type': 'interface', '.name': 'wg0', proto: 'wireguard' },
+		               { '.type': 'interface', '.name': 'lan', proto: 'static' } ]);
+		let wg = v.section_index(c, 'network', 'interface', '.name',
+		                         function(s) { return s.proto == "wireguard"; });
+		t.assert_true(wg.wg0);
+		t.assert_equal(wg.lan, null);
+	});
+
+	t.it('skips a blank key and tolerates a null conn', () => {
+		let c = stub([ { '.type': 'zone', name: '' }, { '.type': 'zone', name: 'lan' } ]);
+		let idx = v.section_index(c, 'firewall', 'zone', 'name');
+		t.assert_equal(length(keys(idx)), 1);
+		t.assert_deep_equal(v.section_index(null, 'firewall', 'zone', 'name'), {});
+	});
+});

@@ -38,8 +38,7 @@ function toUci(json) {
 function validate(json) {
 	let errs = [];
 
-	if (json.name == null || json.name == "")
-		push(errs, { field: "name", code: "required", message: "is required" });
+	values.require_present(errs, json, "name");
 
 	return errs;
 }

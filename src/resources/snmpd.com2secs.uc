@@ -1,3 +1,5 @@
+let values = require('values');
+
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -20,13 +22,11 @@ function toUci(json) {
 
 function validate(json) {
 	let errs = [];
-	if (json.secname == null || json.secname == "")
-		push(errs, { field: "secname", code: "required", message: "is required" });
+	values.require_present(errs, json, "secname");
 	if (json.source == null || json.source == "")
 		push(errs, { field: "source", code: "required",
 		             message: "is required (the source network range or 'default')" });
-	if (json.community == null || json.community == "")
-		push(errs, { field: "community", code: "required", message: "is required" });
+	values.require_present(errs, json, "community");
 	return errs;
 }
 

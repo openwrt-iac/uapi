@@ -81,11 +81,7 @@ function toUci(json) {
 const WILDCARD_ZONES = { "*": true };
 
 function load_zones(conn) {
-	let zones = {};
-	conn.uci_foreach('firewall', 'zone', function(s) {
-		if (s.name) zones[s.name] = true;
-	});
-	return zones;
+	return values.section_index(conn, 'firewall', 'zone', 'name');
 }
 
 // fw4 derives the chain name from the zone (`notrack_<zone>`), so a wildcard is

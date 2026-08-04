@@ -26,21 +26,15 @@ function toUci(json) {
 }
 
 function load_zones(conn) {
-	let zones = {};
-	conn.uci_foreach('firewall', 'zone', function(s) {
-		if (s.name) zones[s.name] = true;
-	});
-	return zones;
+	return values.section_index(conn, 'firewall', 'zone', 'name');
 }
 
 function validate(json, conn) {
 	let errs = [];
 
-	if (json.src == null || json.src == "")
-		push(errs, { field: "src", code: "required", message: "is required" });
+	values.require_present(errs, json, "src");
 
-	if (json.dest == null || json.dest == "")
-		push(errs, { field: "dest", code: "required", message: "is required" });
+	values.require_present(errs, json, "dest");
 
 	if (conn != null) {
 		let zones = null;

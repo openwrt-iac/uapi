@@ -44,12 +44,7 @@ function toUci(json) {
 }
 
 function _load_policy_names(conn) {
-	let names = {};
-	if (conn == null) return names;
-	conn.uci_foreach("mwan3", "policy", function(s) {
-		if (s['.name'] != null) names[s['.name']] = true;
-	});
-	return names;
+	return values.section_index(conn, "mwan3", "policy", '.name');
 }
 
 // src_ip / dest_ip accept either a bare IP (v4 or v6) or a CIDR (v4 or v6).

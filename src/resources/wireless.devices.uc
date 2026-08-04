@@ -39,9 +39,8 @@ function toUci(json) {
 function validate(json) {
 	let errs = [];
 
-	if (json.type == null || json.type == "")
-		push(errs, { field: "type", code: "required", message: "is required" });
-	else if (!VALID_TYPES[json.type])
+	if (values.require_present(errs, json, "type")
+	    && !VALID_TYPES[json.type])
 		push(errs, { field: "type", code: "not_in_enum",
 		             message: "must be one of mac80211, broadcom" });
 

@@ -116,8 +116,7 @@ function toUci(json) {
 function validate(json, conn) {
 	let errs = [];
 
-	if (json.interface == null || json.interface == "")
-		push(errs, { field: "interface", code: "required", message: "is required" });
+	values.require_present(errs, json, "interface");
 
 	if (json.ra != null && !VALID_RA[json.ra])
 		push(errs, { field: "ra", code: "not_in_enum",

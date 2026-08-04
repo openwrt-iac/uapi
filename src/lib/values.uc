@@ -436,8 +436,37 @@ function port_proto_conflict(protos, wildcard_rewrites) {
 	return !(all_tcpudp || (wildcard_rewrites && all_wildcard));
 }
 
+// uci cannot store an empty option value, so a field set to "" is a field the daemon
+// will never see: absent and empty are the same condition, and every resource spelled
+// that out per field. Pushing rather than returning a problem, unlike the value helpers
+// above, because the answer is about a field's absence and there is nothing to inspect.
+function require_present(errs, obj, field, wire_name) {
+	let v = obj[field];
+	if (v != null && v != "") return true;
+	push(errs, { field: wire_name ?? field, code: "required", message: "is required" });
+	return false;
+}
+
+// One walk instead of twelve. Resources each had their own uci_foreach to answer "does a
+// section with this name exist", differing only in which key identifies it (`.name` for
+// the section name, an option name where the daemon keys on a value) and whether a second
+// option has to match. Returns a set so a caller checking several values walks once.
+function section_index(conn, pkg, sec_type, key, filter) {
+	let out = {};
+	// Callers reach validate() with a null conn from the unit suite, and several of the
+	// walks this replaces carried their own guard for it.
+	if (conn == null) return out;
+	conn.uci_foreach(pkg, sec_type, function(s) {
+		if (filter != null && !filter(s)) return;
+		let k = s[key];
+		if (k != null && k != "") out[k] = true;
+	});
+	return out;
+}
+
 return {
 	normalize_bool, platform_bool, as_list, as_int,
+	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,

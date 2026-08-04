@@ -79,8 +79,7 @@ function validate(json, conn) {
 		return errs;
 	}
 
-	if (m.src_zone == null || m.src_zone == "")
-		push(errs, { field: "match.src_zone", code: "required", message: "is required" });
+	values.require_present(errs, m, "src_zone", "match.src_zone");
 
 	// target defaults to DNAT in fromUci, but validate sees the raw body, so a
 	// request that omits it arrives as null and still means DNAT.
@@ -172,8 +171,7 @@ function validate(json, conn) {
 	if (conn != null
 	    && ((m.src_zone != null && m.src_zone != "")
 	        || (m.dest_zone != null && m.dest_zone != ""))) {
-		let zones = {};
-		conn.uci_foreach('firewall', 'zone', function(s) { if (s.name) zones[s.name] = true; });
+		let zones = values.section_index(conn, 'firewall', 'zone', 'name');
 		if (m.src_zone != null && m.src_zone != "" && !zones[m.src_zone])
 			push(errs, { field: "match.src_zone", code: "conflict",
 			             message: sprintf("zone %J does not exist", m.src_zone) });

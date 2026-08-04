@@ -59,11 +59,7 @@ function toUci(json) {
 // name), not a per-interface dhcp.dhcp section. dnsmasq's init reads
 // config_get_bool ... "$instance" against `config dnsmasq` entries.
 function dnsmasq_instance_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('dhcp', 'dnsmasq', function(s) {
-		if (s['.name'] == name) { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'dhcp', 'dnsmasq', '.name')[name] != null;
 }
 
 function validate(json, conn) {

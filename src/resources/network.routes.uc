@@ -42,19 +42,14 @@ function toUci(json) {
 }
 
 function interface_exists(conn, name) {
-	let found = false;
-	conn.uci_foreach('network', 'interface', function(s) {
-		if (s['.name'] == name) { found = true; return false; }
-	});
-	return found;
+	return values.section_index(conn, 'network', 'interface', '.name')[name] != null;
 }
 
 function validate(json, conn) {
 	let errs = [];
 
-	if (json.target == null || json.target == "")
-		push(errs, { field: "target", code: "required", message: "is required" });
-	else if (!is_valid_ipv4(json.target) && !is_valid_cidr(json.target))
+	if (values.require_present(errs, json, "target")
+	    && !is_valid_ipv4(json.target) && !is_valid_cidr(json.target))
 		push(errs, { field: "target", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
 
