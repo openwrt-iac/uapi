@@ -88,6 +88,6 @@ web/                     # static site published to gh-pages (landing page + Red
 
 ## Where to get help
 
-- Open a [GitHub Discussion](https://github.com/raspbeguy/uapi/discussions) for design questions.
-- File an [issue](https://github.com/raspbeguy/uapi/issues) for bugs. Include the router's OpenWrt version, the uapi version (`uapi-token list` prints it), and the syslog excerpt around the failure if you have it.
+- Open a [GitHub Discussion](https://github.com/openwrt-iac/uapi/discussions) for design questions.
+- File an [issue](https://github.com/openwrt-iac/uapi/issues) for bugs. Include the router's OpenWrt version, the uapi version (`cat /usr/share/uapi/VERSION`, or the `version` field of `GET /healthz`), and the syslog excerpt around the failure if you have it.
 - For security-sensitive reports, see [`docs/security.md`](docs/security.md).

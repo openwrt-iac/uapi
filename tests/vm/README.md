@@ -8,7 +8,8 @@ Boots a real OpenWrt 25.12.5 x86_64 QEMU VM for integration testing.
 - Image: `openwrt-25.12.5-x86-64-generic-ext4-combined.img.gz`
 - Source: `https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/`
 
-When bumping the OpenWrt target, update `IMAGE_URL` and `IMAGE_NAME` in `setup.sh` and update this file.
+When bumping the OpenWrt target, update `IMAGE_URL` and `IMAGE_GZ` in `setup.sh`, the coupled
+`OPENWRT_VERSION` and `OPENWRT_IMAGE_CACHE_KEY` in `.github/workflows/ci.yml`, and this file.
 
 ## Scripts
 

@@ -15,7 +15,7 @@ define Package/uapi
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Native HTTP REST API for OpenWrt
-  URL:=https://github.com/raspbeguy/uapi
+  URL:=https://github.com/openwrt-iac/uapi
   PKGARCH:=all
   DEPENDS:=+uhttpd +uhttpd-mod-ucode +ucode +ucode-mod-ubus +ucode-mod-uci \
            +ucode-mod-fs +ucode-mod-digest +ucode-mod-log +rpcd-mod-iwinfo
@@ -81,8 +81,8 @@ uapi installed. Bootstrap:
   3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v2/openapi.json)
 
 Future upgrades from the project feed:
-  curl -fsSL https://raspbeguy.github.io/uapi/uapi-feed.pub.pem > /etc/apk/keys/uapi-feed.pub.pem
-  echo 'https://raspbeguy.github.io/uapi/packages/all/uapi/packages.adb' > /etc/apk/repositories.d/uapi.list
+  curl -fsSL https://openwrt-iac.github.io/feed/uapi-feed.pub.pem > /etc/apk/keys/uapi-feed.pub.pem
+  echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' > /etc/apk/repositories.d/uapi.list
   apk update && apk upgrade uapi
 
 EOF

@@ -31,7 +31,7 @@ Every regression in this list has cost a real debug round-trip at some point. Ke
 
 ## Lint suite
 
-`make lint` chains four sub-targets:
+`make lint` chains these sub-targets:
 
 - `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule, enforced).
 - `lint-syntax`: `ucode -c` on every `.uc` file in `src/`, `cli/`, `tests/`.
