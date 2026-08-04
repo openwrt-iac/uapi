@@ -114,9 +114,15 @@ test-integration: vm-setup vm-start
 
 lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults
 
+# Tracked files only, via git rather than a hand-kept directory list. The list had
+# gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
+# grep exit 2, which the `if` reads as "no match", so the rule was unenforced. It
+# also scanned untracked build artifacts, where a binary image matches by accident.
 lint-emdash:
-	@if grep -rn --exclude-dir=sdk $$'\xe2\x80\x94' src cli tests files build examples docs web .github tools Makefile README.md CHANGELOG.md CLAUDE.md CONTRIBUTING.md 2>/dev/null; then \
-		echo ""; echo "em-dash found in source files (forbidden per CLAUDE.md style)"; exit 1; \
+	@hits=$$(git ls-files -z | xargs -0 grep -In $$'\xe2\x80\x94' 2>/dev/null || true); \
+	if [ -n "$$hits" ]; then \
+		echo "$$hits"; \
+		echo ""; echo "em-dash found in tracked files (forbidden per CLAUDE.md style)"; exit 1; \
 	fi
 
 lint-syntax:
@@ -152,5 +158,7 @@ lint-openapi-shape:
 lint-defaults:
 	@$(UCODE) tests/lint_defaults.uc
 
+# build/openapi.json is tracked and is an input to `make lint` and `make stage`, so
+# it is deliberately not removed here; `make openapi` regenerates it in place.
 clean:
-	@rm -rf build/sdk build/openapi.json
+	@rm -rf build/sdk build/sdk-* build/sbom.spdx.json build/openwrt/uapi/files

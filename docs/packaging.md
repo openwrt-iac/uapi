@@ -22,12 +22,9 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
 /usr/share/uapi/main.uc                  uhttpd ucode-prefix entry point
 /usr/share/uapi/raw.uc                   generic /raw/<package>/<id> handler
 /usr/share/uapi/VERSION                  package version (one line)
-/usr/share/uapi/lib/*.uc                 shared modules (auth, scope, transaction,
-                                          handler, errors, ids, ratelimit, metrics,
-                                          idempotency, jsonpatch, token_store,
-                                          non_uci, system_access, packages, log,
-                                          bus, values, ucitrack, openapi)
-/usr/share/uapi/resources/*.uc           curated resource modules (32 files)
+/usr/share/uapi/lib/*.uc                 every module in src/lib (the install globs
+                                          the directory, so this needs no list here)
+/usr/share/uapi/resources/*.uc           curated resource modules
 /usr/share/uapi/openapi.json             generated OpenAPI 3.1 spec
 /usr/bin/uapi-token                      token CLI
 /etc/config/uapi                         conffile (mode 0600, conffile-marked)
