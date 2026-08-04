@@ -22150,15 +22150,15 @@
 						},
 						"readOnly": true
 					},
-					"key": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read"
-					},
 					"has_key": {
 						"type": "boolean",
 						"readOnly": true,
 						"description": "True if a key is configured (cleartext never returned)"
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "Encryption passphrase; accepted on write, masked on read"
 					}
 				},
 				"required": [

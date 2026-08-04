@@ -904,3 +904,41 @@ t.describe('network.interfaces ipaddr under JSON Patch', () => {
 		t.assert_deep_equal(c.uci_get('network', 'iptest', 'ipaddr'), ['192.0.2.4']);
 	});
 });
+
+// Both messages stated enum sets their constants contradict: `protocol` advertised
+// `auto`, which the validator rejects, and omitted three values it accepts, while
+// `resource_limits` omitted the accepted `default`. Derived now, so a new enum value
+// cannot leave the message behind.
+t.describe('unbound.server enum messages match what is accepted', () => {
+	let srv = loadfile('src/resources/unbound.server.uc')();
+	function message_for(field, bad) {
+		let body = { [field]: bad };
+		for (let e in srv.validate(body, null) ?? [])
+			if (e.field == field && e.code == "not_in_enum") return e.message;
+		return null;
+	}
+
+	// Every value the message names must actually be accepted.
+	function every_named_value_is_accepted(field, msg) {
+		let listed = split(replace(msg, "must be one of ", ""), ", ");
+		for (let v in listed) {
+			let errs = srv.validate({ [field]: v }, null) ?? [];
+			for (let e in errs)
+				if (e.field == field && e.code == "not_in_enum") return false;
+		}
+		return true;
+	}
+
+	t.it('protocol no longer advertises a value it rejects', () => {
+		let msg = message_for("protocol", "nonsense");
+		t.assert_true(msg != null);
+		t.assert_false(index(msg, "auto") >= 0);
+		t.assert_true(every_named_value_is_accepted("protocol", msg));
+	});
+
+	t.it('resource_limits names every value it accepts, including default', () => {
+		let msg = message_for("resource_limits", "nonsense");
+		t.assert_true(index(msg, "default") >= 0);
+		t.assert_true(every_named_value_is_accepted("resource_limits", msg));
+	});
+});
