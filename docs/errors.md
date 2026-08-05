@@ -119,6 +119,7 @@ Every response carries:
 | `X-Reload-Services`          | 2xx on writes when status=ok        | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
 | `X-Kernel-Status`            | 2xx on writes                       | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
 | `X-Kernel-Applied`           | 2xx on writes when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
+| `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddr`. Advisory: the write already happened and was not refused. Present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddr` or `netmask` (or deleted the section, reported as `changed=removed`). Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
 ## Retry-After
 

@@ -19,6 +19,7 @@ let ratelimit = require("ratelimit");
 let metrics = require("metrics");
 let idempotency = require("idempotency");
 let error_ring = require("error_ring");
+let mgmt = require("mgmt");
 
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
@@ -709,6 +710,12 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 		request_id: ctx.request_id,
 	};
 
+	// Which interface this request arrived through. The write-time warning can only tell
+	// a caller after the fact, and cannot tell them at all if the write strands them, so
+	// the same answer is available here before anything is written.
+	let mgmt_path = mgmt.inbound_interface(conn, ctx.remote_addr);
+	if (mgmt_path != null) body.management_path = mgmt_path;
+
 	if (want_validate && conn != null) {
 		let sweep = validation_sweep(conn, scopes);
 		body.invalid_sections = sweep.invalid_sections;
@@ -744,6 +751,9 @@ function dispatch(env) {
 	let path = env.PATH_INFO ?? "/";
 	ctx.method = method;
 	ctx.path = path;
+	// Needed by the management-path guard, which has to know which interface the caller
+	// arrived through before it can say a write moved it.
+	ctx.remote_addr = env.REMOTE_ADDR ?? null;
 
 	let tls = tls_check(env);
 	if (!tls.ok)

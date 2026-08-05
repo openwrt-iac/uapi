@@ -311,6 +311,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	// Opt in to the advisory management-path warning. Only this resource carries the
+	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
+	// not the same condition, so the framework is told rather than guessing.
+	mgmt_path_guard: true,
 	merge_for_patch: merge_for_patch,
 	resolve_for_replace: resolve_for_replace,
 	// Caller-supplied name wins. proto=wireguard falls back to a 14-char

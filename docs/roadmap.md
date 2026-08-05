@@ -135,6 +135,24 @@ Committed, in rough dependency order:
 4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
    sections a write would now reject, before a write finds them one at a time.
 
+5. **Advisory management-path guard.** Done. The cheap protection against the
+   lockout class commit-confirm was meant to cover: `GET /diagnostics` reports
+   `management_path`, the interface this request arrived through, and a
+   `network/interfaces` write that moves that interface's `disabled`, `proto`,
+   `ipaddr` or `netmask`, or deletes it, carries `X-Mgmt-Path-Warning`.
+
+   Advisory, not a refusal: renumbering the management path is legitimate, and
+   LuCI warns rather than blocking on the same four field names. Scope is LuCI's
+   deliberately, with no firewall analysis, because predicting a firewall lockout
+   means modelling fw4 ordering and a guess dressed as a warning is worse than
+   silence. The interface comes from the kernel's route lookup rather than prefix
+   containment, which is what makes it correct for an operator arriving from
+   another network, the case that matters most, and what makes it work for IPv6.
+
+   Its limit is structural and documented: if the write really does strand the
+   caller, the response never arrives. `management_path` is the pre-flight half
+   for anyone who wants to check first.
+
 Decided, and deliberately still not scheduled:
 
 - **Commit-confirmed apply.** The authz model that blocked it is settled
@@ -269,39 +287,6 @@ carries no wire surface and needs no release to take effect.
   Additive, so a minor bump. `terraform-provider-uapi` needs matching attributes
   on `uapi_network_interface`, `uapi_network_route` and `uapi_network_rule` once
   the fields exist.
-
-- **Advisory management-path guard on network writes.** The cheaper protection
-  against the lockout class that commit-confirm exists for, and the one to do
-  first. uapi already knows the caller's address (`src/main.uc` reads
-  `env.REMOTE_ADDR` and already uses it for the TLS and token decisions), so the
-  input is free; the work is deriving the inbound interface and comparing it
-  against the write.
-
-  Scope it as LuCI scopes it: LuCI warns only when the inbound interface's
-  `disabled`, `proto`, `ipaddr` or `netmask` changes, and does no firewall
-  analysis at all. Matching that is the safe default per the design-reference
-  rule, and firewall analysis is the part that cannot be done honestly anyway,
-  since predicting a lockout there means modelling fw4 zone and rule ordering.
-
-  **Advisory, not a refusal.** LuCI offers Cancel / Apply checked / Apply
-  unchecked rather than blocking, and severing the requesting path is a
-  legitimate operation: renumbering the management VLAN, or moving to an
-  out-of-band path. A refusal would also be a breaking change needing an escape
-  hatch, where a warning header plus a `/diagnostics` finding is additive. Both
-  shapes are precedented here: `uhttpd/instances` refuses outright because
-  stripping uapi's own prefix has no legitimate use, while the bridge-vlan
-  self-lockout in `docs/security.md` is prose only and defended by nothing.
-
-  Note a real gap before starting: uapi has IPv4 prefix containment but no IPv6
-  equivalent, so a v6-managed box would be unguarded. Either scope the first cut
-  to v4 callers and say so, or delegate to the kernel with `ip route get` the way
-  LuCI's peeraddr helper does, which is less code and family-agnostic.
-
-  Why this before the timer: it is always on rather than something an operator has
-  to remember to arm, it adds no global window, and apply-confirm's single
-  box-global window is a real operational cost, an arm held for a whole
-  `terraform apply` gives every other config actor on the box `already_armed`,
-  LuCI included.
 
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` never shipped (built in 2.3.0-rc1, removed before stable) and

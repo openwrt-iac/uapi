@@ -300,6 +300,44 @@ Useful for "is anything stuck holding the global lock?" - a non-empty
 `per_package` map under steady state would point at a wedged write
 transaction.
 
+## Management-path warning
+
+The lockout this guards against is the one atomic writes cannot help with: a change that
+reloads cleanly and then severs the only path to the box. uapi warns rather than refuses,
+because renumbering the management VLAN or moving to an out-of-band path are legitimate
+things to do, and because LuCI warns rather than blocking on the same condition.
+
+Two places report it, and they answer different questions.
+
+`GET /diagnostics` carries `management_path`, which names the interface this request
+arrived through:
+
+```json
+{ "management_path": { "address": "192.168.0.236", "device": "eth1", "interface": "wan" } }
+```
+
+That is the pre-flight answer. Ask it before a risky write, or have a wrapper ask it, and
+you know which interface not to touch. `interface` is `null` when the request arrives on a
+device no uci interface claims, which is honest rather than a guess.
+
+A write to `network/interfaces` gets `X-Mgmt-Path-Warning` when it moves that interface's
+`disabled`, `proto`, `ipaddr` or `netmask`, or deletes it. That is the after-the-fact
+answer, and it is worth having because most such writes do not actually break the path:
+the header tells an operator they are in a risky state while the connection still works.
+
+Its limit, stated plainly: if the write really does strand you, the response never
+arrives. This is not a safety net, it is a warning light. The scope is deliberately
+LuCI's: those four field names on the inbound interface, and no firewall analysis at all,
+because predicting a firewall lockout means modelling fw4 zone and rule ordering, and a
+guess dressed as a warning is worse than silence.
+
+The interface is derived from the kernel's own route lookup rather than by comparing the
+caller's address against each interface's configured prefixes. An operator reaching the
+box from another network sits inside no local prefix, and that is exactly the operator a
+write can strand, so containment arithmetic would report "unknown" for the case that
+matters most. The route lookup also answers for IPv6, where uapi's own prefix helpers are
+IPv4-only.
+
 ## Healthz
 
 ```sh

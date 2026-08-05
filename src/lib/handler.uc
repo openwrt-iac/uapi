@@ -2,6 +2,7 @@ let ids = require("ids");
 let errors = require("errors");
 let transaction = require("transaction");
 let jsonpatch = require("jsonpatch");
+let mgmt = require("mgmt");
 
 // ETag computation. Uses sha256 from ucode-mod-digest when available (real
 // router); falls back to a non-crypto stable string hash for unit-test
@@ -349,6 +350,29 @@ function attach_reload_headers(resp, result) {
 	return resp;
 }
 
+// Advisory: the write already happened. It says "you moved the interface you are
+// talking through", which is worth knowing while the connection still works, and is
+// deliberately not a refusal, since renumbering the management path is a legitimate
+// thing to do. The route lookup runs only after a successful write that actually moved a
+// watched field, so the common write pays nothing for it.
+//
+// Its structural limit, stated because it is easy to expect more: if the write really
+// does strand the caller, this response never arrives. It informs the survivable cases,
+// which are the majority, and `/diagnostics` carries the same information ahead of a
+// write for anyone who wants to check first.
+function attach_mgmt_warning(resp, conn, ctx, id, changed) {
+	if (changed == null || length(changed) == 0) return resp;
+	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
+	// not happen, and there is nothing to warn about.
+	if (resp == null || (resp.status != 200 && resp.status != 204)) return resp;
+	let path = mgmt.inbound_interface(conn, ctx.remote_addr);
+	if (path == null || path.interface == null || path.interface != id) return resp;
+	if (resp.headers == null) resp.headers = {};
+	resp.headers["X-Mgmt-Path-Warning"] =
+		sprintf("interface=%s changed=%s", id, join(",", changed));
+	return resp;
+}
+
 function translate_tx(ctx, result) {
 	if (result.ok) {
 		let resp = attach_reload_headers(errors.ok(ctx, result.body), result);
@@ -631,6 +655,7 @@ function make(resource, opts) {
 
 	function replace(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
+		let mgmt_changed = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -661,6 +686,9 @@ function make(resource, opts) {
 				if (length(uf_errs) > 0)
 					return { ok: false, kind: "validation", errors: uf_errs };
 
+				if (resource.mgmt_path_guard)
+					mgmt_changed = mgmt.changed_fields(existing_view, write_body);
+
 				let new_opts = resource.toUci(write_body);
 				diff_apply(c, p, id, existing, new_opts);
 				let view = { ...new_opts };
@@ -673,11 +701,12 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed);
 	}
 
 	function patch(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
+		let mgmt_changed = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -706,6 +735,11 @@ function make(resource, opts) {
 				if (length(uf_errs) > 0)
 					return { ok: false, kind: "validation", errors: uf_errs };
 
+				// Against the merged body, not the request body: a PATCH naming only
+				// `proto` still has to be compared field by field against what was there.
+				if (resource.mgmt_path_guard)
+					mgmt_changed = mgmt.changed_fields(existing_view, r.merged);
+
 				let new_opts = resource.toUci(r.merged);
 				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
 				let view = { ...new_opts };
@@ -718,11 +752,14 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed);
 	}
 
 	function remove(conn, ctx, id) {
 		let kops = ctx.kernel_sink ?? [];
+		// Deleting the interface the caller arrived through strands them as surely as
+		// renumbering it, and none of LuCI's four field names covers a delete.
+		let mgmt_changed = resource.mgmt_path_guard ? [ "removed" ] : null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -745,7 +782,8 @@ function make(resource, opts) {
 		}));
 
 		if (result.ok)
-			return attach_reload_headers(errors.no_content(ctx), result);
+			return attach_mgmt_warning(attach_reload_headers(errors.no_content(ctx), result),
+			                           conn, ctx, id, mgmt_changed);
 		return translate_tx(ctx, result);
 	}
 
