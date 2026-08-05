@@ -274,6 +274,16 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_reload_header_on_raw() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+r = d['paths']['/raw/{package}/{id}']['put']['responses']['200']
+r.setdefault('headers', {})['X-Reload-Status'] = {'$ref': '#/components/headers/XReloadStatus'}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_mgmt_header_undeclared() {
 	python3 - <<'EOF'
 import json
@@ -300,7 +310,8 @@ probe lint-openapi-shape "a then with no if"                   "then/else with n
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
 probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
 probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value
-probe lint-openapi-shape "a kernel header without its pair"    "without the other"                 mut_kernel_header_unpaired
+probe lint-openapi-shape "a transaction header without its set" "declares only"                    mut_kernel_header_unpaired
+probe lint-openapi-shape "a reload header on a raw write"      "never reaches attach_reload_headers" mut_reload_header_on_raw
 probe lint-openapi-shape "an emitted header declared nowhere"  "the header is declared on"         mut_mgmt_header_undeclared
 probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches only" mut_mgmt_header_wrong_verb
 probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywords"                mut_hcl_keyword

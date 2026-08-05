@@ -152,17 +152,15 @@ function make_response(status, description, ref) {
 const SUCCESS_HEADERS_UNIVERSAL = {
 	"X-Request-Id": { "$ref": "#/components/headers/XRequestId" },
 };
-const SUCCESS_HEADERS_WRITE = {
+// All four come from attach_reload_headers, which only the curated-resource handler
+// reaches. Measured rather than reasoned: on a real box a curated write returns the reload
+// pair on POST, PUT, PATCH and DELETE 204, while raw (all four verbs), /batch 207,
+// packages, tokens and authorized_keys return none of them.
+const SUCCESS_HEADERS_UCI_TX = {
 	"X-Reload-Status":   { "$ref": "#/components/headers/XReloadStatus" },
 	"X-Reload-Services": { "$ref": "#/components/headers/XReloadServices" },
-};
-// Emitted by attach_reload_headers, which only the curated-resource handler reaches:
-// raw, non-uci and batch writes never produce them. `X-Reload-Status` belongs here on the
-// same reasoning and is declared more widely than it is emitted; that predates this and
-// moving it is a separate change, since it removes a declaration rather than adding one.
-const SUCCESS_HEADERS_UCI_TX = {
-	"X-Kernel-Status":  { "$ref": "#/components/headers/XKernelStatus" },
-	"X-Kernel-Applied": { "$ref": "#/components/headers/XKernelApplied" },
+	"X-Kernel-Status":   { "$ref": "#/components/headers/XKernelStatus" },
+	"X-Kernel-Applied":  { "$ref": "#/components/headers/XKernelApplied" },
 };
 const SUCCESS_HEADERS_POST = {
 	"Idempotent-Replayed": { "$ref": "#/components/headers/IdempotentReplayed" },
@@ -174,7 +172,6 @@ function attach_success_headers(resp, verb, status, opts) {
 	let h = {};
 	for (let k in SUCCESS_HEADERS_UNIVERSAL) h[k] = SUCCESS_HEADERS_UNIVERSAL[k];
 	if (status >= 200 && status < 300 && verb != "get") {
-		for (let k in SUCCESS_HEADERS_WRITE) h[k] = SUCCESS_HEADERS_WRITE[k];
 		if (opts?.uci_tx)
 			for (let k in SUCCESS_HEADERS_UCI_TX) h[k] = SUCCESS_HEADERS_UCI_TX[k];
 		if (verb == "post")
@@ -1191,11 +1188,11 @@ function build_doc() {
 					"schema": { "type": "string", "enum": ["true"] },
 				},
 				"XReloadStatus": {
-					"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise; see docs/operations.md). `no_reload` = the resource has no reload services. Absent on non-write 2xx responses.",
+					"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise; see docs/operations.md). `no_reload` = the resource has no reload services, which no shipped resource currently is, so responses today always say `ok`. Present on curated-resource writes only: raw passthrough, `POST /batch` and the non-uci writes do not run the reload machinery and return no reload headers at all.",
 					"schema": { "type": "string", "enum": ["ok", "no_reload"] },
 				},
 				"XReloadServices": {
-					"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload.",
+					"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload, and absent wherever X-Reload-Status itself is.",
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
 				},
 				"XKernelStatus": {

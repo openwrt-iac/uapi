@@ -14,10 +14,13 @@ background.
 
 Two signals worth wiring into your automation:
 
-- **`X-Reload-Status`** response header on writes: `ok` means the init
+- **`X-Reload-Status`** response header on curated-resource writes: `ok` means the init
   script ran and exited 0; `no_reload` means the resource has no reload
-  services (e.g. `system`). The header is intentionally not a
-  "converged" promise.
+  services. The header is intentionally not a "converged" promise.
+  In practice you will only ever see `ok`: all 43 writable resources declare
+  at least one reload service, so `no_reload` describes a resource shape that
+  does not currently exist. `system` used to be cited here as the example and
+  is not one, since it reloads `system` and `log`.
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
 
