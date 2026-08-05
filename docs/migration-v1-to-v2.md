@@ -243,12 +243,15 @@ Two safe additions for Terraform-style and dashboard-style clients:
   get a `304 Not Modified` with no body when nothing changed. Same uhttpd
   fallback as If-Match: `?if_none_match=<etag>`.
 
-## Dependency-aware ETags
+## Dependency-aware ETags (introduced in 2.0, since removed)
 
-A real change for cache-invalidation: the ETag on a `firewall/rules` GET now
-mixes in a hash of every `firewall:zone` in the config. Changing a zone
-invalidates the rule's ETag, so a Terraform refresh that uses If-Match for
-optimistic concurrency now correctly notices cross-resource drift.
+2.0 mixed a hash of every `firewall:zone` into the ETag of a `firewall/rules`
+GET, so changing a zone invalidated the rule's ETag. That was dropped again
+during the 2.x line, and this section described it as current until 2.5.0.
+the ETag helper in `src/lib/handler.uc` hashes the response body with
+`runtime` stripped and nothing else, so an ETag reflects only its own resource. Cross-resource
+consistency is enforced at `resource.validate()` time on every write instead;
+`docs/architecture.md` carries the current contract.
 
 Declared dependencies at v2.0 launch:
 

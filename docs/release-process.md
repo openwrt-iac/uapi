@@ -21,10 +21,12 @@ pulls the latest stable Release asset from each source repo listed in
 its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
 
 The `verify-arch-build` matrix job cross-compiles against the SDKs for
-`aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push to PROVE
-the arch-neutrality invariant - if any arch's build diverges from
-expectation, something arch-specific snuck into the package and the
-release should be held. Per-arch SDK tarball sha256 lives in
+`aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push. It does
+not prove arch-neutrality, despite what this said until 2.5.0: it
+compares no digests and has no x86_64 leg to compare against. It fails
+the release on a missing per-arch SDK pin, a tarball that does not match
+its pin, a cross-build that breaks under any of the three, or a build
+that produces no `.apk` - which is what 2.4.1 actually relied on. Per-arch SDK tarball sha256 lives in
 `build/sdk.sha256`; refresh those lines whenever `OPENWRT_VERSION` bumps
 (URLs are in the matrix in `.github/workflows/ci.yml`).
 

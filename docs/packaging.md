@@ -139,8 +139,8 @@ Tag-pushed releases produce more than just the APK:
 
 - **APK** at `bin/packages/all/uapi-<version>-r<N>.apk`. `PKGARCH:=all` means a single APK works on every OpenWrt arch.
 - **SPDX 2.3 SBOM** at `build/sbom.spdx.json` (via `make sbom APK=<apk>`). Carries every shipped file's sha256, package dependencies, and the built APK's verification hash.
-- **Multi-arch verification**: CI's `verify-arch-build` matrix cross-compiles against `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` SDKs to prove the arch-neutrality invariant (no compiled code snuck in).
-- **Signed tag**: required for the publish workflow to run; verified against `.github/allowed-signers`.
+- **Multi-arch verification**: CI's `verify-arch-build` matrix cross-compiles against `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` SDKs. It does NOT prove arch-neutrality: it compares no digests and has no x86_64 leg to compare against. What it hard-fails on is a missing per-arch SDK pin, a tarball that does not match its pin, a cross-build that breaks, and a build that yields no `.apk`. See the comment on the job itself.
+- **Signed tag**: required for the `release-apk` job to run; verified against `.github/release-signers.asc`.
 - **Reproducible SDK pin**: `build/sdk.sha256` records the exact SDK tarball checksums for all four arches.
 
 See `docs/release-process.md` for the full release flow, signed-tag setup, and pre-tag checklist.

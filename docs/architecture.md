@@ -35,7 +35,8 @@ Specifically, uapi shares the default `main` uhttpd instance with LuCI. Both ser
 ```
 
 Validated in `tests/integration/01_concurrency_model_test.sh`: 5 concurrent
-requests against a sleeping endpoint observe 5 distinct PIDs, total wall
+requests against a sleeping endpoint observe at least 2 distinct PIDs
+(the assertion's floor; uhttpd caps concurrent CGI children at 3), total wall
 time ≈ 1-2s instead of ≈ 5s.
 
 ### What this buys us
