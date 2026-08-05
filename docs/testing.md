@@ -52,6 +52,22 @@ Test 47 deletes the wireguard netdev in cleanup, not just the uci section. A wir
 
 No layer here can see a uci option no resource models at all. PUT deliberately drops unmodelled options, so a view-level comparison cannot detect the loss; that is a curation-completeness question, and layer 8 is what answers it.
 
+## Every gate ships with a demonstrated failure
+
+`make gate-selftest` breaks each gate on purpose and asserts it says so. Thirteen probes across nine gates: the six `lint` sub-targets, each of `lint-doc-refs`' five checks separately, `openapi-check` and `coverage`.
+
+It exists because `lint-emdash` shipped for several releases without ever running in CI. It lists tracked files with `git ls-files`, the CI container installed no `git`, and `|| true` turned the failure into a pass, so it reported success without reading a file. From the outside a green check and a working check look identical: "the gate runs" and "the gate works" are different claims, and only a planted defect separates them.
+
+Adding a gate means adding a probe. The completeness check derives the gate list from the Makefile's `lint:` chain rather than a hand-kept copy, so a new gate with no probe fails the self-test instead of passing quietly. That was verified by adding a gate with no probe and watching it fail.
+
+Three properties worth knowing before editing it:
+
+- **Probes run in a throwaway git worktree**, so a mutation can never reach the tree you are working in, and an interrupted run cannot leave your checkout dirty.
+- **The worktree mirrors your working tree, not `HEAD`.** Uncommitted changes are carried across and committed as a throwaway baseline inside the worktree. Without that, a gate and its probe arriving in one commit could not be validated until after committing, and the reset between probes would revert them.
+- **A probe that changes nothing is reported as a broken probe**, not as a blind gate. The two are indistinguishable from an exit code alone, and telling them apart is the whole point. Each probe also asserts a fragment of the expected message, so a gate failing for an unrelated reason does not read as a pass.
+
+It found a real hole on its first complete run: `coverage`'s dead-export gate could never fire. `used_internally` scanned for the export's name as a token, and the module's own export block names every export, so every export counted as used and the `exit_code = 1` on dead exports was unreachable. Excluding the export block from that scan fixed it, verified in both directions: a planted dead export is now reported, and all 131 real exports still pass.
+
 ## Lint suite
 
 `make lint` chains these sub-targets:

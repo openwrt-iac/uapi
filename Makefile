@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs
+.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs gate-selftest
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -19,6 +19,7 @@ help:
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
 	@echo "  lint-defaults      verify every fromUci default is annotated in schema_properties"
 	@echo "  lint-doc-refs      fail on doc references that do not resolve (paths, exports, targets, codes)"
+	@echo "  gate-selftest      break each gate on purpose and assert it fails"
 	@echo "  lint-openapi-shape structural checks a conformance validator does not make"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  openapi-validate   conformance-check the spec (needs python3 + openapi-spec-validator)"
@@ -166,6 +167,13 @@ lint-refs:
 # Complements openapi-validate rather than duplicating it.
 lint-openapi-shape:
 	@$(UCODE) tests/lint_openapi_shape.uc
+
+# Breaks each gate on purpose and asserts it says so. Not part of `lint`: it runs the
+# gates repeatedly in a throwaway worktree, which is CI-shaped work rather than
+# edit-loop work. `lint-emdash` shipped for releases without ever running in CI, so a
+# green gate and a working gate are not the same claim.
+gate-selftest:
+	@sh tests/gate_selftest.sh
 
 # Fails on a documentation reference that does not resolve: a repo path, a
 # module export, a `make` target, or an error code documented as returned that
