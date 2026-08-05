@@ -264,11 +264,45 @@ probe lint-emdash        "em-dash in a tracked file"           "em-dash found in
 probe lint-syntax        "ucode that does not parse"           "Syntax error"                      mut_syntax
 probe lint-reserved      "a Terraform-reserved property name"  "Terraform meta-arguments"          mut_reserved
 probe lint-refs          "a dangling ref"                      "dangling"                          mut_dangling_ref
+mut_kernel_header_unpaired() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+r = d['paths']['/network/interfaces/{id}']['put']['responses']['200']
+del r['headers']['X-Kernel-Applied']
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_mgmt_header_undeclared() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+for verb in ('put', 'patch', 'delete'):
+    for r in d['paths']['/network/interfaces/{id}'][verb]['responses'].values():
+        (r.get('headers') or {}).pop('X-Mgmt-Path-Warning', None)
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_mgmt_header_wrong_verb() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+r = d['paths']['/network/interfaces/{id}']['get']['responses']['200']
+r.setdefault('headers', {})['X-Mgmt-Path-Warning'] = {'$ref': '#/components/headers/XMgmtPathWarning'}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
 probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
 probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
 probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value
+probe lint-openapi-shape "a kernel header without its pair"    "without the other"                 mut_kernel_header_unpaired
+probe lint-openapi-shape "an emitted header declared nowhere"  "the header is declared on"         mut_mgmt_header_undeclared
+probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches only" mut_mgmt_header_wrong_verb
 probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywords"                mut_hcl_keyword
 probe lint-defaults      "a fromUci default, unannotated"      "absent from schema_properties"     mut_unannotated_default
 probe lint-defaults      "default and clear-on-omit together"  ""                                  mut_default_and_clear_on_omit

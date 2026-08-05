@@ -146,11 +146,71 @@ for (let p in paths) {
 		note(p, sprintf("collection segment %J is singular; make it plural, or add it to SINGULAR_COLLECTIONS with the reason", seg));
 }
 
+// Emitted headers have to be declared on the responses that can carry them and nowhere
+// else. Three of them were emitted by the code and declared nowhere at all, which a
+// generated client cannot see; the opposite error is just as invisible, and the tree
+// already carries one (`X-Reload-Status` is declared on raw, non-uci and batch writes,
+// which never reach the reload machinery). Both rules below are derived from the sources
+// rather than from a list kept by hand, so a fourth header cannot be added quietly.
+//
+// The kernel pair is set together by attach_reload_headers, so one without the other is a
+// declaration error whichever way round it is.
+let kernel_pairs = 0;
+for (let p in paths) {
+	for (let verb in paths[p]) {
+		if (verb == "parameters") continue;
+		for (let code in paths[p][verb]?.responses ?? {}) {
+			let h = paths[p][verb].responses[code]?.headers ?? {};
+			let st = exists(h, "X-Kernel-Status"), ap = exists(h, "X-Kernel-Applied");
+			if (st != ap)
+				note(sprintf("%s %s %s", uc(verb), p, code),
+				     "declares one of X-Kernel-Status / X-Kernel-Applied without the other; attach_reload_headers sets both or neither");
+			if (st) {
+				kernel_pairs++;
+				if (!exists(h, "X-Reload-Status"))
+					note(sprintf("%s %s %s", uc(verb), p, code),
+					     "declares the kernel pair but not X-Reload-Status; every uci-transaction write reports both");
+			}
+		}
+	}
+}
+
+// X-Mgmt-Path-Warning is per-resource and per-verb: only an item write on a resource whose
+// module sets `mgmt_path_guard` can move the interface the request arrived through.
+let guarded = 0;
+for (let f in fs.lsdir("src/resources", "*.uc") ?? []) {
+	let fh = fs.open("src/resources/" + f, "r");
+	if (!fh) continue;
+	let text = fh.read("all") ?? "";
+	fh.close();
+	if (index(text, "mgmt_path_guard") >= 0) guarded++;
+}
+let mgmt_paths = {};
+for (let p in paths) {
+	for (let verb in paths[p]) {
+		if (verb == "parameters") continue;
+		for (let code in paths[p][verb]?.responses ?? {}) {
+			if (!exists(paths[p][verb].responses[code]?.headers ?? {}, "X-Mgmt-Path-Warning")) continue;
+			if (mgmt_paths[p] == null) mgmt_paths[p] = [];
+			push(mgmt_paths[p], sprintf("%s %s", verb, code));
+		}
+	}
+}
+if (length(keys(mgmt_paths)) != guarded)
+	note("X-Mgmt-Path-Warning",
+	     sprintf("%d resource(s) set mgmt_path_guard but the header is declared on %d path(s)",
+	             guarded, length(keys(mgmt_paths))));
+for (let p in mgmt_paths) {
+	let got = join(", ", sort(mgmt_paths[p]));
+	if (got != "delete 204, patch 200, put 200")
+		note(p, sprintf("declares X-Mgmt-Path-Warning on %J; attach_mgmt_warning reaches only PUT 200, PATCH 200 and DELETE 204", got));
+}
+
 if (length(problems) > 0) {
 	for (let p in problems) print(p + "\n");
 	printf("FAIL: %d structural problem(s) in build/openapi.json\n", length(problems));
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, collections);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d kernel-header responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, collections, kernel_pairs);
