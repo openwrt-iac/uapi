@@ -174,7 +174,9 @@ let catalog = substr(gen, cat_start, cat_end - cat_start);
 let curated = {};
 for (let line in split(catalog, "\n")) {
 	let m = match(line, /path:[ \t]*"([^"]+)"/);
-	if (m) curated[m[1]] = true;
+	if (!m) continue;
+	let k = match(line, /kind:[ \t]*"([^"]+)"/);
+	curated[m[1]] = k ? k[1] : "crud";
 }
 
 function is_curated(p) {
@@ -182,6 +184,49 @@ function is_curated(p) {
 		if (p == base || p == base + "/{id}" || p == base + "/{id}/adopt") return true;
 	}
 	return false;
+}
+
+// ETag comes from set_etag_header, which the curated CRUD and singleton handlers call and
+// nothing else does. make_collection.get_one returns errors.ok bare, so a collection-kind
+// resource is curated and still carries no ETag: "curated" alone is the wrong test, which
+// is why this walks the catalog's `kind` rather than reusing is_curated().
+function etag_expected(p, verb, code) {
+	for (let base in keys(curated)) {
+		let kind = curated[base];
+		if (kind == "collection") {
+			if (p == base || p == base + "/{id}") return false;
+			continue;
+		}
+		if (kind == "singleton" && p == base)
+			return (verb == "get") ? (code == "200" || code == "304")
+			                       : (verb == "patch" && code == "200");
+		if (kind != "crud") continue;
+		if (p == base)
+			return verb == "post" && code == "200";
+		if (p == base + "/{id}")
+			return (verb == "get") ? (code == "200" || code == "304")
+			                       : ((verb == "put" || verb == "patch") && code == "200");
+		if (p == base + "/{id}/adopt")
+			return verb == "post" && code == "200";
+	}
+	return false;
+}
+
+let etag_responses = 0;
+for (let p in paths) {
+	for (let verb in paths[p]) {
+		if (verb == "parameters") continue;
+		for (let code in paths[p][verb]?.responses ?? {}) {
+			let declared = exists(paths[p][verb].responses[code]?.headers ?? {}, "ETag");
+			let want = etag_expected(p, verb, code);
+			let where = sprintf("%s %s %s", uc(verb), p, code);
+			if (declared && !want)
+				note(where, "declares ETag, but set_etag_header is never reached on this response");
+			else if (!declared && want)
+				note(where, "emits an ETag and does not declare it");
+			else if (declared) etag_responses++;
+		}
+	}
 }
 
 let tx_responses = 0;
@@ -246,5 +291,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d transaction-header responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, collections, tx_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, collections, tx_responses, etag_responses);
