@@ -470,6 +470,20 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 			                        resource.merge_for_patch(post, touched), existing);
 		return { ok: true, merged: post, schema_body: post };
 	}
+	// A merge patch is a partial object. Anything else used to be folded into the read
+	// view and answered 200 without writing anything, so a malformed body was
+	// indistinguishable from a successful no-op. Only the merge flavour is restricted:
+	// the JSON Patch branch above takes an array of ops by definition.
+	//
+	// A null body is not the same thing and stays a no-op. That is a request naming no
+	// fields, which is what an empty request body has always meant here. A literal `null`
+	// body lands here too, and deliberately so: it is indistinguishable from an absent one
+	// by this point, and the raw text that would separate them is the whole batch document
+	// for a sub-request, so there is no reading of it that holds at both entry points.
+	if (body != null && type(body) != "object")
+		return { ok: false, kind: "validation",
+		         errors: [ { field: "", code: "invalid_type",
+		                     message: "body must be a JSON object" } ] };
 	return { ok: true, merged: carry_write_only(resource, merge_fn(existing_view, body), existing),
 	         schema_body: body };
 }
