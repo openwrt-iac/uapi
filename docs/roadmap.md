@@ -138,12 +138,24 @@ Committed, in rough dependency order:
 Decided, and deliberately still not scheduled:
 
 - **Commit-confirmed apply.** The authz model that blocked it is settled
-  (`docs/commit-confirm.md`), so it no longer holds anything up: it can be
-  scoped into a minor without the risk that a later correction turns into a
-  major. It stays out of 2.5.0 on the other gate, which has not moved. No
-  first-party consumer exercises the surface, and shipping a frozen v2 contract
-  that nothing uses is the reason it was pulled from 2.3.0. The next step is a
-  wrapper in the provider repo, not a release slot here.
+  (`docs/commit-confirm.md`), so that gate is closed. It stays out of 2.5.0 on
+  two others, and the second is now stronger than when the feature was deferred.
+
+  No first-party consumer exercises the surface. And a provider cannot be that
+  consumer: the plugin protocol has no apply-scoped hook, and the one lifecycle
+  that looks like it fits, ephemeral resources, closes its window when its own
+  dependency chain finishes rather than when the apply does, so on a successful
+  apply it would confirm while other resources are still being written. Measured;
+  the analysis is in `docs/commit-confirm.md`. So the consumer can only be an
+  operator wrapper, and an SSH wrapper gets most of the benefit at zero wire
+  surface here.
+
+  Two consequences for whenever it is picked up. The per-write `?confirm` half
+  should be dropped rather than shipped: it has no consumer named in this repo and
+  a multi-resource apply using it fails at the second write and reverts the first.
+  And the standalone arm needs a renewal path before it is useful, which the
+  NETCONF prior art has had since 2011. The near-term protection for this risk
+  class is the advisory management-path guard under Features, not the timer.
 
 Deliberately not in 2.5.0: the mirrored-name retirement itself (only its
 announcement lands here, the removal is v3), and anything under Hardening, which
@@ -258,11 +270,44 @@ carries no wire surface and needs no release to take effect.
   on `uapi_network_interface`, `uapi_network_route` and `uapi_network_rule` once
   the fields exist.
 
+- **Advisory management-path guard on network writes.** The cheaper protection
+  against the lockout class that commit-confirm exists for, and the one to do
+  first. uapi already knows the caller's address (`src/main.uc` reads
+  `env.REMOTE_ADDR` and already uses it for the TLS and token decisions), so the
+  input is free; the work is deriving the inbound interface and comparing it
+  against the write.
+
+  Scope it as LuCI scopes it: LuCI warns only when the inbound interface's
+  `disabled`, `proto`, `ipaddr` or `netmask` changes, and does no firewall
+  analysis at all. Matching that is the safe default per the design-reference
+  rule, and firewall analysis is the part that cannot be done honestly anyway,
+  since predicting a lockout there means modelling fw4 zone and rule ordering.
+
+  **Advisory, not a refusal.** LuCI offers Cancel / Apply checked / Apply
+  unchecked rather than blocking, and severing the requesting path is a
+  legitimate operation: renumbering the management VLAN, or moving to an
+  out-of-band path. A refusal would also be a breaking change needing an escape
+  hatch, where a warning header plus a `/diagnostics` finding is additive. Both
+  shapes are precedented here: `uhttpd/instances` refuses outright because
+  stripping uapi's own prefix has no legitimate use, while the bridge-vlan
+  self-lockout in `docs/security.md` is prose only and defended by nothing.
+
+  Note a real gap before starting: uapi has IPv4 prefix containment but no IPv6
+  equivalent, so a v6-managed box would be unguarded. Either scope the first cut
+  to v4 callers and say so, or delegate to the kernel with `ip route get` the way
+  LuCI's peeraddr helper does, which is less code and family-agnostic.
+
+  Why this before the timer: it is always on rather than something an operator has
+  to remember to arm, it adds no global window, and apply-confirm's single
+  box-global window is a real operational cost, an arm held for a whole
+  `terraform apply` gives every other config actor on the box `already_armed`,
+  LuCI included.
+
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
-  `?confirm` shipped in 2.3.0 cannot wrap a whole `terraform apply`: a DAG
-  apply is N isolated provider RPCs with no apply-level begin/end hook, and
-  each `?confirm` mints a separate last-writer-wins window, so they never
-  merge into one transaction. The Terraform-useful shape is apply-confirm's
+  `?confirm` never shipped (built in 2.3.0-rc1, removed before stable) and
+  should not: a DAG apply is N isolated provider RPCs with no apply-level
+  begin/end hook, and only one window can exist at a time, so a second
+  `?confirm` write gets `409 already_armed` with its own change rolled back. The Terraform-useful shape is apply-confirm's
   `stage` primitive (arm once over a package set, ack once after the apply)
   exposed over HTTP, so a wrapper can arm, run the apply, then ack or let it
   auto-revert with no SSH hop. `ac_stage` already exists and the bare

@@ -31,6 +31,11 @@ It was deferred for contract-commitment reasons, not because it is broken:
 - **Unsettled authz (the deciding factor at the time).** Freezing rc1's authz
   into v2 would have cost a major bump to correct. Now settled: see "Authz
   model (decided)" below, which departs from rc1 on both arming and ack.
+- **No viable path for an IaC tool to drive it.** Established after the fact and
+  the most substantive of the three; see "Can Terraform actually use this" below.
+  In short: the plugin protocol has no apply-scoped hook, the one lifecycle that
+  looks like it fits closes its window mid-apply, and the per-write form is not
+  merely unusable by a multi-resource apply but corrupts state when tried.
 
 (The dependency is not a factor: `apply-confirm` 0.1.0 is released and on the
 apk feed. The hold is the wire-contract commitment, not availability.)
@@ -71,8 +76,16 @@ state-divergence objection that killed the v1-era design).
 ## The missing half: a standalone arm
 
 The per-write form cannot wrap a whole `terraform apply`: a DAG apply is N
-isolated RPCs with no apply-level hook, and each `?confirm` mints a separate
-last-writer-wins window. The Terraform-useful shape is `apply-confirm`'s
+isolated RPCs with no apply-level hook, and only one window can exist at a time.
+A second `?confirm` write does not mint a second window and does not degrade
+gracefully: `stage` refuses with `already_armed`, uapi returns `409`, and because
+arming happens before the commit the refused write's own change is rolled back
+too. So an apply that put `?confirm` on every write dies at resource 2, and
+resource 1 is then auto-reverted at its deadline, leaving Terraform state
+claiming a resource the box no longer has. (An earlier revision of this file said
+each `?confirm` "mints a separate last-writer-wins window". That was never true
+of the mechanism; the flock in Architecture above is the accurate description,
+and the rc1 code in `a85a5cd` behaves as described here.) The Terraform-useful shape is `apply-confirm`'s
 `stage` primitive exposed over HTTP so a wrapper can arm once, run the apply,
 then ack once. Locked design (see `docs/roadmap.md`):
 
@@ -159,6 +172,81 @@ mechanism.
 Deciding it now is the point: any of these settled differently after the surface
 freezes would cost a major to correct. With the model recorded, the feature can
 be scoped into whichever minor its consumer lands in.
+
+## Can Terraform actually use this
+
+The question that matters most, and the one asked last. Measured against the
+plugin protocol with a probe provider rather than reasoned from the docs.
+
+**No provider hook spans an apply.** `tfplugin6.proto` has schema/validate/
+configure, managed-resource CRUD, ephemeral Open/Renew/Close, list, functions and
+`StopProvider`, and nothing apply-scoped. `ConfigureProvider` is not a start hook:
+it fires once per graph walk, so once during plan and again during apply, in two
+different processes, with no paired end call. Teardown is a process kill, not an
+RPC. `terraform-plugin-framework` exposes no shutdown hook of its own.
+
+**Ephemeral resources look like the answer and are not.** They do give
+Open / Renew / Close with a framework-honoured `RenewAt`, and a probe confirmed
+renewals firing every 2s across a 9s apply, so the keep-alive half is sound. The
+scoping is what breaks it: the close node is wired to the ephemeral resource's own
+dependents, not to the end of the walk, so the window closes when that chain
+finishes. Measured, with an unrelated 6s resource in the same apply: Close at
+21.2s, the unrelated resource still writing until 27.2s. On a **successful** apply
+the ack would therefore be sent while other resources are still being written,
+which is worse than having no window, because it reports protection it is not
+giving. A bare unreferenced `ephemeral` block is worse again: Open and Close both
+complete before any managed resource applies at all, so it protects nothing while
+looking like it worked. Whole-apply coverage needs `depends_on` on every managed
+resource in every module, which a provider cannot enforce and where one omission
+silently drops that resource outside the net.
+
+Two further properties are independently disqualifying. `Open` fires during
+`terraform plan`, and the request carries no phase indicator, so arming there
+would write a rollback timer to a router during a read-only plan. And `Close` is
+not guaranteed: a failing resource in the chain produced no Close, `SIGINT`
+produced no Close and stopped renewals, and Terraform's own straggler sweep
+carries a TODO admitting the gap. That last one cuts uapi's way (no ack means the
+box reverts, which is the desired outcome) but it means the mechanism can only
+ever be correct under two assumptions the protocol forces: the arm may fire during
+a plan, and the ack may never arrive.
+
+**Conclusion.** A provider cannot drive arm-and-confirm correctly. If this ships
+it is operator-driven, and the per-write half should not ship at all: it has no
+consumer named anywhere in this repo, it cannot serve a multi-resource apply, and
+attempting one leaves Terraform state describing a box that reverted underneath
+it. The standalone arm is the only shape with a plausible consumer.
+
+## What the prior art settles
+
+Confirmed commit is old, and the two things uapi got right are the two things the
+standards took a revision to learn.
+
+NETCONF 1.0 (RFC 4741) bound the confirming commit to the arming session, so a
+transport blip reverted. RFC 6241 added `<persist>` / `<persist-id>` precisely so
+the confirm could arrive on a different session, and RESTCONF's authors hit uapi's
+exact problem when mapping it to HTTP: a request-per-operation transport has no
+session to bind to, so the token is not a convenience, it is the mechanism. uapi's
+durable sidecar plus `X-Confirm-Token` is that design, arrived at independently.
+
+Two things the prior art says uapi's design is still missing:
+
+- **Renewal.** In NETCONF, arming again inside a live window is first-class: it
+  extends the timer and may carry more changes, while the revert baseline stays
+  the snapshot taken at the *first* arm. That is exactly the arm-once-keep-writing
+  shape an apply needs, and it means the deadline does not have to be sized for a
+  worst-case apply up front. A window that must outlive the whole apply forces a
+  long deadline, which is also the recovery latency after a lockout. Renewal
+  decouples the two. Any renewal path must not re-snapshot, or the net silently
+  shrinks to cover only the last write.
+- **A stated answer for a plain write inside a live window.** RESTCONF's HTTP
+  mapping refused to leave this implicit: an unmarked edit either *is* the
+  confirming commit or is rejected `409`. uapi's design says nothing, and "neutral
+  write" is not one of the options the closest analogue allows.
+
+Also worth recording: RESTCONF deliberately did not standardise confirmed commit,
+and the IETF still has no interoperable contract for sessionless transports. There
+is no spelling to conform to, which argues for keeping uapi's surface minimal
+rather than chasing a vendor shape.
 
 ## Operator wrapper guidance (for the eventual consumer)
 
