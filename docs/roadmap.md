@@ -376,6 +376,9 @@ carries no wire surface and needs no release to take effect.
   which nobody has gathered. Until then the tree says measurement, not gate.
 
 - **Derive the property-fuzz resource list from the resource registry.**
+  `tests/unit/read_honesty_test.uc` now does exactly this and is the pattern to
+  copy: it walks `src/resources/` and fails naming any module with a `validate()`
+  that has no case, so the list cannot fall behind the tree.
   `tests/unit/property_test.uc` keeps `RESOURCES` as a hand-written literal, so a
   new curated resource gets no fuzz coverage until somebody remembers to add it.
   That is how `unbound.srv` and `unbound.ext` went unfuzzed: both are writable and

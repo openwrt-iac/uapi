@@ -40,7 +40,9 @@ Principle 4 as a test: read a section, write the body back, read again, and noth
 
 Both forms were validated by re-introducing the bug they claim to catch, at both layers, and each catches only its own. Neutering `carry_write_only` fails four unit cases on the verbatim form and exits the integration test non-zero; neutering `resolve_for_replace` fails one case, and only on the modified form.
 
-The unit case list cannot go stale, because a companion test derives the at-risk set from the resource modules themselves (any module declaring `writeOnly`, `merge_for_patch`, or `resolve_for_replace`) and fails naming what is uncovered.
+Every writable resource carries a case: a companion test walks `src/resources/` and fails naming any module with a `validate()` that has none. There is no exempt category. The first version demanded cases only from modules with a masked field or a merge hook, four of forty-three, which would not have demanded `dhcp/hosts` and so would not have caught the `tag` bug that shipped in the same release as the property itself.
+
+A second companion test enforces something the first version got wrong: **no case may seed a field at the value `fromUci` would synthesize for it.** If a seed uses the default, dropping that field from `toUci` is invisible, because the re-read fills the default back in and before matches after. Measured rather than assumed: deleting `out.forward` from `firewall.zones` went unnoticed while the seed said `REJECT`, the documented default, and was caught immediately once the seed said `DROP`. The check found seven more cases seeding booleans at their defaults that a hand audit had missed.
 
 What the integration layer adds is the part a stub bus cannot reach. It reads the secret back out of uci, which matters because the view masks credentials: a write that replaced one with a different non-empty value satisfies any view-level comparison, and only the stored bytes disprove it. It also confirms the modified address list reached the netdev rather than only uci. Both were measured with the bug present: `preshared_key` was emptied in uci while the response stayed 200.
 
