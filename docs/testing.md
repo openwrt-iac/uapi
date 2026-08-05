@@ -20,7 +20,7 @@ All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`).
 
 Every regression in this list has cost a real debug round-trip at some point. Keep them green; if one starts failing, that is the prompt to stop and investigate before pushing.
 
-1. **Concurrency model confirmation.** Handler sleeps 1s; 5 concurrent curls; total wall time ~1-2s with at least 2 distinct PIDs and `count == 1` on every response (the floor is 2, not 5: uhttpd caps concurrent CGI children at 3). Confirms the fork-per-request CGI model (`tests/integration/01_concurrency_model_test.sh`).
+1. **Concurrency model confirmation.** `tests/integration/01_concurrency_model_test.sh` claims "5 concurrent requests fork; at least 2 distinct PIDs, uhttpd caps CGI children at 3", and asserts `count == 1` on every response. The claim string is printed by the test beside the assertion and is checked by `lint-doc-refs`, so this description cannot drift from what the test does: it said "5 distinct PIDs" for several releases while the test asserted 2.
 2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in syslog.
 3. **Validation failure.** Bad payload → 422 with field errors → no uci change.
 4. **Reload failure rollback.** Construct a config uci accepts but the daemon rejects → 500 `reload_failed_restored` → uci back to prior state.

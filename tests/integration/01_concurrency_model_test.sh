@@ -72,6 +72,7 @@ if echo "$counts" | grep -qE '[^1,]'; then
 	fail=1
 fi
 
+echo "CLAIM: 5 concurrent requests fork; at least 2 distinct PIDs, uhttpd caps CGI children at 3"
 if [ "$pid_count" -lt 2 ]; then
 	echo "ASSERT FAIL: expected multiple distinct PIDs (forks), got $pid_count"
 	fail=1
