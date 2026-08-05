@@ -145,6 +145,63 @@ p.write_text(s.replace(a, '\trequire_present, section_index, probe_dead_export,'
 EOF
 }
 
+# docs/testing.md claims four shapes for lint-openapi-shape and two rules for
+# lint-defaults; one of each was probed, so the rest were documented but unverified.
+mut_required_undeclared() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['System']['required'] = ['nope_field']
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_empty_enum() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['System']['properties']['hostname']['enum'] = []
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_then_without_if() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['System']['allOf'] = [{'then': {'required': ['hostname']}}]
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_nan_value() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['System']['properties']['hostname']['maxLength'] = 'NaN'
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_hcl_keyword() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['System']['properties']['resource'] = {'type': 'string'}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_default_and_clear_on_omit() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('src/resources/system.uc'); s = p.read_text()
+a = 'log_remote:   { type: "boolean", default: false }'
+assert a in s, 'default-carrying property not found'
+p.write_text(s.replace(a, 'log_remote:   { type: "boolean", default: false, "x-uapi-clear-on-omit": true }', 1))
+EOF
+}
+
 probed=""
 failures=0
 
@@ -191,8 +248,14 @@ probe lint-emdash        "em-dash in a tracked file"           "em-dash found in
 probe lint-syntax        "ucode that does not parse"           "Syntax error"                      mut_syntax
 probe lint-reserved      "a Terraform-reserved property name"  "Terraform meta-arguments"          mut_reserved
 probe lint-refs          "a dangling ref"                      "dangling"                          mut_dangling_ref
-probe lint-openapi-shape "an if with no then"                  "structural problem"                mut_if_without_then
+probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
+probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
+probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
+probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
+probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value
+probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywords"                mut_hcl_keyword
 probe lint-defaults      "a fromUci default, unannotated"      "absent from schema_properties"     mut_unannotated_default
+probe lint-defaults      "default and clear-on-omit together"  ""                                  mut_default_and_clear_on_omit
 # lint-doc-refs carries five distinct checks, so it gets five probes: one passing check
 # would otherwise vouch for four that were never exercised.
 probe lint-doc-refs      "doc cites a missing path"            "path does not exist"               mut_doc_bad_path
