@@ -71,6 +71,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Lint (em-dash, ucode syntax, reserved names, $ref integrity, OpenAPI shape, defaults, doc refs)
         run: make lint
+      - name: Every gate fails when its subject is broken
+        run: make gate-selftest
       - name: OpenAPI contract is up to date
         run: make openapi-check
       - name: OpenAPI document is valid 3.1

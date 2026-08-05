@@ -132,6 +132,22 @@ function tested_via_alias(module_name, fn_name) {
 
 // An export referenced inside its own module outside its declaration line
 // (`function name(...)` or `name = function(...)`) is internally used.
+// The module's own export block names every export, so scanning it counts a declaration
+// as a use and no export can ever look dead. That made the dead-export gate below
+// unreachable: exit_code was set on a list that was always empty. Strip the block first.
+// Line-scanned rather than regexed: ucode matches POSIX ERE, where `\s` is not a class,
+// so a `[\s\S]` pattern here silently matched nothing and left the block in place.
+function without_export_block(src) {
+	let lines = split(src, "\n");
+	let cut = -1;
+	for (let i = 0; i < length(lines); i++)
+		if (match(lines[i], /^return[ \t]*\{/)) cut = i;
+	if (cut < 0) return src;
+	let kept = [];
+	for (let i = 0; i < cut; i++) push(kept, lines[i]);
+	return join("\n", kept);
+}
+
 function used_internally(src, name) {
 	let token_in_line = regexp("(^|[^" + IDENT + "])" + name + "([^" + IDENT + "]|$)");
 	let def_lhs = regexp("^[[:space:]]*function[[:space:]]+" + name + "[[:space:]]*\\(");
@@ -160,7 +176,7 @@ for (let m in modules) {
 		if (tested_via_alias(m.name, name)) {
 			fn_unit++;
 		} else if (used_in_production(m.name, name, m.file) != null
-		           || used_internally(src, name)) {
+		           || used_internally(without_export_block(src), name)) {
 			fn_prod_only++;
 		} else {
 			push(dead, name);
