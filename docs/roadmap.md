@@ -72,23 +72,24 @@ Why deferred rather than shipped:
 - No first-party consumer: the Terraform provider ships 2.3.0 without
   consuming confirm, so the surface would enter a permanent v2 contract
   with nothing exercising it.
-- The authz model is unsettled and freezing it would cost a major bump to
-  fix. Per-write arming currently rides the write's own resource `:rw` with
-  no `uapi:confirm` requirement, and ack/rollback are window-agnostic (a
-  `uapi:confirm:rw` token can ack any window); the package-granularity
-  escalation analysis (a per-write arm snapshots and reverts the whole uci
-  package, not just the resource written) suggests these may need to change.
-  Committing them to v2 now forecloses that without a 3.0.0.
+- The authz model was unsettled and freezing it would have cost a major bump to
+  fix. **Now decided** (`docs/commit-confirm.md`): every operation that can move
+  state, arming either way plus ack and rollback, requires `uapi:confirm:rw`
+  and `:rw` on every curated resource backed by the derived package set, because
+  the revert's unit is the uci package and authority has to match blast radius.
+  That departs from rc1 on two counts, which is exactly why it had to be settled
+  before the surface froze.
 
 The dependency is not the blocker: `apply-confirm` 0.1.0 is released and on
 the apk feed. The hold is the wire-contract commitment.
 
 Plan: ship the whole feature once, coherently, in one minor (per-write
-`?confirm` plus the standalone `POST /confirm` arm under Features below,
-with one reviewed authz model), gated on a settled authz model and a
-concrete consumer. 2.4.0 was the original target and passed without it, so
-the next step is a decision rather than a new target date; see the 2.5.0
-scope. Design reference: `docs/commit-confirm.md`.
+`?confirm` plus the standalone `POST /confirm` arm under Features below, with
+one reviewed authz model). One of the two gates is now closed: the authz model
+is decided and recorded, so the feature can be scoped into a minor whenever its
+consumer appears. The other is not. Nothing exercises the surface, and freezing
+a v2 contract that nothing uses is precisely why it came out of 2.3.0, so there
+is still no target release. Design reference: `docs/commit-confirm.md`.
 
 
 ## 2.5.0 scope
@@ -134,15 +135,15 @@ Committed, in rough dependency order:
 4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
    sections a write would now reject, before a write finds them one at a time.
 
-Needs a decision before it can be scoped:
+Decided, and deliberately still not scheduled:
 
-- **Commit-confirmed apply.** The plan under "Needs more reflection" still names
-  2.4.0 as the target, which has passed, so this needs deciding rather than
-  re-dating. It is the largest candidate here and remains gated on a settled
-  authz model and a concrete consumer. The authz question is the reason it
-  matters now: that section warns that freezing the current model would cost a
-  major to change, so if it ships at all it should ship with the model resolved
-  in a minor, not carried into v3.
+- **Commit-confirmed apply.** The authz model that blocked it is settled
+  (`docs/commit-confirm.md`), so it no longer holds anything up: it can be
+  scoped into a minor without the risk that a later correction turns into a
+  major. It stays out of 2.5.0 on the other gate, which has not moved. No
+  first-party consumer exercises the surface, and shipping a frozen v2 contract
+  that nothing uses is the reason it was pulled from 2.3.0. The next step is a
+  wrapper in the provider repo, not a release slot here.
 
 Deliberately not in 2.5.0: the mirrored-name retirement itself (only its
 announcement lands here, the removal is v3), and anything under Hardening, which
