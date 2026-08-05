@@ -175,6 +175,87 @@ t.describe('dhcp.hosts v1.2 parity additions', () => {
 		t.assert_true(seen['mac_aliases/conflict']);
 	});
 
+	t.it('macs alone satisfies the identifier requirement', () => {
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01'], ip: '10.0.0.1' },
+		                                    null)), 0);
+	});
+	t.it('macs writes one uci list mac, and a single entry writes a scalar', () => {
+		t.assert_deep_equal(hosts.toUci({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'] }).mac,
+		               ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
+		t.assert_equal(hosts.toUci({ macs: ['aa:bb:cc:dd:ee:01'] }).mac, 'aa:bb:cc:dd:ee:01');
+	});
+	t.it('macs wins over the deprecated pair, so a disagreement is refused', () => {
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		                            mac: 'aa:bb:cc:dd:ee:09',
+		                            mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null);
+		t.assert_equal(length(errs), 1);
+		t.assert_deep_equal(errs[0].field, 'mac');
+		t.assert_deep_equal(errs[0].code, 'conflict');
+	});
+	t.it('a tail disagreeing with macs is refused against mac_aliases', () => {
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		                            mac: 'aa:bb:cc:dd:ee:01',
+		                            mac_aliases: ['aa:bb:cc:dd:ee:09'] }, null);
+		t.assert_equal(length(errs), 1);
+		t.assert_deep_equal(errs[0].field, 'mac_aliases');
+		t.assert_deep_equal(errs[0].code, 'conflict');
+	});
+	t.it('a body that agrees across all three names is accepted', () => {
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		                                      mac: 'aa:bb:cc:dd:ee:01',
+		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null)), 0);
+	});
+	t.it('bad entries inside macs are reported by index', () => {
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'not-a-mac'] }, null);
+		t.assert_equal(length(errs), 1);
+		t.assert_deep_equal(errs[0].field, 'macs[1]');
+		t.assert_deep_equal(errs[0].code, 'invalid_format');
+	});
+	t.it('aliases without mac are fine when macs carries the list', () => {
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null)), 0);
+	});
+
+	// A PUT cannot avoid sending the stale pair beside the new list: fromUci mirrors both.
+	t.it('PUT resolves a stale pair to macs rather than refusing the body', () => {
+		let out = hosts.resolve_for_replace({ macs: ['aa:bb:cc:dd:ee:03'],
+		                                      mac: 'aa:bb:cc:dd:ee:01',
+		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] });
+		t.assert_true(!exists(out, 'mac'));
+		t.assert_true(!exists(out, 'mac_aliases'));
+		t.assert_deep_equal(out.macs, ['aa:bb:cc:dd:ee:03']);
+	});
+	t.it('PUT leaves an agreeing body alone, and a legacy-only body alone', () => {
+		let agree = { macs: ['aa:bb:cc:dd:ee:01'], mac: 'aa:bb:cc:dd:ee:01' };
+		t.assert_equal(hosts.resolve_for_replace(agree).mac, 'aa:bb:cc:dd:ee:01');
+		let legacy = { mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'] };
+		t.assert_deep_equal(hosts.resolve_for_replace(legacy).mac_aliases, ['aa:bb:cc:dd:ee:02']);
+	});
+	t.it('PATCH drops whichever surface the body did not name', () => {
+		let read = { macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		             mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'] };
+		let by_list = hosts.merge_for_patch(read, { macs: ['aa:bb:cc:dd:ee:03'] });
+		t.assert_equal(hosts.toUci(by_list).mac, 'aa:bb:cc:dd:ee:03');
+		let by_scalar = hosts.merge_for_patch(read, { mac: 'aa:bb:cc:dd:ee:03' });
+		t.assert_deep_equal(hosts.toUci(by_scalar).mac,
+		               ['aa:bb:cc:dd:ee:03', 'aa:bb:cc:dd:ee:02']);
+	});
+	t.it('a PATCH naming neither keeps the list intact', () => {
+		let read = { macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		             mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'],
+		             ip: '10.0.0.1' };
+		let merged = hosts.merge_for_patch(read, { ip: '10.0.0.9' });
+		t.assert_deep_equal(hosts.toUci(merged).mac,
+		               ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
+	});
+	t.it('fromUci surfaces the list and the deprecated split together', () => {
+		let v = hosts.fromUci({ '.name': 'h', '.type': 'host',
+		                        mac: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'] }, null);
+		t.assert_deep_equal(v.macs, ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
+		t.assert_equal(v.mac, 'aa:bb:cc:dd:ee:01');
+		t.assert_deep_equal(v.mac_aliases, ['aa:bb:cc:dd:ee:02']);
+	});
+
 	t.it('validate requires either mac or duid', () => {
 		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
 		t.assert_equal(errs[0].field, 'mac');

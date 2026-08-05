@@ -139,6 +139,9 @@ const CASES = [
 		file: "dhcp.hosts.uc", id: "h3", pkg: "dhcp",
 		section: { '.type': 'host', mac: ['00:11:22:33:44:77', 'aa:bb:cc:dd:ee:77'],
 		           ip: '192.168.1.52' },
+		// Two entries, so the modified list stays a list: a one-entry `macs` writes a
+		// scalar uci option, which would exercise a different toUci branch than intended.
+		modify: { key: "macs", value: ['00:11:22:33:44:78', 'aa:bb:cc:dd:ee:78'] },
 	},
 	{
 		file: "dhcp.servers.uc", id: "s1", pkg: "dhcp",
