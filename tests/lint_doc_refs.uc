@@ -208,6 +208,57 @@ for (let file in corpus()) {
 	}
 }
 
+// Announced deprecations must reach the published spec, not just the ledger. This exists
+// because the list-reads-null change was recorded in docs/deprecations.md and in the
+// changelog while appearing nowhere in build/openapi.json: a consumer generating a client
+// got no signal at all that every array field's type changes in v3, which is the one
+// notice most likely to break a generated client. The whole point of announcing in a minor
+// is that the notice reaches the artifact people consume.
+let dep_md = read("docs/deprecations.md") ?? "";
+let spec_desc = "";
+let spec_raw = read("build/openapi.json");
+if (spec_raw != null) {
+	let spec = json(spec_raw);
+	spec_desc = ((spec ?? {}).info ?? {}).description ?? "";
+}
+let announced = 0;
+for (let line in split(dep_md, "\n")) {
+	// Active deprecation rows: | `<resource>.<field>` (...) | ... |
+	let row = match(line, /^\|[ \t]*`([a-z_0-9]+\/[a-z_0-9]+\.[a-z_0-9]+)`/);
+	if (row) {
+		announced++;
+		if (index(spec_desc, row[1]) < 0)
+			report("docs/deprecations.md", 0,
+			       sprintf("%s is announced in the ledger but not in the spec's own description", row[1]),
+			       "Add it to the \"Upcoming in v3\" block in build/gen_openapi.uc, or the notice never reaches a generated client.");
+	}
+}
+// Response-shape bullets are prose. Matching them by a backticked token looked tidy and
+// would have been useless: the list-reads-null bullet, the one that was actually missing
+// from the spec, does not start with a backtick. So the two sides are compared by count
+// instead, which catches an item added to either place and not the other.
+let shape_bullets = 0;
+let in_shape = false;
+for (let line in split(dep_md, "\n")) {
+	if (index(line, "## Announced response-shape changes") == 0) { in_shape = true; continue; }
+	if (in_shape && substr(line, 0, 3) == "## ") in_shape = false;
+	if (in_shape && substr(line, 0, 4) == "- **") shape_bullets++;
+}
+announced += shape_bullets;
+
+let spec_bullets = 0;
+let in_upcoming = false;
+for (let line in split(spec_desc, "\n")) {
+	if (index(line, "## Upcoming in v3") == 0) { in_upcoming = true; continue; }
+	if (in_upcoming && substr(line, 0, 3) == "## ") in_upcoming = false;
+	if (in_upcoming && substr(line, 0, 4) == "- **") spec_bullets++;
+}
+if (spec_bullets != announced)
+	report("docs/deprecations.md", 0,
+	       sprintf("the ledger announces %d changes; the spec's \"Upcoming in v3\" block lists %d",
+	               announced, spec_bullets),
+	       "Every announcement has to reach build/openapi.json, or a generated client gets no notice. Edit the block in build/gen_openapi.uc and regenerate.");
+
 // Error codes, both directions. A code documented as returned must be emitted somewhere,
 // and a code in the published enum must be documented. The emit test is "the string
 // appears in src/ outside errors.uc", because errors.uc holds the status and enum tables:
@@ -263,5 +314,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d paths, %d module exports, %d make targets, %d test claims, %d documented codes, %d enum codes, all resolve\n",
-       counts.paths, counts.symbols, counts.targets, claim_count, code_count, enum_count);
+printf("OK: %d paths, %d module exports, %d make targets, %d test claims, %d announced deprecations, %d documented codes, %d enum codes, all resolve\n",
+       counts.paths, counts.symbols, counts.targets, claim_count, announced, code_count, enum_count);

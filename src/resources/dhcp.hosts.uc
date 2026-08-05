@@ -152,7 +152,7 @@ return {
 		// a stored scalar, which is why storage does not have to converge first.
 		// See docs/deprecations.md.
 		tag:           { type: ["string", "array", "null"], items: { type: "string" },
-		               description: "dnsmasq tags for this reservation; a request must match all of them. Send an array; a space-separated string is accepted and reads back as one until v3" },
+		               description: "dnsmasq tags for this reservation; a request must match all of them. Send an array. A space-separated string is accepted on write and reads back as one, which v3 removes: the field becomes array-only. Not flagged `deprecated`, because the field survives and only the string form goes away. See docs/deprecations.md" },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.
