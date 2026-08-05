@@ -156,15 +156,27 @@ const SUCCESS_HEADERS_WRITE = {
 	"X-Reload-Status":   { "$ref": "#/components/headers/XReloadStatus" },
 	"X-Reload-Services": { "$ref": "#/components/headers/XReloadServices" },
 };
+// Emitted by attach_reload_headers, which only the curated-resource handler reaches:
+// raw, non-uci and batch writes never produce them. `X-Reload-Status` belongs here on the
+// same reasoning and is declared more widely than it is emitted; that predates this and
+// moving it is a separate change, since it removes a declaration rather than adding one.
+const SUCCESS_HEADERS_UCI_TX = {
+	"X-Kernel-Status":  { "$ref": "#/components/headers/XKernelStatus" },
+	"X-Kernel-Applied": { "$ref": "#/components/headers/XKernelApplied" },
+};
 const SUCCESS_HEADERS_POST = {
 	"Idempotent-Replayed": { "$ref": "#/components/headers/IdempotentReplayed" },
 };
 
-function attach_success_headers(resp, verb, status) {
+const UCI_TX = { uci_tx: true };
+
+function attach_success_headers(resp, verb, status, opts) {
 	let h = {};
 	for (let k in SUCCESS_HEADERS_UNIVERSAL) h[k] = SUCCESS_HEADERS_UNIVERSAL[k];
 	if (status >= 200 && status < 300 && verb != "get") {
 		for (let k in SUCCESS_HEADERS_WRITE) h[k] = SUCCESS_HEADERS_WRITE[k];
+		if (opts?.uci_tx)
+			for (let k in SUCCESS_HEADERS_UCI_TX) h[k] = SUCCESS_HEADERS_UCI_TX[k];
 		if (verb == "post")
 			for (let k in SUCCESS_HEADERS_POST) h[k] = SUCCESS_HEADERS_POST[k];
 		// Writes that return a body (PUT/PATCH/POST 200) carry the refreshed
@@ -172,6 +184,7 @@ function attach_success_headers(resp, verb, status) {
 		// 204 has no body and no ETag.
 		if (status == 200)
 			h["ETag"] = { "$ref": "#/components/headers/ETag" };
+		for (let k in opts?.extra) h[k] = opts.extra[k];
 	}
 	// Item-level GET 200 also returns an ETag (used as the optimistic-
 	// concurrency anchor for the next write). Distinguish item from
@@ -192,11 +205,20 @@ function attach_success_headers(resp, verb, status) {
 
 // Merge a success-response block with the verb-appropriate error set.
 // `success` is an object like { "200": <response>, ["304": <response>] }.
-function responses(verb, success) {
+// X-Mgmt-Path-Warning is the one emitted header that is per-resource and per-verb: only a
+// network/interfaces item write can move the interface the request arrived through. It rides
+// the caller-supplied path rather than a global block for that reason.
+function mgmt_headers(mod, opts) {
+	if (!mod?.mgmt_path_guard) return opts;
+	return { ...opts,
+	         extra: { "X-Mgmt-Path-Warning": { "$ref": "#/components/headers/XMgmtPathWarning" } } };
+}
+
+function responses(verb, success, opts) {
 	let r = {};
 	for (let k in success) {
 		let status = int(k);
-		r[k] = attach_success_headers(success[k], verb, status);
+		r[k] = attach_success_headers(success[k], verb, status, opts);
 	}
 	let errs = error_responses(verb);
 	for (let k in errs) r[k] = errs[k];
@@ -250,7 +272,7 @@ function build_crud_paths(ep) {
 					}
 				}
 			},
-			"responses": responses("post", { "200": make_response(200, "Created", schema_ref) }),
+			"responses": responses("post", { "200": make_response(200, "Created", schema_ref) }, UCI_TX),
 		},
 	};
 
@@ -265,7 +287,8 @@ function build_crud_paths(ep) {
 		"put":    { "summary": sprintf("Replace a %s", ep.subresource),
 		            "description": "Honors `If-Match` (header or `?if_match=`). Stale ETag → 412.",
 		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + schema_ref } } } },
-		            "responses": responses("put", { "200": make_response(200, "Replaced", schema_ref) }) },
+		            "responses": responses("put", { "200": make_response(200, "Replaced", schema_ref) },
+		                                 mgmt_headers(mod, UCI_TX)) },
 		"patch":  { "summary": sprintf("Partially update a %s", ep.subresource),
 		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 		            "requestBody": { "required": true, "content": {
@@ -273,9 +296,11 @@ function build_crud_paths(ep) {
 		                                                            "description": "merge-patch partial body" } },
 		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 		            } },
-		            "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }) },
+		            "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) },
+		                                 mgmt_headers(mod, UCI_TX)) },
 		"delete": { "summary": sprintf("Delete a %s", ep.subresource),
-		            "responses": responses("delete", { "204": { "description": "Deleted" } }) },
+		            "responses": responses("delete", { "204": { "description": "Deleted" } },
+		                                   mgmt_headers(mod, UCI_TX)) },
 	};
 
 	paths[ep.path + "/{id}/adopt"] = {
@@ -290,7 +315,7 @@ function build_crud_paths(ep) {
 				"original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: " +
 				"adopting an already-managed section returns 409 unmanaged_resource " +
 				"(see error envelope).", singular),
-			"responses": responses("post", { "200": make_response(200, "Adopted", schema_ref) })
+			"responses": responses("post", { "200": make_response(200, "Adopted", schema_ref) }, UCI_TX)
 		},
 	};
 
@@ -313,7 +338,7 @@ function build_singleton_paths(ep) {
 			             "application/json":            { "schema": { "type": "object" } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
-			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }) },
+			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }, UCI_TX) },
 		},
 	};
 }
@@ -1172,6 +1197,18 @@ function build_doc() {
 				"XReloadServices": {
 					"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload.",
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
+				},
+				"XKernelStatus": {
+					"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were skipped. `skipped` = none was, because the interface is down or netifd does not know it; uci is still committed and the change takes effect on the next ifup. `no_kernel` = the resource has no kernel path, which is the value on most writes. Absent on raw, non-uci and batch writes, which do not run the kernel apply.",
+					"schema": { "type": "string", "enum": ["ok", "partial", "skipped", "no_kernel"] },
+				},
+				"XKernelApplied": {
+					"description": "Comma-separated list of the interfaces whose kernel state was actually changed. Absent when nothing was applied, so also absent whenever X-Kernel-Status is `skipped` or `no_kernel`.",
+					"schema": { "type": "string", "example": "wg0" },
+				},
+				"XMgmtPathWarning": {
+					"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
+					"schema": { "type": "string", "example": "interface=lan changed=ipaddr" },
 				},
 			},
 			"responses": {

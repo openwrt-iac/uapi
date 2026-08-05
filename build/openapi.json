@@ -465,6 +465,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -613,6 +619,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -695,6 +707,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -752,6 +770,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -828,6 +852,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -977,6 +1007,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -1125,6 +1161,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1207,6 +1249,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1264,6 +1312,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -1340,6 +1394,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -1489,6 +1549,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -1637,6 +1703,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1719,6 +1791,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1776,6 +1854,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -1852,6 +1936,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -2001,6 +2091,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -2149,6 +2245,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2231,6 +2333,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2288,6 +2396,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -2364,6 +2478,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -2513,6 +2633,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -2661,6 +2787,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2743,6 +2875,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2800,6 +2938,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -2876,6 +3020,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -3018,6 +3168,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -3163,6 +3319,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -3312,8 +3474,17 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -3394,8 +3565,17 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -3451,6 +3631,15 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -3527,6 +3716,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -3676,6 +3871,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -3824,6 +4025,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -3906,6 +4113,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -3963,6 +4176,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -4039,6 +4258,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -4188,6 +4413,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -4336,6 +4567,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -4418,6 +4655,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -4475,6 +4718,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -4551,6 +4800,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -4700,6 +4955,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -4848,6 +5109,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -4930,6 +5197,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -4987,6 +5260,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -5063,6 +5342,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -5212,6 +5497,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -5360,6 +5651,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -5442,6 +5739,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -5499,6 +5802,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -5575,6 +5884,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -5724,6 +6039,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -5872,6 +6193,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -5954,6 +6281,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6011,6 +6344,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -6087,6 +6426,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -6236,6 +6581,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -6384,6 +6735,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6466,6 +6823,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6523,6 +6886,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -6599,6 +6968,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -6748,6 +7123,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -6896,6 +7277,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6978,6 +7365,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -7035,6 +7428,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -7111,6 +7510,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -7260,6 +7665,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -7408,6 +7819,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -7490,6 +7907,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -7547,6 +7970,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -7623,6 +8052,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -7988,6 +8423,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -8136,6 +8577,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8218,6 +8665,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8275,6 +8728,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -8351,6 +8810,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -8494,6 +8959,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8633,6 +9104,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8771,6 +9248,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -8916,6 +9399,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -9065,6 +9554,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9147,6 +9642,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9204,6 +9705,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -9280,6 +9787,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -9429,6 +9942,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -9577,6 +10096,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9659,6 +10184,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9716,6 +10247,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -9792,6 +10329,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -9941,6 +10484,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -10089,6 +10638,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10171,6 +10726,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10228,6 +10789,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -10304,6 +10871,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -10453,6 +11026,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -10601,6 +11180,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10683,6 +11268,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10740,6 +11331,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -10816,6 +11413,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -10959,6 +11562,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11098,6 +11707,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11236,6 +11851,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -11381,6 +12002,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -11530,6 +12157,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11612,6 +12245,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11669,6 +12308,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -11745,6 +12390,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -11894,6 +12545,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -12042,6 +12699,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12124,6 +12787,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12181,6 +12850,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -12257,6 +12932,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -12406,6 +13087,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -12554,6 +13241,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12636,6 +13329,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12693,6 +13392,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -12769,6 +13474,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -12918,6 +13629,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -13066,6 +13783,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13148,6 +13871,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13205,6 +13934,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -13281,6 +14016,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -13430,6 +14171,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -13578,6 +14325,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13660,6 +14413,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13717,6 +14476,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -13793,6 +14558,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -13936,6 +14707,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14074,6 +14851,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -14214,6 +14997,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14352,6 +15141,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -14497,6 +15292,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -14646,6 +15447,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14728,6 +15535,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14785,6 +15598,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -14861,6 +15680,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -15003,6 +15828,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -15148,6 +15979,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -15297,6 +16134,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15379,6 +16222,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15436,6 +16285,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -15512,6 +16367,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -15661,6 +16522,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -15809,6 +16676,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15891,6 +16764,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15948,6 +16827,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -16024,6 +16909,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -16173,6 +17064,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -16321,6 +17218,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16403,6 +17306,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16460,6 +17369,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -16536,6 +17451,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -16685,6 +17606,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -16833,6 +17760,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16915,6 +17848,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16972,6 +17911,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -17048,6 +17993,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -17190,6 +18141,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -17335,6 +18292,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -17484,6 +18447,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -17566,6 +18535,12 @@
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
 							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -17623,6 +18598,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							}
 						}
 					},
@@ -17699,6 +18680,12 @@
 							},
 							"X-Reload-Services": {
 								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -24952,6 +25939,32 @@
 				"schema": {
 					"type": "string",
 					"example": "firewall,dnsmasq"
+				}
+			},
+			"XKernelStatus": {
+				"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were skipped. `skipped` = none was, because the interface is down or netifd does not know it; uci is still committed and the change takes effect on the next ifup. `no_kernel` = the resource has no kernel path, which is the value on most writes. Absent on raw, non-uci and batch writes, which do not run the kernel apply.",
+				"schema": {
+					"type": "string",
+					"enum": [
+						"ok",
+						"partial",
+						"skipped",
+						"no_kernel"
+					]
+				}
+			},
+			"XKernelApplied": {
+				"description": "Comma-separated list of the interfaces whose kernel state was actually changed. Absent when nothing was applied, so also absent whenever X-Kernel-Status is `skipped` or `no_kernel`.",
+				"schema": {
+					"type": "string",
+					"example": "wg0"
+				}
+			},
+			"XMgmtPathWarning": {
+				"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
+				"schema": {
+					"type": "string",
+					"example": "interface=lan changed=ipaddr"
 				}
 			}
 		},
