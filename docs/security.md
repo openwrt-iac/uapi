@@ -55,6 +55,15 @@ What uapi defends against, what it doesn't, and what the operator should do.
 12. **uhttpd self-lockout.** `uhttpd/instances` validate refuses any PATCH
     or PUT on the `main` instance that would strip uapi's own `ucode_prefix`
     entry - returning `422 conflict` instead of leaving uapi unreachable.
+13. **Network self-lockout.** Advisory rather than a refusal, because unlike
+    item 12 there is a legitimate version of the write: renumbering the
+    management VLAN or moving to an out-of-band path. A `network/interfaces`
+    write that moves the inbound interface's `disabled`, `proto`, `ipaddr` or
+    `netmask` returns `X-Mgmt-Path-Warning`, and `GET /diagnostics` reports
+    `management_path` so a caller can check before writing. Firewall lockout is
+    deliberately not covered: it would need fw4 ordering modelled, and the
+    requesting connection survives the reload by design, so uapi cannot detect
+    it by observation either. See `docs/operations.md`.
 
 ### Out of scope (not defended)
 
