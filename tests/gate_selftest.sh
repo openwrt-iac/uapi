@@ -101,6 +101,8 @@ mut_doc_bad_path()   { printf '\nSee `src/lib/nope.uc`.\n' >> docs/testing.md; }
 mut_doc_bad_symbol() { printf '\nHandled by `values.no_such_helper`.\n' >> docs/testing.md; }
 mut_doc_bad_target() { printf '\nRun `make nope-target`.\n' >> docs/testing.md; }
 
+mut_doc_bad_claim() { printf '\nIt claims "no test prints this line".\n' >> docs/testing.md; }
+
 mut_code_unemitted() {
 	python3 - <<'EOF'
 import pathlib
@@ -261,6 +263,7 @@ probe lint-defaults      "default and clear-on-omit together"  ""               
 probe lint-doc-refs      "doc cites a missing path"            "path does not exist"               mut_doc_bad_path
 probe lint-doc-refs      "doc cites a missing export"          "does not export"                   mut_doc_bad_symbol
 probe lint-doc-refs      "doc cites a missing make target"     "defines no target"                 mut_doc_bad_target
+probe lint-doc-refs      "a claim no test prints"               "no test prints this claim"         mut_doc_bad_claim
 probe lint-doc-refs      "an error code nothing emits"         "nothing in src/ emits it"          mut_code_unemitted
 probe lint-doc-refs      "an enum code nothing documents"      "appears nowhere in docs/errors.md" mut_code_undocumented
 probe openapi-check      "a schema change not regenerated"     ""                                  mut_stale_spec

@@ -180,6 +180,34 @@ for (let file in corpus()) {
 	}
 }
 
+// Claims a doc attributes to a test. A doc that says what a test asserts is the shape that
+// went wrong twice: "5 distinct PIDs" where the test asserted 2, and "asserted live" for a
+// case only a unit test covers. The convention is that the test prints the claim beside its
+// assertion and the doc quotes that string, which turns an unverifiable statement about
+// behaviour into a reference that either resolves or does not.
+let test_text = "";
+for (let d in [ "tests/integration", "tests/unit" ]) {
+	for (let f in fs.lsdir(d) ?? []) {
+		if (index(f, "test") < 0) continue;
+		test_text += read(d + "/" + f) ?? "";
+	}
+}
+let claim_count = 0;
+for (let file in corpus()) {
+	let text = read(file);
+	if (text == null) continue;
+	let lines = split(text, "\n");
+	for (let i = 0; i < length(lines); i++) {
+		for (let m in match(lines[i], /claims "([^"]+)"/g) ?? []) {
+			claim_count++;
+			if (index(test_text, m[1]) < 0)
+				report(file, i + 1,
+				       sprintf("no test prints this claim: %J", m[1]),
+				       "Quote the CLAIM line the test prints, or add the claim to the test beside the assertion it describes.");
+		}
+	}
+}
+
 // Error codes, both directions. A code documented as returned must be emitted somewhere,
 // and a code in the published enum must be documented. The emit test is "the string
 // appears in src/ outside errors.uc", because errors.uc holds the status and enum tables:
@@ -235,5 +263,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d paths, %d module exports, %d make targets, %d documented codes, %d enum codes, all resolve\n",
-       counts.paths, counts.symbols, counts.targets, code_count, enum_count);
+printf("OK: %d paths, %d module exports, %d make targets, %d test claims, %d documented codes, %d enum codes, all resolve\n",
+       counts.paths, counts.symbols, counts.targets, claim_count, code_count, enum_count);

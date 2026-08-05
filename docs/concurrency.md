@@ -117,7 +117,7 @@ If you add a code path that takes multiple locks at once, follow the same sorted
 The concurrency model is asserted by integration tests, not just docs:
 
 - `tests/integration/01_concurrency_model_test.sh` confirms fork-per-request (5 concurrent requests; the test asserts at least 2 distinct PIDs, since uhttpd caps concurrent CGI children at 3).
-- Lock granularity is asserted at two different levels, and the difference matters when reading a green run. The SAME-package half is live: two concurrent writes serialize with the second returning `423` (`tests/integration/13_lock_contention_test.sh`). The DIFFERENT-packages half is a unit test over real flocks, not HTTP (`tests/unit/transaction_test.uc`, "per-package lock allows different packages to proceed in parallel").
+- Lock granularity is asserted at two different levels, and the difference matters when reading a green run. The SAME-package half is live: `tests/integration/13_lock_contention_test.sh` claims "two concurrent writes to the SAME package serialize; the second gets 423 naming the lock". The DIFFERENT-packages half is a unit test over real flocks, not HTTP (`tests/unit/transaction_test.uc`, "per-package lock allows different packages to proceed in parallel").
 
 If you change the locking model, run integration tests in QEMU before opening the PR.
 

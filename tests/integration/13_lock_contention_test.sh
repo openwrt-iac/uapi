@@ -14,6 +14,7 @@ echo "--- start a background lock-holder on /var/lock/uapi.lock ---"
 $SSH 'flock -nx /var/lock/uapi.lock -c "sleep 5" >/dev/null 2>&1 &' &
 sleep 1
 
+echo "CLAIM: two concurrent writes to the SAME package serialize; the second gets 423 naming the lock"
 echo "--- POST while the lock is held → expect 423 locked + Retry-After ---"
 resp=$(curl -sS -i -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/firewall/rules" -d '{
