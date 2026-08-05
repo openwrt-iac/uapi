@@ -153,27 +153,61 @@ for (let p in paths) {
 // which never reach the reload machinery). Both rules below are derived from the sources
 // rather than from a list kept by hand, so a fourth header cannot be added quietly.
 //
-// The kernel pair is set together by attach_reload_headers, so one without the other is a
-// declaration error whichever way round it is.
-let kernel_pairs = 0;
+// The four transaction headers travel together and reach only curated-resource writes.
+// The curated path set is derived from the generator's own ENDPOINTS catalog, so a new
+// resource is covered automatically and a header attached to the wrong block is caught in
+// both directions: declared where it cannot be emitted, or missing where it is.
+//
+// The over-declaration half is not hypothetical. `X-Reload-Status` was declared on 15 raw,
+// batch and non-uci write responses that emit nothing, which is as invisible to a generated
+// client as the opposite error.
+const TX_HEADERS = [ "X-Reload-Status", "X-Reload-Services", "X-Kernel-Status", "X-Kernel-Applied" ];
+
+let gen = "";
+let gh = fs.open("build/gen_openapi.uc", "r");
+if (gh) { gen = gh.read("all") ?? ""; gh.close(); }
+let cat_start = index(gen, "const ENDPOINTS = [");
+let cat_end = index(gen, "\n];", cat_start);
+if (cat_start < 0 || cat_end < 0)
+	note("build/gen_openapi.uc", "cannot find the ENDPOINTS catalog, so the transaction-header scope is unchecked");
+let catalog = substr(gen, cat_start, cat_end - cat_start);
+let curated = {};
+for (let line in split(catalog, "\n")) {
+	let m = match(line, /path:[ \t]*"([^"]+)"/);
+	if (m) curated[m[1]] = true;
+}
+
+function is_curated(p) {
+	for (let base in keys(curated)) {
+		if (p == base || p == base + "/{id}" || p == base + "/{id}/adopt") return true;
+	}
+	return false;
+}
+
+let tx_responses = 0;
 for (let p in paths) {
 	for (let verb in paths[p]) {
-		if (verb == "parameters") continue;
+		if (verb == "parameters" || verb == "get") continue;
 		for (let code in paths[p][verb]?.responses ?? {}) {
+			if (substr(code, 0, 1) != "2") continue;
 			let h = paths[p][verb].responses[code]?.headers ?? {};
-			let st = exists(h, "X-Kernel-Status"), ap = exists(h, "X-Kernel-Applied");
-			if (st != ap)
-				note(sprintf("%s %s %s", uc(verb), p, code),
-				     "declares one of X-Kernel-Status / X-Kernel-Applied without the other; attach_reload_headers sets both or neither");
-			if (st) {
-				kernel_pairs++;
-				if (!exists(h, "X-Reload-Status"))
-					note(sprintf("%s %s %s", uc(verb), p, code),
-					     "declares the kernel pair but not X-Reload-Status; every uci-transaction write reports both");
+			let present = [];
+			for (let n in TX_HEADERS) if (exists(h, n)) push(present, n);
+			let where = sprintf("%s %s %s", uc(verb), p, code);
+			if (is_curated(p)) {
+				if (length(present) == 0)
+					note(where, "a curated-resource write declares none of the transaction headers; it emits all four");
+				else if (length(present) != length(TX_HEADERS))
+					note(where, sprintf("declares only %J of the four transaction headers, which attach_reload_headers sets together", present));
+				else tx_responses++;
+			} else if (length(present) > 0) {
+				note(where, sprintf("declares %J, but this is not a curated-resource write and never reaches attach_reload_headers", present));
 			}
 		}
 	}
 }
+if (length(keys(curated)) == 0)
+	note("build/gen_openapi.uc", "the ENDPOINTS catalog parsed to zero paths, so the check above proved nothing");
 
 // X-Mgmt-Path-Warning is per-resource and per-verb: only an item write on a resource whose
 // module sets `mgmt_path_guard` can move the interface the request arrived through.
@@ -212,5 +246,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d kernel-header responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, collections, kernel_pairs);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d transaction-header responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, collections, tx_responses);

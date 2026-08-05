@@ -18818,12 +18818,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -18963,12 +18957,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -19038,12 +19026,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -19095,12 +19077,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							}
 						}
 					},
@@ -19217,12 +19193,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -19336,12 +19306,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							}
 						}
 					},
@@ -19458,12 +19422,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -19577,12 +19535,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							}
 						}
 					},
@@ -19644,12 +19596,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -19769,12 +19715,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -19849,12 +19789,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -19967,12 +19901,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							}
 						}
 					},
@@ -20308,12 +20236,6 @@
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -20427,12 +20349,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							}
 						}
 					},
@@ -20600,12 +20516,6 @@
 						"headers": {
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -25925,7 +25835,7 @@
 				}
 			},
 			"XReloadStatus": {
-				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise; see docs/operations.md). `no_reload` = the resource has no reload services. Absent on non-write 2xx responses.",
+				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise; see docs/operations.md). `no_reload` = the resource has no reload services, which no shipped resource currently is, so responses today always say `ok`. Present on curated-resource writes only: raw passthrough, `POST /batch` and the non-uci writes do not run the reload machinery and return no reload headers at all.",
 				"schema": {
 					"type": "string",
 					"enum": [
@@ -25935,7 +25845,7 @@
 				}
 			},
 			"XReloadServices": {
-				"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload.",
+				"description": "Comma-separated list of init scripts that were reloaded after the write committed. Absent when X-Reload-Status: no_reload, and absent wherever X-Reload-Status itself is.",
 				"schema": {
 					"type": "string",
 					"example": "firewall,dnsmasq"

@@ -115,11 +115,24 @@ Every response carries:
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`.                                       |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on writes                       | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
-| `X-Reload-Services`          | 2xx on writes when status=ok        | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
-| `X-Kernel-Status`            | 2xx on writes                       | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
-| `X-Kernel-Applied`           | 2xx on writes when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
+| `X-Reload-Status`            | 2xx on curated-resource writes      | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Services`          | curated-resource writes, when status=ok | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
+| `X-Kernel-Status`            | 2xx on curated-resource writes      | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
+| `X-Kernel-Applied`           | curated-resource writes, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
 | `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddr`. Advisory: the write already happened and was not refused. Present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddr` or `netmask` (or deleted the section, reported as `changed=removed`). Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
+
+The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
+`X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than "writes" because that is
+measured, not assumed: raw passthrough (`/raw/...`), `POST /batch`, and the non-uci writes
+(`/packages/...`, `/tokens`, `/system/password`, `/system/authorized_keys`) never reach
+`attach_reload_headers` and return none of them. Until 2.5.0 the OpenAPI document declared
+the reload pair on those responses anyway, which is why the wording here matters: a client
+generated from the spec was told to expect a header that was never going to arrive.
+
+`X-Reload-Status: no_reload` is documented but not currently reachable: every writable
+resource declares at least one reload service, so shipped responses always say `ok`.
+The value stays defined because it describes a resource with no reload services, which
+is a shape the transaction still handles.
 
 ## Retry-After
 
