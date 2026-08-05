@@ -58,6 +58,8 @@ No layer here can see a uci option no resource models at all. PUT deliberately d
 
 It exists because `lint-emdash` shipped for several releases without ever running in CI. It lists tracked files with `git ls-files`, the CI container installed no `git`, and `|| true` turned the failure into a pass, so it reported success without reading a file. From the outside a green check and a working check look identical: "the gate runs" and "the gate works" are different claims, and only a planted defect separates them.
 
+Each rejection shape the bullets below describe has its own probe, so the list of what a gate catches is executable rather than prose that can drift from it: `lint-openapi-shape` documented four shapes while only one was probed, which is how prose and behaviour separate. If you add a shape to a gate, add its probe, and if the two disagree the self-test says so.
+
 Adding a gate means adding a probe. The completeness check derives the gate list from the Makefile's `lint:` chain rather than a hand-kept copy, so a new gate with no probe fails the self-test instead of passing quietly. That was verified by adding a gate with no probe and watching it fail.
 
 Three properties worth knowing before editing it:
