@@ -86,7 +86,7 @@ CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-s
 | Semver mapping, non-breaking vs breaking changes, OpenAPI spec versioning, schema annotations | `docs/versioning.md` | Cutting a release, naming a deprecation, considering whether a change is patch / minor / major. |
 | ucode quirks that have cost CI iterations | `docs/ucode-quirks.md` | Designing a new module; before assuming standard language behavior. |
 | Release process (signed tags, multi-arch build, feed publication) | `docs/release-process.md` | Cutting a tag or troubleshooting a release workflow. |
-| Lock-state audit (every fd-open / lock-acquire site with release proof) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
+| Lock-state audit (the transaction and token paths; 17 of 36 sites, see the doc) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
 | Migration v1 to v2 (rename map, breaking changes) | `docs/migration-v1-to-v2.md` | Supporting operators upgrading across the v2 boundary. |
 | Field-level deprecation log | `docs/deprecations.md` | Renaming or removing a wire-surface field. |
 | Roadmap (shipped, in-flight, deferred, out of scope) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |

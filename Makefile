@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help
+.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -18,6 +18,7 @@ help:
 	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
 	@echo "  lint-defaults      verify every fromUci default is annotated in schema_properties"
+	@echo "  lint-doc-refs      fail on doc references that do not resolve (paths, exports, targets, codes)"
 	@echo "  lint-openapi-shape structural checks a conformance validator does not make"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
 	@echo "  openapi-validate   conformance-check the spec (needs python3 + openapi-spec-validator)"
@@ -112,13 +113,28 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults
+lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-doc-refs
 
 # Tracked files only, via git rather than a hand-kept directory list. The list had
 # gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
 # grep exit 2, which the `if` reads as "no match", so the rule was unenforced. It
 # also scanned untracked build artifacts, where a binary image matches by accident.
+#
+# The two guards exist because the git form had its own silent-pass hole: the CI lint
+# container installed no git, so `git ls-files` printed nothing, `hits` came back empty
+# and the check reported success without reading a file. It had never run in CI. git is
+# installed there now, and these guards mean the next container change fails the build
+# instead of quietly disabling the rule.
 lint-emdash:
+	@command -v git >/dev/null 2>&1 || { \
+		echo "lint-emdash needs git to list tracked files; without it this check passes without scanning anything"; \
+		exit 1; }
+	@git rev-parse --git-dir >/dev/null 2>/tmp/uapi-emdash-git.err || { \
+		echo "lint-emdash cannot use this checkout, so the scan would be empty. git said:"; \
+		sed 's/^/  /' /tmp/uapi-emdash-git.err; \
+		echo "  (a tarball export has no tracked-file list; a container checkout needs"; \
+		echo "   git config --global --add safe.directory \"\$$GITHUB_WORKSPACE\")"; \
+		exit 1; }
 	@hits=$$(git ls-files -z | xargs -0 grep -In $$'\xe2\x80\x94' 2>/dev/null || true); \
 	if [ -n "$$hits" ]; then \
 		echo "$$hits"; \
@@ -150,6 +166,13 @@ lint-refs:
 # Complements openapi-validate rather than duplicating it.
 lint-openapi-shape:
 	@$(UCODE) tests/lint_openapi_shape.uc
+
+# Fails on a documentation reference that does not resolve: a repo path, a
+# module export, a `make` target, or an error code documented as returned that
+# nothing emits. Four false claims were found by hand in a few days; this catches
+# the two shapes that are mechanically checkable.
+lint-doc-refs:
+	@$(UCODE) tests/lint_doc_refs.uc
 
 # Verifies every fromUci unconditional default has a matching
 # `default: V` in schema_properties. Catches the drift case where a new

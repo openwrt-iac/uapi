@@ -10,7 +10,7 @@ Three layers, plus the harness and the load-bearing test inventory.
 
 ## ucode test harness
 
-Thin homegrown harness (`tests/harness.uc`, ~100 lines): `describe` / `it` / `assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1 on any failure.
+Thin homegrown harness (`tests/harness.uc`, ~110 lines): `describe` / `it` / `assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1 on any failure.
 
 ## Injectable ubus surface
 
@@ -20,7 +20,7 @@ All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`).
 
 Every regression in this list has cost a real debug round-trip at some point. Keep them green; if one starts failing, that is the prompt to stop and investigate before pushing.
 
-1. **Concurrency model confirmation.** Handler sleeps 1s; 5 concurrent curls; total wall time ~1-2s with 5 distinct PIDs and `count == 1` on every response. Confirms the fork-per-request CGI model (`tests/integration/01_concurrency_model_test.sh`).
+1. **Concurrency model confirmation.** Handler sleeps 1s; 5 concurrent curls; total wall time ~1-2s with at least 2 distinct PIDs and `count == 1` on every response (the floor is 2, not 5: uhttpd caps concurrent CGI children at 3). Confirms the fork-per-request CGI model (`tests/integration/01_concurrency_model_test.sh`).
 2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in syslog.
 3. **Validation failure.** Bad payload → 422 with field errors → no uci change.
 4. **Reload failure rollback.** Construct a config uci accepts but the daemon rejects → 500 `reload_failed_restored` → uci back to prior state.
@@ -61,6 +61,7 @@ No layer here can see a uci option no resource models at all. PUT deliberately d
 - `lint-reserved`: fails on schema property names that collide with Terraform meta-arguments or HCL block keywords.
 - `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json` and fails on dangling targets.
 - `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json` that a conformance validator does not make, because the shapes are legal JSON Schema and merely useless to a generator: a schema `required` naming a property the schema does not declare, an `if` with no `then` or `else` (and the reverse), an empty or non-array `enum`, and any value that is the string `"NaN"`. The last one exists because ucode's `+` on two arrays yields NaN rather than concatenating, which is how an `enum` of `"NaN"` reached the published spec.
+- `lint-doc-refs` (2.5.0+): walks `docs/*.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md` and `.github/workflows/ci.yml`, and fails on a reference that does not resolve: a repo path that is not there, a `module.export` a module does not export, a backticked `make <target>` the Makefile does not define, and an error code documented as returned that nothing in `src/` emits (plus the reverse, a published enum code absent from `docs/errors.md`). Waivers live in `tests/lint_doc_refs.uc::WAIVERS`, keyed by the reference with the reason as the value, because some references are deliberately unresolvable: `bench/baseline.json` is cited precisely because it does not exist. What it does not catch is stated in its own header and is the larger half: "this job proves X" where the job exists and does something adjacent, and modal invariants like `never` or `atomic`. Both of those shapes shipped false claims that had to be caught by reading.
 - `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies a matching `default:` annotation in `schema_properties`; for every `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ?? null` and the schema type includes `"null"`.
 
 ### Asserting that a write reached the daemon

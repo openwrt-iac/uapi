@@ -375,6 +375,21 @@ carries no wire surface and needs no release to take effect.
   release time. Deciding needs a few runs' worth of variance data across runners,
   which nobody has gathered. Until then the tree says measurement, not gate.
 
+- **Finish the lock-state audit.** `docs/lock-state-audit.md` covers 17 of the 36
+  sites its own reproduction command finds, and roughly seven of its line ranges have
+  drifted. Nine modules are absent entirely: `error_ring`, `idempotency`, `metrics`,
+  `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6`, `dhcp.servers`. The
+  doc no longer claims completeness, so this is a coverage gap rather than a false
+  statement, but the missing sites are real fd and lock acquisitions with no release
+  proof written down. Re-run the command, audit each site, and consider whether the count
+  can be checked mechanically the way the read-honesty case list is.
+
+- **Reporting-surface consumption is the provider's.** `X-Kernel-Status`,
+  `management_path` and `?validate=1` are all emitted and documented here, and
+  `terraform-provider-uapi` consumes none of them. That is the provider's call, not a gap
+  in this repo, and it is recorded here only so the question is not re-opened as uapi
+  work.
+
 - **Derive the property-fuzz resource list from the resource registry.**
   `tests/unit/read_honesty_test.uc` now does exactly this and is the pattern to
   copy: it walks `src/resources/` and fails naming any module with a `validate()`

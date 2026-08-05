@@ -60,11 +60,16 @@ jobs:
       image: alpine:edge
     steps:
       - name: Install ucode and tooling
-        run: apk add --no-cache ucode make grep findutils python3 py3-pip
+        run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
         run: pip install --break-system-packages --quiet openapi-spec-validator
       - uses: actions/checkout@v7
-      - name: Lint (em-dash + ucode syntax + reserved-name guard + OpenAPI shape)
+      # checkout adds this under a temporarily-overridden HOME and then restores it, so by
+      # the time make runs git distrusts the workspace's ownership and refuses. Without it
+      # lint-emdash cannot list tracked files, which is how it went unenforced.
+      - name: Trust the workspace (container checkout)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Lint (em-dash, ucode syntax, reserved names, $ref integrity, OpenAPI shape, defaults, doc refs)
         run: make lint
       - name: OpenAPI contract is up to date
         run: make openapi-check

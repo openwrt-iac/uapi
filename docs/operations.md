@@ -263,7 +263,7 @@ Three things worth knowing:
 - **Opt-in on purpose.** Each resource walks its own uci package, so a package is
   traversed once per resource that lives in it, six times for `firewall` and
   `network`. The cost therefore scales with the number of sections in the
-  configuration, not with a fixed overhead: 43 resources over a stock-sized
+  configuration, not with a fixed overhead: 45 resources over a stock-sized
   configuration measured about 90 ms, and a router with a large firewall will be
   slower. `/diagnostics` is what a monitoring system polls on an interval, so
   without `?validate=1` the response is unchanged and costs nothing extra.

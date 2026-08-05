@@ -16,7 +16,18 @@ Reproducing the audit: `grep -rn 'fs\.open\|fs\.popen\|\.lock(' src/ cli/` yield
 
 ## Summary
 
-17 sites audited. All release correctly on every in-request exit path.
+**Partial: 17 of the 36 sites the command above finds.** Every site in the table
+below releases correctly on every in-request exit path, and that claim is good. What
+is not good is the coverage: this said "17 sites audited" without qualification until
+2.5.0, while its own reproduction command returned 36. Nine modules appear nowhere in
+the table (`error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`, `token_store`,
+`dhcp.leases`, `dhcp.leases6`, `dhcp.servers`), and roughly seven of the line ranges
+below have drifted from the code they name. `mgmt.uc` is the illustration: it landed
+in 2.5.0 with an `fs.popen` and this document went on asserting it had audited
+everything.
+
+Completing it is tracked in `docs/roadmap.md` under Hardening. Until then, read this
+as an audit of the transaction and token paths, not of the tree.
 
 ## Sites
 
