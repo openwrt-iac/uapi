@@ -89,7 +89,7 @@ const CASES = [
 		// from the mirrored ipaddr pair above, and only this one exercises it.
 		file: "network.interfaces.uc", id: "wg0", pkg: "network",
 		section: { '.type': 'interface', proto: 'wireguard', private_key: WG_KEY,
-		           addresses: ['10.9.0.1/24'], listen_port: '51820' },
+		           addresses: ['10.9.0.1/24', 'fd00:9::1/64'], listen_port: '51820' },
 	},
 	{
 		file: "network.devices.uc", id: "dev1", pkg: "network",
@@ -105,12 +105,14 @@ const CASES = [
 	},
 	{
 		file: "network.bridge_vlans.uc", id: "bv1", pkg: "network",
-		section: { '.type': 'bridge-vlan', device: 'br-probe', vlan: '7', ports: ['lan1'] },
+		section: { '.type': 'bridge-vlan', device: 'br-probe', vlan: '7',
+		           ports: ['lan1', 'lan2'] },
 	},
 	{
 		file: "network.wireguard_peers.uc", id: "p1", pkg: "network",
 		modify: { key: "allowed_ips", value: ["10.9.0.3/32"] },
-		section: { '.type': 'wireguard_wg0', public_key: WG_PUB, allowed_ips: ['10.9.0.2/32'], preshared_key: WG_KEY, endpoint_host: '198.51.100.7', endpoint_port: '51820' },
+		section: { '.type': 'wireguard_wg0', public_key: WG_PUB, allowed_ips: ['10.9.0.2/32', 'fd00:9::2/128'],
+		           preshared_key: WG_KEY, endpoint_host: '198.51.100.7', endpoint_port: '51820' },
 	},
 	{
 		file: "wireless.devices.uc", id: "radio0", pkg: "wireless",
@@ -130,6 +132,13 @@ const CASES = [
 		file: "dhcp.hosts.uc", id: "h2", pkg: "dhcp",
 		modify: { key: "tag", value: ["guest", "iot", "lab"] },
 		section: { '.type': 'host', mac: '00:11:22:33:44:66', ip: '192.168.1.51', tag: ['guest', 'iot'] },
+	},
+	{
+		// A `list mac`, the shape no fixture carried: `mac` is its head and `mac_aliases`
+		// the tail, so a single-valued seed cannot exercise the split at all.
+		file: "dhcp.hosts.uc", id: "h3", pkg: "dhcp",
+		section: { '.type': 'host', mac: ['00:11:22:33:44:77', 'aa:bb:cc:dd:ee:77'],
+		           ip: '192.168.1.52' },
 	},
 	{
 		file: "dhcp.servers.uc", id: "s1", pkg: "dhcp",
@@ -154,7 +163,7 @@ const CASES = [
 	},
 	{
 		file: "system.timeservers.uc", id: "ntp", pkg: "system",
-		section: { '.type': 'timeserver', server: ['0.pool.ntp.org'] },
+		section: { '.type': 'timeserver', server: ['0.pool.ntp.org', '1.pool.ntp.org'] },
 	},
 	{
 		file: "dropbear.instances.uc", id: "db1", pkg: "dropbear",
@@ -162,7 +171,9 @@ const CASES = [
 	},
 	{
 		file: "uhttpd.instances.uc", id: "main", pkg: "uhttpd",
-		section: { '.type': 'uhttpd', listen_http: ['0.0.0.0:80'], home: '/www', ucode_prefix: ['/api/v2=/usr/share/uapi/main.uc'] },
+		section: { '.type': 'uhttpd', listen_http: ['0.0.0.0:80', '[::]:80'], home: '/www',
+		           ucode_prefix: ['/api/v2=/usr/share/uapi/main.uc',
+		                          '/probe=/usr/share/uapi/main.uc'] },
 	},
 	{
 		file: "uhttpd.certs.uc", id: "px", pkg: "uhttpd",
