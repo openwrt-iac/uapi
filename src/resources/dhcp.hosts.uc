@@ -84,6 +84,19 @@ function validate(json, conn) {
 		}
 	}
 
+	// `mac` and `mac_aliases` are two wire names for one uci `list mac`: the scalar is its
+	// first entry and the array is the rest. Aliases without a primary describe a list with
+	// no head, which toUci cannot write, so it wrote nothing at all and answered 200 with
+	// the MACs discarded. Writing them as the list instead would answer a different request
+	// than the one sent, since `mac` would come back non-null.
+	//
+	// Reported against mac_aliases rather than mac: a second mac/required error would
+	// collide with the identifier one above under the field|code dedup in
+	// _validate_with_schema, and one of the two would silently disappear.
+	if (type(json.mac_aliases) == "array" && length(json.mac_aliases) > 0 && !has_mac)
+		push(errs, { field: "mac_aliases", code: "conflict",
+		             message: "cannot be sent without mac: both name the same uci list option, and mac is its first entry" });
+
 	if (has_duid && !match(json.duid, DUID_RE))
 		push(errs, { field: "duid", code: "invalid_format",
 		             message: "must be a hex string (optionally colon-separated)" });

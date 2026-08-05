@@ -137,6 +137,44 @@ t.describe('dhcp.hosts v1.2 parity additions', () => {
 		for (let e in errs)
 			t.assert_not_equal(e.field + ':' + e.code, 'mac:required');
 	});
+	// The bug this pins: validate returned [] for a duid-only body carrying aliases, and
+	// toUci then wrote no mac option at all, so the MACs were discarded on a 200. The test
+	// above ("validate accepts duid-only entries") was one field away from catching it.
+	t.it('rejects mac_aliases sent without mac, rather than dropping them', () => {
+		let errs = hosts.validate({
+			mac_aliases: ['11:22:33:44:55:66'],
+			duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff',
+			ip: '2001:db8::42',
+		}, null);
+		let found = false;
+		for (let e in errs)
+			if (e.field == 'mac_aliases' && e.code == 'conflict') found = true;
+		t.assert_true(found);
+	});
+
+	// The shape toUci cannot express, which is why the body is refused rather than written:
+	// with no primary there is no first entry to build the list from.
+	t.it('toUci writes no mac option when only aliases are present', () => {
+		let out = hosts.toUci({ mac: null, mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' });
+		t.assert_equal(out.mac, null);
+		t.assert_equal(out.ip, '10.0.0.1');
+	});
+
+	t.it('an empty alias list is not a conflict, since there is no orphaned tail', () => {
+		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', mac_aliases: [], ip: '10.0.0.1' }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	// Distinct fields on purpose: reported against mac it would collide with the identifier
+	// error under the field|code dedup and one of the two would vanish.
+	t.it('reports both the missing identifier and the orphaned aliases', () => {
+		let errs = hosts.validate({ mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' }, null);
+		let seen = {};
+		for (let e in errs) seen[e.field + '/' + e.code] = true;
+		t.assert_true(seen['mac/required']);
+		t.assert_true(seen['mac_aliases/conflict']);
+	});
+
 	t.it('validate requires either mac or duid', () => {
 		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
 		t.assert_equal(errs[0].field, 'mac');
