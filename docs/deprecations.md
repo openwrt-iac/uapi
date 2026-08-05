@@ -13,6 +13,14 @@ Policy: a deprecation in a minor release means both forms (old and new) are acce
 | `network/interfaces.name` (request input) | `network/interfaces.id` | 2.2.0 | v3 | Send `id` instead of `name` at create time. Both fields accept the same charset (uci section-name rules); on `proto=wireguard` both are IFNAMSIZ-tight (15 char cap). If both are supplied they must match or the request returns `422 conflict`. The `id` field is the universal "section name at create" input across every CRUD resource in 2.2.0; `name` was a 2.1.0-era shim that only worked on `network/interfaces`. |
 | `network/interfaces.ipaddr` (request input) | `network/interfaces.ipaddrs` | 2.5.0 (targeted, not yet released) | v3 | Send `ipaddrs` instead. Both name the same uci `list ipaddr`, and the list already wins on write, so the migration is to stop sending the scalar rather than to change any value. `ipaddr` stays in responses after removal, carrying the first entry of the list; only the write is going away. See the note below on why this row carries no `deprecated: true` flag. |
 
+Every entry above must also appear in the published spec's own description, under
+"Upcoming in v3". That is checked by `make lint-doc-refs`: the ledger and the spec are
+compared, and a change announced in one but not the other fails the build. The check exists
+because the list-reads-`null` change was recorded here and in the changelog while appearing
+nowhere in `build/openapi.json`, so a consumer generating a client got no notice at all of
+the one change most likely to break its response validation. Announcing in a minor is only
+worth doing if the notice reaches the artifact people consume.
+
 ## How to migrate
 
 For each deprecated input field your client sends, switch to the replacement column. uapi accepts both during the window, so the migration can be staged: update writes first, observe nothing breaks, then drop the old field. Reads are unaffected (response shape unchanged during the window).
