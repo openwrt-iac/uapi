@@ -254,10 +254,20 @@ through a `GET`. Name the field and describe the expected shape
 ### Mirrored field pairs
 
 When one uci option is exposed under two wire names, every write path has
-to tolerate a faithful full replace that changes only one of them.
-`network/interfaces` is the only resource that does this today: it
-mirrors the first entry of `list ipaddr` into `ipaddr` alongside the full
-`ipaddrs`. Prefer not to add a second one.
+to tolerate a faithful full replace that changes only one of them. Two
+resources do this today: `network/interfaces` mirrors the first entry of
+`list ipaddr` into `ipaddr` alongside the full `ipaddrs`, and `dhcp/hosts`
+splits one `list mac` across `macs`, `mac` and `mac_aliases`.
+
+**Do not add a mirror to expose a field. Add one only to remove one.** The
+`dhcp/hosts` triple is the second case and exists for that reason: `mac` and
+`mac_aliases` were already a mirrored pair, a positional split of a list that
+every other resource would surface as an array, and they cannot be dropped
+inside a major. `macs` is the single writable name they collapse into, so the
+third name is what pays for retiring the other two. A transitional mirror is
+allowed when it carries a `docs/deprecations.md` row naming its removal
+target; a mirror added for a caller's convenience is not, because the cost
+below is permanent while the convenience is not.
 
 The read mirror puts both names into the caller's state, so a
 full-replace client sends both back whether or not its own config named
