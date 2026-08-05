@@ -91,7 +91,7 @@ Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `dhcp/hosts` | `config host` | Static leases. `mac` (or `mac_aliases` for multi-MAC), `ip`, `name`, `leasetime`, `duid`, `tag`. |
+| `dhcp/hosts` | `config host` | Static leases. `macs` (the whole uci `list mac`; `mac` and `mac_aliases` are its deprecated positional split), `ip`, `name`, `leasetime`, `duid`, `tag`. |
 | `dhcp/servers` | `config dhcp` | Per-interface server config. `runtime` carries active-lease counts. |
 | `dhcp/dnsmasq` (singleton) | `config dnsmasq` | Global dnsmasq tuning; forwarders, address overrides, rebind protection. |
 | `dhcp/odhcpd` (singleton) | `config odhcpd` | `maindhcp`, `leasefile`, `loglevel`. |

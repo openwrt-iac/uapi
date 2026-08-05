@@ -216,11 +216,12 @@ carries no wire surface and needs no release to take effect.
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
 
-- **Stop mirroring one uci option into two writable wire names.** `ipaddr` /
-  `ipaddrs` on `network/interfaces` is the only case, and the only one there
-  should be. One uci `list ipaddr` is exposed under two names that are both
-  readable and both writable, so a full-replace client carries both back with
-  one of them stale, and every write path has to guess which the caller meant.
+- **Stop mirroring one uci option into two writable wire names.** Two resources
+  do it: `ipaddr` / `ipaddrs` on `network/interfaces`, and `macs` / `mac` /
+  `mac_aliases` on `dhcp/hosts`. One uci list option is exposed under names that
+  are all readable and all writable, so a full-replace client carries every one
+  of them back with the ones it did not change now stale, and every write path
+  has to guess which the caller meant.
   `resolve_for_replace` and `merge_for_patch` decide that per method
   ([#60](https://github.com/openwrt-iac/uapi/issues/60),
   [#65](https://github.com/openwrt-iac/uapi/issues/65), both in 2.4.1, the
@@ -232,8 +233,18 @@ carries no wire surface and needs no release to take effect.
   accepted on write, with `ipaddrs` the only input.
   That is a removal from the write surface, so it needs a deprecation window
   (`docs/deprecations.md`) announced in a minor and completed in v3, not a
-  patch. Until then the per-method resolution stays, and a new mirrored pair
-  should not be added: see `docs/adding-a-resource.md` § Mirrored field pairs.
+  patch. Until then the per-method resolution stays.
+
+  `dhcp/hosts` is the same defect one step further along, and shows what the
+  window costs. There the split was worse than a mirror: `mac` held the first
+  entry of `list mac` and `mac_aliases` the rest, so no single field ever
+  answered what a reservation matched, and it was the one place in the API
+  where a uci list option did not surface as a JSON array. 2.5.0 adds `macs`,
+  the whole list under one name, and deprecates both old names for removal in
+  v3. Doing so means three writable names for one option during the window,
+  which is why the rule in `docs/adding-a-resource.md` § Mirrored field pairs
+  permits a new mirror only when it retires an existing one and carries a
+  removal target.
 
 - **`disabled` on `network/interfaces`, `network/routes` and `network/rules`.**
   Filed as [openwrt-iac/uapi#64](https://github.com/openwrt-iac/uapi/issues/64).
