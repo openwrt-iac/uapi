@@ -273,9 +273,41 @@ t.describe('handler object guard', () => {
 		}
 	});
 
-	// The guard deliberately tests the merged body and not the request body, because a
-	// PATCH with an empty body arrives here as null and has always been a no-op. Guarding
-	// the request body instead would turn it into a 422.
+	// A PATCH body that is not an object used to merge into the read view and answer 200
+	// having written nothing, so a malformed request looked like a successful no-op.
+	t.it('answers 422 for a PATCH body that is not an object', () => {
+		for (let body in [ "a string", 42, [ "an", "array" ] ]) {
+			let c = with_zones();
+			c._state.uci.firewall.r_patchguard = {
+				'.type': 'rule', '.anonymous': false,
+				target: 'ACCEPT', src: 'wan', dest_port: ['22'], proto: ['tcp'],
+			};
+			let r = rules.patch(c, ctx(), 'r_patchguard', body);
+			t.assert_equal(r.status, 422);
+			t.assert_equal(r.body.errors[0].code, "invalid_type");
+			t.assert_equal(r.body.errors[0].message, "body must be a JSON object");
+			// The rejection has to happen before the write, not after it.
+			t.assert_equal(c._state.uci.firewall.r_patchguard.target, 'ACCEPT');
+		}
+	});
+
+	// The array case above must not catch JSON Patch, whose body is an array of ops.
+	t.it('still accepts a JSON Patch array body', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_jp = {
+			'.type': 'rule', '.anonymous': false,
+			target: 'ACCEPT', src: 'wan', dest_port: ['22'], proto: ['tcp'],
+		};
+		let jctx = ctx();
+		jctx.json_patch = true;
+		let r = rules.patch(c, jctx, 'r_jp',
+		                    [ { op: "replace", path: "/target", value: "REJECT" } ]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.target, 'REJECT');
+	});
+
+	// Both an absent body and a literal `null` reach the merge as null and stay a no-op.
+	// Worth pinning now that the shapes either side of them are rejected.
 	t.it('leaves an empty PATCH body a no-op rather than a 422', () => {
 		let c = with_zones();
 		c._state.uci.firewall.r_guard = {
@@ -286,6 +318,17 @@ t.describe('handler object guard', () => {
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.target, 'ACCEPT');
 		t.assert_equal(r.body.match.src_zone, 'wan');
+	});
+
+	t.it('rejects a boolean, which is neither an object nor an absent body', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_bool = {
+			'.type': 'rule', '.anonymous': false,
+			target: 'ACCEPT', src: 'wan', dest_port: ['22'], proto: ['tcp'],
+		};
+		let r = rules.patch(c, ctx(), 'r_bool', true);
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].code, "invalid_type");
 	});
 });
 
@@ -1463,6 +1506,42 @@ t.describe('handler.sweep', () => {
 // point, dead: written, registered nowhere, and reachable only through a caller
 // that swallows exceptions. Both halves are covered here so a throw or a wrong
 // binding cannot masquerade as "nothing wrong".
+// The singleton PATCH path builds its own merge closure but goes through the same
+// apply_patch_body, so it is covered by the same guard. Asserted rather than assumed,
+// because the issue this fixes named both paths.
+t.describe('handler.make_singleton object guard', () => {
+	let defaults_mod = loadfile('src/resources/firewall.defaults.uc')();
+	let sg = handler.make_singleton(defaults_mod, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function seeded() {
+		return ubus.stub({ uci: { firewall: {
+			defaults: { '.type': 'defaults', '.anonymous': false,
+			            input: 'ACCEPT', output: 'ACCEPT', forward: 'REJECT' },
+		} } });
+	}
+
+	t.it('answers 422 for a PATCH body that is not an object', () => {
+		for (let body in [ "a string", 42, [ "an", "array" ] ]) {
+			let c = seeded();
+			let r = sg.patch(c, ctx(), body);
+			t.assert_equal(r.status, 422);
+			t.assert_equal(r.body.errors[0].code, "invalid_type");
+			t.assert_equal(c._state.uci.firewall.defaults.forward, 'REJECT');
+		}
+	});
+
+	t.it('leaves an empty PATCH body a no-op', () => {
+		let c = seeded();
+		let r = sg.patch(c, ctx(), null);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.forward, 'REJECT');
+	});
+});
+
 t.describe('handler.make_singleton sweep', () => {
 	let defaults_mod = loadfile('src/resources/firewall.defaults.uc')();
 	let defaults = handler.make_singleton(defaults_mod, {
