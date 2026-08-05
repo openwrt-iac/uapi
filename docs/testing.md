@@ -31,6 +31,21 @@ Every regression in this list has cost a real debug round-trip at some point. Ke
 
 9. **Read-honesty round-trip** (`tests/integration/47_read_honesty_test.sh`, 2.5.0+). The resources layer 8 cannot reach (wireguard interface and peer, wireless, plus the `ipaddr` / `ipaddrs` pair), round-tripped both verbatim and with one field changed, with the masked credential read back out of uci and the address list checked on the netdev. See the section below for why each part is there.
 
+## The no-partial-state property
+
+`tests/unit/no_partial_state_test.uc` (2.5.0+) is the first architectural principle stated as a test: a write that fails leaves uci exactly as it found it. It runs over the same 45 fixtures as the read-honesty property, injecting the failure at reload, the one point where uci has already been committed and the daemon then refuses. That is the case the restore path exists for and the only one where a partial state can survive a request.
+
+Before this, "no partial-failure states, no config drift" was asserted in ten documentation files and covered by one unit test on the transaction module. Never per resource, which is where it can actually go wrong: the transaction restores a snapshot, but whether a given resource's write falls entirely inside that snapshot depends on the resource.
+
+Two things the injection had to get right, both learned by getting them wrong:
+
+- **Only the first reload fails.** The restore path reloads too, so a stub that fails every call produces `reload_failed_unrecovered` and exercises the wrong branch. The case worth covering is a daemon that refuses the new config and accepts the restored one.
+- **The test asserts the write actually failed** before comparing state. A `200` would mean the injected error never reached the transaction, and the comparison would then pass for the wrong reason.
+
+Validated by neutering the restore (`conn.uci_import` in `transaction.uc`): 33 of the 45 cases fail with the before-and-after uci printed. The remaining 12 are singletons and no-op writes where the failed write changed nothing, so there was nothing to restore.
+
+Not covered: a crash between commit and reload. Nothing in-process can restore after that, `docs/architecture.md` says so, and it is the reason commit-confirmed apply was designed at all.
+
 ## The read-honesty property
 
 Principle 4 as a test: read a section, write the body back, read again, and nothing may change or be rejected. Two layers state it, `tests/unit/read_honesty_test.uc` and `tests/integration/47_read_honesty_test.sh` (both 2.5.0+). Each runs in two forms, because the forms catch different defects.
