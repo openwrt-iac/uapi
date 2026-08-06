@@ -58,7 +58,7 @@ What uapi defends against, what it doesn't, and what the operator should do.
 13. **Network self-lockout.** Advisory rather than a refusal, because unlike
     item 12 there is a legitimate version of the write: renumbering the
     management VLAN or moving to an out-of-band path. A `network/interfaces`
-    write that moves the inbound interface's `disabled`, `proto`, `ipaddr` or
+    write that moves the inbound interface's `disabled`, `proto`, `ipaddr`, `ipaddrs` or
     `netmask` returns `X-Mgmt-Path-Warning`, and `GET /diagnostics` reports
     `management_path` so a caller can check before writing. Firewall lockout is
     deliberately not covered: it would need fw4 ordering modelled, and the

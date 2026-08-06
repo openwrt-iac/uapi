@@ -365,7 +365,10 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed) {
 	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
 	// not happen, and there is nothing to warn about.
 	if (resp == null || (resp.status != 200 && resp.status != 204)) return resp;
-	let path = mgmt.inbound_interface(conn, ctx.remote_addr);
+	// The third argument is mgmt.uc's existing route-lookup seam. Production never sets
+	// it, so this is the real `ip route get`; a test can substitute one, which is the
+	// only way to reach the DELETE arm without stranding the box running the test.
+	let path = mgmt.inbound_interface(conn, ctx.remote_addr, ctx.device_lookup);
 	if (path == null || path.interface == null || path.interface != id) return resp;
 	if (resp.headers == null) resp.headers = {};
 	resp.headers["X-Mgmt-Path-Warning"] =

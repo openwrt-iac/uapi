@@ -103,3 +103,100 @@ t.describe('mgmt.inbound_interface device mapping', () => {
 		t.assert_equal(m.inbound_interface(c, '10.0.0.1', function() { return null; }), null);
 	});
 });
+
+// `ipaddrs` is the same uci option as `ipaddr` under the name that replaces it. Watching
+// only the scalar made the guard blind to the case it exists for: merge_for_patch deletes
+// `ipaddr` from the merged body exactly when the caller sends the list, and
+// resolve_for_replace returns early on a PUT that names only the list, so renumbering the
+// caller's own interface warned about nothing. The deprecation steers clients toward that
+// spelling, so the blind path was on its way to becoming the only one.
+t.describe('the management-path guard follows ipaddr under both names', () => {
+	let mg = require('mgmt');
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	const READ = { proto: 'static', ipaddr: '192.168.1.1',
+	               ipaddrs: ['192.168.1.1'], netmask: '255.255.255.0' };
+
+	t.it('a PATCH naming ipaddrs is reported', () => {
+		let merged = ifaces.merge_for_patch(READ, { ipaddrs: ['10.9.9.1'] });
+		t.assert_deep_equal(mg.changed_fields(READ, merged), ['ipaddrs']);
+	});
+	t.it('a PATCH naming ipaddr is still reported', () => {
+		let merged = ifaces.merge_for_patch(READ, { ipaddr: '10.9.9.1' });
+		t.assert_deep_equal(mg.changed_fields(READ, merged), ['ipaddr']);
+	});
+	t.it('a PUT naming only ipaddrs is reported', () => {
+		let body = ifaces.resolve_for_replace({ proto: 'static', ipaddrs: ['10.9.9.1'] });
+		t.assert_deep_equal(mg.changed_fields(READ, body), ['ipaddrs']);
+	});
+	t.it('an unwatched field is still silent', () => {
+		let merged = ifaces.merge_for_patch(READ, { metric: 5 });
+		t.assert_equal(length(mg.changed_fields(READ, merged)), 0);
+	});
+	t.it('the same address under the other name is not a change', () => {
+		let merged = ifaces.merge_for_patch(READ, { ipaddrs: ['192.168.1.1'] });
+		t.assert_equal(length(mg.changed_fields(READ, merged)), 0);
+	});
+});
+
+// The DELETE arm hardcodes `["removed"]` rather than going through changed_fields, since
+// none of LuCI's field names describes a delete. That literal is why it works, and it had
+// no test: 48_mgmt_path_guard_test.sh asserts only that deleting an *unrelated* interface
+// stays silent, and says in a comment that it cannot exercise the real one without
+// stranding itself. A unit test can, because the route lookup is injectable.
+t.describe('deleting the inbound interface warns', () => {
+	let ubus3 = require('bus');
+	let handler3 = require('handler');
+	let fx3 = require('resource_fixtures');
+	let ifaces3 = loadfile('src/resources/network.interfaces.uc')();
+
+	function tx3() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function seeded3() {
+		let uci = fx3.world();
+		uci.network = uci.network ?? {};
+		uci.network.mgmtif = { '.anonymous': false, '.type': 'interface',
+		                       proto: 'static', ipaddr: '192.168.9.1',
+		                       netmask: '255.255.255.0', device: 'br-mg' };
+		uci.network.otherif = { '.anonymous': false, '.type': 'interface',
+		                        proto: 'static', ipaddr: '192.168.8.1',
+		                        netmask: '255.255.255.0', device: 'br-other' };
+		let conn = ubus3.stub({ uci: uci });
+		conn.call = function(obj, method) {
+			if (obj == 'network.interface' && method == 'dump')
+				return { interface: [ { interface: 'mgmtif', l3_device: 'br-mg' },
+				                      { interface: 'otherif', l3_device: 'br-other' } ] };
+			return null;
+		};
+		return conn;
+	}
+	function ctx3() {
+		return { request_id: "01hx0000000000000000000000", remote_addr: "192.168.9.50",
+		         device_lookup: function() { return 'br-mg'; } };
+	}
+
+	t.it('the header names the interface and reports it as removed', () => {
+		let conn = seeded3();
+		let r = handler3.make(ifaces3, { tx: tx3() }).remove(conn, ctx3(), 'mgmtif');
+		t.assert_equal(r.status, 204);
+		let warn = r.headers?.['X-Mgmt-Path-Warning'];
+		if (warn == null) {
+			// The lookup seam differs from the one the handler uses; say so rather than
+			// asserting a null, which would pass for the wrong reason.
+			t.assert_equal("no X-Mgmt-Path-Warning on the inbound-interface delete",
+			               "a warning");
+			return;
+		}
+		t.assert_true(index(warn, 'interface=mgmtif') >= 0);
+		t.assert_true(index(warn, 'changed=removed') >= 0);
+	});
+
+	t.it('deleting a different interface stays silent', () => {
+		let conn = seeded3();
+		let r = handler3.make(ifaces3, { tx: tx3() }).remove(conn, ctx3(), 'otherif');
+		t.assert_equal(r.status, 204);
+		t.assert_equal(r.headers?.['X-Mgmt-Path-Warning'], null);
+	});
+});
