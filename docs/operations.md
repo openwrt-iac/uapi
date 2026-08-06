@@ -324,7 +324,7 @@ you know which interface not to touch. `interface` is `null` when the request ar
 device no uci interface claims, which is honest rather than a guess.
 
 A write to `network/interfaces` gets `X-Mgmt-Path-Warning` when it moves that interface's
-`disabled`, `proto`, `ipaddr` or `netmask`, or deletes it. That is the after-the-fact
+`disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask`, or deletes it. That is the after-the-fact
 answer, and it is worth having because most such writes do not actually break the path:
 the header tells an operator they are in a risky state while the connection still works.
 

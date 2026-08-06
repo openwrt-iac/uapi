@@ -50,7 +50,14 @@ function inbound_interface(conn, addr, device_lookup) {
 // `disabled`, `proto`, `ipaddr` and `netmask` and does no firewall analysis at all.
 // Matching that scope is deliberate; predicting a firewall lockout means modelling fw4
 // zone and rule ordering, which cannot be done honestly from a resource module.
-const WATCHED = [ "disabled", "proto", "ipaddr", "netmask" ];
+//
+// `ipaddrs` is the same option as `ipaddr` under the name that replaces it, and watching
+// only the scalar made the guard blind to the exact case it exists for. A PATCH naming
+// `ipaddrs` has its `ipaddr` deleted by merge_for_patch, and a PUT naming only `ipaddrs`
+// leaves resolve_for_replace's early return untouched, so renumbering the caller's own
+// interface produced no warning at all. The deprecation is steering every client toward
+// that spelling, so the blind path was becoming the normal one.
+const WATCHED = [ "disabled", "proto", "ipaddr", "ipaddrs", "netmask" ];
 
 function changed_fields(existing, incoming) {
 	let out = [];

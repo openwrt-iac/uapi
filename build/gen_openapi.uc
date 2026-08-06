@@ -1204,7 +1204,7 @@ function build_doc() {
 					"schema": { "type": "string", "example": "wg0" },
 				},
 				"XMgmtPathWarning": {
-					"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
+					"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
 					"schema": { "type": "string", "example": "interface=lan changed=ipaddr" },
 				},
 			},
