@@ -39,7 +39,16 @@ function connect(opts) {
 				return cursor.get(pkg, section, option);
 			return cursor.get_all(pkg, section);
 		},
+		// uci cannot represent an empty list: uval_to_uci returns false for a
+		// zero-length array and the set is silently discarded, so a cleared list used
+		// to answer 200 with the old value still in place. `[]` is the absence of a
+		// value, so setting one is a delete. Doing it here rather than in each caller
+		// is deliberate: there are six write loops across handler.uc and raw.uc, and
+		// teaching only some of them is how the first version of this fix turned an
+		// accepted create into a 500.
 		uci_set: function(pkg, section, option, value) {
+			if (type(value) == "array" && length(value) == 0)
+				return cursor.delete(pkg, section, option);
 			return cursor.set(pkg, section, option, value);
 		},
 		uci_create_section: function(pkg, name, sec_type) {
@@ -126,7 +135,15 @@ function stub(initial) {
 			return sec[option];
 		},
 
+		// The real binding cannot store a zero-length array, so setting one deletes the
+		// option. The stub used to accept it and store `[]`, which is why no unit test
+		// could see a cleared list being silently dropped.
 		uci_set: function(pkg, section, option, value) {
+			if (type(value) == "array" && length(value) == 0) {
+				if (st.uci[pkg] && st.uci[pkg][section]) delete st.uci[pkg][section][option];
+				record("delete", pkg, section, option);
+				return true;
+			}
 			let sec = ensure_section(pkg, section);
 			sec[option] = value;
 			record("set", pkg, section, option, value);

@@ -52,6 +52,32 @@ denied=$(curl -sS -H "$FW_RO" -w "\n%{http_code}" -X POST -H 'Content-Type: appl
 }')
 echo "$denied" | tail -1 | grep -q '^403$' || fail "ro POST via /raw/ expected 403"
 
+# Clearing a list through raw. uci cannot store an empty list, so `[]` means "no option";
+# the binding silently discarded it and the option survived a 200. raw.uc hard-codes the
+# transaction lock path, so this cannot be exercised from the unit suite. Driven entirely
+# over HTTP like the rest of this file: the first version shelled into the VM and hung the
+# job to its 15 minute timeout.
+echo "--- raw: an empty list clears the option instead of being silently dropped ---"
+created=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/firewall" -d '{
+	".type": "rule", "name": "uapi_list_probe", "target": "ACCEPT", "src": "lan",
+	"proto": ["tcp", "udp"]
+}')
+echo "$created" | tail -1 | grep -q '^200$' || fail "list-probe create expected 200"
+probe_id=$(echo "$created" | sed -n 's/.*"id":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+[ -n "$probe_id" ] || fail "no id returned for the list probe"
+echo "$created" | grep -q '"tcp"' || fail "seed did not store the list"
+
+cleared=$(call -X PATCH -H 'Content-Type: application/json' \
+	"$URL/raw/firewall/$probe_id" -d '{"proto":[]}')
+echo "$cleared" | tail -1 | grep -q '^200$' || fail "raw PATCH clearing a list expected 200"
+
+after=$(call "$URL/raw/firewall/$probe_id")
+echo "$after" | tail -1 | grep -q '^200$' || fail "re-read after clearing expected 200"
+echo "$after" | grep -q '"proto"' \
+	&& fail "raw PATCH answered 200 but proto survived: $(echo "$after" | head -1)"
+echo "  proto cleared and stays cleared on re-read"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/raw/firewall/$probe_id"
+
 echo "--- POST to an unknown package writes the file but reports reloaded:false ---"
 unknown=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/uapi_test_unknown" -d '{
 	".type": "thing", "color": "red"

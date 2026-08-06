@@ -1577,3 +1577,70 @@ t.describe('handler.make_singleton sweep', () => {
 		t.assert_deep_equal(defaults.sweep(ubus.stub({ uci: { firewall: {} } })), []);
 	});
 });
+
+// uci cannot store an empty list, so `[]` means "no value", not "a value that is empty".
+// The uci binding refuses a zero-length array and the old code discarded that answer:
+// because the key was still present in new_opts, neither diff loop took its delete arm,
+// so clearing a list returned 200 with the option untouched and a re-read still showed
+// the old value. The stub used to accept `[]` too, which is why no unit test saw it.
+t.describe('clearing a list option actually clears it', () => {
+	function tx_ok() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function c() { return { request_id: "01hx0000000000000000000000" }; }
+	function seeded() {
+		let fx = require('resource_fixtures');
+		let uci = fx.world();
+		uci.dhcp = uci.dhcp ?? {};
+		uci.dhcp.hclr = { '.anonymous': false, '.type': 'host',
+		                  mac: '00:11:22:33:44:99', ip: '10.0.0.9', tag: 'guest' };
+		return ubus.stub({ uci: uci });
+	}
+	let mod = loadfile('src/resources/dhcp.hosts.uc')();
+
+	t.it('PATCH with an empty array deletes the uci option', () => {
+		let conn = seeded();
+		let h = handler.make(mod, { tx: tx_ok() });
+		let r = h.patch(conn, c(), 'hclr', { tag: [] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(conn._state.uci.dhcp.hclr.tag, null);
+	});
+
+	t.it('PUT with an empty array deletes it too', () => {
+		let conn = seeded();
+		let h = handler.make(mod, { tx: tx_ok() });
+		let r = h.replace(conn, c(), 'hclr', { mac: '00:11:22:33:44:99', ip: '10.0.0.9', tag: [] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(conn._state.uci.dhcp.hclr.tag, null);
+	});
+
+	t.it('a non-empty list is still written', () => {
+		let conn = seeded();
+		let h = handler.make(mod, { tx: tx_ok() });
+		h.patch(conn, c(), 'hclr', { tag: ['a', 'b'] });
+		t.assert_deep_equal(conn._state.uci.dhcp.hclr.tag, ['a', 'b']);
+	});
+
+	// The rule lives in bus.uc rather than in each write loop: there are six across
+	// handler.uc and raw.uc, and teaching only two of them is what turned an accepted
+	// create into a 500 in the first version of this fix.
+	t.it('setting an empty list through the bus deletes the option', () => {
+		let conn = seeded();
+		conn.uci_set('dhcp', 'hclr', 'tag', []);
+		t.assert_equal(conn._state.uci.dhcp.hclr.tag, null);
+	});
+
+	t.it('POST with an empty list is accepted, not refused', () => {
+		let fx = require('resource_fixtures');
+		let uci = fx.world();
+		uci.dhcp = uci.dhcp ?? {};
+		let conn = ubus.stub({ uci: uci });
+		let h = handler.make(mod, { tx: tx_ok() });
+		let r = h.create(conn, c(), { id: 'hnew', mac: '00:11:22:33:44:aa',
+		                              ip: '10.0.0.77', tag: [] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(conn._state.uci.dhcp.hnew.tag, null);
+	});
+});
