@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 
 const VALID_MODES = {
 	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true,
@@ -67,9 +67,9 @@ function fromUci(section, conn) {
 		mode: section.mode ?? "ap",
 		ssid: section.ssid ?? null,
 		encryption: section.encryption ?? "none",
-		disabled: normalize_bool(section.disabled, false),
-		hidden: normalize_bool(section.hidden, false),
-		isolate: normalize_bool(section.isolate, false),
+		disabled: platform_bool(section.disabled, false),
+		hidden: platform_bool(section.hidden, false),
+		isolate: platform_bool(section.isolate, false),
 		runtime: fetch_runtime(conn, section['.name']),
 		// Always present, and an empty key is not a key. The published schema declares
 		// a non-nullable boolean, so the previous absent-or-true form meant a keyless

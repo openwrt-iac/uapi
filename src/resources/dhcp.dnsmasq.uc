@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list = values.as_list;
 
@@ -9,21 +9,21 @@ function fromUci(section) {
 		managed: true,
 		domain: section.domain ?? null,
 		local: section.local ?? null,
-		noresolv: normalize_bool(section.noresolv, false),
-		rebind_protection: normalize_bool(section.rebind_protection, true),
-		expandhosts: normalize_bool(section.expandhosts, false),
+		noresolv: shell_bool(section.noresolv, false),
+		rebind_protection: shell_bool(section.rebind_protection, true),
+		expandhosts: shell_bool(section.expandhosts, false),
 		cachesize: as_int(section.cachesize),
 		port: as_int(section.port),
-		domainneeded: normalize_bool(section.domainneeded, true),
-		boguspriv: normalize_bool(section.boguspriv, true),
-		filterwin2k: normalize_bool(section.filterwin2k, false),
-		authoritative: normalize_bool(section.authoritative, true),
-		readethers: normalize_bool(section.readethers, true),
+		domainneeded: shell_bool(section.domainneeded, true),
+		boguspriv: shell_bool(section.boguspriv, true),
+		filterwin2k: shell_bool(section.filterwin2k, false),
+		authoritative: shell_bool(section.authoritative, true),
+		readethers: shell_bool(section.readethers, true),
 		leasefile: section.leasefile ?? null,
 		resolvfile: section.resolvfile ?? null,
 		server: as_list(section.server),
 		address: as_list(section.address),
-		nonwildcard: normalize_bool(section.nonwildcard, true),
+		nonwildcard: shell_bool(section.nonwildcard, true),
 		runtime: {},
 	};
 }

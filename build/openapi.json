@@ -23692,8 +23692,11 @@
 						"default": false
 					},
 					"urandom_seed": {
-						"type": "boolean",
-						"default": false
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Path the entropy seed is saved to and restored from"
 					},
 					"runtime": {
 						"type": "object",
@@ -24574,9 +24577,11 @@
 						"maximum": 4
 					},
 					"lldp_description": {
-						"type": "boolean",
-						"default": true,
-						"description": "Advertise the system description TLV"
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
 						"type": "boolean",
@@ -24864,7 +24869,7 @@
 					},
 					"enabled": {
 						"type": "boolean",
-						"default": true
+						"default": false
 					},
 					"family": {
 						"type": "string",
@@ -25472,7 +25477,7 @@
 					},
 					"enabled": {
 						"type": "boolean",
-						"default": true
+						"default": false
 					},
 					"client": {
 						"type": "boolean",

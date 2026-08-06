@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list = values.as_list;
 let fs = require('fs');
@@ -83,9 +83,9 @@ function fromUci(section, conn) {
 		start: as_int(section.start),
 		limit: as_int(section.limit),
 		leasetime: section.leasetime ?? null,
-		ignore: normalize_bool(section.ignore, false),
-		force: normalize_bool(section.force, false),
-		dynamicdhcp: normalize_bool(section.dynamicdhcp, true),
+		ignore: shell_bool(section.ignore, false),
+		force: shell_bool(section.force, false),
+		dynamicdhcp: shell_bool(section.dynamicdhcp, true),
 		ra: section.ra ?? null,
 		dhcpv6: section.dhcpv6 ?? null,
 		ra_default: as_int(section.ra_default),

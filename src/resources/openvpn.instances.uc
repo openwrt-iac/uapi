@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let as_int = values.as_int;
 let is_valid_ip = values.is_valid_ip;
@@ -27,8 +27,10 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enabled:         normalize_bool(section.enabled, true),
-		client:          normalize_bool(section.client, false),
+		// openvpn.init's section_enabled() defaults both `enable` and `enabled` to 0, so an absent
+		// option means off.
+		enabled:         shell_bool(section.enabled, false),
+		client:          shell_bool(section.client, false),
 		dev:             section.dev ?? null,
 		dev_type:        section.dev_type ?? null,
 		proto:           section.proto ?? null,
@@ -37,8 +39,8 @@ function fromUci(section) {
 		rport:           as_int(section.rport),
 		remote:          as_list(section.remote),
 		local:           section.local ?? null,
-		nobind:          normalize_bool(section.nobind, false),
-		float:           normalize_bool(section.float, false),
+		nobind:          shell_bool(section.nobind, false),
+		float:           shell_bool(section.float, false),
 		topology:        section.topology ?? null,
 		server:          section.server ?? null,
 		server_bridge:   section.server_bridge ?? null,
@@ -47,21 +49,21 @@ function fromUci(section) {
 		route_gateway:   section.route_gateway ?? null,
 		ifconfig:        section.ifconfig ?? null,
 		ifconfig_pool:   section.ifconfig_pool ?? null,
-		client_to_client: normalize_bool(section.client_to_client, false),
-		duplicate_cn:    normalize_bool(section.duplicate_cn, false),
+		client_to_client: shell_bool(section.client_to_client, false),
+		duplicate_cn:    shell_bool(section.duplicate_cn, false),
 		keepalive:       section.keepalive ?? null,
 		ping:            as_int(section.ping),
 		ping_restart:    as_int(section.ping_restart),
-		persist_key:     normalize_bool(section.persist_key, false),
-		persist_tun:     normalize_bool(section.persist_tun, false),
+		persist_key:     shell_bool(section.persist_key, false),
+		persist_tun:     shell_bool(section.persist_tun, false),
 		comp_lzo:        section.comp_lzo ?? null,
 		compress:        section.compress ?? null,
 		cipher:          section.cipher ?? null,
 		auth:            section.auth ?? null,
 		ncp_ciphers:     section.ncp_ciphers ?? null,
-		ncp_disable:     normalize_bool(section.ncp_disable, false),
-		tls_server:      normalize_bool(section.tls_server, false),
-		tls_client:      normalize_bool(section.tls_client, false),
+		ncp_disable:     shell_bool(section.ncp_disable, false),
+		tls_server:      shell_bool(section.tls_server, false),
+		tls_client:      shell_bool(section.tls_client, false),
 		tls_crypt:       section.tls_crypt ?? null,
 		ca:              section.ca ?? null,
 		cert:            section.cert ?? null,
@@ -193,7 +195,7 @@ return {
 	merge_for_patch: merge_for_patch,
 	id_prefix: "o",
 	schema_properties: {
-		enabled:          { type: "boolean", default: true },
+		enabled:          { type: "boolean", default: false },
 		client:           { type: "boolean", default: false, description: "True to run as a client; false (the default) runs as a server." },
 		dev:              { type: ["string", "null"], description: "Interface name (tun0, tap0, etc.)." },
 		dev_type:         { type: ["string", "null"], enum: [...keys(VALID_DEV), null] },

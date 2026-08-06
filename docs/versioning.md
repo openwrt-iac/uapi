@@ -26,7 +26,7 @@ A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >=
 
 - Removing a field that was never deprecated, or removing one ahead of its scheduled `docs/deprecations.md` removal target.
 - Removing or renaming any endpoint or error code. Rename of a request field with a deprecation pair is non-breaking; see above.
-- Changing a field's JSON type or semantic meaning.
+- Changing a field's JSON type or semantic meaning. (Carve-out: when the declared type could not represent the field's real state, so that **no value of it was ever a correct answer**, correcting the type can ship in a minor with an explicit CHANGELOG entry naming the carve-out and the affected values. The test is strict: if any uci value produced a correct read under the old type, this does not apply and the change waits for the major. 2.5.0's `system.urandom_seed` and `lldpd.lldp_description` are the precedent, both typed boolean while holding a filesystem path and free text respectively: `true` was unreachable as a truthful answer, and every write replaced the operator's value with `"1"`.)
 - Making a previously-optional request field required.
 - Tightening validation to reject previously-accepted payloads. (Carve-out: when the previously-accepted payload produced broken state no caller can rely on, tightening can ship as a patch with an explicit CHANGELOG entry naming the carve-out. 2.2.1's cross-section uniqueness check is the precedent.)
 

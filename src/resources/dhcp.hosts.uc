@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let is_valid_ip = values.is_valid_ip;
 
@@ -25,8 +25,8 @@ function fromUci(section) {
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
 		tag: section.tag ?? null,
-		dns: normalize_bool(section.dns, false),
-		broadcast: (section.broadcast != null) ? normalize_bool(section.broadcast, false) : null,
+		dns: shell_bool(section.dns, false),
+		broadcast: (section.broadcast != null) ? shell_bool(section.broadcast, false) : null,
 		instance: section.instance ?? null,
 		runtime: {},
 	};

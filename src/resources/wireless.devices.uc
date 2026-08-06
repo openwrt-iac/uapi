@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_int = values.as_int;
 
 const VALID_TYPES = { "mac80211": true, "broadcom": true };
@@ -19,7 +19,7 @@ function fromUci(section) {
 		// view is clean and the country pattern check below never sees ''.
 		country: (section.country == null || section.country == "") ? null : section.country,
 		txpower: as_int(section.txpower),
-		disabled: normalize_bool(section.disabled, false),
+		disabled: platform_bool(section.disabled, false),
 		runtime: {},
 	};
 }

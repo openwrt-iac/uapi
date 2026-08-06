@@ -1,4 +1,5 @@
 let values = require('values');
+let shell_bool = values.shell_bool;
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
@@ -7,7 +8,7 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enable:             normalize_bool(section.enable, true),
+		enable:             shell_bool(section.enable, true),
 		port:               as_int(section.Port),
 		password_auth:      normalize_bool(section.PasswordAuth, true),
 		root_password_auth: normalize_bool(section.RootPasswordAuth, true),

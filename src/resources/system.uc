@@ -15,7 +15,7 @@ function fromUci(section) {
 		log_ip: section.log_ip ?? null,
 		log_proto: section.log_proto ?? null,
 		log_remote: normalize_bool(section.log_remote, false),
-		urandom_seed: normalize_bool(section.urandom_seed, false),
+		urandom_seed: section.urandom_seed ?? null,
 		runtime: {},
 	};
 }
@@ -31,7 +31,7 @@ function toUci(json) {
 	if (json.log_ip != null) out.log_ip = json.log_ip;
 	if (json.log_proto != null) out.log_proto = json.log_proto;
 	if (json.log_remote != null) out.log_remote = json.log_remote ? "1" : "0";
-	if (json.urandom_seed != null) out.urandom_seed = json.urandom_seed ? "1" : "0";
+	if (json.urandom_seed != null) out.urandom_seed = json.urandom_seed;
 	return out;
 }
 
@@ -65,6 +65,10 @@ return {
 		log_proto:    { type: ["string", "null"],
 		                description: "Remote syslog transport (udp or tcp)" },
 		log_remote:   { type: "boolean", default: false },
-		urandom_seed: { type: "boolean", default: false },
+		// A path, not a flag: /sbin/urandom_seed tests `[ "${SEED:0:1}" = "/" ]` and
+		// saves the seed there. It was typed boolean, so any write put "1" or "0" in
+		// place of the operator's path and silently turned the feature off.
+		urandom_seed: { type: ["string", "null"],
+		                description: "Path the entropy seed is saved to and restored from" },
 	},
 };

@@ -1,5 +1,5 @@
 let values = require('values');
-let platform_bool = values.platform_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
@@ -24,8 +24,8 @@ function fromUci(section) {
 		endpoint_host: section.endpoint_host ?? null,
 		endpoint_port: as_int(section.endpoint_port),
 		persistent_keepalive: as_int(section.persistent_keepalive),
-		route_allowed_ips: platform_bool(section.route_allowed_ips, false),
-		disabled: platform_bool(section.disabled, false),
+		route_allowed_ips: shell_bool(section.route_allowed_ips, false),
+		disabled: shell_bool(section.disabled, false),
 		runtime: {},
 	};
 }
@@ -132,7 +132,7 @@ return {
 		// a section written by hand or by another tool can carry `true`, and reading
 		// that as false tells the apply the old config installed no routes, so the
 		// ones it did install are never withdrawn.
-		let prev_routes = (existing != null) && platform_bool(existing.route_allowed_ips, false);
+		let prev_routes = (existing != null) && shell_bool(existing.route_allowed_ips, false);
 
 		if (kind == "remove") {
 			if (existing?.public_key == null) return [];

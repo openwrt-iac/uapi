@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list = values.as_list;
 
@@ -26,9 +26,9 @@ function fromUci(section) {
 		tcp_keepalive: as_int(section.tcp_keepalive),
 		index_page: as_list(section.index_page),
 		error_page: section.error_page ?? null,
-		no_dirlists: normalize_bool(section.no_dirlists, false),
-		no_symlinks: normalize_bool(section.no_symlinks, false),
-		rfc1918_filter: normalize_bool(section.rfc1918_filter, false),
+		no_dirlists: shell_bool(section.no_dirlists, false),
+		no_symlinks: shell_bool(section.no_symlinks, false),
+		rfc1918_filter: shell_bool(section.rfc1918_filter, false),
 		runtime: {},
 	};
 }

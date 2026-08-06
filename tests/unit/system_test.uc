@@ -40,28 +40,36 @@ t.describe('system resource', () => {
 		t.assert_true(r.managed);
 	});
 
-	t.it('fromUci normalizes log_remote and urandom_seed to JSON booleans', () => {
+	t.it('fromUci normalizes log_remote to a JSON boolean', () => {
 		let on = system_resource.fromUci({
-			'.name': 'cfg01', '.type': 'system',
-			log_remote: '1', urandom_seed: 'on',
+			'.name': 'cfg01', '.type': 'system', log_remote: '1',
 		});
 		t.assert_true(on.log_remote);
-		t.assert_true(on.urandom_seed);
 		let off = system_resource.fromUci({
-			'.name': 'cfg01', '.type': 'system',
-			log_remote: '0', urandom_seed: 'off',
+			'.name': 'cfg01', '.type': 'system', log_remote: '0',
 		});
 		t.assert_false(off.log_remote);
-		t.assert_false(off.urandom_seed);
 	});
 
-	t.it('toUci writes log_remote and urandom_seed as uci 1/0 strings', () => {
-		let on = system_resource.toUci({ log_remote: true, urandom_seed: true });
-		t.assert_equal(on.log_remote, '1');
-		t.assert_equal(on.urandom_seed, '1');
-		let off = system_resource.toUci({ log_remote: false, urandom_seed: false });
-		t.assert_equal(off.log_remote, '0');
-		t.assert_equal(off.urandom_seed, '0');
+	t.it('toUci writes log_remote as a uci 1/0 string', () => {
+		t.assert_equal(system_resource.toUci({ log_remote: true }).log_remote, '1');
+		t.assert_equal(system_resource.toUci({ log_remote: false }).log_remote, '0');
+	});
+
+	// urandom_seed is the path the seed is saved to, not a flag. It was typed boolean,
+	// so `option urandom_seed '/mnt/seed'` read back false and any write replaced the
+	// path with "0", turning the feature off and losing where the operator put it.
+	t.it('urandom_seed carries the operator path through a round trip', () => {
+		let v = system_resource.fromUci({
+			'.name': 'cfg01', '.type': 'system', urandom_seed: '/mnt/persist/seed',
+		});
+		t.assert_equal(v.urandom_seed, '/mnt/persist/seed');
+		t.assert_equal(system_resource.toUci(v).urandom_seed, '/mnt/persist/seed');
+	});
+	t.it('an absent urandom_seed reads null and writes nothing', () => {
+		let v = system_resource.fromUci({ '.name': 'cfg01', '.type': 'system' });
+		t.assert_equal(v.urandom_seed, null);
+		t.assert_true(!exists(system_resource.toUci(v), 'urandom_seed'));
 	});
 
 	t.it('declares system and log reload services', () => {

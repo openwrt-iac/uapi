@@ -24,8 +24,8 @@
 //      `normalize_bool`).
 //
 // Patterns detected (in fromUci's returned dict literal):
-//   - <jsonkey>: normalize_bool(section.<ucikey>, true|false)
-//   - <jsonkey>: normalize_bool(section["<ucikey>"], true|false)
+//   - <jsonkey>: <normalize_bool|platform_bool|shell_bool>(section.<ucikey>, true|false)
+//   - <jsonkey>: <same>(section["<ucikey>"], true|false)
 //   - <jsonkey>: section.<ucikey> ?? "literal"
 //
 // Captures the JSON-side key (the schema property name), not the uci-side
@@ -76,14 +76,18 @@ function find_fromuci_defaults(content) {
 	// captures the JSON-side key (the schema property name) and naturally
 	// excludes conditional `view.X = ...` blocks (different LHS shape) and
 	// `(section.X != null) ? ... : null` ternaries (RHS starts with `(`).
-	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*normalize_bool\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
-	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*normalize_bool\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
+	// Every helper that takes a default, not just normalize_bool. Anchoring on one name
+	// meant that reclassifying 50 fields onto shell_bool silently dropped them from this
+	// gate: it went from seeing 75 fields to 25 while still reporting OK. strict_bool is
+	// absent on purpose, since it takes no default to check.
+	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
+	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
 	let str_re          = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*"([^"]+)"');
 
 	for (let line in split(content, "\n")) {
 		let m;
-		if (m = match(line, bool_dot_re))     defaults[m[1]] = m[2];
-		if (m = match(line, bool_bracket_re)) defaults[m[1]] = m[2];
+		if (m = match(line, bool_dot_re))     defaults[m[1]] = m[3];
+		if (m = match(line, bool_bracket_re)) defaults[m[1]] = m[3];
 		if (m = match(line, str_re))          defaults[m[1]] = sprintf('"%s"', m[2]);
 	}
 	return defaults;

@@ -54,7 +54,7 @@ function peer_sections(conn, iface) {
 		if (s['.type'] != want) return;
 		// A disabled peer is one netifd omits when it builds the config, so the
 		// kernel should not carry it either.
-		if (values.platform_bool(s.disabled, false)) return;
+		if (values.shell_bool(s.disabled, false)) return;
 		push(out, s);
 	});
 	return out;
@@ -167,7 +167,7 @@ function routes_from(allowed_ips, enabled) {
 
 function peer_routes(section) {
 	return routes_from(to_peer(section).allowed_ips,
-	                   values.platform_bool(section.route_allowed_ips, false));
+	                   values.shell_bool(section.route_allowed_ips, false));
 }
 
 // netifd puts an interface's routes in ip4table / ip6table when those are set,

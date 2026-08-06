@@ -248,7 +248,7 @@ const CASES = [
 	},
 	{
 		file: "mwan3.interfaces.uc", id: "mwan", pkg: "mwan3",
-		section: { '.type': 'interface', family: 'ipv4', enabled: '0', track_method: 'ping', reliability: '1' },
+		section: { '.type': 'interface', family: 'ipv4', enabled: '1', track_method: 'ping', reliability: '1' },
 	},
 	{
 		file: "mwan3.members.uc", id: "m1", pkg: "mwan3",
@@ -270,7 +270,7 @@ const CASES = [
 	{
 		file: "openvpn.instances.uc", id: "vpn0", pkg: "openvpn",
 		modify: { key: "port", value: 1195 },
-		section: { '.type': 'openvpn', enabled: '0', dev_type: 'tun', proto: 'udp', port: '1194', key: '/etc/openvpn/k.pem', tls_auth: '/etc/openvpn/ta.key' },
+		section: { '.type': 'openvpn', enabled: '1', dev_type: 'tun', proto: 'udp', port: '1194', key: '/etc/openvpn/k.pem', tls_auth: '/etc/openvpn/ta.key' },
 	},
 ];
 

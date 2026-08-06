@@ -23,13 +23,36 @@ function normalize_bool(v, default_val) {
 // autostarts. The default passed here must therefore be the daemon's default,
 // not a uapi-chosen one.
 //
-// Only for fields netifd parses. fw4 and the shell helpers accept the wider
-// set, so normalize_bool is correct for those and using this would introduce
-// the mirror-image misreport.
+// Only for fields netifd parses, which is both the C daemon and its ucode side
+// (`parse_bool` in /lib/netifd/utils.uc, which governs wireless). Every other
+// reader accepts a wider set; see the table in docs/ucode-quirks.md and pick the
+// helper from it rather than defaulting to normalize_bool.
 function platform_bool(v, default_val) {
 	if (v === true || v === "1" || v === "true") return true;
 	if (v === false || v === "0" || v === "false") return false;
 	return default_val;
+}
+
+// `get_bool` in /lib/functions.sh, which every `config_get_bool` in an init
+// script or proto handler goes through. Its set is normalize_bool's plus
+// `enabled`/`disabled`, and the two extra spellings are the whole reason this
+// exists: reading `option disabled 'enabled'` with the narrower helper reports
+// the opposite of what the shell will do.
+function shell_bool(v, default_val) {
+	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes"
+	    || v === "enabled")
+		return true;
+	if (v === false || v === "0" || v === "off" || v === "false" || v === "no"
+	    || v === "disabled")
+		return false;
+	return default_val;
+}
+
+// Options nothing converts, read raw and compared against the literal "1"
+// (`[ "$x" != "1" ]`). Everything else, including `true`, is false to that
+// reader, so there is no default to pass: absence and `yes` are the same answer.
+function strict_bool(v) {
+	return v === "1" || v === 1 || v === true;
 }
 
 function as_list(v) {
@@ -465,7 +488,9 @@ function section_index(conn, pkg, sec_type, key, filter) {
 }
 
 return {
-	normalize_bool, platform_bool, as_list, as_int,
+	normalize_bool, platform_bool,
+	shell_bool,
+	strict_bool, as_list, as_int,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,

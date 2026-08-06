@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let strict_bool = values.strict_bool;
 let as_int = values.as_int;
 
 const VALID_LOGLEVEL = {
@@ -13,7 +13,7 @@ function fromUci(section) {
 		managed: true,
 		mmx_mask:        section.mmx_mask ?? null,
 		local_source:    section.local_source ?? null,
-		logging:         normalize_bool(section.logging, false),
+		logging:         strict_bool(section.logging),
 		loglevel:        section.loglevel ?? null,
 		rtmon_interval:  as_int(section.rtmon_interval),
 		runtime: {},
