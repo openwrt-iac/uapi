@@ -93,6 +93,19 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `conflict`       | References a missing or incompatible resource, or two fields naming one option disagree |
 | `read_only`      | Field is computed/runtime and can't be set                    |
 
+Two more appear only inside `invalid_sections` in `GET /diagnostics?validate=1`, never in a
+request rejection, because they describe a section the sweep could not judge rather than a
+field the caller got wrong:
+
+| `code`           | Meaning                                                       |
+|------------------|---------------------------------------------------------------|
+| `unreadable`     | The section could not be read into the resource's view at all |
+| `sweep_failed`   | The sweep itself threw for that resource; nothing was checked  |
+
+`sweep_failed` carries an empty `field`, and its section reports `id: null` and
+`managed: null`. It is reported rather than swallowed because an empty result for a
+resource that was never actually checked is the one answer that endpoint must not give.
+
 ## Field paths
 
 Dotted notation with bracket indexing: `match.src_zone`, `dns[0]`, `rules[2].target`.

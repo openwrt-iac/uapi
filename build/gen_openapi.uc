@@ -695,7 +695,12 @@ function build_paths() {
 	paths["/diagnostics"] = {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-			"description": "Scope: uapi:diagnostics:ro (or *:ro).",
+			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
+			"parameters": [
+				{ "name": "validate", "in": "query", "required": false,
+				  "schema": { "type": "string", "enum": ["1"] },
+				  "description": "Set to `1` to include the validation sweep. Any other value is ignored." },
+			],
 			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },
 			}),
@@ -971,6 +976,53 @@ function build_schemas() {
 				                  "global_held": { "type": "boolean" },
 				                  "per_package": { "type": "object", "additionalProperties": { "type": "boolean" } },
 				                } },
+				// Present only when the route lookup resolved; `interface` is null when no
+				// uci interface claims the device the request arrived on.
+				"management_path": {
+					"type": "object",
+					"description": "Which interface this request arrived through. Absent when the inbound address or its route could not be determined.",
+					"required": ["address", "device", "interface"],
+					"properties": {
+						"address":   { "type": "string" },
+						"device":    { "type": "string" },
+						"interface": { "type": ["string", "null"] },
+					},
+				},
+				// The three sweep fields appear together, and only with ?validate=1.
+				"invalid_sections": {
+					"type": "array",
+					"description": "Sections a write would reject today. Present only with ?validate=1.",
+					"items": {
+						"type": "object",
+						"required": ["resource", "id", "managed", "errors"],
+						"properties": {
+							"resource": { "type": "string", "example": "firewall/rules",
+							              "description": "Slash form, unlike swept_resources" },
+							"id":       { "type": ["string", "null"] },
+							"managed":  { "type": ["boolean", "null"] },
+							"errors": { "type": "array", "items": {
+								"type": "object",
+								"required": ["field", "code", "message"],
+								"properties": {
+									"field":   { "type": "string" },
+									"code":    { "type": "string",
+									             "enum": ["required", "invalid_type", "invalid_format",
+									                      "out_of_range", "not_in_enum", "conflict",
+									                      "read_only", "unreadable", "sweep_failed"] },
+									"message": { "type": "string" },
+								},
+							} },
+						},
+					},
+				},
+				"swept_resources": {
+					"type": "array", "items": { "type": "string", "example": "firewall:rules" },
+					"description": "Resources the sweep checked, in colon form. Present only with ?validate=1.",
+				},
+				"skipped_for_scope": {
+					"type": "array", "items": { "type": "string", "example": "firewall:rules" },
+					"description": "Resources left out because the token lacks :ro on them. An empty invalid_sections beside a long list here means \"not allowed to look\", not \"nothing wrong\". Present only with ?validate=1.",
+				},
 				"recent_errors": {
 					"type": "array",
 					"maxItems": 20,
