@@ -726,8 +726,22 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 	return errors.ok(ctx, body);
 }
 
+// RFC 9110 13.1.2: a false If-None-Match yields 304 only for GET and HEAD, and 412 for
+// every other method. Without the method test this ran on writes too, and a write cannot
+// be answered with 304 at all: by the time this is reached the transaction has committed
+// and reloaded, so `PUT ...?if_none_match=*` returned 304 for a write that really happened,
+// dropping X-Reload-Status, X-Kernel-Status and X-Mgmt-Path-Warning with it. Worse, the
+// audit branch in handle_request logs 2xx writes only, so appending that query parameter
+// kept a write out of the audit trail entirely, and a 304'd POST was never cached for
+// idempotency so a retry created a second section.
+//
+// 412 would be the conforming answer for a write, but preconditions have to be evaluated
+// before the method runs (RFC 9110 13.2.2) and this runs after; doing it properly belongs
+// with the If-Match seam in handler.uc, not here. Returning the write's real response is
+// correct in the meantime, and matches the published spec, which declares 304 on GET only.
 function maybe_304(resp, ctx) {
 	if (ctx == null || ctx.if_none_match == null) return resp;
+	if (ctx.method != "GET" && ctx.method != "HEAD") return resp;
 	if (resp.status != 200) return resp;
 	if (resp.headers == null) return resp;
 	let etag_header = resp.headers.ETag;
