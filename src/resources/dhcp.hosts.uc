@@ -88,9 +88,19 @@ function merge_for_patch(existing_json, body) {
 			merged[k] = body[k];
 	}
 	let sent_list = exists(body, "macs");
-	let sent_split = exists(body, "mac") || exists(body, "mac_aliases");
-	if (sent_list && !sent_split) { delete merged.mac; delete merged.mac_aliases; }
-	else if (sent_split && !sent_list) delete merged.macs;
+	let sent_head = exists(body, "mac");
+	let sent_tail = exists(body, "mac_aliases");
+	if (sent_list && !sent_head && !sent_tail) { delete merged.mac; delete merged.mac_aliases; }
+	else if ((sent_head || sent_tail) && !sent_list) delete merged.macs;
+
+	// Clearing `mac` clears the whole list. The tail left behind is the read view's, not
+	// the caller's, and a list with no head is exactly the shape validate rejects, so a
+	// PATCH naming one field came back 422 against `mac_aliases`, which the caller never
+	// sent. Dropping the tail with the head is what the caller asked for: there is no uci
+	// list left to hold it.
+	if (sent_head && !sent_tail && !sent_list
+	    && (merged.mac == null || merged.mac == ""))
+		delete merged.mac_aliases;
 	return merged;
 }
 
