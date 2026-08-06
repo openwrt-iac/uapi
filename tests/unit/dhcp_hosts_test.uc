@@ -385,3 +385,56 @@ t.describe('dhcp.hosts tag write shape', () => {
 		t.assert_equal(u.tag, 'guest iot');
 	});
 });
+
+// `mac` and `mac_aliases` were collapsed into one "did the body name the split" flag, so
+// a PATCH naming only `mac` deleted the merged `macs` but kept the read view's
+// `mac_aliases`. Clearing `mac` therefore produced a list with no head, which is exactly
+// the shape validate rejects, and the caller got a 422 against a field it never sent.
+t.describe('clearing mac through PATCH clears the whole list', () => {
+	let ubus2 = require('bus');
+	let handler2 = require('handler');
+	let fx2 = require('resource_fixtures');
+	function tx2() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function ct() { return { request_id: "01hx0000000000000000000000" }; }
+	function seeded2() {
+		let uci = fx2.world();
+		uci.dhcp = uci.dhcp ?? {};
+		uci.dhcp.hp = { '.anonymous': false, '.type': 'host',
+		                mac: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
+		                duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff', ip: '10.0.0.5' };
+		return ubus2.stub({ uci: uci });
+	}
+	function patch(body) {
+		let conn = seeded2();
+		let r = handler2.make(hosts, { tx: tx2() }).patch(conn, ct(), 'hp', body);
+		return { status: r.status, body: r.body, uci: conn._state.uci.dhcp.hp.mac };
+	}
+
+	t.it('PATCH {mac: null} on a multi-MAC host clears it instead of a 422', () => {
+		let r = patch({ mac: null });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.uci, null);
+	});
+	t.it('the empty-string spelling does not report a conflict either', () => {
+		// It is still refused for its format, but only for that: the orphaned-tail
+		// conflict named a field the caller never sent.
+		let r = patch({ mac: "" });
+		t.assert_equal(r.status, 422);
+		for (let e in (r.body?.errors ?? []))
+			t.assert_true(e.field != "mac_aliases");
+	});
+	t.it('replacing mac keeps the tail', () => {
+		let r = patch({ mac: 'aa:bb:cc:dd:ee:09' });
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(r.uci, ['aa:bb:cc:dd:ee:09', 'aa:bb:cc:dd:ee:02']);
+	});
+	t.it('a PATCH naming neither leaves the list alone', () => {
+		let r = patch({ ip: '10.0.0.6' });
+		t.assert_equal(r.status, 200);
+		t.assert_deep_equal(r.uci, ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
+	});
+});
