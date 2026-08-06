@@ -129,35 +129,50 @@ t.describe('property: a read written straight back changes nothing', () => {
 	}
 });
 
-// A seed must not set a field to the same value fromUci would synthesize for it, or the
-// property goes blind to that field: drop it from toUci and the re-read fills the default
-// back in, so before and after match and nothing is reported. Measured, not theorised:
-// deleting `out.forward` from firewall.zones was invisible while the seed said `REJECT`,
-// which is the documented default, and caught immediately once the seed said `DROP`.
+// A field whose read-back value equals its own declared default is invisible to the
+// property above: drop it from toUci and the re-read synthesizes the default again, so
+// before and after match and nothing is reported. Measured, not theorised: deleting
+// `out.forward` from firewall.zones was invisible while the seed said `REJECT`, which is
+// the documented default, and caught immediately once the seed said `DROP`.
+//
+// The first version of this check compared the SEED against the default, which looked
+// equivalent and was not: seeds are keyed by uci option name and schema_properties by wire
+// name, so every renamed field (`PasswordAuth` vs `password_auth`, and 20 others) failed
+// the lookup and was skipped in silence. It inspected 15 of 140 seeded keys, and deleting
+// the `PasswordAuth` write from dropbear.instances.uc -- which silently re-enables SSH
+// password authentication across a GET-then-PUT -- passed the entire suite.
+//
+// Comparing the READ-BACK value needs no name mapping at all, because it asks the question
+// the property actually depends on: if toUci dropped this field, would the re-read refill
+// it and hide the loss? Any resource whose uci names differ from its wire names is covered
+// for free.
 t.describe('property: no case hides a field behind its own default', () => {
-	t.it('every seeded value differs from the schema default for that field', () => {
-		let offenders = [];
-		for (let c in CASES) {
+	for (let c in CASES) {
+		t.it(sprintf("%s/%s reads back off-default for every defaulted field", c.file, c.id), () => {
 			let mod = loadfile('src/resources/' + c.file)();
 			let props = mod.schema_properties ?? {};
-			for (let k in c.section) {
-				let spec = props[k];
-				if (spec == null || !exists(spec, "default")) continue;
-				// uci holds strings, so compare as strings: `disabled: '0'` against a
-				// declared default of false is the same claim.
-				let seeded = "" + c.section[k];
-				let dflt = "" + spec.default;
-				if (dflt == "false") dflt = "0";
-				if (dflt == "true") dflt = "1";
-				if (seeded == dflt)
-					push(offenders, sprintf("%s/%s: %s=%s is the default",
-					                        c.file, c.id, k, seeded));
+			let h = c.singleton ? handler.make_singleton(mod, { tx: tx_stub() })
+			                    : handler.make(mod, { tx: tx_stub() });
+			let conn = seeded(c);
+			let got = read(h, c, conn);
+			if (got.status != 200) {
+				t.assert_equal(sprintf("GET failed, so the seed is wrong: %J", got.body),
+				               "GET 200");
+				return;
 			}
-		}
-		if (length(offenders) > 0)
-			t.assert_equal(join("; ", offenders), "no field seeded at its default");
-		t.assert_equal(length(offenders), 0);
-	});
+			let blind = [];
+			for (let k in props) {
+				if (!exists(props[k], "default")) continue;
+				if (ph.json_eq(got.body[k], props[k].default))
+					push(blind, sprintf("%s=%J", k, props[k].default));
+			}
+			if (length(blind) > 0)
+				t.assert_equal(sprintf("%s/%s reads back at the default for %s, so a "
+				                       + "dropped write would be invisible",
+				                       c.file, c.id, join(", ", blind)),
+				               "every defaulted field seeded off its default");
+		});
+	}
 });
 
 // The case list must not fall behind the resource tree. Every resource with a validate()
