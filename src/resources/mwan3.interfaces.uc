@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let as_int = values.as_int;
 let is_valid_ip = values.is_valid_ip;
@@ -11,7 +11,10 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enabled:                normalize_bool(section.enabled, true),
+		// mwan3's init reads this with `config_get_bool enabled $interface 'enabled' '0'`, so an
+		// absent option means off. Declaring true here reported an interface mwan3 ignores as
+		// enabled, and any PATCH persisted that read view as `enabled='1'`, switching it on.
+		enabled:                shell_bool(section.enabled, false),
 		family:                 section.family ?? null,
 		track_ip:               as_list(section.track_ip),
 		track_method:           section.track_method ?? null,
@@ -19,7 +22,7 @@ function fromUci(section) {
 		probe_count:            as_int(section.count),
 		size:                   as_int(section.size),
 		max_ttl:                as_int(section.max_ttl),
-		check_quality:          normalize_bool(section.check_quality, false),
+		check_quality:          shell_bool(section.check_quality, false),
 		failure_latency:        as_int(section.failure_latency),
 		failure_loss:           as_int(section.failure_loss),
 		recovery_latency:       as_int(section.recovery_latency),
@@ -28,7 +31,7 @@ function fromUci(section) {
 		interval:               as_int(section.interval),
 		failure_interval:       as_int(section.failure_interval),
 		recovery_interval:      as_int(section.recovery_interval),
-		keep_failure_interval:  normalize_bool(section.keep_failure_interval, false),
+		keep_failure_interval:  shell_bool(section.keep_failure_interval, false),
 		down:                   as_int(section.down),
 		up:                     as_int(section.up),
 		flush_conntrack:        as_list(section.flush_conntrack),
@@ -85,7 +88,7 @@ return {
 	id_prefix: "i",
 	openapi_required: ["family"],
 	schema_properties: {
-		enabled:               { type: "boolean", default: true },
+		enabled:               { type: "boolean", default: false },
 		family:                { type: "string", enum: keys(VALID_FAMILY),
 		                         description: "Address family this interface tracks." },
 		track_ip:              { type: "array", items: { type: "string" },

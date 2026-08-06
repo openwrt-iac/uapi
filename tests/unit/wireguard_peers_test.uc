@@ -437,3 +437,33 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		t.assert_equal(length(ops), 0);
 	});
 });
+
+// `disabled` and `route_allowed_ips` are read by wireguard.sh with config_get_bool, which
+// accepts `on`, `yes` and `enabled` as well as `1`. Reading them with the netifd-strict
+// helper made an operator-disabled peer report enabled, and because toUci writes the view
+// back, an unrelated PATCH then rewrote uci to '0' and kernel_ops emitted a `set` that
+// installed the peer live. Every spelling the shell honours has to survive the round trip.
+t.describe('network.wireguard_peers boolean spellings match config_get_bool', () => {
+	function peer(disabled) {
+		return { '.name': 'p1', '.type': 'wireguard_wg0', '.anonymous': false,
+		         public_key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=',
+		         allowed_ips: ['10.0.0.2/32'], disabled: disabled };
+	}
+	for (let spelling in ['1', 'true', 'on', 'yes', 'enabled']) {
+		t.it(sprintf("disabled=%s reads as disabled and stays disabled", spelling), () => {
+			let view = wgp.fromUci(peer(spelling), null);
+			t.assert_true(view.disabled);
+			t.assert_equal(wgp.toUci(view).disabled, '1');
+		});
+	}
+	for (let spelling in ['0', 'false', 'off', 'no', 'disabled']) {
+		t.it(sprintf("disabled=%s reads as enabled", spelling), () => {
+			t.assert_false(wgp.fromUci(peer(spelling), null).disabled);
+		});
+	}
+	t.it('route_allowed_ips honours the same set', () => {
+		let sec = peer('0');
+		sec.route_allowed_ips = 'yes';
+		t.assert_true(wgp.fromUci(sec, null).route_allowed_ips);
+	});
+});

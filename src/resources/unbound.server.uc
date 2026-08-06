@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 
 const VALID_DHCP_LINK = { "none": true, "odhcpd": true, "dnsmasq": true };
@@ -19,22 +19,22 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		enabled: normalize_bool(section.enabled, true),
+		enabled: shell_bool(section.enabled, true),
 		listen_port: as_int(section.listen_port),
 		dhcp_link: section.dhcp_link ?? null,
 		add_local_fqdn: as_int(section.add_local_fqdn),
 		add_wan_fqdn: as_int(section.add_wan_fqdn),
-		dnssec_enabled: normalize_bool(section.dnssec_enabled, false),
+		dnssec_enabled: shell_bool(section.dnssec_enabled, false),
 		recursion: section.recursion ?? null,
 		resource_limits: section.resource ?? null,
 		protocol: section.protocol ?? null,
-		query_minimize: normalize_bool(section.query_minimize, false),
-		prefetch: normalize_bool(section.prefetch, false),
-		manual_conf: (section.manual_conf != null) ? normalize_bool(section.manual_conf, false) : null,
-		extended_stats: (section.extended_stats != null) ? normalize_bool(section.extended_stats, false) : null,
-		interface_auto: (section.interface_auto != null) ? normalize_bool(section.interface_auto, true) : null,
-		localservice: (section.localservice != null) ? normalize_bool(section.localservice, true) : null,
-		hide_binddata: (section.hide_binddata != null) ? normalize_bool(section.hide_binddata, true) : null,
+		query_minimize: shell_bool(section.query_minimize, false),
+		prefetch: shell_bool(section.prefetch, false),
+		manual_conf: (section.manual_conf != null) ? shell_bool(section.manual_conf, false) : null,
+		extended_stats: (section.extended_stats != null) ? shell_bool(section.extended_stats, false) : null,
+		interface_auto: (section.interface_auto != null) ? shell_bool(section.interface_auto, true) : null,
+		localservice: (section.localservice != null) ? shell_bool(section.localservice, true) : null,
+		hide_binddata: (section.hide_binddata != null) ? shell_bool(section.hide_binddata, true) : null,
 		rebind_protection: section.rebind_protection ?? null,
 		num_threads: as_int(section.num_threads),
 		ttl_min: as_int(section.ttl_min),

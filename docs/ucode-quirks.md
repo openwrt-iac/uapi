@@ -119,17 +119,39 @@ Read a boolean the way its owning daemon reads it, or a GET reports the
 operator's intent instead of the daemon's behaviour. The sets do not match, and
 netifd's is the strict one:
 
-| Reader | true | false | anything else |
-|---|---|---|---|
-| netifd, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies |
-| fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default |
-| shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default |
+| Reader | true | false | anything else | uapi helper |
+|---|---|---|---|---|
+| netifd C, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies | `platform_bool` |
+| netifd ucode, `parse_bool` in `/lib/netifd/utils.uc` | `1`, `true` | `0`, `false` | undefined, caller default | `platform_bool` |
+| fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default | `normalize_bool` |
+| shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default | `shell_bool` |
+| raw compare, `[ "$x" != "1" ]` | `1` | everything else | there is no else | `strict_bool` |
+| libvalidate `:bool:` via `uci_validate_section` | unverified | unverified | section **dropped**, see below | `normalize_bool` |
 
 So `option auto 'no'` on an interface does not disable autostart: netifd drops
-the value and uses its own `true`. `values.platform_bool` is the reader for
-netifd-owned fields and `values.normalize_bool` for the rest; using the wrong one
-produces a misreport in whichever direction. Writes should emit `"1"` / `"0"`,
-which every reader above accepts.
+the value and uses its own `true`.
+
+**Pick the row, do not pick a default.** This table previously said "`platform_bool`
+for netifd-owned fields and `normalize_bool` for the rest", and that "the rest"
+produced a bug in roughly forty places at once. The worst was `disabled` on a
+wireguard peer: `wireguard.sh` reads it with `config_get_bool`, so
+`option disabled 'yes'` means disabled, while `platform_bool` reported enabled and
+the next write pushed `disabled='0'` to uci and the peer into the kernel. Find the
+reader before choosing, and cite it in a comment when it is not obvious.
+
+The libvalidate row is honestly unknown: ubox is not in the SDK feeds, so the
+accepted set could not be read. It matters more than the others, because a value
+`validate_data` rejects makes the init script drop the **whole section** rather
+than fall back to a default (`dropbear.init` and `sysntpd` both do this). Until
+someone reads ubox, `normalize_bool` is the conservative guess for those fields:
+`system.log_remote`, `system/timeservers`, and dropbear's auth flags.
+
+Writes still emit `"1"` / `"0"`, which every reader above accepts.
+
+A related trap the table cannot catch: an option that is not a boolean at all.
+`system.urandom_seed` is the filesystem path the entropy seed is written to, and
+`lldpd`'s `lldp_description` is free text. Both were typed boolean, so a write
+replaced the operator's value with `"1"`.
 
 ### Real `ubus` and `uci` modules are `.so` packages
 

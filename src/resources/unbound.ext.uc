@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let check_lines = values.check_lines;
 
@@ -9,7 +9,7 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		enabled: normalize_bool(section.enabled, false),
+		enabled: shell_bool(section.enabled, false),
 		ext_line: as_list(section.ext_line),
 		runtime: {},
 	};

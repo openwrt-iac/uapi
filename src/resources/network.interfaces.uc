@@ -1,4 +1,5 @@
 let values = require('values');
+let strict_bool = values.strict_bool;
 let ids = require('ids');
 let platform_bool = values.platform_bool;
 let as_list = values.as_list;
@@ -84,7 +85,7 @@ function fromUci(section, conn) {
 	if (proto == "wireguard") {
 		view.listen_port = as_int(section.listen_port);
 		view.addresses = as_list(section.addresses);
-		view.nohostroute = platform_bool(section.nohostroute, false);
+		view.nohostroute = strict_bool(section.nohostroute);
 		view.ip4table = section.ip4table ?? null;
 		view.ip6table = section.ip6table ?? null;
 		view.has_private_key = (section.private_key != null && section.private_key != "");

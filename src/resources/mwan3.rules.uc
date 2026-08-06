@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let strict_bool = values.strict_bool;
 let as_int = values.as_int;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
@@ -18,11 +18,11 @@ function fromUci(section) {
 		src_port:   section.src_port ?? null,
 		dest_ip:    section.dest_ip ?? null,
 		dest_port:  section.dest_port ?? null,
-		sticky:     normalize_bool(section.sticky, false),
+		sticky:     strict_bool(section.sticky),
 		timeout:    as_int(section.timeout),
 		ipset:      section.ipset ?? null,
 		use_policy: section.use_policy ?? null,
-		logging:    normalize_bool(section.logging, false),
+		logging:    strict_bool(section.logging),
 		runtime: {},
 	};
 }
