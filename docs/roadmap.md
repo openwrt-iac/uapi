@@ -426,6 +426,21 @@ to serve a compatibility case v3 deletes:
   writing `/etc/unbound/unbound_srv.conf` (high bar per
   `docs/non-uci-state.md`; only if option (a) genuinely stalls).
 
+## Install the deferred packages in CI
+
+`tests/integration/44_stock_config_test.sh` skips nine packages that are not in the bare
+image (snmpd, lldpd, vnstat, mwan3, unbound, sqm, usteer, prometheus-node-exporter-lua,
+openvpn) because installing them inside an integration test hit a QEMU SLIRP failure that
+cost hours of CI. The cost of leaving it is now measurable: `vnstat/interfaces` modelled a
+section type vnstat never reads and shipped that way, because a resource for an uninstalled
+package is never exercised against real configuration, so a wrong section type is
+indistinguishable from a right one.
+
+The route is to install at VM-setup time (`tests/vm/setup.sh`) rather than during a test.
+Note for whoever picks this up: on the standing test box the distfeeds needed pointing at
+25.12.5 and the kmods feed at kernel `6.12.94-1-a7bc15f4...`, or every `kmod-*` dependency
+is unresolvable.
+
 ## Hardening (next, no new wire surface)
 
 - **Decide whether the perf bench should gate, and on what.** It measures
