@@ -784,7 +784,7 @@ function build_schemas() {
 			"properties": {
 				"id": { "type": "string", "description": "Optional; generated if absent" },
 				".type": { "type": "string" },
-				"managed": { "type": "boolean" },
+				"managed": { "type": "boolean", "readOnly": true },
 			},
 			"additionalProperties": true,
 		},
@@ -803,7 +803,7 @@ function build_schemas() {
 			"required": ["id", "name", "installed"],
 			"properties": {
 				"id": { "type": "string", "description": "Package name (same as name)" },
-				"managed": { "type": "boolean" },
+				"managed": { "type": "boolean", "readOnly": true },
 				"name": { "type": "string" },
 				"version": { "type": ["string", "null"] },
 				"installed": { "type": "boolean" },
@@ -823,7 +823,7 @@ function build_schemas() {
 			"required": ["id", "url"],
 			"properties": {
 				"id": { "type": "string" },
-				"managed": { "type": "boolean" },
+				"managed": { "type": "boolean", "readOnly": true },
 				"name": { "type": "string" },
 				"filename": { "type": "string" },
 				"url": { "type": "string" },
@@ -1143,6 +1143,20 @@ function build_schemas() {
 			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : properties.runtime;
 			properties.runtime = { ...documented, readOnly: true };
 		}
+
+		// Same reasoning for `managed`, which is derived from uci's `.anonymous` flag: no
+		// toUci reads it, and the write path hardcodes `.anonymous = false`, so a PUT
+		// sending `managed: false` answers 200 with `managed: true`. Management state
+		// moves only through the adopt endpoint. Emitted bare, it reads to a generator as
+		// an ordinary writable boolean, so it lands in the request model and every
+		// read-modify-write client sends a field the server ignores.
+		//
+		// Annotated here rather than in the modules on purpose: adding `managed` to a
+		// resource's schema_properties would also add it to the runtime type checker, and
+		// `managed: "true"` would go from 200 to 422. This is a documentation fix and
+		// should not change what the server accepts.
+		if (type(properties.managed) == "object")
+			properties.managed = { ...properties.managed, readOnly: true };
 
 		// 2.2.0: every CRUD resource accepts an optional `id` at create
 		// that becomes both the uci section name and the response id. If
