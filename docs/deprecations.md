@@ -102,6 +102,43 @@ before the major that makes them.
   and validates that entries are non-empty strings, which is as far as validation can go
   without asking the kernel.
 
+- **Fields that write a uci option no OpenWrt component reads will be removed**, targeted
+  at v3. Each was modelled against an option name the owning daemon does not consult, so
+  the field has never had any effect: a write is accepted and stored, and the daemon
+  carries on as before. They are removed rather than repointed because, unlike the three
+  corrected in 2.5.0, there is nothing to point them at.
+
+  | field | why there is no target |
+  |---|---|
+  | `mwan3/globals.rtmon_interval` | `mwan3rtmon` is driven by `ip monitor route`; there is no polling interval |
+  | `mwan3/globals.local_source` | the live knob is `source_routing`, a boolean about route-line parsing, not an interface name |
+  | `vnstat/config.database_dir` | a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it |
+  | `vnstat/config.interface_5min_hours` | as above |
+  | `vnstat/config.month_rotate` | as above |
+  | `lldpd/config.enable_lldpmed` | LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`) |
+  | `unbound/server.enabled` | `enabled` is read only on `config zone`; the daemon is enabled through procd |
+  | `unbound/server.prefetch` | the only similar option is `prefetch_root`, a different feature; unbound's `prefetch:` directive is derived from `recursion`, which uapi already exposes |
+  | `prometheus_node_exporter_lua/config.listen_ipv6` | the v6 bind is derived from `listen_interface` |
+  | its seventeen collector toggles | collectors are enumerated from `/usr/lib/lua/prometheus-collectors/*.lua`; **seven of the seventeen name collectors that do not exist in that package at all** |
+
+  Requests carrying these keys are ignored today, so nothing on the write side needs
+  migrating. The read side does: each is returned on `GET` with a `default:` annotation,
+  which is what an IaC client reads to keep an attribute sticky, and a generated response
+  model for `prometheus_node_exporter_lua/config` loses eighteen of its properties.
+
+- **`managed` leaves the request half of every resource schema**, targeted at v3. It is
+  derived from uci's `.anonymous` flag and no `toUci` reads it, so a `PUT` sending
+  `managed: false` has always answered 200 with `managed: true`; management state moves
+  only through `POST /<resource>/{id}/adopt`. 2.5.0 annotates it `readOnly`, which is the
+  notice: a regenerated client stops putting it in request models. v3 completes the split.
+
+- **Each resource will be described by a separate request schema and response schema**,
+  targeted at v3. One schema serves both directions today, which is why `dhcp/hosts.tag`
+  keeps `string` in its type for writers while responses are always an array, why
+  `network/interfaces.ipaddr` is described in prose rather than as `readOnly`, and why any
+  read/write asymmetry is unstatable. Generated model names change for every resource.
+  This is the change the `ipaddr` row above already promises the consequence of.
+
 ## Removed in past releases
 
 (none yet; uapi has not cut a v3.)

@@ -115,7 +115,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		enabled:           { type: "boolean", default: true },
+		enabled:           { deprecated: true, type: "boolean", default: true },
 		listen_port:       { type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { type: "string", enum: keys(VALID_DHCP_LINK) },
 		add_local_fqdn:    { type: ["integer", "null"], minimum: 0, maximum: 4,
@@ -128,7 +128,7 @@ return {
 		                     description: "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)." },
 		protocol:          { type: "string", enum: keys(VALID_PROTOCOL) },
 		query_minimize:    { type: "boolean", default: false },
-		prefetch:          { type: "boolean", default: false },
+		prefetch:          { deprecated: true, type: "boolean", default: false },
 		rebind_protection: { type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
 		domain:            { type: ["string", "null"] },
