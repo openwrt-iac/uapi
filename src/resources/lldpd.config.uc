@@ -15,7 +15,12 @@ function fromUci(section) {
 		enable_lldpmed: shell_bool(section.enable_lldpmed, false),
 		lldp_class: as_int(section.lldp_class),
 		lldp_description: section.lldp_description ?? null,
-		lldp_capabilities: shell_bool(section.lldp_capabilities, true),
+		// lldpd reads `lldp_capability_advertisements`; uapi wrote `lldp_capabilities`,
+		// which the init never looks at, so this field has never done anything. The old
+		// key is still read as a fallback, or an upgrade would silently drop the value an
+		// operator set and report the default instead.
+		lldp_capabilities: shell_bool(section.lldp_capability_advertisements
+		                              ?? section.lldp_capabilities, true),
 		lldp_mgmt_ip: section.lldp_mgmt_ip ?? null,
 		interface: as_list(section.interface),
 		runtime: {},
@@ -25,10 +30,15 @@ function fromUci(section) {
 function toUci(json) {
 	let out = {};
 	let bool_fields = ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp",
-	                   "enable_lldpmed", "lldp_capabilities"];
+	                   "enable_lldpmed"];
 	for (let f in bool_fields) {
 		if (json[f] != null) out[f] = json[f] ? "1" : "0";
 	}
+	// See unbound.server.uc: the legacy key has to be cleared explicitly or a PATCH that
+	// clears the field leaves it behind for the fallback read to resurrect.
+	out.lldp_capabilities = [];
+	if (json.lldp_capabilities != null)
+		out.lldp_capability_advertisements = json.lldp_capabilities ? "1" : "0";
 	if (json.lldp_description != null) out.lldp_description = json.lldp_description;
 	if (json.lldp_class != null)   out.lldp_class = "" + json.lldp_class;
 	if (json.lldp_mgmt_ip != null) out.lldp_mgmt_ip = json.lldp_mgmt_ip;

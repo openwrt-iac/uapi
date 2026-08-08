@@ -942,3 +942,92 @@ t.describe('unbound.server enum messages match what is accepted', () => {
 		t.assert_true(every_named_value_is_accepted("resource_limits", msg));
 	});
 });
+
+// Three fields wrote a uci key their daemon never reads, so the value never reached the
+// device: lldpd reads `lldp_capability_advertisements` (lldpd.init:228), unbound reads
+// `validator` (unbound.sh:1352), and snmpd reads `sysService` singular (snmpd.init:36,
+// a typo uapi inherited from upstream's own sample config). Each now writes the key its
+// daemon reads, and still reads the old one when the new is absent, or an upgrade would
+// silently drop whatever the operator had set and report the default instead.
+t.describe('fields repointed at the uci key their daemon actually reads', () => {
+	let lldpd = loadfile('src/resources/lldpd.config.uc')();
+	let unbound = loadfile('src/resources/unbound.server.uc')();
+	let snmpd = loadfile('src/resources/snmpd.system.uc')();
+
+	t.it('lldpd writes lldp_capability_advertisements', () => {
+		t.assert_equal(lldpd.toUci({ lldp_capabilities: false }).lldp_capability_advertisements, '0');
+		// The legacy key is emitted as an empty array, which is uci's "no such option":
+		// it has to be in the write set or nothing ever deletes it from an upgraded box.
+		t.assert_deep_equal(lldpd.toUci({ lldp_capabilities: false }).lldp_capabilities, []);
+	});
+	t.it('lldpd still reads a section carrying only the old key', () => {
+		let v = lldpd.fromUci({ '.name': 'cfg', '.type': 'lldpd', lldp_capabilities: '0' }, null);
+		t.assert_false(v.lldp_capabilities);
+	});
+	t.it('lldpd prefers the real key when both are present', () => {
+		let v = lldpd.fromUci({ '.name': 'cfg', '.type': 'lldpd',
+		                        lldp_capabilities: '1',
+		                        lldp_capability_advertisements: '0' }, null);
+		t.assert_false(v.lldp_capabilities);
+	});
+
+	t.it('unbound writes validator', () => {
+		t.assert_equal(unbound.toUci({ dnssec_enabled: true }).validator, '1');
+		t.assert_deep_equal(unbound.toUci({ dnssec_enabled: true }).dnssec_enabled, []);
+	});
+	t.it('unbound still reads a section carrying only the old key', () => {
+		let v = unbound.fromUci({ '.name': 'ub', '.type': 'unbound', dnssec_enabled: '1' }, null);
+		t.assert_true(v.dnssec_enabled);
+	});
+
+	t.it('snmpd writes sysService, singular', () => {
+		t.assert_equal(snmpd.toUci({ sys_services: 72 }).sysService, '72');
+		t.assert_deep_equal(snmpd.toUci({ sys_services: 72 }).sysServices, []);
+	});
+	t.it('snmpd still reads a section carrying only the plural', () => {
+		let v = snmpd.fromUci({ '.name': 'c', '.type': 'system', sysServices: '72' }, null);
+		t.assert_equal(v.sys_services, 72);
+	});
+});
+
+// Clearing a repointed field has to clear the legacy key too. Without that the legacy key
+// is never in the footprint diff_apply_patch deletes from, so the fallback read resurrects
+// it: the 200 said false, the next GET said true, and the daemon had it off. Three answers,
+// two of them wrong.
+t.describe('clearing a repointed field clears the legacy key with it', () => {
+	let ubus4 = require('bus');
+	let handler4 = require('handler');
+	let fx4 = require('resource_fixtures');
+	let unbound4 = loadfile('src/resources/unbound.server.uc')();
+	function tx4() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function c4() { return { request_id: "01hx0000000000000000000000" }; }
+	function legacy_box() {
+		let u = fx4.world();
+		u.unbound = { ub: { '.anonymous': false, '.type': 'unbound', dnssec_enabled: '1' } };
+		return ubus4.stub({ uci: u });
+	}
+	let h4 = handler4.make_singleton(unbound4, { tx: tx4() });
+
+	t.it('an untouched box still reports the operator value', () => {
+		t.assert_true(h4.get(legacy_box(), c4()).body.dnssec_enabled);
+	});
+	t.it('clearing it removes both keys, and the next read agrees with the write', () => {
+		let c = legacy_box();
+		let r = h4.patch(c, c4(), { dnssec_enabled: null });
+		t.assert_equal(r.status, 200);
+		t.assert_false(r.body.dnssec_enabled);
+		t.assert_equal(c._state.uci.unbound.ub.dnssec_enabled, null);
+		t.assert_equal(c._state.uci.unbound.ub.validator, null);
+		t.assert_false(h4.get(c, c4()).body.dnssec_enabled);
+	});
+	t.it('setting it writes the real key and drops the legacy one', () => {
+		let c = legacy_box();
+		h4.patch(c, c4(), { dnssec_enabled: true });
+		t.assert_equal(c._state.uci.unbound.ub.validator, '1');
+		t.assert_equal(c._state.uci.unbound.ub.dnssec_enabled, null);
+	});
+});
