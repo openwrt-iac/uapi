@@ -95,30 +95,42 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	"$URL/system?if_none_match=deadbeef0000")
 [ "$status" = "200" ] || fail "non-matching If-None-Match expected 200, got $status"
 
-# A write is not a conditional GET. maybe_304 ran on every response, so appending the
-# documented ?if_none_match= fallback to a PUT or PATCH returned 304 for a write that had
-# already committed and reloaded: the transaction headers went missing, and because the
-# audit branch logs 2xx writes only, the write left no audit line at all.
-echo "--- If-None-Match on a write is ignored, not answered with 304 ---"
+# A write is not a conditional GET, and it is not unconditional either. RFC 9110 13.1.2
+# gives 304 for GET/HEAD and 412 for everything else; uapi used to parse the header on a
+# write and then drop it, so a caller asking for "only if absent" had the condition
+# discarded and the write performed. The assertion that matters is that nothing was
+# written, since a 412 returned after the commit looks the same from the status alone.
+echo "--- If-None-Match on a write is refused with 412, and writes nothing ---"
 $SSH "uci -q delete network.cget; uci commit network" >/dev/null 2>&1 || true
 curl -sS -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/network/interfaces" -d '{"id":"cget","proto":"static","ipaddr":"192.168.222.1/24"}'
-code=$(curl -sS -D /tmp/uapi_cget_h -o /dev/null -w '%{http_code}' -H "$ADMIN" \
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	-H 'Content-Type: application/json' \
-	-X PATCH "$URL/network/interfaces/cget?if_none_match=%2A" -d '{"metric":9}')
-[ "$code" = "200" ] || { cat /tmp/uapi_cget_h; fail "PATCH with if_none_match=* returned $code, expected 200"; }
-tr -d '\r' < /tmp/uapi_cget_h | grep -qi '^X-Reload-Status:' \
-	|| { tr -d '\r' < /tmp/uapi_cget_h; fail "the write lost its transaction headers to a 304 rewrite"; }
-echo "  PATCH kept its 200 and its X-Reload-Status"
+	-X PATCH "$URL/network/interfaces/cget?if_none_match=%2A" -d '{"ipaddr":"192.168.222.77/24"}')
+[ "$code" = "412" ] || fail "PATCH with if_none_match=* returned $code, expected 412"
+after=$($SSH "uci -q get network.cget.ipaddr" | tr -d '\r')
+[ "$after" = "192.168.222.1/24" ] || fail "the refused write still changed uci: $after"
+echo "  refused, and uci is untouched"
 
-# The same request against the etag the write itself produces: the write must still win.
+# The same request against the etag the resource currently has: also a refusal.
 etag=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/network/interfaces/cget" | tr -d '\r' \
 	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]"')
 code=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X PUT "$URL/network/interfaces/cget?if_none_match=$etag" \
-	-d '{"proto":"static","ipaddr":"192.168.222.1/24","metric":9}')
-[ "$code" = "200" ] || fail "PUT with a matching if_none_match returned $code, expected 200"
-echo "  PUT with its own matching etag still returned 200"
+	-d '{"proto":"static","ipaddr":"192.168.222.88/24"}')
+[ "$code" = "412" ] || fail "PUT with a matching if_none_match returned $code, expected 412"
+
+# A non-matching etag satisfies the condition, so the write proceeds and carries its
+# transaction headers. This is where the header assertion lives now: under the change above
+# there is no successful write left in that case to carry them.
+code=$(curl -sS -D /tmp/uapi_cget_h -o /dev/null -w '%{http_code}' -H "$ADMIN" \
+	-H 'Content-Type: application/json' \
+	-X PATCH "$URL/network/interfaces/cget?if_none_match=deadbeef0000" -d '{"metric":9}')
+[ "$code" = "200" ] || { cat /tmp/uapi_cget_h; fail "PATCH with a non-matching if_none_match returned $code"; }
+tr -d '\r' < /tmp/uapi_cget_h | grep -qi '^X-Reload-Status:' \
+	|| { tr -d '\r' < /tmp/uapi_cget_h; fail "the write lost its transaction headers"; }
+echo "  a non-matching etag still writes, with its headers"
+
 
 $SSH "uci -q delete network.cget; uci commit network" >/dev/null 2>&1 || true
 

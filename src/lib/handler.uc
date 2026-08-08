@@ -118,18 +118,46 @@ function parse_if_match(header_value) {
 	return out;
 }
 
+// RFC 9110 13.1.2: a false If-None-Match is 304 for GET and HEAD, and 412 for every other
+// method. uapi parsed the header for every verb and then dropped it on writes, so a caller
+// asking for "create only if absent" had the condition discarded and its write performed.
+// This runs inside the transaction closure, before uci_commit, which is what 13.2.2
+// requires: a refusal here reverts and nothing is written.
+//
+// Evaluated after If-Match, per 13.2.2's ordering. `*` means "only if the resource does not
+// exist", so on a write against an existing section it always fails.
+function none_match_check(ctx, existing_body) {
+	let want = parse_if_match(ctx.if_none_match);
+	if (want == null) return null;
+	if (existing_body == null) return null;         // nothing there: the condition holds
+	if (want == "*")
+		return errors.error(ctx, "precondition_failed",
+			"If-None-Match: * requires the resource not to exist");
+	let have = compute_etag(existing_body);
+	for (let candidate in want)
+		if (candidate == have)
+			return errors.error(ctx, "precondition_failed",
+				sprintf("If-None-Match matched the current ETag (current=\"%s\")", have));
+	return null;
+}
+
 function precondition_check(ctx, existing_body) {
 	let want = parse_if_match(ctx.if_match);
-	if (want == null) return null;          // no If-Match -> no check
-	if (want == "*" && existing_body != null) return null;  // wildcard ok for any existing
+	if (want == null) return none_match_check(ctx, existing_body);
+	if (want == "*" && existing_body != null) return none_match_check(ctx, existing_body);
 	if (want == "*") return errors.error(ctx, "precondition_failed",
 		"If-Match: * requires an existing resource");
 	let have = compute_etag(existing_body);
+	let matched = false;
 	for (let candidate in want)
-		if (candidate == have) return null;
-	return errors.error(ctx, "precondition_failed",
-		sprintf("If-Match did not match current ETag (current=\"%s\")", have));
+		if (candidate == have) matched = true;
+	if (!matched)
+		return errors.error(ctx, "precondition_failed",
+			sprintf("If-Match did not match current ETag (current=\"%s\")", have));
+	return none_match_check(ctx, existing_body);
 }
+
+
 
 function build_field_errors(raw_errs) {
 	let out = [];
@@ -913,6 +941,7 @@ function make_singleton(resource, opts) {
 		let result = transaction.transaction(conn, tx_params({
 			fn: function(c, p) {
 				let existing = find(c);
+				let synthesized = false;
 				if (!existing) {
 					if (!create_if_missing)
 						return { ok: false, kind: "not_found",
@@ -926,11 +955,17 @@ function make_singleton(resource, opts) {
 					existing['.name'] = singleton_section_name;
 					existing['.anonymous'] = false;
 					existing['.type'] = sec_type;
+					synthesized = true;
 				}
 				let id = existing['.name'];
 
 				let existing_view = resource.fromUci(existing, conn);
-				let pc = precondition_check(ctx, existing_view);
+				// A synthesized section did not exist when the request arrived, and a
+				// precondition asks about the resource the caller addressed, not about the
+				// stub staged a few lines up. Passing the stub made `If-None-Match: *`
+				// answer 412 for a resource GET reports as 404, which is exactly the
+				// create-if-absent case RFC 9110 13.1.2 says must proceed.
+				let pc = precondition_check(ctx, synthesized ? null : existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };

@@ -1644,3 +1644,112 @@ t.describe('clearing a list option actually clears it', () => {
 		t.assert_equal(conn._state.uci.dhcp.hnew.tag, null);
 	});
 });
+
+// RFC 9110 13.1.2: a false If-None-Match is 304 for GET and HEAD, and 412 for everything
+// else. uapi parsed the header for every verb and then dropped it on writes, so a caller
+// asking for "only if absent" had the condition discarded and its write performed. The
+// assertion that matters in each case below is that uci is untouched: a 412 returned after
+// the commit would look identical from the status alone.
+t.describe('handler If-None-Match on writes', () => {
+	function seeded() {
+		return ubus.stub({
+			uci: {
+				firewall: {
+					z_lan: { '.type': 'zone', name: 'lan' },
+					r_inm: { '.type': 'rule', '.anonymous': false, name: 'before',
+					         target: 'ACCEPT', src: 'lan' },
+				},
+			},
+		});
+	}
+	function cx(extra) {
+		let c = { request_id: "01hx0000000000000000000000" };
+		for (let k in (extra ?? {})) c[k] = extra[k];
+		return c;
+	}
+	function current_etag() {
+		return rules.get_one(seeded(), ctx(), 'r_inm').headers?.ETag;
+	}
+
+	t.it('* against an existing resource is refused, and writes nothing', () => {
+		let c = seeded();
+		let r = rules.patch(c, cx({ if_none_match: "*" }), 'r_inm', { name: 'after' });
+		t.assert_equal(r.status, 412);
+		t.assert_equal(r.body.code, 'precondition_failed');
+		t.assert_equal(c._state.uci.firewall.r_inm.name, 'before');
+	});
+
+	t.it('a matching etag is refused, and writes nothing', () => {
+		let c = seeded();
+		let r = rules.patch(c, cx({ if_none_match: current_etag() }), 'r_inm', { name: 'after' });
+		t.assert_equal(r.status, 412);
+		t.assert_equal(c._state.uci.firewall.r_inm.name, 'before');
+	});
+
+	t.it('a non-matching etag lets the write through', () => {
+		let c = seeded();
+		let r = rules.patch(c, cx({ if_none_match: '"deadbeef0000"' }), 'r_inm', { name: 'after' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_inm.name, 'after');
+	});
+
+	t.it('no precondition still writes', () => {
+		let c = seeded();
+		t.assert_equal(rules.patch(c, cx(), 'r_inm', { name: 'after' }).status, 200);
+		t.assert_equal(c._state.uci.firewall.r_inm.name, 'after');
+	});
+
+	// 13.2.2 evaluates If-Match first, so a stale If-Match loses regardless of the other.
+	t.it('a stale If-Match wins over a satisfiable If-None-Match', () => {
+		let c = seeded();
+		let r = rules.patch(c, cx({ if_match: '"stale0000"', if_none_match: '"other0000"' }),
+		                    'r_inm', { name: 'after' });
+		t.assert_equal(r.status, 412);
+		t.assert_equal(c._state.uci.firewall.r_inm.name, 'before');
+	});
+
+	t.it('DELETE honours it too, and the section survives', () => {
+		let c = seeded();
+		let r = rules.remove(c, cx({ if_none_match: "*" }), 'r_inm');
+		t.assert_equal(r.status, 412);
+		t.assert_true(c._state.uci.firewall.r_inm != null);
+	});
+});
+
+// The create-if-absent idiom, which is the case RFC 9110 13.1.2 most clearly says must
+// proceed, and the one the first version of this change broke. A `create_if_missing`
+// singleton stages its section before the precondition runs, so passing that stub made
+// `If-None-Match: *` answer 412 for a resource GET reports as 404: the one request that
+// should always succeed became the one that could not.
+t.describe('If-None-Match: * still creates an absent singleton', () => {
+	let ext = loadfile('src/resources/unbound.ext.uc')();
+	function tx_ok() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function cx(extra) {
+		let c = { request_id: "01hx0000000000000000000000" };
+		for (let k in (extra ?? {})) c[k] = extra[k];
+		return c;
+	}
+	function absent() {
+		let fx = require('resource_fixtures');
+		let u = fx.world();
+		u.unbound_ext = {};
+		return ubus.stub({ uci: u });
+	}
+	let h = handler.make_singleton(ext, { tx: tx_ok() });
+
+	t.it('the resource really is absent to a reader', () => {
+		t.assert_equal(h.get(absent(), cx()).status, 404);
+	});
+	t.it('* proceeds and creates it', () => {
+		t.assert_equal(h.patch(absent(), cx({ if_none_match: "*" }), { enabled: true }).status, 200);
+	});
+	t.it('and still refuses once it exists', () => {
+		let c = absent();
+		h.patch(c, cx(), { enabled: true });
+		t.assert_equal(h.patch(c, cx({ if_none_match: "*" }), { enabled: false }).status, 412);
+	});
+});
