@@ -78,6 +78,58 @@ echo "$after" | grep -q '"proto"' \
 echo "  proto cleared and stays cleared on re-read"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/raw/firewall/$probe_id"
 
+# `managed` is derived from uci's `.anonymous` flag, never stored. Raw copies the body
+# wholesale, so before this guard a read-modify-write client wrote a literal
+# `option managed` into the section, and normalize_section then let that stored option
+# shadow the derived value: `managed` came back as the string "0" where the schema
+# promises a boolean.
+echo "--- raw: managed is never written into uci, and never shadows the derived value ---"
+mg=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/firewall" -d '{
+	".type": "rule", "name": "uapi_managed_probe", "target": "ACCEPT", "src": "lan"
+}')
+echo "$mg" | tail -1 | grep -q '^200$' || fail "managed-probe create expected 200"
+mg_id=$(echo "$mg" | sed -n 's/.*"id":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+[ -n "$mg_id" ] || fail "no id for the managed probe"
+
+patched=$(call -X PATCH -H 'Content-Type: application/json' \
+	"$URL/raw/firewall/$mg_id" -d '{"managed": false}')
+echo "$patched" | tail -1 | grep -q '^200$' || fail "raw PATCH with managed expected 200"
+
+stored=$($SSH "uci -q get firewall.$mg_id.managed" | tr -d '\r')
+[ -z "$stored" ] || fail "raw wrote option managed into uci: $stored"
+echo "$patched" | head -1 | grep -q '"managed":[[:space:]]*true' \
+	|| fail "managed did not read back as the derived boolean: $(echo "$patched" | head -1)"
+echo "  managed stayed derived and out of uci"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/raw/firewall/$mg_id"
+
+# A section written by a client from before the guard above carries a literal
+# `option managed`, and normalize_section used to let that stored string overwrite the
+# derived boolean, so the response came back as "0" against a schema declaring boolean.
+# Deriving after the copy fixes the read; the sweep removes the residue, which previously
+# only a full replace could do.
+echo "--- raw: a stored managed neither shadows the read nor survives a patch ---"
+$SSH "uci -q delete firewall.uapi_legacy_mg
+      uci set firewall.uapi_legacy_mg=rule
+      uci set firewall.uapi_legacy_mg.name=uapi_legacy_mg
+      uci set firewall.uapi_legacy_mg.target=ACCEPT
+      uci set firewall.uapi_legacy_mg.src=lan
+      uci set firewall.uapi_legacy_mg.managed=0
+      uci commit firewall" >/dev/null 2>&1
+seeded=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
+[ "$seeded" = "0" ] || fail "seed did not take"
+
+read_back=$(call "$URL/raw/firewall/uapi_legacy_mg")
+echo "$read_back" | head -1 | grep -q '"managed":[[:space:]]*true' \
+	|| fail "a stored managed shadowed the derived value: $(echo "$read_back" | head -1)"
+
+patched=$(call -X PATCH -H 'Content-Type: application/json' \
+	"$URL/raw/firewall/uapi_legacy_mg" -d '{"name":"uapi_legacy_mg2"}')
+echo "$patched" | tail -1 | grep -q '^200$' || fail "patch over a legacy section expected 200"
+left=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
+[ -z "$left" ] || fail "the stale managed option survived a patch: $left"
+echo "  read stays boolean, and the stale option is swept"
+$SSH "uci -q delete firewall.uapi_legacy_mg; uci commit firewall" >/dev/null 2>&1
+
 echo "--- POST to an unknown package writes the file but reports reloaded:false ---"
 unknown=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/uapi_test_unknown" -d '{
 	".type": "thing", "color": "red"

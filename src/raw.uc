@@ -77,12 +77,17 @@ function normalize_section(s) {
 	let out = {
 		id: s['.name'],
 		'.type': s['.type'],
-		managed: !s['.anonymous'],
 	};
 	for (let k in s) {
 		if (substr(k, 0, 1) == ".") continue;
 		out[k] = s[k];
 	}
+	// After the copy, not before it. `managed` is derived from `.anonymous`, but a section
+	// written by a client before raw stopped storing the field carries a literal
+	// `option managed`, and that stored string used to overwrite the derived boolean here:
+	// the response came back as "0" against a schema that declares boolean. Deriving last
+	// makes those sections read correctly whether or not the stale option is ever removed.
+	out.managed = !s['.anonymous'];
 	return out;
 }
 
@@ -183,7 +188,11 @@ function create(conn, ctx, scopes, pkg, body) {
 	let reload = ucitrack.reload_services(conn, pkg);
 	let opts = {};
 	for (let k in body) {
-		if (k == ".type" || k == "id") continue;
+		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
+		// toUci to drop unknown keys, so without this a read-modify-write client writes a
+		// literal `option managed` into the section, and normalize_section then lets that
+		// stored option shadow the derived value on the way back out.
+		if (k == ".type" || k == "id" || k == "managed") continue;
 		opts[k] = body[k];
 	}
 
@@ -225,7 +234,11 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	let reload = ucitrack.reload_services(conn, pkg);
 	let new_opts = {};
 	for (let k in body) {
-		if (k == ".type" || k == "id") continue;
+		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
+		// toUci to drop unknown keys, so without this a read-modify-write client writes a
+		// literal `option managed` into the section, and normalize_section then lets that
+		// stored option shadow the derived value on the way back out.
+		if (k == ".type" || k == "id" || k == "managed") continue;
 		new_opts[k] = body[k];
 	}
 
@@ -272,7 +285,11 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	let reload = ucitrack.reload_services(conn, pkg);
 	let updates = {};
 	for (let k in body) {
-		if (k == ".type" || k == "id") continue;
+		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
+		// toUci to drop unknown keys, so without this a read-modify-write client writes a
+		// literal `option managed` into the section, and normalize_section then lets that
+		// stored option shadow the derived value on the way back out.
+		if (k == ".type" || k == "id" || k == "managed") continue;
 		updates[k] = body[k];
 	}
 
@@ -284,8 +301,14 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 			if (!existing)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
+			// Sweep a stored `managed` left by a client from before raw stopped copying it.
+			// Nothing else reaches it: the guard above keeps the key out of `updates`, so
+			// even the empty-array clear idiom cannot target it, and until now only a full
+			// replace removed it. An empty array is uci's "no such option".
+			if (exists(existing, "managed")) c.uci_set(p, id, "managed", []);
 			for (let k in updates) c.uci_set(p, id, k, updates[k]);
 			let view = { ...existing, ...updates };
+			delete view.managed;
 			view['.name'] = id;
 			view['.type'] = existing['.type'];
 			return { ok: true, body: build_response_body(view, reload) };

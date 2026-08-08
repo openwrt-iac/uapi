@@ -120,6 +120,21 @@ for (let name in schemas) {
 		     "must be readOnly: a generator reads an un-annotated object as writable, and no resource accepts a runtime");
 }
 
+// `managed` is the same shape of mistake one field over: derived from uci's `.anonymous`,
+// ignored by every toUci, and hardcoded to true on the write path, so a PUT sending
+// `managed: false` answers 200 with `managed: true`. Emitted bare it reads as a writable
+// boolean, so it lands in the request model of every generated client. It moves only
+// through the adopt endpoint, so like `runtime` there is no resource needing an exception.
+let managed_seen = 0;
+for (let name in schemas) {
+	let mg = schemas[name].properties?.managed;
+	if (type(mg) != "object") continue;
+	managed_seen++;
+	if (mg.readOnly !== true)
+		note(sprintf("/components/schemas/%s/properties/managed", name),
+		     "must be readOnly: no toUci reads it and the write path forces it true, so a generator that puts it in the request model sends a field the server ignores");
+}
+
 // A collection segment names a set, so it reads plural, and every curated one
 // is the plural of its uci section type. The exceptions below are decisions,
 // not oversights, and each became load-bearing the moment it shipped: the path,
@@ -291,5 +306,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, collections, tx_responses, etag_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, managed_seen, collections, tx_responses, etag_responses);
