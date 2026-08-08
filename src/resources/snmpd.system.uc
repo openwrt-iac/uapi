@@ -8,7 +8,10 @@ function fromUci(section) {
 		sys_location:  section.sysLocation ?? null,
 		sys_contact:   section.sysContact ?? null,
 		sys_name:      section.sysName ?? null,
-		sys_services:  as_int(section.sysServices),
+		// snmpd.init reads `sysService`, singular. uapi wrote the plural, which is
+		// upstream's own typo in its sample config, so the value never reached snmpd.
+		// The plural is still read as a fallback.
+		sys_services:  as_int(section.sysService ?? section.sysServices),
 		sys_descr:     section.sysDescr ?? null,
 		sys_object_id: section.sysObjectID ?? null,
 		runtime: {},
@@ -20,7 +23,9 @@ function toUci(json) {
 	if (json.sys_location != null)  out.sysLocation = json.sys_location;
 	if (json.sys_contact != null)   out.sysContact = json.sys_contact;
 	if (json.sys_name != null)      out.sysName = json.sys_name;
-	if (json.sys_services != null)  out.sysServices = "" + json.sys_services;
+	// See unbound.server.uc: clear the legacy key or the fallback read resurrects it.
+	out.sysServices = [];
+	if (json.sys_services != null)  out.sysService = "" + json.sys_services;
 	if (json.sys_descr != null)     out.sysDescr = json.sys_descr;
 	if (json.sys_object_id != null) out.sysObjectID = json.sys_object_id;
 	return out;

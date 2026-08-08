@@ -24,7 +24,9 @@ function fromUci(section) {
 		dhcp_link: section.dhcp_link ?? null,
 		add_local_fqdn: as_int(section.add_local_fqdn),
 		add_wan_fqdn: as_int(section.add_wan_fqdn),
-		dnssec_enabled: shell_bool(section.dnssec_enabled, false),
+		// unbound reads `validator`; uapi wrote `dnssec_enabled`, which unbound.sh never
+		// looks at. Old key read as a fallback so an upgrade does not drop the value.
+		dnssec_enabled: shell_bool(section.validator ?? section.dnssec_enabled, false),
 		recursion: section.recursion ?? null,
 		resource_limits: section.resource ?? null,
 		protocol: section.protocol ?? null,
@@ -51,7 +53,13 @@ function toUci(json) {
 	if (json.dhcp_link != null)         out.dhcp_link = json.dhcp_link;
 	if (json.add_local_fqdn != null)    out.add_local_fqdn = "" + json.add_local_fqdn;
 	if (json.add_wan_fqdn != null)      out.add_wan_fqdn = "" + json.add_wan_fqdn;
-	if (json.dnssec_enabled != null)    out.dnssec_enabled = json.dnssec_enabled ? "1" : "0";
+	// Clearing the legacy key on every write, not just mirroring the new one. Without
+	// this it never enters the modeled footprint that diff_apply_patch deletes from, so a
+	// PATCH clearing the field removed `validator` and left `dnssec_enabled` behind, and
+	// the fallback read then reported the old value: the 200 said false and the next GET
+	// said true while the daemon had it off. An empty array is uci's "no such option".
+	out.dnssec_enabled = [];
+	if (json.dnssec_enabled != null)    out.validator = json.dnssec_enabled ? "1" : "0";
 	if (json.recursion != null)         out.recursion = json.recursion;
 	if (json.resource_limits != null)   out.resource = json.resource_limits;
 	if (json.protocol != null)          out.protocol = json.protocol;
