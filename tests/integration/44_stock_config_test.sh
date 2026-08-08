@@ -30,6 +30,13 @@ fail() { echo "FAIL: $*"; exit 1; }
 # Note on package naming: the package is 'vnstat2' (the v2 fork shipping in the
 # 25.12 feed) but the uci config and the resource paths are 'vnstat'.
 
+# This exemption is why `vnstat/interfaces` shipped modelling a section type vnstat never
+# reads, and went unnoticed until an audit against the OpenWrt sources. A resource for an
+# uninstalled package is never exercised against real config, so a section-type mismatch
+# looks identical to a correct model. Closing it means installing these packages at
+# VM-setup time rather than inside a test, which is the follow-up the note below already
+# describes; it is not a line to delete here.
+#
 # Coverage scope: every curated resource whose package ships in the bare
 # OpenWrt 25.12.5 image. Resources for packages outside the bare image
 # (snmpd, lldpd, vnstat, mwan3, unbound, sqm, usteer, prometheus_node_

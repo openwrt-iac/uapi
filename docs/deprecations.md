@@ -78,6 +78,30 @@ before the major that makes them.
   Deferring the read shape cost every client a release of handling two shapes to learn one
   thing, and bought nothing.
 
+- **`vnstat/interfaces` will be removed as an endpoint**, targeted at v3. Use the
+  `interfaces` array on the `vnstat/config` singleton, added in 2.5.0.
+
+  The endpoint has never worked. uapi models `config interface` sections; vnstat's init
+  only ever visits `config vnstat` sections and reads a `list interface` inside them
+  (`vnstat.init:21,28`), so neither the `interface` nor the `enabled` option on a
+  `config interface` section is read by anything. A `POST` returns 200, writes a section,
+  and vnstat continues tracking exactly what it tracked before. A `GET` returns `[]` on a
+  box that is genuinely collecting statistics.
+
+  Seen on a real router, where both shapes are present at once:
+
+  ```
+  vnstat.@vnstat[0].interface='br-lan' 'eth0'      <- tracked
+  vnstat.i_01kvbfpp7f...interface='vlan30'         <- created through uapi, ignored
+  vnstat.i_01kvbfppd8...interface='lan'            <- created through uapi, ignored
+  ```
+
+  **The values differ in kind, not just in place.** The dead endpoint accepted uci
+  interface section names (`lan`); vnstat wants device names as the kernel shows them
+  (`br-lan`). Migrating is not a copy: `lan` becomes `br-lan`. The new field documents this
+  and validates that entries are non-empty strings, which is as far as validation can go
+  without asking the kernel.
+
 ## Removed in past releases
 
 (none yet; uapi has not cut a v3.)

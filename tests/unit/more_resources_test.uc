@@ -1031,3 +1031,35 @@ t.describe('clearing a repointed field clears the legacy key with it', () => {
 		t.assert_equal(c._state.uci.unbound.ub.dnssec_enabled, null);
 	});
 });
+
+// vnstat's init walks `config vnstat` sections and reads a `list interface` inside them
+// (vnstat.init:21,28). uapi's `vnstat/interfaces` resource models `config interface`
+// sections instead, which nothing reads, so every write to it returned 200 and changed
+// nothing the daemon looks at. The working surface is on the singleton, which is already
+// the `config vnstat` section.
+t.describe('vnstat/config carries the interface list vnstat actually reads', () => {
+	let vc = loadfile('src/resources/vnstat.config.uc')();
+
+	t.it('reads the list off the vnstat section', () => {
+		let v = vc.fromUci({ '.name': 'cfg', '.type': 'vnstat',
+		                     interface: ['br-lan', 'eth0'] }, null);
+		t.assert_deep_equal(v.interfaces, ['br-lan', 'eth0']);
+	});
+	t.it('writes it back as the list, not as sections', () => {
+		t.assert_deep_equal(vc.toUci({ interfaces: ['br-lan'] }).interface, ['br-lan']);
+	});
+	t.it('a single device is still a list', () => {
+		let v = vc.fromUci({ '.name': 'cfg', '.type': 'vnstat', interface: 'br-lan' }, null);
+		t.assert_deep_equal(v.interfaces, ['br-lan']);
+	});
+	// Entries are device names as the kernel shows them. The old endpoint took uci
+	// interface names, so migrating is a translation (`lan` -> `br-lan`), not a copy.
+	t.it('rejects an empty entry, which cannot name a device', () => {
+		let errs = vc.validate({ interfaces: ['', 'br-lan'] });
+		t.assert_equal(length(errs), 1);
+		t.assert_equal(errs[0].field, 'interfaces[0]');
+	});
+	t.it('accepts a plausible device list', () => {
+		t.assert_equal(length(vc.validate({ interfaces: ['br-lan', 'eth0.30'] })), 0);
+	});
+});
