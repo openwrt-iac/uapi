@@ -202,26 +202,46 @@ again for the rest.
 - List-valued fields read back `null` rather than `[]` when the uci key is absent.
 - `dhcp/hosts.tag` stops accepting a space-separated string on write.
 
-**Eligible on the strength of the policy, not yet announced.** None of these needs a
-deprecation window in the ledger sense, because there is nothing for a client to migrate
-*to*; they are removals of surface that never worked:
+**All announced as of 2.5.0.** The list below is now covered by `docs/deprecations.md` and
+the published spec's own "Upcoming in v3" block, which the reference lint keeps in step by
+count. It was not, when this section was first written: the claim that a removal with no
+migration target needs no window was wrong, since the notice is for the reader, not for the
+migration:
 
 - Fields no OpenWrt component reads at all, found by auditing every option against its
-  reader in the SDK: `lldpd.lldp_capabilities` (the real option is
-  `lldp_capability_advertisements`, so the current name is a no-op),
-  `lldpd.enable_lldpmed`, `unbound/server.enabled`, `unbound/server.dnssec_enabled`,
-  `unbound/server.prefetch`, `vnstat/interfaces.enabled`, and
-  `prometheus_node_exporter_lua.listen_ipv6` plus its seventeen collector toggles. Each
-  reads and writes a uci option the daemon ignores.
+  reader in the SDK: `lldpd/config.enable_lldpmed`, `unbound/server.enabled`,
+  `unbound/server.prefetch`, `mwan3/globals.rtmon_interval`, `mwan3/globals.local_source`,
+  `vnstat/config.database_dir`, `interface_5min_hours` and `month_rotate`, and
+  `prometheus_node_exporter_lua/config.listen_ipv6` plus its seventeen collector toggles.
+  Each writes a uci option the daemon ignores, and none has a correctly-named counterpart
+  to point at, which is what separates them from the three below.
+
+  `vnstat/interfaces` is on this list as a whole endpoint rather than a field: it models a
+  section type vnstat never reads. `vnstat/config.interfaces` replaces it.
+
+  Three fields that looked identical were **fixed rather than announced** in 2.5.0, because
+  a correctly-named option did exist: `lldpd/config.lldp_capabilities` now writes
+  `lldp_capability_advertisements`, `unbound/server.dnssec_enabled` writes `validator`, and
+  `snmpd/system.sys_services` writes `sysService`. They are not part of the v3 removal set.
 - Separate request and response schemas. One schema serves both directions today, which is
   what forces `tag` to keep `string` in its type for writers, forces `ipaddr` to be
   described in prose instead of `readOnly`, and makes any read/write asymmetry unstatable.
   This is the single change that unblocks the most others.
-- `412` rather than a silently-ignored precondition when `If-None-Match` arrives on a write.
+- ~~`412` rather than a silently-ignored precondition when `If-None-Match` arrives on a
+  write.~~ Done in 2.5.0, not deferred: the precondition seam already ran before the
+  transaction, so the change was a guard rather than the restructure this entry assumed.
   RFC 9110 13.1.2 requires it; doing it properly means evaluating the precondition before
   the transaction runs (13.2.2), which is a restructure rather than a guard.
 - The `X-Reload-Status` / `X-Kernel-*` header set on `POST /batch`, which currently reports
   nothing about the sub-writes it performed.
+
+**What the audit could not reach.** Five packages ship only a Makefile in the SDK feed, so
+their options could not be checked against a reader either way: firewall4, netifd, odhcpd,
+usteer and sqm-scripts. That leaves `firewall/*`, most of `network/*`, `dhcp/odhcpd`,
+`usteer/config` and `sqm/queues` unverified rather than verified-clean. The route is
+`./scripts/feeds` plus `make package/<name>/prepare`, then re-running the same audit against
+the extracted trees. Worth doing before v3, since a dead field found after the removal
+window closes has to wait for v4.
 
 **Simplification the removals unlock.** Worth doing in the same pass, since each exists only
 to serve a compatibility case v3 deletes:

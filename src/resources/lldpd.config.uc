@@ -68,7 +68,7 @@ return {
 		                     description: "Emit Nortel SONMP frames" },
 		enable_edp:        { type: "boolean", default: false,
 		                     description: "Emit Extreme Discovery Protocol frames" },
-		enable_lldpmed:    { type: "boolean", default: false,
+		enable_lldpmed:    { deprecated: true, type: "boolean", default: false,
 		                     description: "Emit LLDP-MED extensions" },
 		lldp_class:        { type: "integer", minimum: 1, maximum: 4 },
 		// Free text, not a flag: lldpd.init reads it with config_get and emits it
