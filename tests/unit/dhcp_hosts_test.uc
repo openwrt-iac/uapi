@@ -344,11 +344,11 @@ t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
 		t.assert_equal(length(types({ name: null })), 0);
 	});
 
-	// `tag` declares a union because uci genuinely holds either shape: dnsmasq
-	// word-splits a scalar, so `option tag 'a b'` and `list tag` are the same
-	// configuration and a string-only schema would reject what LuCI writes. The
-	// union is what v3 narrows to an array.
-	t.it('accepts both shapes uci can hold, and null', () => {
+	// `tag` keeps the union on the request side only: the 2.4.1 spec declared a
+	// string, so clients generated against it send one, and dnsmasq word-splits a
+	// scalar identically. Responses are always an array (see the round-trip test
+	// below); v3 removes the write form.
+	t.it('accepts both shapes a client may send, and null', () => {
 		t.assert_equal(length(types({ tag: ["a", "b"] })), 0);
 		t.assert_equal(length(types({ tag: "a b" })), 0);
 		t.assert_equal(length(types({ tag: null })), 0);
@@ -436,5 +436,58 @@ t.describe('clearing mac through PATCH clears the whole list', () => {
 		let r = patch({ ip: '10.0.0.6' });
 		t.assert_equal(r.status, 200);
 		t.assert_deep_equal(r.uci, ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
+	});
+});
+
+// A reservation storing `option tag 'a b'` used to read back as the string "a b" while an
+// identical one storing `list tag` read back as ["a","b"]. Same configuration to dnsmasq,
+// two shapes on the wire, and a generated client had to handle both to learn one thing.
+// The read is settled on the array. A read never touches storage; a write does converge
+// it, which the block below covers.
+t.describe('dhcp.hosts tag always reads as an array', () => {
+	function view(v) {
+		let sec = { '.name': 'ht', '.type': 'host', mac: '00:11:22:33:44:55' };
+		if (v != null) sec.tag = v;
+		return hosts.fromUci(sec, null);
+	}
+	t.it('a stored scalar is split the way dnsmasq splits it', () => {
+		t.assert_deep_equal(view('a b').tag, ['a', 'b']);
+		t.assert_deep_equal(view('  a   b  ').tag, ['a', 'b']);
+	});
+	t.it('a single tag is still an array', () => {
+		t.assert_deep_equal(view('guest').tag, ['guest']);
+	});
+	t.it('a stored list is unchanged', () => {
+		t.assert_deep_equal(view(['x', 'y']).tag, ['x', 'y']);
+	});
+	t.it('absent stays null, not an empty array', () => {
+		t.assert_equal(view(null).tag, null);
+	});
+	// The view has to survive a round trip even though the storage shape changes: read a
+	// scalar, write the array back, read again, and the client sees what it sent.
+	t.it('a scalar-stored reservation round-trips at the view level', () => {
+		let first = view('a b');
+		let second = hosts.fromUci({ '.name': 'ht', '.type': 'host',
+		                             ...hosts.toUci(first) }, null);
+		t.assert_deep_equal(second.tag, first.tag);
+	});
+	t.it('a string is still accepted on write, for 2.4.1-era clients', () => {
+		t.assert_equal(hosts.toUci({ tag: 'a b' }).tag, 'a b');
+	});
+});
+
+// Writing the array back converges the storage shape, which is intentional and is the
+// half the original design balked at. It is safe because it is invisible on the wire:
+// dnsmasq compiles `option tag 'a b'` and `list tag` identically, and the view is stable.
+t.describe('dhcp.hosts tag storage converges on write, invisibly', () => {
+	t.it('toUci emits the array, which uci stores as a list', () => {
+		t.assert_deep_equal(hosts.toUci({ tag: ['guest', 'iot'] }).tag, ['guest', 'iot']);
+	});
+	t.it('the view is identical before and after that conversion', () => {
+		let scalar = hosts.fromUci({ '.name': 'h', '.type': 'host',
+		                             mac: '00:11:22:33:44:55', tag: 'guest iot' }, null);
+		let listed = hosts.fromUci({ '.name': 'h', '.type': 'host',
+		                             mac: '00:11:22:33:44:55', tag: ['guest', 'iot'] }, null);
+		t.assert_deep_equal(scalar.tag, listed.tag);
 	});
 });

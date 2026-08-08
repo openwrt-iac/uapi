@@ -8,6 +8,22 @@ const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
 const DUID_RE = /^[0-9A-Fa-f]{2}([:]?[0-9A-Fa-f]{2})+$/;
 const IPV6_HOSTID_RE = /^[0-9A-Fa-f:]+$/;
 
+// A stored scalar is one or more whitespace-separated tags, which is what dnsmasq makes
+// of it. Splitting on read is what settles the wire shape; a read never touches storage.
+// A write does converge it, since toUci hands uci the array and uci stores a list, so the
+// first write-back turns `option tag 'a b'` into `list tag`. That is safe here only
+// because the view is stable across it: dnsmasq treats the two identically, and a body
+// read and written back unchanged reads back unchanged, which is what read honesty asks.
+// The earlier design refused to normalize on write for that reason and then kept the raw
+// shape on read too, which is the part that did not follow.
+function split_tags(v) {
+	if (v == null) return null;
+	if (type(v) == "array") return v;
+	let out = [];
+	for (let t in split(trim("" + v), /[ \t]+/)) if (t != "") push(out, t);
+	return length(out) > 0 ? out : null;
+}
+
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	let macs = as_list(section.mac);
@@ -24,7 +40,12 @@ function fromUci(section) {
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
-		tag: section.tag ?? null,
+		// dnsmasq word-splits whatever it reads, so `option tag 'a b'` and `list tag`
+		// are the same configuration to it and uci holds either. Reading the raw shape
+		// meant the same reservation answered with a string on one box and an array on
+		// another, and a generated client had to handle both to learn one thing. The
+		// read is the array now; a stored scalar is split on the way out.
+		tag: split_tags(section.tag),
 		dns: shell_bool(section.dns, false),
 		broadcast: (section.broadcast != null) ? shell_bool(section.broadcast, false) : null,
 		instance: section.instance ?? null,
@@ -54,7 +75,8 @@ function toUci(json) {
 	if (json.hostid != null)    out.hostid = json.hostid;
 	if (json.ip != null)        out.ip = json.ip;
 	if (json.leasetime != null) out.leasetime = json.leasetime;
-	if (json.tag != null)       out.tag = json.tag;
+	if (type(json.tag) == "array" && length(json.tag) > 0) out.tag = json.tag;
+	else if (json.tag != null && type(json.tag) != "array") out.tag = json.tag;
 	if (json.dns != null)       out.dns = json.dns ? "1" : "0";
 	if (json.broadcast != null) out.broadcast = json.broadcast ? "1" : "0";
 	if (json.instance != null)  out.instance = json.instance;
@@ -256,16 +278,13 @@ return {
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation" },
-		// The union is temporary, and it is the honest shape until v3. dnsmasq
-		// word-splits whatever it reads, so `option tag 'a b'` and `list tag` are
-		// the same configuration to it and uci holds either; a scalar therefore
-		// reads back as a string and a list as an array. Writes persist the shape
-		// they were given rather than normalizing, so a body written back
-		// unchanged stays unchanged. v3 narrows the read to an array by splitting
-		// a stored scalar, which is why storage does not have to converge first.
-		// See docs/deprecations.md.
+		// Responses are always an array; the string stays in the type only because a
+		// request may still send one, and one schema serves both directions here. The
+		// 2.4.1 spec declared `string`, so clients generated against it send one, and
+		// rejecting that would break every existing writer for no gain: dnsmasq
+		// word-splits a scalar identically. v3 removes the write form.
 		tag:           { type: ["string", "array", "null"], items: { type: "string" },
-		               description: "dnsmasq tags for this reservation; a request must match all of them. Send an array. A space-separated string is accepted on write and reads back as one, which v3 removes: the field becomes array-only. Not flagged `deprecated`, because the field survives and only the string form goes away. See docs/deprecations.md" },
+		               description: "dnsmasq tags for this reservation; a request must match all of them. **Responses are always an array**, including for a section storing a space-separated scalar, which dnsmasq treats the same way. A space-separated string is still accepted on write; v3 removes that and the field becomes array-only. See docs/deprecations.md" },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.
