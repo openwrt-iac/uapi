@@ -12,6 +12,34 @@ Package version follows semver, with the major version aligned to the API major:
 
 A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >= y`.
 
+## What a major is for
+
+A major is expensive to *have*, not to fill. Operators pin a package, clients regenerate,
+the migration document gets written, and the feed carries two lines for a while. That cost
+is paid the moment the major exists and barely moves with how much it contains. So when one
+happens, take everything.
+
+**The objective of a major is to raise quality and remove complexity, and it should break as
+much as it needs to in order to do that.** Not only the changes that are individually
+unavoidable: every compatibility shim, mirrored field name, union type kept for an old
+client, over-declared response, and branch that exists solely to keep a previous contract
+working is eligible, and the default answer is to remove it. Simplification is a sufficient
+reason on its own. A compatibility branch nobody can delete is a permanent tax on every
+future change to the code around it, and a major is the only moment the tax can be repealed.
+
+Two things follow.
+
+**Minors stay strict, and that is the trade.** Being permissive in a major is what lets a
+minor refuse. The carve-outs above are deliberately narrow and their tests are meant to be
+applied literally; when a change does not qualify, the answer is to queue it for the major
+rather than to widen a carve-out. A rule bent once stops being a rule.
+
+**Queued debt has to be written down or it will not be swept.** Anything deferred with "this
+needs a major" belongs in `docs/roadmap.md` under the v3 objectives, with enough detail to
+act on years later. The failure mode is not shipping a breaking change; it is arriving at a
+major, shipping the three items someone remembered, and paying the whole cost again for the
+rest.
+
 ## Non-breaking changes (allowed within a major)
 
 - New endpoints / resources.

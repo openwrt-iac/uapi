@@ -95,12 +95,13 @@ is still no target release. Design reference: `docs/commit-confirm.md`.
 ## 2.5.0 scope
 
 The next release is a minor, and its job is as much to make a clean 3.0.0
-possible as to ship features. v3 has four things queued: removing the `name`
-create input, removing `ipaddr` as a write input, reading absent lists back as
-`null`, and `dhcp/hosts.tag` reading back as an array. Only the first has served
-the notice `docs/deprecations.md` requires, so cutting a major before a minor
-announces the rest would break clients with no window, spend the major, and
-still leave the changes unmade.
+possible as to ship features. The v3 list is in § v3 objectives above and has
+grown past what a single major used to be expected to carry, which is the point:
+a major is expensive to have and cheap to fill. What a minor has to do first is
+serve the notice `docs/deprecations.md` requires, because the window runs from
+the release that announces a removal, not the one that performs it. Cutting a
+major before a minor announces the rest would break clients with no window,
+spend the major, and still leave the changes unmade.
 
 Committed, in rough dependency order:
 
@@ -113,12 +114,14 @@ Committed, in rough dependency order:
 
    `tag` carried work beyond the announcement, because the schema promised a
    string the resource does not always return: a `list tag`, which is what LuCI
-   writes, already read back as an array. Done: the schema declares the union
-   actually emitted, and the field is type-checked, which it never was. Writes
-   persist the shape they were given rather than normalizing to `list tag`, since
-   normalizing would make a body written back unchanged come back changed; v3
-   reconciles the two shapes on the read side instead. Only that narrowing waits
-   for the major.
+   writes, already read back as an array. The read is settled in this minor rather
+   than deferred: a stored scalar is split on the way out, so responses are always
+   an array. Deferring it was a mistake, and the reasoning is worth keeping because
+   the shape of the error recurs. The objection was to normalizing *storage*, which
+   would rewrite `option tag` into `list tag` under a client that had only read the
+   section. That observation was right; the conclusion that the read had to wait did
+   not follow from it. What remains for the major is the write form, since a
+   space-separated string is still accepted for clients generated against 2.4.1.
 2. **Kernel-apply reporting.** Done: `X-Kernel-Status` and `X-Kernel-Applied`,
    mirroring the reload pair. Closes the gap the kernel apply left, where a
    client writing a peer to a down tunnel got a `200` it could not distinguish
@@ -178,6 +181,58 @@ Decided, and deliberately still not scheduled:
 Deliberately not in 2.5.0: the mirrored-name retirement itself (only its
 announcement lands here, the removal is v3), and anything under Hardening, which
 carries no wire surface and needs no release to take effect.
+
+## v3 objectives
+
+`docs/versioning.md` § What a major is for sets the policy: a major is expensive to have and
+cheap to fill, so when one happens it should break as much as it needs to in order to raise
+quality and remove complexity. This section is the list that makes that actionable. Anything
+deferred with "needs a major" belongs here with enough detail to act on later, because the
+failure mode is arriving at v3, shipping the items someone remembered, and paying the cost
+again for the rest.
+
+**Announced, with the deprecation window already running.** These carry ledger rows in
+`docs/deprecations.md` and appear in the published spec's own "Upcoming in v3" block:
+
+- `network/interfaces.name` as a create input: removed, `id` is the universal spelling.
+- `network/interfaces.ipaddr` as a *write* input: removed, `ipaddrs` wins. `ipaddr` becomes
+  `readOnly` rather than disappearing.
+- `dhcp/hosts.mac` and `dhcp/hosts.mac_aliases`: removed entirely, `macs` is the only name.
+  Neither corresponds to a real uci option, so nothing survives as a read.
+- List-valued fields read back `null` rather than `[]` when the uci key is absent.
+- `dhcp/hosts.tag` stops accepting a space-separated string on write.
+
+**Eligible on the strength of the policy, not yet announced.** None of these needs a
+deprecation window in the ledger sense, because there is nothing for a client to migrate
+*to*; they are removals of surface that never worked:
+
+- Fields no OpenWrt component reads at all, found by auditing every option against its
+  reader in the SDK: `lldpd.lldp_capabilities` (the real option is
+  `lldp_capability_advertisements`, so the current name is a no-op),
+  `lldpd.enable_lldpmed`, `unbound/server.enabled`, `unbound/server.dnssec_enabled`,
+  `unbound/server.prefetch`, `vnstat/interfaces.enabled`, and
+  `prometheus_node_exporter_lua.listen_ipv6` plus its seventeen collector toggles. Each
+  reads and writes a uci option the daemon ignores.
+- Separate request and response schemas. One schema serves both directions today, which is
+  what forces `tag` to keep `string` in its type for writers, forces `ipaddr` to be
+  described in prose instead of `readOnly`, and makes any read/write asymmetry unstatable.
+  This is the single change that unblocks the most others.
+- `412` rather than a silently-ignored precondition when `If-None-Match` arrives on a write.
+  RFC 9110 13.1.2 requires it; doing it properly means evaluating the precondition before
+  the transaction runs (13.2.2), which is a restructure rather than a guard.
+- The `X-Reload-Status` / `X-Kernel-*` header set on `POST /batch`, which currently reports
+  nothing about the sub-writes it performed.
+
+**Simplification the removals unlock.** Worth doing in the same pass, since each exists only
+to serve a compatibility case v3 deletes:
+
+- `resolve_for_replace` and `merge_for_patch` on `network/interfaces` and `dhcp/hosts`. Both
+  exist solely to decide which of two names for one uci option the caller meant. With one
+  name per option they are dead code, along with the conflict rules in both `validate`s.
+- The mirrored-pair section of `docs/adding-a-resource.md` and its carve-out, which document
+  a hazard that stops existing.
+- `values.normalize_bool`'s remaining callers, once the libvalidate accepted set is actually
+  read out of ubox rather than guessed at. See `docs/ucode-quirks.md`.
 
 ## Features (additive, future minor bumps in v2.x)
 
