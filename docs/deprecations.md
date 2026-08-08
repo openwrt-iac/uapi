@@ -54,36 +54,29 @@ before the major that makes them.
   leaving the surface inconsistent, which is why it waits for a major instead of
   arriving piecemeal.
 
-- **`dhcp/hosts.tag` will read back as an array of strings, not a
-  space-separated string**, targeted at v3. dnsmasq's tag construct is
-  multi-valued: several tags may be set on one reservation, and a request has to
-  match all of them. LuCI writes that form (`list tag`, from a `DynamicList`
-  widget) and dnsmasq's host handler word-splits the option it reads, so
-  `option tag 'a b'` and `list tag` are the same configuration to the daemon.
-  uapi passes whichever shape uci holds straight through, so today the field
-  reads back as `["a","b"]` for LuCI-authored config and `"a b"` for a
-  hand-written scalar, while the published schema declares only
-  `["string", "null"]`. A generated client therefore fails on configuration the
-  stock OpenWrt UI produces, which makes this a correction rather than a
-  preference. v3 settles the field on `["array", "null"]`, matching both the
-  semantics and LuCI.
+- **`dhcp/hosts.tag` no longer accepts a space-separated string on write**, targeted at
+  v3. The read half of this has already landed: responses are always an array, including
+  for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. What
+  remains for v3 is the request side, where a string is still accepted because the 2.4.1
+  spec declared one and clients generated against it send one. One schema serves both
+  directions here, so the type stays `["string", "array", "null"]` until the major can
+  split them.
 
-  Two halves of this did not need the major and have landed ahead of it. The
-  schema declares the union the resource actually returns,
-  `["string", "array", "null"]`, so a generated client stops being wrong about
-  the list case. And the field is type-checked for the first time, which is what
-  stops an object or a number reaching uci as an option value; that half is a
-  tightening under the `docs/versioning.md` carve-out, since the payloads it now
-  rejects could only ever have produced configuration no caller could rely on.
+  This was originally announced the other way round, as a v3 change to the read shape, on
+  the reasoning that normalizing storage would rewrite `option tag` into `list tag` the
+  first time a client touched a section. The observation was right and the conclusion did
+  not follow: splitting a stored scalar on the way *out* settles the read immediately, and
+  a read never touches storage. A write still converges it, measured on hardware:
 
-  Writes deliberately persist the shape they were given instead of normalizing
-  every write to `list tag`. Normalizing looks tidier and was the original plan,
-  but it would convert a stored scalar the first time any client wrote the
-  section back, so a body read and written back unchanged would come back
-  changed, which is the one thing the read-honesty property forbids. Storage does
-  not need to converge for the v3 read in any case: splitting a stored scalar on
-  the read side arrives at the same place without rewriting configuration nobody
-  asked us to touch.
+  ```
+  storage before PUT: dhcp.tgs.tag='guest iot'
+  storage after PUT:  dhcp.tgs.tag='guest' 'iot'
+  ```
+
+  That is acceptable precisely because it is invisible on the wire. dnsmasq compiles both
+  to `set:guest,set:iot`, and the view round-trips, which is the property that matters.
+  Deferring the read shape cost every client a release of handling two shapes to learn one
+  thing, and bought nothing.
 
 ## Removed in past releases
 
