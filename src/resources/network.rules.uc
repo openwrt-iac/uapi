@@ -22,6 +22,9 @@ function fromUci(section) {
 		action: section.action ?? "lookup",
 		invert: platform_bool(section.invert, false),
 		mark: section.mark ?? null,
+		// See network.routes: netifd drops a disabled section outright, so an unmodelled
+		// flag makes a rule that is not in `ip rule` read back as active configuration.
+		disabled: platform_bool(section.disabled, false),
 		runtime: {},
 	};
 }
@@ -38,6 +41,7 @@ function toUci(json) {
 	if (json.action != null && json.action != "lookup") out.action = json.action;
 	if (json.invert != null)  out.invert = json.invert ? "1" : "0";
 	if (json.mark != null)    out.mark = json.mark;
+	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
 	return out;
 }
 
@@ -108,6 +112,8 @@ return {
 		            description: "Match source IPv4 address or CIDR" },
 		dest:     { type: ["string", "null"],
 		            description: "Match destination IPv4 address or CIDR" },
+		disabled: { type: "boolean", default: false,
+		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
 		priority: { type: "integer", minimum: 0, maximum: 32766 },
 		lookup:   { type: ["integer", "null"], minimum: 0,
 		            description: "Routing table id to look up when action is lookup" },

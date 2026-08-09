@@ -2,6 +2,7 @@ let values = require('values');
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let as_int = values.as_int;
+let platform_bool = values.platform_bool;
 
 const VALID_TYPES = {
 	"unicast": true, "blackhole": true, "unreachable": true,
@@ -23,6 +24,12 @@ function fromUci(section) {
 		mtu: as_int(section.mtu),
 		source: section.source ?? null,
 		type: section.type ?? "unicast",
+		// netifd omits a disabled section entirely, so without this a route that does not
+		// exist on the box reads back as ordinary active config and a converged client sees
+		// nothing to apply. platform_bool rather than shell_bool: measured on 25.12.5,
+		// netifd honours `1` and `true` and ignores `on`/`yes`/`enabled`, so the wider
+		// helper would report a section disabled that netifd is still installing.
+		disabled: platform_bool(section.disabled, false),
 		runtime: {},
 	};
 }
@@ -38,6 +45,7 @@ function toUci(json) {
 	if (json.mtu != null)       out.mtu = "" + json.mtu;
 	if (json.source != null)    out.source = json.source;
 	if (json.type != null && json.type != "unicast") out.type = json.type;
+	if (json.disabled != null)  out.disabled = json.disabled ? "1" : "0";
 	return out;
 }
 
@@ -101,5 +109,7 @@ return {
 		mtu:       { type: "integer", minimum: 0 },
 		source:    { type: ["string", "null"],
 		             description: "Preferred source address (IPv4 or CIDR)" },
+		disabled:  { type: "boolean", default: false,
+		             description: "Whether netifd skips this route. A disabled route is not installed at all, so it is absent from `ip route`." },
 	},
 };

@@ -35,13 +35,23 @@ if [ -z "$iface" ]; then
 fi
 
 echo "--- a watched field on the inbound interface warns ---"
-# `disabled: false` on an already-enabled interface is the smallest change that still
-# moves a watched field: netifd sees no material difference, so the connection carrying
-# this request survives long enough to read the response. Any of the four field names
-# would warn; this one cannot strand the test.
+# The guard compares the incoming body against the current read, so this needs a real
+# transition: sending `disabled: false` to an interface that already reads false is not a
+# change and the guard correctly stays silent. It said otherwise while `disabled` was
+# unmodelled, when the read carried no such field and any value looked like a change.
+#
+# Staged in uci and committed without a reload, so netifd never sees the disabled state and
+# the connection carrying this request survives. The PATCH then clears it through the API,
+# whose transaction writes `disabled '0'` and reloads once, leaving the interface exactly as
+# it was. Going the other way would strand the test, which is why the transition runs in
+# this direction.
+$SSH "uci set network.$iface.disabled='1'; uci commit network"
 code=$(curl -sS -D /tmp/uapi_mgmt_h -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	-H 'Content-Type: application/json' \
 	-X PATCH "$URL/network/interfaces/$iface" -d '{"disabled":false}')
+# Leaving `disabled '1'` staged would take the interface down on the next unrelated reload,
+# so clear it by hand if the write did not.
+[ "$code" = "200" ] || $SSH "uci -q delete network.$iface.disabled; uci commit network"
 [ "$code" = "200" ] || { cat /tmp/uapi_mgmt_h; fail "PATCH $iface returned $code"; }
 warn=$(tr -d '\r' < /tmp/uapi_mgmt_h | grep -i '^X-Mgmt-Path-Warning:' | cut -d' ' -f2- || true)
 [ -n "$warn" ] || { tr -d '\r' < /tmp/uapi_mgmt_h; fail "no X-Mgmt-Path-Warning on the inbound interface"; }

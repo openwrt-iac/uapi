@@ -82,13 +82,13 @@ const CASES = [
 	{
 		file: "network.interfaces.uc", id: "lan", pkg: "network",
 		modify: { key: "ipaddrs", value: ["192.168.78.1/24"] },
-		section: { auto: '0', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'] },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'] },
 	},
 	{
 		// A second network.interfaces case: the masked private_key is a different shape
 		// from the mirrored ipaddr pair above, and only this one exercises it.
 		file: "network.interfaces.uc", id: "wg0", pkg: "network",
-		section: { auto: '0', '.type': 'interface', proto: 'wireguard', private_key: WG_KEY,
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'wireguard', private_key: WG_KEY,
 		           addresses: ['10.9.0.1/24', 'fd00:9::1/64'], listen_port: '51820' },
 	},
 	{
@@ -97,11 +97,13 @@ const CASES = [
 	},
 	{
 		file: "network.routes.uc", id: "rt1", pkg: "network",
-		section: { type: 'blackhole', '.type': 'route', interface: 'lan', target: '10.9.0.0/24', gateway: '192.168.1.254' },
+		section: { type: 'blackhole', '.type': 'route', interface: 'lan', target: '10.9.0.0/24', gateway: '192.168.1.254',
+		           disabled: '1' },
 	},
 	{
 		file: "network.rules.uc", id: "nr1", pkg: "network",
-		section: { action: 'unreachable', invert: '1', '.type': 'rule', src: '10.0.0.0/8', lookup: '42', priority: '100' },
+		section: { action: 'unreachable', invert: '1', '.type': 'rule', src: '10.0.0.0/8', lookup: '42', priority: '100',
+		           disabled: '1' },
 	},
 	{
 		file: "network.bridge_vlans.uc", id: "bv1", pkg: "network",
