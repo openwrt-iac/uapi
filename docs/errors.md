@@ -41,7 +41,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 409  | `conflict`                      | Duplicate name, dangling cross-reference, etc.               |
 | 409  | `unmanaged_resource`            | Tried to write to a section that needs to be adopted first   |
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
-| 412  | `precondition_failed`           | Stale `If-Match` ETag, or JSON Patch `test` op mismatch      |
+| 412  | `precondition_failed`           | Stale `If-Match` ETag, a matching `If-None-Match` on a write, or JSON Patch `test` op mismatch |
 | 415  | `unsupported_media_type`        | Reserved, never returned. See the note below before branching on it |
 | 422  | `validation_failed`             | Body parsed but failed schema or per-field rules             |
 | 423  | `locked`                        | Another write transaction holds a lock on the same package (or the global lock for a non-uci writer); retry. The response message names the specific lock. |

@@ -143,7 +143,7 @@ Generated at build time (`make openapi`) from the inline `schema_properties` blo
 
 ## Curl example suite
 
-In-repo at `examples/curl/`, one file per curated resource demonstrating CRUD. Doubles as documentation and seed for provider contract tests.
+In-repo at `examples/curl/`, sixteen files covering a subset of the curated resources rather than all of them, one per distinct shape: plain collections, a singleton, an adopt flow, a masked credential, a non-uci resource and the raw passthrough. Doubles as documentation and seed for provider contract tests. `adopt.sh` was added in 2.5.0 after an audit found the flow every operator meets on pre-existing config had no runnable example at all.
 
 ## Coverage gates
 

@@ -175,8 +175,8 @@ Per CLAUDE.md:
 
 - `snake_case` field names.
 - Stable `id` at top level (set by the dispatcher; your `fromUci` provides it from `section['.name']`).
-- `managed: bool` at top level. Derive from `!section['.anonymous']`.
-- Normalize uci booleans to JSON booleans on the way out; emit `"1"`/`"0"` on the way in.
+- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put it in `schema_properties`: the generator marks it `readOnly` for every resource, and adding it module-side would also add it to the runtime type checker.
+- Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with the helper that matches the parser the option's own reader uses, which is not the same for every option and not even for every section type.** `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal compare against `1`, `platform_bool` for netifd's blob converter (`1` and `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for `get_bool` in `/lib/functions.sh`, which adds `enabled`/`disabled`. Picking the wide one where the reader is narrow reports a section as configured when the daemon ignored the value, which is the read-honesty failure principle 4 exists to prevent. `network/interfaces.disabled` and `network/routes.disabled` are the same option name on the same package needing two different helpers, with the measurement in the module comments.
 - Lift single-value uci list options to JSON arrays (a uci list with one element comes through as a string from `cursor.get`; coerce to an array).
 - Nest related fields where it improves readability. `firewall.rules` uses `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This pays off in the Terraform mapping.
 - Runtime/computed fields go under `runtime: {...}`. Currently empty for most resources; populate when ubus exposes useful data.
@@ -269,6 +269,17 @@ allowed when it carries a `docs/deprecations.md` row naming its removal
 target; a mirror added for a caller's convenience is not, because the cost
 below is permanent while the convenience is not.
 
+Marking a field deprecated has three parts and two of them are enforced. Set
+`deprecated: true` in `schema_properties`, which is what codegen reads, and open
+its `description` with `Deprecated, removed in vN: <why>`, which is what an
+operator sees in a plan warning and is the only place the reason exists;
+`lint-openapi-shape` fails on the flag without a reason, and on a notice with no
+text after the colon. Then add the row or bullet to `docs/deprecations.md` and
+the matching entry to the "Upcoming in v3" block in `build/gen_openapi.uc`,
+which `lint-doc-refs` compares by count, so the two cannot drift apart. A field
+whose API name is not its uci option also needs an entry in
+`tests/lint_wire_names.uc`, with the reason as the value.
+
 The read mirror puts both names into the caller's state, so a
 full-replace client sends both back whether or not its own config named
 them, with the one it did not change now stale. Rejecting the pair on
@@ -347,7 +358,7 @@ This walks the resource modules and emits `build/openapi.json`. Add an entry for
 
 ## 8. Add a curl example
 
-`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to delete: ..." reminder.
+`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to delete: ..." reminder. The suite is a representative subset rather than one file per resource, so this is expected when the new resource shows a shape the existing fifteen do not, and optional when it is another instance of one they already cover.
 
 ## 9. Update docs/tokens.md
 

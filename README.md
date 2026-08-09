@@ -100,7 +100,7 @@ Operator-facing:
 - `docs/resources.md`: curated resource catalog.
 - `docs/non-uci-state.md`: resources whose source of truth is not `/etc/config/`.
 - `docs/migration-v1-to-v2.md`: v1 -> v2 field renames, strict typing, new endpoints, new errors.
-- `examples/curl/`: one shell script per resource demonstrating CRUD.
+- `examples/curl/`: runnable walkthroughs for a subset of resources, one per distinct shape, including the adopt flow for pre-existing config.
 - `build/openapi.json` (also `/api/v2/openapi.json` on a live router): the API contract.
 
 Contributor-facing:
