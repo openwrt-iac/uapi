@@ -80,6 +80,11 @@ function fromUci(section, conn) {
 		ip6assign: as_int(section.ip6assign),
 		mtu: as_int(section.mtu),
 		auto: platform_bool(section.auto, true),
+		// `auto` controls bring-up at boot; `disabled` is stronger and separate: netifd
+		// does not register the interface at all, so it has no ubus object and its
+		// addresses, routes and peers go with it. Unmodelled, that box reads as ordinary
+		// active config, which is the one thing a read must never do.
+		disabled: platform_bool(section.disabled, false),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (proto == "wireguard") {
@@ -129,6 +134,7 @@ function toUci(json) {
 	if (json.ip6assign != null) out.ip6assign = "" + json.ip6assign;
 	if (json.mtu != null) out.mtu = "" + json.mtu;
 	if (json.auto != null) out.auto = json.auto ? "1" : "0";
+	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
 	if (json.proto == "wireguard") {
 		if (json.private_key != null) out.private_key = json.private_key;
 		if (json.listen_port != null) out.listen_port = "" + json.listen_port;
@@ -382,6 +388,8 @@ return {
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535 },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
+		disabled:  { type: "boolean", default: false,
+		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed." },
 		addresses: { type: "array", items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read" },

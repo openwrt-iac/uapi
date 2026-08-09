@@ -22409,6 +22409,11 @@
 						"default": true,
 						"description": "Bring this interface up at boot"
 					},
+					"disabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed."
+					},
 					"runtime": {
 						"type": "object",
 						"description": "Populated from ubus network.interface.<name> status; empty {} when the interface has no runtime state.",
@@ -22780,6 +22785,11 @@
 						],
 						"default": "unicast"
 					},
+					"disabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether netifd skips this route. A disabled route is not installed at all, so it is absent from `ip route`."
+					},
 					"runtime": {
 						"type": "object",
 						"readOnly": true
@@ -22874,6 +22884,11 @@
 							"null"
 						],
 						"description": "Match fwmark (value or value/mask)"
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`."
 					},
 					"runtime": {
 						"type": "object",
