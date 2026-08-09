@@ -41,7 +41,6 @@ All notable changes to this project will be documented in this file. Format foll
 
 - `X-Kernel-Status` and `X-Kernel-Applied` response headers on writes, saying whether a write reached the kernel rather than only uci. The kernel apply added in 2.4.1 skips an interface that is down or that netifd does not know, which is correct because `ifup` reads the peers from uci, but it left a client unable to tell that `200` apart from one whose peer is live. `X-Kernel-Status` is `ok` when every targeted interface was applied, `partial` when some were skipped, `skipped` when none was, and `no_kernel` for a resource with no kernel path, mirroring how `X-Reload-Status` reports `no_reload`. `X-Kernel-Applied` names the interfaces actually changed. Documented in `docs/errors.md` § Response headers.
 
-### Fixed
 
 - **`If-None-Match` is now evaluated on writes.** It was parsed for every method and then dropped for anything but `GET`, so a caller asking for "only if this has not changed" or "only if absent" had its condition silently discarded and the write performed anyway. RFC 9110 13.1.2 gives `304` for `GET`/`HEAD` and `412` for every other method; 13.2.2 requires the precondition to be evaluated before the method runs, so the check goes in the existing `precondition_check` seam, which already runs inside the transaction before `uci_commit`. A `412` therefore means nothing was written, and that is what the tests assert rather than the status alone. `If-Match` is still evaluated first, per 13.2.2's ordering.
 
