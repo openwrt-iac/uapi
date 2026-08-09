@@ -135,6 +135,34 @@ for (let name in schemas) {
 		     "must be readOnly: no toUci reads it and the write path forces it true, so a generator that puts it in the request model sends a field the server ignores");
 }
 
+// `deprecated: true` tells a generator THAT a field is going away; only the description can
+// tell an operator why, and that text is what a provider surfaces in a plan warning. Eight
+// fields shipped the flag with no reason attached, so the warning had nothing field-specific
+// to say and downstream had to assemble a generic one from the changelog.
+//
+// Matched case-insensitively on purpose: `network/interfaces.name` opens "DEPRECATED in
+// 2.2.0" and carries a perfectly good reason, so a literal-prefix rule would fail the one
+// field that predates the convention.
+let deprecated_seen = 0;
+for (let name in schemas) {
+	for (let prop in schemas[name].properties ?? {}) {
+		let p = schemas[name].properties[prop];
+		if (type(p) != "object" || p.deprecated !== true) continue;
+		deprecated_seen++;
+		let desc = p.description ?? "";
+		let colon = index(desc, ":");
+		if (substr(lc(desc), 0, 10) != "deprecated")
+			note(sprintf("/components/schemas/%s/properties/%s", name, prop),
+			     "is deprecated but its description does not open with \"Deprecated\": the flag says a field is going away, only the text says why");
+		// The prefix alone satisfies the check above while telling an operator nothing, so
+		// the reason after the colon is what is actually required. Every existing form has
+		// one: "Deprecated, removed in v3: use macs" and "DEPRECATED in 2.2.0: use `id`".
+		else if (colon < 0 || trim(substr(desc, colon + 1)) == "")
+			note(sprintf("/components/schemas/%s/properties/%s", name, prop),
+			     "is deprecated but states no reason: the description needs \"<notice>: <why>\", not the notice alone");
+	}
+}
+
 // A collection segment names a set, so it reads plural, and every curated one
 // is the plural of its uci section type. The exceptions below are decisions,
 // not oversights, and each became load-bearing the moment it shipped: the path,
@@ -306,5 +334,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, managed_seen, collections, tx_responses, etag_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, managed_seen, deprecated_seen, collections, tx_responses, etag_responses);

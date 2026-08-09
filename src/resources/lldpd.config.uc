@@ -69,7 +69,7 @@ return {
 		enable_edp:        { type: "boolean", default: false,
 		                     description: "Emit Extreme Discovery Protocol frames" },
 		enable_lldpmed:    { deprecated: true, type: "boolean", default: false,
-		                     description: "Emit LLDP-MED extensions" },
+		                     description: "Deprecated, removed in v3: nothing reads this. LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`), not a runtime option." },
 		lldp_class:        { type: "integer", minimum: 1, maximum: 4 },
 		// Free text, not a flag: lldpd.init reads it with config_get and emits it
 		// verbatim as the system description. Typed boolean, a write replaced the

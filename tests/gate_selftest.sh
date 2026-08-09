@@ -296,6 +296,15 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_deprecated_no_reason() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+del d['components']['schemas']['DhcpHosts']['properties']['mac']['description']
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_etag_on_raw() {
 	python3 - <<'EOF'
 import json
@@ -355,6 +364,7 @@ probe lint-openapi-shape "a transaction header without its set" "declares only" 
 probe lint-openapi-shape "a reload header on a raw write"      "never reaches attach_reload_headers" mut_reload_header_on_raw
 probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header is never reached"  mut_etag_on_raw
 probe lint-openapi-shape "a writable managed property"        "must be readOnly"                 mut_managed_writable
+probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
 probe lint-openapi-shape "an emitted header declared nowhere"  "the header is declared on"         mut_mgmt_header_undeclared
 probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches only" mut_mgmt_header_wrong_verb

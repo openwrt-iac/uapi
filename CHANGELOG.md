@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Added
 
+- Eight deprecated fields now say why they are deprecated. `deprecated: true` tells a code generator that a field is going away; the description is the only place an operator learns the reason, and it is what a provider prints in a plan warning. Twenty-one fields carried that text and eight did not, two of them carrying no description at all, so anything downstream had to substitute a generic message that could not name the specific reason. Each now states it: `unbound/server.enabled` is read only on `config zone`, `vnstat/config.database_dir` is a key of a file that ships from upstream, and so on. `make lint-openapi-shape` now requires a description opening with `Deprecated` on any property carrying the flag, matched case-insensitively because `network/interfaces.name` predates the convention and opens `DEPRECATED in 2.2.0`. Documentation only, no behaviour change.
+
 - `vnstat/config.interfaces`: the devices vnstat tracks, mapping to the `list interface` inside `config vnstat` that vnstat's init actually reads. This is the first time that setting has been reachable through the API. Values are device names as the kernel shows them (`br-lan`, `eth0`), which is what vnstat wants. Verified on hardware: `PATCH {"interfaces":["br-lan"]}` puts `br-lan` in the list and, after a service restart, vnstat is tracking `br-lan` in its database.
 
 
