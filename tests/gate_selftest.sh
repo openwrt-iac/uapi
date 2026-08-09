@@ -296,6 +296,20 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_unaccounted_wire_name() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('src/resources/network.routes.uc'); s = p.read_text()
+# A second API name for a uci key another field already writes: the alias shape a major
+# removes, planted on a resource that has none.
+s = s.replace("\tif (json.gateway != null)   out.gateway = json.gateway;",
+              "\tif (json.gateway != null)   out.gateway = json.gateway;\n\tif (json.via != null)       out.gateway = json.via;", 1)
+s = s.replace('\t\tgateway:   { type: ["string", "null"],',
+              '\t\tvia:       { type: ["string", "null"] },\n\t\tgateway:   { type: ["string", "null"],', 1)
+p.write_text(s)
+EOF
+}
+
 mut_deprecated_no_reason() {
 	python3 - <<'EOF'
 import json
@@ -365,6 +379,7 @@ probe lint-openapi-shape "a reload header on a raw write"      "never reaches at
 probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header is never reached"  mut_etag_on_raw
 probe lint-openapi-shape "a writable managed property"        "must be readOnly"                 mut_managed_writable
 probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
+probe lint-wire-names    "an unaccounted alias name"            "is read by toUci but never written" mut_unaccounted_wire_name
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
 probe lint-openapi-shape "an emitted header declared nowhere"  "the header is declared on"         mut_mgmt_header_undeclared
 probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches only" mut_mgmt_header_wrong_verb
