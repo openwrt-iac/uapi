@@ -84,7 +84,15 @@ function fromUci(section, conn) {
 		// does not register the interface at all, so it has no ubus object and its
 		// addresses, routes and peers go with it. Unmodelled, that box reads as ordinary
 		// active config, which is the one thing a read must never do.
-		disabled: platform_bool(section.disabled, false),
+		//
+		// strict_bool, not the platform_bool that `network/routes` and `network/rules` use
+		// for the same option name. netifd compares this one literally against "1" while
+		// route and rule go through the boolean blob converter, which also takes "true", so
+		// on 25.12.5 `disabled 'true'` disables a route and leaves an interface running.
+		// Measured three times against a reset baseline: the interface stayed registered on
+		// ubus every time. Reading it with the wider helper would report an interface as
+		// disabled while it is up, which is the same lie this field exists to end.
+		disabled: strict_bool(section.disabled),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
 	if (proto == "wireguard") {

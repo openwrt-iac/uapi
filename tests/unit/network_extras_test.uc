@@ -236,3 +236,33 @@ t.describe('network.interfaces dns items stay type-checked centrally', () => {
 		t.assert_equal(length(errs), 0);
 	});
 });
+
+// netifd does not parse `disabled` the same way on all three section types. The interface
+// flag is compared literally against "1"; route and rule go through the boolean blob
+// converter, which also accepts "true". Measured on 25.12.5 against a reset baseline:
+// `disabled 'true'` removes a route and leaves an interface registered and running.
+//
+// So the two helpers here are not an inconsistency to tidy up. Unifying them puts the lie
+// back, in whichever direction it is unified: the wide helper reports an interface disabled
+// while it is up, the narrow one reports a route active while it is gone.
+t.describe('disabled follows each section type parser, which differ', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	let conn = ubus.stub({ uci: {} });
+
+	t.it('an interface honours only "1", because netifd compares it literally', () => {
+		t.assert_true(ifaces.fromUci({ '.name': 'w', proto: 'static', disabled: '1' }, conn).disabled);
+		for (let v in ['true', 'on', 'yes', '0', 'false'])
+			t.assert_false(ifaces.fromUci({ '.name': 'w', proto: 'static', disabled: v }, conn).disabled);
+		t.assert_false(ifaces.fromUci({ '.name': 'w', proto: 'static' }, conn).disabled);
+	});
+
+	t.it('a route and a rule also honour "true", via the blob converter', () => {
+		for (let r in [routes, rules]) {
+			t.assert_true(r.fromUci({ '.name': 'x', disabled: '1' }).disabled);
+			t.assert_true(r.fromUci({ '.name': 'x', disabled: 'true' }).disabled);
+			for (let v in ['on', 'yes', '0', 'false'])
+				t.assert_false(r.fromUci({ '.name': 'x', disabled: v }).disabled);
+			t.assert_false(r.fromUci({ '.name': 'x' }).disabled);
+		}
+	});
+});
