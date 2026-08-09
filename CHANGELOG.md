@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-09
+
 ### Added
 
 - `examples/curl/adopt.sh`. Adoption is the operation an operator meets on any router configured before uapi arrived, and it had no runnable example: a section uci named anonymously reads `managed: false`, writes to it are refused with 409, and `POST .../adopt` renames it and hands back the new id. Verified end to end on hardware against a hand-written `config host`.
@@ -1393,7 +1395,8 @@ First release candidate. Native HTTP REST API for OpenWrt 25.12+ packaged as a s
 - uci-defaults install hook wires `uhttpd.main.ucode_prefix` and self-deletes; pre-remove hook unwires it.
 - Release-tier CI builds the APK and runs a full install/use/remove smoke test in a fresh QEMU VM.
 
-[Unreleased]: https://github.com/openwrt-iac/uapi/compare/v2.4.1...HEAD
+[Unreleased]: https://github.com/openwrt-iac/uapi/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/openwrt-iac/uapi/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/openwrt-iac/uapi/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/openwrt-iac/uapi/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/openwrt-iac/uapi/compare/v2.2.3...v2.3.0

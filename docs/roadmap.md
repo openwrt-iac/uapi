@@ -92,7 +92,7 @@ a v2 contract that nothing uses is precisely why it came out of 2.3.0, so there
 is still no target release. Design reference: `docs/commit-confirm.md`.
 
 
-## 2.5.0 scope
+## Shipped in 2.5.0
 
 The next release is a minor, and its job is as much to make a clean 3.0.0
 possible as to ship features. The v3 list is in § v3 objectives above and has
