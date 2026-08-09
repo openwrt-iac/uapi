@@ -45,4 +45,21 @@ t.describe('usteer.config contract', () => {
 		let errs = full_validate(config, { min_snr: -75, roam_trigger_snr: -72 });
 		t.assert_equal(length(errs), 0);
 	});
+
+	// usteer's init compares `enabled` numerically rather than parsing a bool, so the
+	// word spellings a bool helper accepts leave the daemon down. Reading them as true
+	// reported a running usteer that was not running.
+	t.it('enabled follows the init\'s numeric comparison, not a bool parse', () => {
+		let sec = t => ({ '.name': 'cfg', enabled: t });
+		t.assert_true(config.fromUci({ '.name': 'cfg' }).enabled);
+		t.assert_true(config.fromUci(sec('1')).enabled);
+		t.assert_true(config.fromUci(sec('2')).enabled);
+		t.assert_false(config.fromUci(sec('0')).enabled);
+		for (let word in ['true', 'on', 'yes'])
+			t.assert_false(config.fromUci(sec(word)).enabled);
+	});
+
+	t.it('max_assoc_sta is flagged deprecated, since nothing reads it', () => {
+		t.assert_true(config.schema_properties.max_assoc_sta.deprecated);
+	});
 });
