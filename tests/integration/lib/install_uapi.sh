@@ -90,6 +90,7 @@ bootstrap_uapi() {
 # calls thanks to the sentinel.
 install_uapi() {
 	bootstrap_uapi
+	ensure_daemon_packages || echo "WARN: lldpd/vnstat2 not installable; their resources will answer 503"
 	$SSH 'rm -f /etc/config/uapi'
 	ADMIN_TOKEN=$($SSH 'uapi-token create --name test_admin --scope "*:rw"' 2>/dev/null | head -1)
 	RO_TOKEN=$($SSH 'uapi-token create --name test_readonly --scope "*:ro"' 2>/dev/null | head -1)
@@ -241,6 +242,19 @@ assert_dnsmasq_loads() {
 # and proto=wireguard never gets a netdev. The restart has to be detached, since
 # it drops the link this ssh session is riding on. Readiness is netifd actually
 # advertising the handler, not a fixed sleep.
+# lldpd and vnstat2 are outside the bare image, so their resources answered 503
+# init_script_missing and were never exercised against a real daemon. That is how
+# `vnstat/interfaces` shipped modelling a section type vnstat never reads.
+#
+# Installed here rather than inside a test, and guarded on its own rather than on the
+# bootstrap fingerprint, which covers the source tree and not this package list: adding
+# a package would otherwise be a no-op on any VM already carrying the current source.
+ensure_daemon_packages() {
+	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1' && return 0
+	$SSH 'apk add lldpd vnstat2 2>&1 | tail -3' || return 1
+	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1'
+}
+
 ensure_wireguard() {
 	$SSH 'apk info -e kmod-wireguard >/dev/null 2>&1 && apk info -e wireguard-tools >/dev/null 2>&1' && {
 		$SSH 'lsmod | grep -q "^wireguard " || modprobe wireguard 2>/dev/null

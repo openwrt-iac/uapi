@@ -21,30 +21,28 @@ fail() { echo "FAIL: $*"; exit 1; }
 # a handful of common packages here to broaden coverage beyond the bare image.
 # Each package brings its own /etc/config/<name> with sections we then exercise.
 #
-# IMPORTANT: keep this test LAST-numbered in tests/integration/. PUT-self
-# cumulatively rewrites the VM's /etc/config/* via toUci, which drops uci
-# options not in any resource's schema_properties (e.g. firewall.rules'
-# `option limit` / `list icmp_type`). Any subsequent test that depends on
-# pristine stock state would see drift.
+# IMPORTANT: no test numbered after this one may depend on pristine stock config. PUT-self
+# cumulatively rewrites the VM's /etc/config/* via toUci, which drops uci options not in
+# any resource's schema_properties (e.g. firewall.rules' `option limit` / `list icmp_type`),
+# so a later test reading a stock value sees drift. This said "keep this test LAST-numbered"
+# while five tests already ran after it; the rule that holds is the narrower one, and each
+# of those tests writes the values it then asserts rather than reading what OpenWrt shipped.
 #
 # Note on package naming: the package is 'vnstat2' (the v2 fork shipping in the
 # 25.12 feed) but the uci config and the resource paths are 'vnstat'.
 
-# This exemption is why `vnstat/interfaces` shipped modelling a section type vnstat never
-# reads, and went unnoticed until an audit against the OpenWrt sources. A resource for an
-# uninstalled package is never exercised against real config, so a section-type mismatch
-# looks identical to a correct model. Closing it means installing these packages at
-# VM-setup time rather than inside a test, which is the follow-up the note below already
-# describes; it is not a line to delete here.
+# A resource for an uninstalled package is never exercised against real config, so a
+# section-type mismatch looks identical to a correct model. That is how `vnstat/interfaces`
+# shipped modelling a section type vnstat never reads, unnoticed until an audit against the
+# OpenWrt sources.
 #
-# Coverage scope: every curated resource whose package ships in the bare
-# OpenWrt 25.12.5 image. Resources for packages outside the bare image
-# (snmpd, lldpd, vnstat, mwan3, unbound, sqm, usteer, prometheus_node_
-# exporter_lua, openvpn) are deferred to a follow-up that wires the apk
-# install at VM-setup time instead of inside an integration test. Earlier
-# attempts to install them in install_uapi.sh's bootstrap or inline from
-# this test surfaced a QEMU SLIRP "wget EPERM after state churn"
-# pathology that ate hours of CI; not worth blocking 2.3.0 over.
+# Coverage scope: every curated resource whose package is on the box. lldpd and vnstat are
+# now installed by install_uapi, so both are in the list below. The rest (snmpd, mwan3,
+# sqm, usteer, prometheus_node_exporter_lua, openvpn) remain outside the image and so
+# remain unexercised here; unbound is installed by 40_unbound but only when that test runs,
+# which is not a guarantee this one can lean on. An earlier attempt at installing from
+# inside a test surfaced a QEMU SLIRP "wget EPERM after state churn" pathology, which is
+# why the install sits in install_uapi's bootstrap path instead.
 #
 # Excluded:
 #   - uhttpd/* : PUT-self restarts the daemon serving us
@@ -75,6 +73,8 @@ system
 firewall/defaults
 dhcp/dnsmasq
 dhcp/odhcpd
+lldpd/config
+vnstat/config
 "
 
 # Persistable shape: drop ephemeral / response-only fields. `id` and `managed`
