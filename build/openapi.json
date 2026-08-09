@@ -24174,7 +24174,8 @@
 					"enabled": {
 						"deprecated": true,
 						"type": "boolean",
-						"default": true
+						"default": true,
+						"description": "Deprecated, removed in v3: nothing reads this. `enabled` is read only on `config zone`; the daemon itself is enabled through procd."
 					},
 					"listen_port": {
 						"type": "integer",
@@ -24250,7 +24251,8 @@
 					"prefetch": {
 						"deprecated": true,
 						"type": "boolean",
-						"default": false
+						"default": false,
+						"description": "Deprecated, removed in v3: nothing reads this. The only similar option is `prefetch_root`, a different feature; unbound's own `prefetch:` directive is derived from `recursion`, which this resource already exposes."
 					},
 					"manual_conf": {
 						"type": "boolean",
@@ -24736,7 +24738,7 @@
 						"deprecated": true,
 						"type": "boolean",
 						"default": false,
-						"description": "Emit LLDP-MED extensions"
+						"description": "Deprecated, removed in v3: nothing reads this. LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`), not a runtime option."
 					},
 					"lldp_class": {
 						"type": "integer",
@@ -24929,20 +24931,20 @@
 					"database_dir": {
 						"deprecated": true,
 						"type": "string",
-						"description": "Path to vnstat's database directory"
+						"description": "Deprecated, removed in v3: nothing reads this. vnstat's database directory is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
 					},
 					"interface_5min_hours": {
 						"deprecated": true,
 						"type": "integer",
 						"minimum": 0,
-						"description": "How many hours of 5-minute granularity data to keep"
+						"description": "Deprecated, removed in v3: nothing reads this. 5-minute retention is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
 					},
 					"month_rotate": {
 						"deprecated": true,
 						"type": "integer",
 						"minimum": 1,
 						"maximum": 31,
-						"description": "Day of month that monthly counters roll over"
+						"description": "Deprecated, removed in v3: nothing reads this. The monthly rollover day is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
 					},
 					"interfaces": {
 						"type": "array",
@@ -25016,7 +25018,7 @@
 							"string",
 							"null"
 						],
-						"description": "Network interface used as source for locally-generated traffic; 'none' to disable."
+						"description": "Deprecated, removed in v3: nothing reads this. The live knob is `source_routing`, a boolean about route-line parsing, not an interface name, so there is nothing to rename this to."
 					},
 					"logging": {
 						"type": "boolean",
@@ -25048,7 +25050,7 @@
 						],
 						"minimum": 1,
 						"maximum": 86400,
-						"description": "Seconds between netlink route-monitor polls."
+						"description": "Deprecated, removed in v3: nothing reads this. `mwan3rtmon` is driven by `ip monitor route`, so there is no polling interval to set."
 					},
 					"runtime": {
 						"type": "object",

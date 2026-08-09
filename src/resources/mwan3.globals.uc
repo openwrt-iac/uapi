@@ -47,11 +47,11 @@ return {
 		                  pattern: "^0x[0-9A-Fa-f]+$",
 		                  description: "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)." },
 		local_source:   { deprecated: true, type: ["string", "null"],
-		                  description: "Network interface used as source for locally-generated traffic; 'none' to disable." },
+		                  description: "Deprecated, removed in v3: nothing reads this. The live knob is `source_routing`, a boolean about route-line parsing, not an interface name, so there is nothing to rename this to." },
 		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
 		loglevel:       { type: ["string", "null"], enum: keys(VALID_LOGLEVEL),
 		                  description: "syslog facility level (notice/info/debug/etc.)." },
 		rtmon_interval: { deprecated: true, type: ["integer", "null"], minimum: 1, maximum: 86400,
-		                  description: "Seconds between netlink route-monitor polls." },
+		                  description: "Deprecated, removed in v3: nothing reads this. `mwan3rtmon` is driven by `ip monitor route`, so there is no polling interval to set." },
 	},
 };
