@@ -128,12 +128,12 @@ Committed, in rough dependency order:
    from one that reached the kernel. `values.platform_bool` landed alongside it,
    because reading a netifd boolean with `normalize_bool` reported the
    operator's intent rather than netifd's behaviour.
-3. **Not `disabled` on the network resources**
-   ([#64](https://github.com/openwrt-iac/uapi/issues/64)). Deferred with no
-   target release: the upstream fix it waits on is not pinned by any OpenWrt
-   branch, master included, so there is no date to plan against. See the Features
-   entry for the measurement and for the two alternatives that were weighed and
-   turned down.
+3. **`disabled` on the network resources**
+   ([#64](https://github.com/openwrt-iac/uapi/issues/64)). Done. Deferred for a
+   while on the grounds that netifd parses the flag differently per section type,
+   which is real but does not need an upstream fix: each resource reads it with the
+   helper matching its own parser rather than all three sharing one. See the
+   Features entry.
 
 4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
    sections a write would now reject, before a write finds them one at a time.
@@ -209,9 +209,11 @@ migration target needs no window was wrong, since the notice is for the reader, 
 migration:
 
 - Fields no OpenWrt component reads at all, found by auditing every option against its
-  reader in the SDK: `lldpd/config.enable_lldpmed`, `unbound/server.enabled`,
-  `unbound/server.prefetch`, `mwan3/globals.rtmon_interval`, `mwan3/globals.local_source`,
-  `vnstat/config.database_dir`, `interface_5min_hours` and `month_rotate`, and
+  reader on a running device (`scripts/audit-dead-fields.sh`, since several of these packages
+  ship only a Makefile in the SDK feed): `lldpd/config.enable_lldpmed`,
+  `unbound/server.enabled`, `unbound/server.prefetch`, `mwan3/globals.rtmon_interval`,
+  `mwan3/globals.local_source`, `vnstat/config.database_dir`, `interface_5min_hours` and
+  `month_rotate`, `usteer/config.max_assoc_sta`, and
   `prometheus_node_exporter_lua/config.listen_ipv6` plus its seventeen collector toggles.
   Each writes a uci option the daemon ignores, and none has a correctly-named counterpart
   to point at, which is what separates them from the three below.
@@ -223,6 +225,12 @@ migration:
   a correctly-named option did exist: `lldpd/config.lldp_capabilities` now writes
   `lldp_capability_advertisements`, `unbound/server.dnssec_enabled` writes `validator`, and
   `snmpd/system.sys_services` writes `sysService`. They are not part of the v3 removal set.
+- `managed` leaves the request half of every resource schema. It is derived from uci's
+  `.anonymous` flag and no `toUci` reads it, so a `PUT` sending `managed: false` has always
+  answered 200 with `managed: true`; management state moves only through
+  `POST /<resource>/{id}/adopt`. 2.5.0 annotates it `readOnly`, which is the notice a
+  regenerated client acts on; v3 completes the split.
+
 - Separate request and response schemas. One schema serves both directions today, which is
   what forces `tag` to keep `string` in its type for writers, forces `ipaddr` to be
   described in prose instead of `readOnly`, and makes any read/write asymmetry unstatable.
@@ -351,7 +359,7 @@ to serve a compatibility case v3 deletes:
   interface configured but not started at boot, `disabled '1'` makes netifd
   ignore the section outright.
 
-  **Deferred, and the wait is open-ended.** netifd parses the interface flag with
+  **Shipped in 2.5.0, with the asymmetry handled rather than waited out.** netifd parses the interface flag with
   a literal compare against `"1"` while route and rule go through the boolean
   blob converter, which also takes `true` (and only `true`; `on` and `yes` are
   accepted by neither, and uci drops the option instead). So on 25.12.5
@@ -360,13 +368,18 @@ to serve a compatibility case v3 deletes:
   disabled while it is up. That is the same lie as the bug being fixed, inverted.
 
   Upstream closed the asymmetry in netifd `e97e36f`, 2026-07-16, "config: accept
-  'true' for the interface disabled option". Measured 2026-08-04: the
-  `openwrt-25.12` branch pins netifd at `cbb83a18` (2026-02-26) and **master**
-  pins `6088f7b3` (2026-07-08), so the fix is in the netifd repository and not
-  yet pinned by any OpenWrt branch at all. It needs a pin bump in master, then
-  either a backport to 25.12, unlikely for a non-critical parsing fix, or the
-  next feature release. Re-measure those two pins before assuming this is close;
-  do not write a target release here until one of them carries the fix.
+  'true' for the interface disabled option", but as of 2026-08-04 no OpenWrt branch
+  pinned it, master included. Waiting turned out to be the wrong call: the parser
+  difference is a fact about the device, so the read follows it per section type.
+  `network/interfaces` uses `strict_bool`, the other two use `platform_bool`, and a
+  unit test pins the difference in both directions, because unifying them puts the lie
+  back whichever way it is unified. When a branch carries `e97e36f` the interface
+  helper can widen, and that test is what will say so.
+
+  The first cut shared one helper across all three and shipped the inverted lie for a
+  day: an interface carrying `disabled 'true'` read back as disabled while netifd had
+  it registered and running. Caught by re-reading this entry, and measured three times
+  against a reset baseline before and after.
 
   Two alternatives were weighed and turned down, recorded so they are not
   re-argued from scratch:
@@ -465,16 +478,22 @@ to serve a compatibility case v3 deletes:
 
 ## Install the deferred packages in CI
 
-`tests/integration/44_stock_config_test.sh` skips nine packages that are not in the bare
-image (snmpd, lldpd, vnstat, mwan3, unbound, sqm, usteer, prometheus-node-exporter-lua,
-openvpn) because installing them inside an integration test hit a QEMU SLIRP failure that
-cost hours of CI. The cost of leaving it is now measurable: `vnstat/interfaces` modelled a
+Partly done in 2.5.0. lldpd and vnstat2 are installed by `install_uapi`'s bootstrap, about
+560 KiB together, so `lldpd/config` and `vnstat/config` are exercised by
+`tests/integration/49_daemon_gated_resources_test.sh` and included in the stock-config
+round-trip. The install sits in the bootstrap rather than inside a test, which is what avoids
+the QEMU SLIRP failure that cost hours of CI when it was tried inline.
+
+Still outside the image, so still unexercised: snmpd, mwan3, sqm, usteer,
+prometheus-node-exporter-lua and openvpn. unbound is installed by `40_unbound_uci_ext_test.sh`
+but only while that test runs, which is not a guarantee another test can lean on.
+
+The cost of leaving it is measurable rather than theoretical: `vnstat/interfaces` modelled a
 section type vnstat never reads and shipped that way, because a resource for an uninstalled
 package is never exercised against real configuration, so a wrong section type is
 indistinguishable from a right one.
 
-The route is to install at VM-setup time (`tests/vm/setup.sh`) rather than during a test.
-Note for whoever picks this up: on the standing test box the distfeeds needed pointing at
+Note for whoever picks up the rest: on the standing test box the distfeeds needed pointing at
 25.12.5 and the kmods feed at kernel `6.12.94-1-a7bc15f4...`, or every `kmod-*` dependency
 is unresolvable.
 
