@@ -36,7 +36,7 @@ for that resource if one exists, or open an issue to add one.
 }
 ```
 
-`managed: true` means the section has a real `.name` (named at creation by uapi or by another tool); `managed: false` means it is anonymous (`cfg012345`-style). uapi does not distinguish between writes to anonymous and named sections via `/raw/`. If you want adoption (rename an anonymous section to a uapi-style ULID), the curated endpoints for that type provide `POST .../adopt`.
+`managed: true` means the section has a real `.name` (named at creation by uapi or by another tool); `managed: false` means it is anonymous (`cfg012345`-style). uapi does not distinguish between writes to anonymous and named sections via `/raw/`. It is derived from uci's `.anonymous` flag on every read and is never stored, so `/raw/` ignores it on write: sending `managed` in a body neither changes the section nor lands as an option. Before 2.5.0 it did land, as a literal `option managed`, and that stored string then shadowed the derived value on read. If you want adoption (rename an anonymous section to a uapi-style ULID), the curated endpoints for that type provide `POST .../adopt`.
 
 `GET /api/v2/raw/<package>/<id>` returns one section in the same shape.
 
