@@ -54,7 +54,17 @@ rest.
 
 - Removing a field that was never deprecated, or removing one ahead of its scheduled `docs/deprecations.md` removal target.
 - Removing or renaming any endpoint or error code. Rename of a request field with a deprecation pair is non-breaking; see above.
-- Changing a field's JSON type or semantic meaning. (Carve-out: when the declared type could not represent the field's real state, so that **no value of it was ever a correct answer**, correcting the type can ship in a minor with an explicit CHANGELOG entry naming the carve-out and the affected values. The test is strict: if any uci value produced a correct read under the old type, this does not apply and the change waits for the major. 2.5.0's `system.urandom_seed` and `lldpd.lldp_description` are the precedent, both typed boolean while holding a filesystem path and free text respectively: `true` was unreachable as a truthful answer, and every write replaced the operator's value with `"1"`.)
+- Changing a field's JSON type or semantic meaning.
+
+  **Carve-out.** When the declared type could not represent the field's real state, correcting it can ship in a minor with a CHANGELOG entry naming this carve-out, the branch it relies on, and the affected values. Two branches qualify, and each needs evidence rather than an argument.
+
+  **(a) No value of it was ever a correct answer.** 2.5.0's `system.urandom_seed` and `lldpd.lldp_description`, both typed boolean while holding a filesystem path and free text respectively: `true` was unreachable as a truthful answer, and every write replaced the operator's value with `"1"`.
+
+  **(b) The server violated its own declared type for a reachable configuration**, so no generated client could rely on the field even though individual reads conformed. 2.5.0's `dhcp/hosts.tag`, declared `["string", "null"]` while a section storing `list tag` returned an array. That is the ordinary uci spelling for more than one tag and what LuCI writes, so the schema was wrong for a configuration operators actually have. A scalar `option tag 'red'` did read back correctly under the old type, which is exactly why branch (a) does not cover it.
+
+  Branch (b) exists because the original wording of this carve-out was narrower than its own opening clause: it demanded that no value ever be correct, which is a strictly smaller set than "the declared type could not represent the field's real state". `tag` fell in the gap and shipped anyway, and [#126](https://github.com/openwrt-iac/uapi/issues/126) is what surfaced that the rule and the release disagreed.
+
+  Neither branch covers widening a type for convenience, nor a field where every reachable configuration produced a conforming read. Branch (b) requires naming the uci configuration under which the old server broke its own schema. If you cannot name one, the change waits for the major.
 - Making a previously-optional request field required.
 - Tightening validation to reject previously-accepted payloads. (Carve-out: when the previously-accepted payload produced broken state no caller can rely on, tightening can ship as a patch with an explicit CHANGELOG entry naming the carve-out. 2.2.1's cross-section uniqueness check is the precedent.)
 
