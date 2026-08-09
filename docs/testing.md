@@ -106,6 +106,16 @@ A 200 and a successful read-back prove only that uci accepted the write. Both we
 
 There is deliberately **no equivalent for network**. netifd reports a status object for an interface whose proto it does not recognise (silently falling back to `none`) and for one whose device does not exist, so "netifd knows about it" passes for broken configuration and would be a tautological assertion. `available: false` is not a usable signal either, since it is also false for a perfectly valid interface that has no device to bind to. A meaningful check would need a test interface bound to a real device, which the suite does not currently create.
 
+### The dead-field audit
+
+`scripts/audit-dead-fields.sh root@<device>` checks every uci option a resource writes against the thing that reads it, and fails on any that nothing reads. A field nothing reads accepts a write, answers 200, and changes nothing on the device, which no status code distinguishes from a working one. It needs a device rather than CI, because the readers are what it greps: firewall4 is ucode, the init scripts are shell, and a uci option name a C daemon looks up is a literal in its string table. Several of those packages ship only a Makefile in the SDK feed, so a running box is the only place they can be read at all.
+
+**The corpus is the part that goes wrong, and it fails in the direction of looking productive.** An empty or partial corpus reports live options as dead, which is indistinguishable from a real finding. Three corpora were wrong on the first pass: the firewall4 entry was misnamed and produced 63 false positives including `src` and `target`, openvpn's option table turned out to live in `/usr/share/openvpn/openvpn.options` rather than the init, and `unbound_srv` / `unbound_ext` are read by a separate package entirely. So the script self-checks first, with two probes per package rather than one, and refuses to report a result if any probe cannot find an option that is unmistakably live. One probe was not enough: `openvpn/client` passed against a corpus that could not see a single openvpn option, because the init declares a shell local of that name.
+
+Known-accounted entries live in the script beside the corpus, each with its reason: announced for removal, a deliberate decision such as `system.notes` which LuCI reads, or an artifact of reading option names out of the source such as a legacy key that is cleared on write. Anything else is a new finding and fails the run.
+
+Validated in both directions: adding an option nothing reads is reported as new, and blinding one package's corpus fails the run instead of reporting that package's options as dead.
+
 ### Which resources a daemon has to be installed to test
 
 A resource whose package is not on the box answers 503 `init_script_missing`, which is correct behaviour and also indistinguishable from a correct model: nothing exercises the resource, so a section-type mismatch looks exactly like a working one. That is how `vnstat/interfaces` shipped modelling `config interface` sections vnstat has never read.

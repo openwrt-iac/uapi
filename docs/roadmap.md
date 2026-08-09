@@ -249,6 +249,11 @@ against nothing and everything looked unread. A sweep that finds nothing and a s
 reads nothing are indistinguishable from the outside, so the harness now asserts it can find
 an option that is unmistakably live and cannot find an invented one.
 
+The sweep has since been widened to every curated resource and checked in as
+`scripts/audit-dead-fields.sh`, so the answer is re-runnable rather than a claim: 426 options
+across all 45 modules and 18 packages, 11 with no reader, all 11 accounted for as announced,
+decided or an artifact. Nothing unannounced.
+
 One real finding, `usteer/config.max_assoc_sta`, now announced. usteer is the one package
 where "the name appears in the daemon" is too weak a test: its init forwards a fixed list of
 uci options over ubus, and an option missing from that list never reaches usteerd no matter
