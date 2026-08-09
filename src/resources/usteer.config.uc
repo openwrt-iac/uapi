@@ -7,7 +7,12 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		enabled:                       normalize_bool(section.enabled, true),
+		// The init reads this with `uci -q get`, defaults it to 1 when absent, and then
+		// compares `[ "$ENABLED" -gt 0 ]`. That is numeric, not a bool parse: `enabled 'true'`
+		// makes ash bail with "out of range" and usteer stays down, while `enabled '2'` starts
+		// it. normalize_bool called the word spellings true, so the read disagreed with the
+		// daemon on exactly the values a hand-written config is likely to carry.
+		enabled:                       (section.enabled == null) ? true : (int(section.enabled) > 0),
 		network:                       section.network ?? null,
 		syslog:                        normalize_bool(section.syslog, true),
 		debug_level:                   as_int(section.debug_level),
@@ -110,7 +115,8 @@ return {
 		remote_update_interval:        { type: ["integer", "null"], minimum: 0 },
 		remote_node_timeout:           { type: ["integer", "null"], minimum: 0 },
 		assoc_steering:                { type: "boolean", default: false },
-		max_assoc_sta:                 { type: ["integer", "null"], minimum: 0, maximum: 255 },
+		max_assoc_sta:                 { deprecated: true, type: ["integer", "null"], minimum: 0, maximum: 255,
+		                                 description: "Deprecated, removed in v3: nothing reads this. usteer's init forwards a fixed list of uci options to the daemon over ubus and this is not on it; the daemon's own `max_assoc` knob is not bridged from uci at all." },
 		min_connect_snr:               { type: ["integer", "null"], description: "Refuse association below this SNR (dBm)." },
 		min_snr:                       { type: ["integer", "null"], description: "Disconnect clients below this SNR (dBm)." },
 		min_snr_kick_delay:            { type: ["integer", "null"], minimum: 0 },

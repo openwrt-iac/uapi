@@ -119,6 +119,7 @@ before the major that makes them.
   | `unbound/server.enabled` | `enabled` is read only on `config zone`; the daemon is enabled through procd |
   | `unbound/server.prefetch` | the only similar option is `prefetch_root`, a different feature; unbound's `prefetch:` directive is derived from `recursion`, which uapi already exposes |
   | `prometheus_node_exporter_lua/config.listen_ipv6` | the v6 bind is derived from `listen_interface` |
+  | `usteer/config.max_assoc_sta` | usteer's init forwards a fixed list of uci options to the daemon over ubus and this is not on it; the daemon's own knob is `max_assoc`, which nothing bridges from uci |
   | its seventeen collector toggles | collectors are enumerated from `/usr/lib/lua/prometheus-collectors/*.lua`; **seven of the seventeen name collectors that do not exist in that package at all** |
 
   Requests carrying these keys are ignored today, so nothing on the write side needs

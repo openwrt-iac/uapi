@@ -235,13 +235,25 @@ migration:
 - The `X-Reload-Status` / `X-Kernel-*` header set on `POST /batch`, which currently reports
   nothing about the sub-writes it performed.
 
-**What the audit could not reach.** Five packages ship only a Makefile in the SDK feed, so
-their options could not be checked against a reader either way: firewall4, netifd, odhcpd,
-usteer and sqm-scripts. That leaves `firewall/*`, most of `network/*`, `dhcp/odhcpd`,
-`usteer/config` and `sqm/queues` unverified rather than verified-clean. The route is
-`./scripts/feeds` plus `make package/<name>/prepare`, then re-running the same audit against
-the extracted trees. Worth doing before v3, since a dead field found after the removal
-window closes has to wait for v4.
+**The audit gap is closed.** Five packages ship only a Makefile in the SDK feed, so their
+options could not be checked against a reader from the sources: firewall4, netifd, odhcpd,
+usteer and sqm-scripts. Extracting the feeds was never needed, because every one of those
+readers is installed on a running device: firewall4 is ucode at `/usr/share/ucode/fw4.uc`,
+sqm-scripts is shell, and a uci option name a C daemon looks up is a literal in its string
+table, so `strings` answers for netifd, odhcpd and usteerd.
+
+All 174 options those modules write were checked against the reader that consumes them, with
+the harness self-checked in both directions first. An earlier run of it reported 63 dead
+firewall4 options, all of them false: the corpus variable was misnamed, so the lookup ran
+against nothing and everything looked unread. A sweep that finds nothing and a sweep that
+reads nothing are indistinguishable from the outside, so the harness now asserts it can find
+an option that is unmistakably live and cannot find an invented one.
+
+One real finding, `usteer/config.max_assoc_sta`, now announced. usteer is the one package
+where "the name appears in the daemon" is too weak a test: its init forwards a fixed list of
+uci options over ubus, and an option missing from that list never reaches usteerd no matter
+what the binary contains. `max_assoc` is in the daemon and is not on the list, so it is not
+a repoint target.
 
 **Simplification the removals unlock.** Worth doing in the same pass, since each exists only
 to serve a compatibility case v3 deletes:
