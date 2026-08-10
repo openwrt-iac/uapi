@@ -21864,71 +21864,47 @@
 							},
 							"src_ip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name"
 							},
 							"src_port": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Match source port or range, one value per redirect"
 							},
 							"src_dport": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect"
 							},
 							"src_dip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect"
 							},
 							"dest_ip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "Rewrite destination address, one value per redirect"
 							},
 							"dest_port": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Rewrite destination port or range, one value per redirect"
 							},
 							"proto": {
@@ -22087,71 +22063,47 @@
 							},
 							"src_ip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name"
 							},
 							"src_port": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Match source port or range, one value per redirect"
 							},
 							"src_dport": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect"
 							},
 							"src_dip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect"
 							},
 							"dest_ip": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string"
-								},
 								"description": "Rewrite destination address, one value per redirect"
 							},
 							"dest_port": {
 								"type": [
-									"array",
+									"string",
 									"null"
 								],
-								"maxItems": 1,
-								"items": {
-									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
-								},
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Rewrite destination port or range, one value per redirect"
 							},
 							"proto": {

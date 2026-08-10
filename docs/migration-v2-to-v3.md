@@ -159,6 +159,31 @@ This affects every uci-backed list on a curated resource. It does **not** affect
 and response envelopes (`BatchResponse.results`, `ErrorEnvelope.errors`, and the rest), where
 `[]` means empty rather than absent and is correct.
 
+### `firewall/redirects` match fields are scalars
+
+Six fields under `match` change from an array capped at one entry to a plain string:
+`src_ip`, `src_dip`, `src_dport`, `dest_ip`, `dest_port`, `src_port`.
+
+```
+# v2
+{"match": {"src_zone": "wan", "src_dport": ["443"], "dest_ip": ["192.168.1.10"]}}
+
+# v3
+{"match": {"src_zone": "wan", "src_dport": "443", "dest_ip": "192.168.1.10"}}
+```
+
+firewall4 marks only `proto`, `src_mac` and `reflection_zone` as list options on a
+`config redirect`, and its parser refuses a list on the rest outright, discarding the whole
+section. The cap existed to stop uapi writing one; 2.4.0 could not narrow the type because that
+needs a major. `proto` is genuinely a list and does not change.
+
+The reason to care is when the mistake is caught. A second value used to be accepted by the
+schema and rejected at apply, after a declarative client had already committed to a plan and
+possibly written other resources. A string makes it a type error before anything is written.
+
+Validation errors on these fields lose their index: `match.src_dport` rather than
+`match.src_dport[0]`.
+
 ### `dhcp/hosts.tag` is array-only
 
 Responses have been arrays since 2.5.0. v3 drops the space-separated string on the request side
