@@ -9,7 +9,7 @@ Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates stan
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side rotation (`POST /tokens`).
 - 45 curated resources plus a generic `/raw/<package>/<id>` passthrough for the long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags + `If-Match`, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
-- OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v2/openapi.json`.
+- OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at `/api/v3/openapi.json`.
 
 ## Why this approach
 
@@ -45,7 +45,7 @@ Or a local APK file:
 apk add /tmp/uapi-<version>-r1.apk
 ```
 
-The package's `uci-defaults` hook adds `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and restarts uhttpd. After that, `/api/v2/healthz` is reachable on the same ports as LuCI.
+The package's `uci-defaults` hook adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and restarts uhttpd. After that, `/api/v3/healthz` is reachable on the same ports as LuCI.
 
 ## First token
 
@@ -60,7 +60,7 @@ After the first admin token exists, subsequent tokens can be minted over the wir
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v2/tokens \
+     -X POST https://<router>/api/v3/tokens \
      -d '{ "name": "ci-bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
 ```
 
@@ -70,8 +70,8 @@ Requested scopes must be a strict subset of the caller's (escalation returns `40
 
 ```sh
 TOKEN=<value-from-above>
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v2/system
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v2/auth/whoami
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/system
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/auth/whoami
 ```
 
 ## Quick demo: add a firewall rule
@@ -79,7 +79,7 @@ curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v2/auth/whoami
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v2/firewall/rules \
+     -X POST https://<router>/api/v3/firewall/rules \
      -d '{
        "target": "ACCEPT",
        "match": { "src_zone": "wan", "dest_port": [22], "proto": ["tcp"] }
@@ -101,7 +101,7 @@ Operator-facing:
 - `docs/non-uci-state.md`: resources whose source of truth is not `/etc/config/`.
 - `docs/migration-v1-to-v2.md`: v1 -> v2 field renames, strict typing, new endpoints, new errors.
 - `examples/curl/`: runnable walkthroughs for a subset of resources, one per distinct shape, including the adopt flow for pre-existing config.
-- `build/openapi.json` (also `/api/v2/openapi.json` on a live router): the API contract.
+- `build/openapi.json` (also `/api/v3/openapi.json` on a live router): the API contract.
 
 Contributor-facing:
 

@@ -24,7 +24,7 @@ endef
 define Package/uapi/description
   uapi translates standard HTTP REST verbs into OpenWrt ubus/uci operations,
   designed as a backend for Infrastructure-as-Code workflows such as Terraform.
-  Curated endpoints under /api/v2/<domain>/... plus a generic /api/v2/raw/...
+  Curated endpoints under /api/v3/<domain>/... plus a generic /api/v3/raw/...
   passthrough for the long tail.
 endef
 
@@ -79,8 +79,8 @@ uapi installed. Bootstrap:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
   2. Verify reachable:  uclient-fetch -qO - --no-check-certificate \
                           --header="Authorization: Bearer <token>" \
-                          https://127.0.0.1/api/v2/system
-  3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v2/openapi.json)
+                          https://127.0.0.1/api/v3/system
+  3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v3/openapi.json)
 
 Future upgrades from the project feed:
   uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
@@ -96,9 +96,10 @@ endef
 define Package/uapi/prerm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
+uci -q del_list uhttpd.main.ucode_prefix='/api/v3=/usr/share/uapi/main.uc' || true
+# Belt-and-suspenders: strip every older mount too, so removing the package cannot leave a
+# prefix pointing at a main.uc that is about to disappear.
 uci -q del_list uhttpd.main.ucode_prefix='/api/v2=/usr/share/uapi/main.uc' || true
-# Belt-and-suspenders: also strip the v1 entry if a previous 2.0.0-broken
-# install accidentally added it.
 uci -q del_list uhttpd.main.ucode_prefix='/api/v1=/usr/share/uapi/main.uc' || true
 uci -q commit uhttpd || true
 /etc/init.d/uhttpd reload || true

@@ -4,7 +4,7 @@ let as_int = values.as_int;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
-const UAPI_PREFIX = "/api/v2=/usr/share/uapi/main.uc";
+const UAPI_PREFIX = "/api/v3=/usr/share/uapi/main.uc";
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

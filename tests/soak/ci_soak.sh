@@ -18,7 +18,7 @@ tmpdir=$(mktemp -d)
 trap "rm -rf $tmpdir; $SSH 'uapi-token revoke ci_soak >/dev/null 2>&1' || true" EXIT
 
 deadline=$(($(date +%s) + DURATION))
-endpoints="/api/v2/healthz /api/v2/system /api/v2/firewall/zones /api/v2/network/interfaces /api/v2/dhcp/hosts"
+endpoints="/api/v3/healthz /api/v3/system /api/v3/firewall/zones /api/v3/network/interfaces /api/v3/dhcp/hosts"
 
 sample_proc() {
 	$SSH '

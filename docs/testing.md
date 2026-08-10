@@ -137,7 +137,7 @@ Four resource families remain uncovered because their packages stay outside the 
 
 ## OpenAPI emission
 
-Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v2/openapi.json`. The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
+Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
 
 `make openapi-check` regenerates the spec into a temp file and diffs against the committed `build/openapi.json`. CI runs this as a sanity gate; if it fails, the committed spec is out of sync with the resource modules and one of them has to give.
 

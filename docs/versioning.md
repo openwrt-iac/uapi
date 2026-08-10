@@ -1,6 +1,6 @@
 # API versioning policy
 
-The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves under `/api/v2/`, a future v3 would mount at `/api/v3/`. Within a given installed major, additions are backwards-compatible.
+The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves under `/api/v3/`, a future v3 would mount at `/api/v3/`. Within a given installed major, additions are backwards-compatible.
 
 ## Package version mirrors API major
 

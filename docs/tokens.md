@@ -36,7 +36,7 @@ wire:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v2/tokens \
+     -X POST https://router/api/v3/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],
@@ -51,9 +51,9 @@ returns `403 scope_escalation_blocked`. The same request with a name
 that's already in use returns `409 conflict`.
 
 ```sh
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v2/tokens
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v2/tokens/ci_bot
-curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v2/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/tokens
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v3/tokens/ci_bot
 ```
 
 GET responses never include `salt` or `hash`.
@@ -61,7 +61,7 @@ GET responses never include `salt` or `hash`.
 ## Inspecting the current token
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" https://router/api/v2/auth/whoami
+curl -H "Authorization: Bearer $TOKEN" https://router/api/v3/auth/whoami
 ```
 
 Returns `{token_id, scopes, source_ip, expires_at, allowed_cidrs,
@@ -171,7 +171,7 @@ Or via HTTP:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v2/tokens \
+     -X POST https://router/api/v3/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],

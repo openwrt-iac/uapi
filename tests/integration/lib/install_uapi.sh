@@ -1,5 +1,5 @@
 SSH="tests/vm/ssh.sh"
-UAPI_PREFIX_ENTRY="/api/v2=/usr/share/uapi/main.uc"
+UAPI_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
 
 # Everything the box runs. Named once so the push and the fingerprint below
 # cannot drift apart and start attesting to a different set of files than the
@@ -34,7 +34,7 @@ source_fingerprint() {
 }
 
 # Bootstrap: install deps, push every source file in a single tar stream, wire
-# the uhttpd prefix, restart. Each request to /api/v2 forks a fresh ucode child
+# the uhttpd prefix, restart. Each request to /api/v3 forks a fresh ucode child
 # that reads the on-disk source, so per-test isolation only needs a clean token
 # store, not a re-copy of the source tree.
 #
