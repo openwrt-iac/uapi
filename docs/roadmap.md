@@ -25,7 +25,7 @@ catalog in `CHANGELOG.md`'s v2.0.0 section; migration table in
 
 ## Shipped in v1.x
 
-(Preserved for historical context; new features land under v2.x or v3.)
+(Preserved for historical context; new features land under v3.x.)
 
 - **ETags / `If-Match` optimistic concurrency** in v1.2.
 - **Schema-driven type check** in `handler.uc` (v1.2).
@@ -182,104 +182,55 @@ Deliberately not in 2.5.0: the mirrored-name retirement itself (only its
 announcement lands here, the removal is v3), and anything under Hardening, which
 carries no wire surface and needs no release to take effect.
 
-## v3 objectives
+## Shipped in 3.0.0
 
-`docs/versioning.md` § What a major is for sets the policy: a major is expensive to have and
-cheap to fill, so when one happens it should break as much as it needs to in order to raise
-quality and remove complexity. This section is the list that makes that actionable. Anything
-deferred with "needs a major" belongs here with enough detail to act on later, because the
-failure mode is arriving at v3, shipping the items someone remembered, and paying the cost
-again for the rest.
+Everything 2.5.0 announced, plus the simplification the removals unlocked. The ledger's
+`Removed in past releases` section and `docs/migration-v2-to-v3.md` are the operator-facing
+record; this is the engineering one.
 
-**Announced, with the deprecation window already running.** These carry ledger rows in
-`docs/deprecations.md` and appear in the published spec's own "Upcoming in v3" block:
+**Removals**, all announced in the 2.5.0 spec's own "Upcoming in v3" block:
 
-- `network/interfaces.name` as a create input: removed, `id` is the universal spelling.
-- `network/interfaces.ipaddr` as a *write* input: removed, `ipaddrs` wins. `ipaddr` becomes
-  `readOnly` rather than disappearing.
-- `dhcp/hosts.mac` and `dhcp/hosts.mac_aliases`: removed entirely, `macs` is the only name.
-  Neither corresponds to a real uci option, so nothing survives as a read.
-- List-valued fields read back `null` rather than `[]` when the uci key is absent.
-- `dhcp/hosts.tag` stops accepting a space-separated string on write.
+- `network/interfaces.name` as a create input; `id` is the only section-name input.
+- `dhcp/hosts.mac` and `mac_aliases`; `macs` is the only name.
+- The 27 fields writing a uci option no OpenWrt component reads, across `mwan3/globals`,
+  `vnstat/config`, `lldpd/config`, `unbound/server`, `usteer/config` and
+  `prometheus_node_exporter_lua/config`, which drops from 20 modelled fields to 2.
+- `vnstat/interfaces` as a whole endpoint, replaced by `vnstat/config.interfaces`.
 
-**All announced as of 2.5.0.** The list below is now covered by `docs/deprecations.md` and
-the published spec's own "Upcoming in v3" block, which the reference lint keeps in step by
-count. It was not, when this section was first written: the claim that a removal with no
-migration target needs no window was wrong, since the notice is for the reader, not for the
-migration:
+**Convention changes:**
 
-- Fields no OpenWrt component reads at all, found by auditing every option against its
-  reader on a running device (`scripts/audit-dead-fields.sh`, since several of these packages
-  ship only a Makefile in the SDK feed): `lldpd/config.enable_lldpmed`,
-  `unbound/server.enabled`, `unbound/server.prefetch`, `mwan3/globals.rtmon_interval`,
-  `mwan3/globals.local_source`, `vnstat/config.database_dir`, `interface_5min_hours` and
-  `month_rotate`, `usteer/config.max_assoc_sta`, and
-  `prometheus_node_exporter_lua/config.listen_ipv6` plus its seventeen collector toggles.
-  Each writes a uci option the daemon ignores, and none has a correctly-named counterpart
-  to point at, which is what separates them from the three below.
+- List-valued fields read back `null`, not `[]`, when the uci key is absent
+  ([#39](https://github.com/openwrt-iac/uapi/issues/39)). 46 properties. The issue's stated
+  scope of 32 was stale and its derivation query missed the 13 arrays nested under the
+  writable `match` objects, so re-derive rather than trusting a recorded count.
+- Every resource is described by `<Name>Request` and `<Name>Response`. This is what makes
+  `managed` absent from request models, `network/interfaces.ipaddr` `readOnly`, and
+  `dhcp/hosts.tag` array-only in both directions: one schema serving both directions could
+  state none of them. The 13 singletons gained a real request schema in place of an untyped
+  object.
+- The mount moved to `/api/v3`, as it moved to `/api/v2` across the previous major. The
+  install hook strips every older prefix, because a leftover mount would serve the removed
+  surface under v3 semantics.
 
-  `vnstat/interfaces` is on this list as a whole endpoint rather than a field: it models a
-  section type vnstat never reads. `vnstat/config.interfaces` replaces it.
+**Additive, and the one item that was never announced because it did not need to be:**
 
-  Three fields that looked identical were **fixed rather than announced** in 2.5.0, because
-  a correctly-named option did exist: `lldpd/config.lldp_capabilities` now writes
-  `lldp_capability_advertisements`, `unbound/server.dnssec_enabled` writes `validator`, and
-  `snmpd/system.sys_services` writes `sysService`. They are not part of the v3 removal set.
-- `managed` leaves the request half of every resource schema. It is derived from uci's
-  `.anonymous` flag and no `toUci` reads it, so a `PUT` sending `managed: false` has always
-  answered 200 with `managed: true`; management state moves only through
-  `POST /<resource>/{id}/adopt`. 2.5.0 annotates it `readOnly`, which is the notice a
-  regenerated client acts on; v3 completes the split.
+- `POST /batch` reports its transaction outcome on the 207, aggregated over the sub-writes.
+  It cannot be per-operation: the results array carries `{status, body}` and drops
+  sub-response headers, which is the same reason the management-path guard is inert inside a
+  batch.
 
-- Separate request and response schemas. One schema serves both directions today, which is
-  what forces `tag` to keep `string` in its type for writers, forces `ipaddr` to be
-  described in prose instead of `readOnly`, and makes any read/write asymmetry unstatable.
-  This is the single change that unblocks the most others.
-- ~~`412` rather than a silently-ignored precondition when `If-None-Match` arrives on a
-  write.~~ Done in 2.5.0, not deferred: the precondition seam already ran before the
-  transaction, so the change was a guard rather than the restructure this entry assumed.
-  RFC 9110 13.1.2 requires it; doing it properly means evaluating the precondition before
-  the transaction runs (13.2.2), which is a restructure rather than a guard.
-- The `X-Reload-Status` / `X-Kernel-*` header set on `POST /batch`, which currently reports
-  nothing about the sub-writes it performed.
+**Simplification the removals unlocked**, all dead code once the mirrored names were gone:
+`merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and `network/interfaces`,
+`equal_list`, the mirrored-pair conflict rules in both `validate`s, and the
+`resolve_for_replace` seam in `handler.uc` along with its contract in
+`docs/adding-a-resource.md`.
 
-**The audit gap is closed.** Five packages ship only a Makefile in the SDK feed, so their
-options could not be checked against a reader from the sources: firewall4, netifd, odhcpd,
-usteer and sqm-scripts. Extracting the feeds was never needed, because every one of those
-readers is installed on a running device: firewall4 is ucode at `/usr/share/ucode/fw4.uc`,
-sqm-scripts is shell, and a uci option name a C daemon looks up is a literal in its string
-table, so `strings` answers for netifd, odhcpd and usteerd.
+**Not done, and deliberately:** retiring `values.normalize_bool`'s remaining callers. The
+precondition is reading libvalidate's accepted set out of ubox rather than guessing at it, and
+that has not happened. It could change which strings are accepted on the wire, so acting on a
+guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 
-All 174 options those modules write were checked against the reader that consumes them, with
-the harness self-checked in both directions first. An earlier run of it reported 63 dead
-firewall4 options, all of them false: the corpus variable was misnamed, so the lookup ran
-against nothing and everything looked unread. A sweep that finds nothing and a sweep that
-reads nothing are indistinguishable from the outside, so the harness now asserts it can find
-an option that is unmistakably live and cannot find an invented one.
-
-The sweep has since been widened to every curated resource and checked in as
-`scripts/audit-dead-fields.sh`, so the answer is re-runnable rather than a claim: 426 options
-across all 45 modules and 18 packages, 11 with no reader, all 11 accounted for as announced,
-decided or an artifact. Nothing unannounced.
-
-One real finding, `usteer/config.max_assoc_sta`, now announced. usteer is the one package
-where "the name appears in the daemon" is too weak a test: its init forwards a fixed list of
-uci options over ubus, and an option missing from that list never reaches usteerd no matter
-what the binary contains. `max_assoc` is in the daemon and is not on the list, so it is not
-a repoint target.
-
-**Simplification the removals unlock.** Worth doing in the same pass, since each exists only
-to serve a compatibility case v3 deletes:
-
-- `resolve_for_replace` and `merge_for_patch` on `network/interfaces` and `dhcp/hosts`. Both
-  exist solely to decide which of two names for one uci option the caller meant. With one
-  name per option they are dead code, along with the conflict rules in both `validate`s.
-- The mirrored-pair section of `docs/adding-a-resource.md` and its carve-out, which document
-  a hazard that stops existing.
-- `values.normalize_bool`'s remaining callers, once the libvalidate accepted set is actually
-  read out of ubox rather than guessed at. See `docs/ucode-quirks.md`.
-
-## Features (additive, future minor bumps in v2.x)
+## Features (additive, future minor bumps in v3.x)
 
 - **`dhcp/hosts.match_tag`.** Not modelled, though LuCI exposes it on the same
   form as `tag` and dnsmasq's host handler reads it with `config_list_foreach`,
@@ -315,36 +266,6 @@ to serve a compatibility case v3 deletes:
   reached the kernel, which is what the transaction contract needs. Retiring the
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
-
-- **Stop mirroring one uci option into two writable wire names.** Two resources
-  do it: `ipaddr` / `ipaddrs` on `network/interfaces`, and `macs` / `mac` /
-  `mac_aliases` on `dhcp/hosts`. One uci list option is exposed under names that
-  are all readable and all writable, so a full-replace client carries every one
-  of them back with the ones it did not change now stale, and every write path
-  has to guess which the caller meant.
-  `resolve_for_replace` and `merge_for_patch` decide that per method
-  ([#60](https://github.com/openwrt-iac/uapi/issues/60),
-  [#65](https://github.com/openwrt-iac/uapi/issues/65), both in 2.4.1, the
-  second caused by the fix for the first) rather than removing the cause.
-
-  The durable fix is one writable name per uci option. The list form is the
-  general one, so `ipaddr` becomes read-only: still surfaced for the v1.0
-  contract and for clients that only understand a scalar, but no longer
-  accepted on write, with `ipaddrs` the only input.
-  That is a removal from the write surface, so it needs a deprecation window
-  (`docs/deprecations.md`) announced in a minor and completed in v3, not a
-  patch. Until then the per-method resolution stays.
-
-  `dhcp/hosts` is the same defect one step further along, and shows what the
-  window costs. There the split was worse than a mirror: `mac` held the first
-  entry of `list mac` and `mac_aliases` the rest, so no single field ever
-  answered what a reservation matched, and it was the one place in the API
-  where a uci list option did not surface as a JSON array. 2.5.0 adds `macs`,
-  the whole list under one name, and deprecates both old names for removal in
-  v3. Doing so means three writable names for one option during the window,
-  which is why the rule in `docs/adding-a-resource.md` § Mirrored field pairs
-  permits a new mirror only when it retires an existing one and carries a
-  removal target.
 
 - **`disabled` on `network/interfaces`, `network/routes` and `network/rules`.**
   Filed as [openwrt-iac/uapi#64](https://github.com/openwrt-iac/uapi/issues/64).

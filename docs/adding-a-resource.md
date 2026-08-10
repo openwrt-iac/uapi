@@ -38,7 +38,6 @@ return {
 
     // Optional, less common:
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
-    resolve_for_replace: function(body) { ... },   // PUT only; resolve two wire names for one uci option. See "Mirrored field pairs" below.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
     id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
@@ -179,7 +178,7 @@ Per CLAUDE.md:
 
 - `snake_case` field names.
 - Stable `id` at top level (set by the dispatcher; your `fromUci` provides it from `section['.name']`).
-- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put it in `schema_properties`: the generator marks it `readOnly` for every resource, and adding it module-side would also add it to the runtime type checker.
+- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put it in `schema_properties`: the generator stamps it into the response schema and keeps it out of the request one, and declaring it in the module would also enrol it in the runtime type checker, turning `managed: "true"` from a 200 into a 422.
 - Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with the helper that matches the parser the option's own reader uses, which is not the same for every option and not even for every section type.** `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal compare against `1`, `platform_bool` for netifd's blob converter (`1` and `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for `get_bool` in `/lib/functions.sh`, which adds `enabled`/`disabled`. Picking the wide one where the reader is narrow reports a section as configured when the daemon ignored the value, which is the read-honesty failure principle 4 exists to prevent. `network/interfaces.disabled` and `network/routes.disabled` are the same option name on the same package needing two different helpers, with the measurement in the module comments.
 - Lift single-value uci list options to JSON arrays (a uci list with one element comes through as a string from `cursor.get`; coerce to an array).
 - Nest related fields where it improves readability. `firewall.rules` uses `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This pays off in the Terraform mapping.
@@ -255,59 +254,18 @@ can reach a caller who holds only `:ro` on the resource and can never see it
 through a `GET`. Name the field and describe the expected shape
 ("must be a 44-char base64 WireGuard private key"), never the value.
 
-### Mirrored field pairs
+### One uci option, one wire name
 
-When one uci option is exposed under two wire names, every write path has
-to tolerate a faithful full replace that changes only one of them. Two
-resources do this today: `network/interfaces` mirrors the first entry of
-`list ipaddr` into `ipaddr` alongside the full `ipaddrs`, and `dhcp/hosts`
-splits one `list mac` across `macs`, `mac` and `mac_aliases`.
+A uci option gets exactly one writable name. Mirroring one option into two, or splitting a
+list positionally into a scalar and a tail, is what `network/interfaces` did with
+`ipaddr`/`ipaddrs` and `dhcp/hosts` did with `mac`/`mac_aliases`, and 3.0.0 removed both. The
+cost was not the extra name: it was that a caller sending both had half its body silently
+discarded on a 200, which needed a per-method resolution hook on every write path to work
+around, and a deprecation window plus a major to undo.
 
-**Do not add a mirror to expose a field. Add one only to remove one.** The
-`dhcp/hosts` triple is the second case and exists for that reason: `mac` and
-`mac_aliases` were already a mirrored pair, a positional split of a list that
-every other resource would surface as an array, and they cannot be dropped
-inside a major. `macs` is the single writable name they collapse into, so the
-third name is what pays for retiring the other two. A transitional mirror is
-allowed when it carries a `docs/deprecations.md` row naming its removal
-target; a mirror added for a caller's convenience is not, because the cost
-below is permanent while the convenience is not.
-
-Marking a field deprecated has three parts and two of them are enforced. Set
-`deprecated: true` in `schema_properties`, which is what codegen reads, and open
-its `description` with `Deprecated, removed in vN: <why>`, which is what an
-operator sees in a plan warning and is the only place the reason exists;
-`lint-openapi-shape` fails on the flag without a reason, and on a notice with no
-text after the colon. Then add the row or bullet to `docs/deprecations.md` and
-the matching entry to the "Upcoming in v3" block in `build/gen_openapi.uc`,
-which `lint-doc-refs` compares by count, so the two cannot drift apart. A field
-whose API name is not its uci option also needs an entry in
-`tests/lint_wire_names.uc`, with the reason as the value.
-
-The read mirror puts both names into the caller's state, so a
-full-replace client sends both back whether or not its own config named
-them, with the one it did not change now stale. Rejecting the pair on
-that ground makes the field unwritable for every such client, which is
-the failure `ipaddrs` hit in 2.4.1.
-
-It belongs to a wider family: a full replace destroys or blocks whatever
-the read view does not faithfully return. 2.4.0 fixed two other members,
-an unmodelled `src_dip` dropped from every SNAT redirect it round-tripped
-and masked write-only secrets erased by any PUT that omitted them.
-
-The three methods need different answers:
-
-- **PATCH**: `merge_for_patch` knows which name the body carried, so drop
-  the other rather than letting the read view resurrect it.
-- **PUT**: no notion of "did not name" exists, so `resolve_for_replace`
-  drops the losing name and lets the documented winner through. It runs
-  before validation, so `validate` never sees the pair.
-- **POST**: no prior read to have carried a stale value back, so a
-  contradiction is a real one. Report it.
-
-Resolving silently on PUT is only safe when the winner is documented and
-`toUci` already prefers it, so the resolution changes no uci outcome. If
-that is not true for a new pair, fix the precedence first.
+A field that reads differently from how it writes is expressible now that request and response
+schemas are separate: mark it `readOnly` and it stays in the response half only, which is what
+`network/interfaces.ipaddr` does.
 
 ## 4. Add unit tests
 
