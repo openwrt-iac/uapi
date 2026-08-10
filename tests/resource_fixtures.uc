@@ -85,6 +85,15 @@ const CASES = [
 		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'] },
 	},
 	{
+		// A static interface addressed only over IPv6, which uci and LuCI both accept and
+		// which nothing here covered: modelling only the v4 list made it read back with no
+		// addresses and refused its own body on write.
+		file: "network.interfaces.uc", id: "v6only", pkg: "network",
+		modify: { key: "ip6addrs", value: ["fd00:db8::2/64"] },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'eth7',
+		           ip6addr: ['fd00:db8::1/64'] },
+	},
+	{
 		// A second network.interfaces case: the masked private_key is a different shape
 		// from the mirrored ipaddr pair above, and only this one exercises it.
 		file: "network.interfaces.uc", id: "wg0", pkg: "network",

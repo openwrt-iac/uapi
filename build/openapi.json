@@ -22860,6 +22860,16 @@
 						},
 						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
 					},
+					"ip6addrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
+					},
 					"netmask": {
 						"type": [
 							"string",
@@ -23087,6 +23097,11 @@
 									"required": [
 										"ipaddrs"
 									]
+								},
+								{
+									"required": [
+										"ip6addrs"
+									]
 								}
 							]
 						}
@@ -23150,6 +23165,16 @@
 							"type": "string"
 						},
 						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
+					},
+					"ip6addrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
 					},
 					"netmask": {
 						"type": [
@@ -23308,6 +23333,11 @@
 								{
 									"required": [
 										"ipaddrs"
+									]
+								},
+								{
+									"required": [
+										"ip6addrs"
 									]
 								}
 							]

@@ -7,6 +7,8 @@ let as_list_or_null = values.as_list_or_null;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_cidr_any = values.is_valid_cidr_any;
+let is_valid_ipv6 = values.is_valid_ipv6;
+let is_valid_ipv6_cidr = values.is_valid_ipv6_cidr;
 let as_int = values.as_int;
 
 const PKG = "network";
@@ -76,6 +78,10 @@ function fromUci(section, conn) {
 		proto: proto,
 		ipaddr: ipaddr_first,
 		ipaddrs: ipaddrs,
+		// uci holds IPv6 static addressing in a separate `list ip6addr`, and modelling only
+		// the v4 list made an IPv6-addressed interface read back with no addresses at all and
+		// no indication that a value had been seen and dropped.
+		ip6addrs: as_list_or_null(section.ip6addr),
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
 		dns: as_list_or_null(section.dns),
@@ -135,6 +141,8 @@ function toUci(json) {
 	// list form is required for multi-address static interfaces.
 	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
 		out.ipaddr = json.ipaddrs;
+	if (type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0)
+		out.ip6addr = json.ip6addrs;
 
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
@@ -193,17 +201,29 @@ function validate(json, conn, id) {
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
-		// Only `ipaddrs` writes. Counting the read-only `ipaddr` as an address here let a
-		// body carrying it alone satisfy the requirement and then write nothing, so uapi
-		// created an addressless static interface and answered 200.
-		if (!has_list)
+		let has_v6 = type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0;
+		// One address family is enough, matching LuCI, whose static form marks neither
+		// `ipaddr` nor `ip6addr` required. Demanding IPv4 made an IPv6-only interface
+		// unwritable and so unable to round-trip its own read.
+		//
+		// The read-only `ipaddr` deliberately does not count. Only `ipaddrs` and `ip6addrs`
+		// write, so a body carrying the scalar alone once satisfied the requirement and then
+		// wrote nothing: uapi created an addressless static interface and answered 200.
+		if (!has_list && !has_v6)
 			push(errs, { field: "ipaddrs", code: "required",
-			             message: "is required when proto is static" });
+			             message: "either ipaddrs or ip6addrs is required when proto is static" });
 		if (has_list) {
 			for (let i = 0; i < length(json.ipaddrs); i++) {
 				if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
 					push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
 					             message: "must be a valid IPv4 address or CIDR" });
+			}
+		}
+		if (has_v6) {
+			for (let i = 0; i < length(json.ip6addrs); i++) {
+				if (!is_valid_ipv6(json.ip6addrs[i]) && !is_valid_ipv6_cidr(json.ip6addrs[i]))
+					push(errs, { field: sprintf("ip6addrs[%d]", i), code: "invalid_format",
+					             message: "must be a valid IPv6 address or CIDR" });
 			}
 		}
 		if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
@@ -272,6 +292,7 @@ return {
 		  then: { anyOf: [
 		            { required: ["ipaddr"] },
 		            { required: ["ipaddrs"] },
+		            { required: ["ip6addrs"] },
 		          ] } },
 		// private_key is write-only; GET surfaces only has_private_key, so listing
 		// it in `required` would make strict OpenAPI client codegen reject reads.
@@ -307,6 +328,8 @@ return {
 		             description: "First entry of the uci `list ipaddr`. Read-only: send `ipaddrs` to write, which names the same uci option." },
 		ipaddrs:   { type: ["array", "null"], items: { type: "string" },
 		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry." },
+		ip6addrs:  { type: ["array", "null"], items: { type: "string" },
+		             description: "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,

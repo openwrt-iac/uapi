@@ -124,11 +124,43 @@ t.describe('network.interfaces', () => {
 
 	// `ipaddr` is read-only from 3.0.0 and nothing writes it, so a body carrying it alone
 	// must not satisfy the requirement: doing so created an addressless static interface
-	// and answered 200.
+	// and answered 200. Relaxing the rule to accept IPv6 must not reopen that.
 	t.it('validate does not accept the read-only ipaddr in place of ipaddrs', () => {
 		let errs = interfaces.validate({ proto: 'static', ipaddr: '192.0.2.99' }, null);
 		let ip = filter(errs, function(e) { return e.field == "ipaddrs" && e.code == "required"; });
 		t.assert_equal(length(ip), 1);
+	});
+
+	// LuCI's static form marks neither address family required, so an interface addressed
+	// only over IPv6 is valid there and has to be here.
+	t.it('validate accepts a static interface addressed only over IPv6', () => {
+		t.assert_equal(length(interfaces.validate(
+			{ proto: 'static', ip6addrs: ['fd00:db8::1/64'] }, null)), 0);
+	});
+
+	t.it('validate accepts both families together', () => {
+		t.assert_equal(length(interfaces.validate(
+			{ proto: 'static', ipaddrs: ['192.0.2.1/24'], ip6addrs: ['fd00:db8::1/64'] }, null)), 0);
+	});
+
+	t.it('validate rejects an ip6addrs entry that is not an IPv6 address', () => {
+		let errs = interfaces.validate({ proto: 'static', ip6addrs: ['192.0.2.1'] }, null);
+		let e6 = filter(errs, function(e) { return e.field == "ip6addrs[0]"; });
+		t.assert_equal(e6[0].code, 'invalid_format');
+	});
+
+	t.it('fromUci surfaces list ip6addr as ip6addrs, and null when absent', () => {
+		let v6 = interfaces.fromUci({ '.name': 'v6', '.anonymous': false, '.type': 'interface',
+		                              proto: 'static', ip6addr: ['fd00::1/64', 'fd00::2/64'] });
+		t.assert_deep_equal(v6.ip6addrs, ['fd00::1/64', 'fd00::2/64']);
+		let v4 = interfaces.fromUci({ '.name': 'v4', '.anonymous': false, '.type': 'interface',
+		                              proto: 'static', ipaddr: '192.0.2.1' });
+		t.assert_equal(v4.ip6addrs, null);
+	});
+
+	t.it('toUci writes ip6addrs onto the uci ip6addr option', () => {
+		let u = interfaces.toUci({ proto: 'static', ip6addrs: ['fd00::1/64'] });
+		t.assert_deep_equal(u.ip6addr, ['fd00::1/64']);
 	});
 
 	t.it('validate accepts dhcp without an address', () => {

@@ -30,6 +30,7 @@ function read(path) {
 const EXPECTED = {
 	"dhcp.hosts.uc:macs":                 "rename: the uci option is the singular `mac` list",
 	"network.interfaces.uc:ipaddrs":      "rename: the uci option is the singular `ipaddr` list",
+	"network.interfaces.uc:ip6addrs":     "rename: the uci option is the singular `ip6addr` list",
 
 	"dropbear.instances.uc:port":         "rename: uci spells it Port",
 	"dropbear.instances.uc:banner_file":  "rename: uci spells it BannerFile",
