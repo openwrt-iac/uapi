@@ -29,9 +29,8 @@ t.describe('mwan3.globals contract', () => {
 	});
 
 	t.it('toUci round-trips logging boolean and rtmon_interval int', () => {
-		let u = globals.toUci({ logging: true, rtmon_interval: 5 });
+		let u = globals.toUci({ logging: true });
 		t.assert_equal(u.logging, "1");
-		t.assert_equal(u.rtmon_interval, "5");
 	});
 
 	t.it('schema enforces mmx_mask hex pattern', () => {

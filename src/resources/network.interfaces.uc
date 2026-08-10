@@ -134,8 +134,7 @@ function toUci(json) {
 	// list form is required for multi-address static interfaces.
 	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
 		out.ipaddr = json.ipaddrs;
-	else if (json.ipaddr != null)
-		out.ipaddr = json.ipaddr;
+
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
 	if (type(json.dns) == "array" && length(json.dns) > 0) out.dns = json.dns;
@@ -170,85 +169,18 @@ function toUci(json) {
 	return out;
 }
 
-// The default merge folds the read view into the body, so a PATCH naming only
-// `ipaddr` arrived carrying the `ipaddrs` that had just been read, and toUci
-// preferred that list: the patch answered 200 and changed nothing. Whichever of
-// the two the caller actually named wins, and the other is dropped rather than
-// resurrected from the server's own read.
-function merge_for_patch(existing_json, body) {
-	let merged = { ...existing_json };
-	for (let k in body) {
-		if (type(merged[k]) == "object" && type(body[k]) == "object")
-			merged[k] = { ...merged[k], ...body[k] };
-		else
-			merged[k] = body[k];
-	}
-	let sent_scalar = exists(body, "ipaddr");
-	let sent_list = exists(body, "ipaddrs");
-	if (sent_scalar && !sent_list) delete merged.ipaddrs;
-	else if (sent_list && !sent_scalar) delete merged.ipaddr;
-	return merged;
-}
-
-// A full-replace caller cannot avoid sending both names disagreeing. fromUci
-// mirrors the first list entry into `ipaddr`, so the scalar is in the caller's
-// state even when its own config named only `ipaddrs`, and a PUT carries every
-// field it knows. Refusing that body made `ipaddrs` unchangeable through any
-// full-replace client. The list is the documented winner and toUci already
-// prefers it, so resolve to it here instead. PATCH has `merge_for_patch` to
-// express "did not name", and POST has no prior read to have carried a stale
-// scalar back, so both keep the 422.
-function resolve_for_replace(body) {
-	if (type(body) != "object" || type(body.ipaddrs) != "array"
-	    || length(body.ipaddrs) == 0 || body.ipaddr == null
-	    || body.ipaddr == "" || body.ipaddr == body.ipaddrs[0])
-		return body;
-
-	let out = { ...body };
-	delete out.ipaddr;
-	return out;
-}
-
 function validate(json, conn, id) {
 	let errs = [];
 
-	// `ipaddr` and `ipaddrs` are two wire names for the same `list ipaddr`, and
-	// toUci prefers the list whenever it is non-empty. A body carrying both, with
-	// the scalar naming a different address, is a contradiction: half of it was
-	// discarded and answered 200, so a caller re-reading saw its own write vanish
-	// rather than fail. Agreement is still accepted, which is what a faithful
-	// GET-then-PUT round trip sends.
-	let ips = json.ipaddrs;
-	if (type(ips) == "array" && length(ips) > 0
-	    && json.ipaddr != null && json.ipaddr != "" && json.ipaddr != ips[0])
-		push(errs, { field: "ipaddr", code: "conflict",
-		             message: sprintf(
-		               "conflicts with ipaddrs[0] (%J): both name the same uci option, so send one or the other",
-		               ips[0]) });
-
 	values.require_present(errs, json, "proto");
 
-	// Both `id` (the universal section-name input, since 2.2.0) and `name`
-	// (the original 2.1.0 wireguard-era field) are accepted at create. If
-	// both are supplied they must match. Charset / IFNAMSIZ-tightness is
-	// enforced here for `name`; `id` goes through the framework's
-	// validate_section_id which applies the broader uci section-name rules.
-	// In-package uniqueness is checked by the framework for either path.
+	// `id` is the universal section-name input and goes through the framework's
+	// validate_section_id for the broader uci section-name rules; the tighter IFNAMSIZ
+	// cap below applies only where netifd uses the section name as the kernel netdev name.
 	let push_ifnamsiz_err = function(field, ctx) {
 		push(errs, { field: field, code: "invalid_format",
 		             message: sprintf("must match [A-Za-z][A-Za-z0-9_]{0,14} (%s)", ctx) });
 	};
-	if (json.name != null) {
-		if (id != null)
-			push(errs, { field: "name", code: "read_only",
-			             message: "name can only be set at create time; rename via DELETE + POST" });
-		else if (type(json.name) != "string" || !match(json.name, IFNAMSIZ_RE))
-			push_ifnamsiz_err("name", "uci section name, IFNAMSIZ-tight");
-		if (id == null && json.id != null && json.name != null && json.id != json.name)
-			push(errs, { field: "name", code: "conflict",
-			             message: sprintf("id (%J) and name (%J) must match when both are supplied",
-			                              json.id, json.name) });
-	}
 	// Reject id at PATCH time (read-only post-create).
 	if (id != null && json.id != null && json.id != id)
 		push(errs, { field: "id", code: "read_only",
@@ -330,14 +262,11 @@ return {
 	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
 	// not the same condition, so the framework is told rather than guessing.
 	mgmt_path_guard: true,
-	merge_for_patch: merge_for_patch,
-	resolve_for_replace: resolve_for_replace,
 	// Caller-supplied name wins. proto=wireguard falls back to a 14-char
 	// wg_<rand> (netifd's IFNAMSIZ constraint); other protos return null
 	// so handler.create emits the standard 28-char ULID.
 	id_for_create: function(body) {
 		if (body == null) return null;
-		if (body.name != null) return body.name;
 		if (body.proto == "wireguard") return ids.new_id("wg", 11);
 		return null;
 	},
@@ -375,9 +304,6 @@ return {
 	schema_properties: {
 		proto: { type: "string", enum: keys(VALID_PROTOS), default: "none",
 		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it" },
-		name:      { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-		             deprecated: true,
-		             description: "DEPRECATED in 2.2.0: use `id` instead (the universal section-name input across every resource). Both are accepted during the deprecation window; if both are supplied they must match. `name` is scheduled for removal in v3. See docs/deprecations.md." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
 		device:    { type: ["string", "null"],

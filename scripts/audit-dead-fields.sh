@@ -92,11 +92,6 @@ snmpd.system.uc	sysServices	legacy key cleared on write, not a field
 unbound.server.uc	dnssec_enabled	legacy key cleared on write, not a field
 wireless.interfaces.uc	assoclist_count	runtime field, never written to uci
 wireless.interfaces.uc	txpower_actual	runtime field, never written to uci
-mwan3.globals.uc	local_source	announced for removal in v3
-mwan3.globals.uc	rtmon_interval	announced for removal in v3
-prometheus_node_exporter_lua.config.uc	listen_ipv6	announced for removal in v3
-usteer.config.uc	max_assoc_sta	announced for removal in v3
-vnstat.config.uc	Interface5MinHours	uci key of interface_5min_hours, announced for removal in v3
 system.uc	notes	read by LuCI (system.js), metadata by design, stays
 EOF
 }

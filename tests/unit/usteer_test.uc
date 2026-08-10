@@ -59,7 +59,4 @@ t.describe('usteer.config contract', () => {
 			t.assert_false(config.fromUci(sec(word)).enabled);
 	});
 
-	t.it('max_assoc_sta is flagged deprecated, since nothing reads it', () => {
-		t.assert_true(config.schema_properties.max_assoc_sta.deprecated);
 	});
-});

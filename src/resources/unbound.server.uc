@@ -19,7 +19,6 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		enabled: shell_bool(section.enabled, true),
 		listen_port: as_int(section.listen_port),
 		dhcp_link: section.dhcp_link ?? null,
 		add_local_fqdn: as_int(section.add_local_fqdn),
@@ -31,7 +30,6 @@ function fromUci(section) {
 		resource_limits: section.resource ?? null,
 		protocol: section.protocol ?? null,
 		query_minimize: shell_bool(section.query_minimize, false),
-		prefetch: shell_bool(section.prefetch, false),
 		manual_conf: (section.manual_conf != null) ? shell_bool(section.manual_conf, false) : null,
 		extended_stats: (section.extended_stats != null) ? shell_bool(section.extended_stats, false) : null,
 		interface_auto: (section.interface_auto != null) ? shell_bool(section.interface_auto, true) : null,
@@ -48,7 +46,6 @@ function fromUci(section) {
 
 function toUci(json) {
 	let out = {};
-	if (json.enabled != null)           out.enabled = json.enabled ? "1" : "0";
 	if (json.listen_port != null)       out.listen_port = "" + json.listen_port;
 	if (json.dhcp_link != null)         out.dhcp_link = json.dhcp_link;
 	if (json.add_local_fqdn != null)    out.add_local_fqdn = "" + json.add_local_fqdn;
@@ -64,7 +61,6 @@ function toUci(json) {
 	if (json.resource_limits != null)   out.resource = json.resource_limits;
 	if (json.protocol != null)          out.protocol = json.protocol;
 	if (json.query_minimize != null)    out.query_minimize = json.query_minimize ? "1" : "0";
-	if (json.prefetch != null)          out.prefetch = json.prefetch ? "1" : "0";
 	if (json.manual_conf != null)       out.manual_conf = json.manual_conf ? "1" : "0";
 	if (json.extended_stats != null)    out.extended_stats = json.extended_stats ? "1" : "0";
 	if (json.interface_auto != null)    out.interface_auto = json.interface_auto ? "1" : "0";
@@ -115,8 +111,6 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		enabled:           { deprecated: true, type: "boolean", default: true,
-		                     description: "Deprecated, removed in v3: nothing reads this. `enabled` is read only on `config zone`; the daemon itself is enabled through procd." },
 		listen_port:       { type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { type: "string", enum: keys(VALID_DHCP_LINK) },
 		add_local_fqdn:    { type: ["integer", "null"], minimum: 0, maximum: 4,
@@ -129,8 +123,6 @@ return {
 		                     description: "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)." },
 		protocol:          { type: "string", enum: keys(VALID_PROTOCOL) },
 		query_minimize:    { type: "boolean", default: false },
-		prefetch:          { deprecated: true, type: "boolean", default: false,
-		                     description: "Deprecated, removed in v3: nothing reads this. The only similar option is `prefetch_root`, a different feature; unbound's own `prefetch:` directive is derived from `recursion`, which this resource already exposes." },
 		rebind_protection: { type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
 		domain:            { type: ["string", "null"] },

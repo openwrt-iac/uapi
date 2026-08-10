@@ -136,8 +136,8 @@ const CASES = [
 		section: { dns: '1', '.type': 'host', mac: '00:11:22:33:44:66', ip: '192.168.1.51', tag: ['guest', 'iot'] },
 	},
 	{
-		// A `list mac`, the shape no fixture carried: `mac` is its head and `mac_aliases`
-		// the tail, so a single-valued seed cannot exercise the split at all.
+		// A `list mac`: more than one MAC on one reservation, which a single-valued
+		// seed cannot exercise.
 		file: "dhcp.hosts.uc", id: "h3", pkg: "dhcp",
 		section: { dns: '1', '.type': 'host', mac: ['00:11:22:33:44:77', 'aa:bb:cc:dd:ee:77'],
 		           ip: '192.168.1.52' },
@@ -187,7 +187,7 @@ const CASES = [
 	{
 		file: "unbound.server.uc", id: "ub", pkg: "unbound",
 		singleton: true,
-		section: { dnssec_enabled: '1', query_minimize: '1', prefetch: '1', '.type': 'unbound', enabled: '0', listen_port: '5353', recursion: 'default', resource: 'small', protocol: 'mixed' },
+		section: { dnssec_enabled: '1', query_minimize: '1', '.type': 'unbound', listen_port: '5353', recursion: 'default', resource: 'small', protocol: 'mixed' },
 	},
 	{
 		file: "unbound.srv.uc", id: "srv", pkg: "unbound_srv",
@@ -227,26 +227,22 @@ const CASES = [
 	{
 		file: "lldpd.config.uc", id: "cfg", pkg: "lldpd",
 		singleton: true,
-		section: { enable_cdp: '1', enable_fdp: '1', enable_sonmp: '1', enable_edp: '1', enable_lldpmed: '1', lldp_description: '0', lldp_capabilities: '0', '.type': 'lldpd', enable_lldp: '1', lldp_class: '4' },
+		section: { enable_cdp: '1', enable_fdp: '1', enable_sonmp: '1', enable_edp: '1', lldp_description: '0', lldp_capabilities: '0', '.type': 'lldpd', enable_lldp: '1', lldp_class: '4' },
 	},
 	{
 		file: "prometheus_node_exporter_lua.config.uc", id: "main", pkg: "prometheus-node-exporter-lua",
 		singleton: true,
-		section: { listen_ipv6: '1', cpu: '1', meminfo: '1', netdev: '1', loadavg: '1', filesystem: '1', diskstats: '1', uname: '1', netstat: '1', stat: '1', vmstat: '1', boottime: '1', entropy: '1', time: '1', hwmon: '1', textfile: '1', thermal_zone: '1', edac: '1', '.type': 'prometheus-node-exporter-lua', listen_interface: 'lan', listen_port: '9100' },
+		section: { '.type': 'prometheus-node-exporter-lua', listen_interface: 'lan', listen_port: '9100' },
 	},
 	{
 		file: "vnstat.config.uc", id: "cfg", pkg: "vnstat",
 		singleton: true,
-		section: { '.type': 'vnstat', DatabaseDir: '/var/lib/vnstat' },
-	},
-	{
-		file: "vnstat.interfaces.uc", id: "vi1", pkg: "vnstat",
-		section: { enabled: '0', '.type': 'interface', interface: 'lan' },
+		section: { '.type': 'vnstat', interface: ['br-lan'] },
 	},
 	{
 		file: "mwan3.globals.uc", id: "globals", pkg: "mwan3",
 		singleton: true,
-		section: { logging: '1', '.type': 'globals', mmx_mask: '0x3F00', rtmon_interval: '5' },
+		section: { logging: '1', '.type': 'globals', mmx_mask: '0x3F00' },
 	},
 	{
 		file: "mwan3.interfaces.uc", id: "mwan", pkg: "mwan3",

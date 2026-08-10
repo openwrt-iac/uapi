@@ -128,7 +128,6 @@ Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 | `lldpd/config` (singleton) | `config config` (lldpd) | LLDP/CDP/etc. toggles. |
 | `prometheus_node_exporter_lua/config` (singleton) | `config main` | listen + per-collector toggles. |
 | `vnstat/config` (singleton) | `config vnstat` | `interfaces`, the devices vnstat tracks. The other three fields are deprecated: they name keys of `/etc/vnstat.conf`, which nothing bridges from uci. |
-| `vnstat/interfaces` | `config interface` (vnstat) | Per-iface enable. |
 
 ## Packages (non-uci)
 

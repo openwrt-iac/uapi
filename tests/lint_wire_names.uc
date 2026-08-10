@@ -28,9 +28,8 @@ function read(path) {
 
 // Reason as the value, so a waiver has to say why it is one.
 const EXPECTED = {
-	"dhcp.hosts.uc:macs":                 "alias of mac, announced for v3",
-	"dhcp.hosts.uc:mac_aliases":          "alias of mac, announced for v3",
-	"network.interfaces.uc:ipaddrs":      "alias of ipaddr, announced for v3",
+	"dhcp.hosts.uc:macs":                 "rename: the uci option is the singular `mac` list",
+	"network.interfaces.uc:ipaddrs":      "rename: the uci option is the singular `ipaddr` list",
 
 	"dropbear.instances.uc:port":         "rename: uci spells it Port",
 	"dropbear.instances.uc:banner_file":  "rename: uci spells it BannerFile",
@@ -47,9 +46,6 @@ const EXPECTED = {
 	"snmpd.system.uc:sys_object_id":      "rename: uci spells it sysObjectID",
 	"snmpd.system.uc:sys_services":       "rename: uci spells it sysService",
 
-	"vnstat.config.uc:database_dir":      "rename: uci spells it DatabaseDir",
-	"vnstat.config.uc:interface_5min_hours": "rename: uci spells it Interface5MinHours",
-	"vnstat.config.uc:month_rotate":      "rename: uci spells it MonthRotate",
 	"vnstat.config.uc:interfaces":        "rename: the uci option is the singular `interface` list",
 
 	"unbound.server.uc:resource_limits":  "rename: `resource` is an HCL block keyword",
@@ -68,7 +64,7 @@ for (let e = dir.read(); e != null; e = dir.read())
 	if (substr(e, -3) == ".uc") push(files, e);
 dir.close();
 
-let problems = [], checked = 0;
+let problems = [], checked = 0, seen_names = {};
 
 for (let name in sort(files)) {
 	let src = read("src/resources/" + name);
@@ -93,15 +89,23 @@ for (let name in sort(files)) {
 		if (!consumed[p] || written[p]) continue;
 		checked++;
 		let key = name + ":" + p;
+		seen_names[key] = true;
 		if (!exists(EXPECTED, key))
 			push(problems, sprintf("%s: `%s` is read by toUci but never written under its own name, so it is an alias or a rename. Add it to EXPECTED with the reason, and if it is a second name for a key another field already writes, announce it for the next major first.", name, p));
 	}
 }
 
+// A waiver for a property that no longer exists is worse than no waiver: it reads as a
+// reviewed decision while covering nothing. Checking only the file let four entries outlive
+// the fields they described, so the property is checked too.
 for (let key in EXPECTED) {
 	let parts = split(key, ":");
-	if (!fs.stat("src/resources/" + parts[0]))
+	if (!fs.stat("src/resources/" + parts[0])) {
 		push(problems, sprintf("EXPECTED names %s, which no longer exists", parts[0]));
+		continue;
+	}
+	if (!seen_names[key])
+		push(problems, sprintf("EXPECTED names %s, which is no longer a wire name that differs from its uci key. Delete the entry.", key));
 }
 
 if (length(problems) > 0) {

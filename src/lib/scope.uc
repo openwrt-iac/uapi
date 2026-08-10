@@ -51,7 +51,6 @@ const KNOWN_PATHS = {
 	"prometheus_node_exporter_lua:config": true,
 	"vnstat": true,
 	"vnstat:config": true,
-	"vnstat:interfaces": true,
 	"mwan3": true,
 	"mwan3:globals": true,
 	"mwan3:interfaces": true,
