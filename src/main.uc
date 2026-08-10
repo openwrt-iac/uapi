@@ -61,7 +61,6 @@ const RESOURCES = {
 	"snmpd:com2secs":      handler.make(load_resource("snmpd:com2secs")),
 	"snmpd:groups":        handler.make(load_resource("snmpd:groups")),
 	"snmpd:accesses":      handler.make(load_resource("snmpd:accesses")),
-	"vnstat:interfaces":   handler.make(load_resource("vnstat:interfaces")),
 	"mwan3:interfaces":   handler.make(load_resource("mwan3:interfaces")),
 	"mwan3:members":      handler.make(load_resource("mwan3:members")),
 	"mwan3:policies":     handler.make(load_resource("mwan3:policies")),

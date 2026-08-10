@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Removed
+
+- **`dhcp/hosts.mac` and `dhcp/hosts.mac_aliases`.** `macs` is the only name, and it is the whole uci `list mac` as one array. Neither removed name was ever a uci option: `mac` was the list's first entry and `mac_aliases` the rest, so a client had to read two fields to learn what one reservation matched. Validation errors previously reported against `mac` now report against `macs`.
+
+- **`network/interfaces.name` as a create input.** Send `id`, the universal section-name input since 2.2.0. The `422 conflict` for a disagreeing `id` and `name` goes with the field.
+
+- **The 27 fields that wrote a uci option no OpenWrt component reads**, across `mwan3/globals`, `vnstat/config`, `lldpd/config`, `unbound/server`, `usteer/config` and `prometheus_node_exporter_lua/config`. Writes carrying them were already ignored, so nothing on the write side migrates; what changes is that they no longer appear in responses, where each carried a `default:` annotation an IaC client may have kept sticky. `prometheus_node_exporter_lua/config` loses 18 of its 20 fields and is now `listen_interface` and `listen_port`.
+
+- **`vnstat/interfaces`, the whole endpoint.** It modelled `config interface` sections, which vnstat never reads, so a `POST` answered 200 and changed nothing the daemon looked at. Use the `interfaces` array on `vnstat/config`, remembering the values differ in kind: the removed endpoint took uci interface names (`lan`), vnstat wants device names (`br-lan`).
+
+- **The compatibility machinery the above unlocks**: `merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and `network/interfaces`, `equal_list`, and the mirrored-pair conflict rules in both `validate`s. Each existed only to decide which of two names for one uci option the caller meant.
+
+### Added
+
+- `docs/migration-v2-to-v3.md`, and `make lint-wire-names` now fails on a waiver whose property no longer exists rather than only on one whose file is gone. Four entries had already outlived the fields they described, which is exactly the drift a waiver list is supposed to prevent.
+
 ## [2.5.0] - 2026-08-09
 
 ### Added

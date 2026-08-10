@@ -12,7 +12,6 @@ function fromUci(section) {
 		enable_fdp: shell_bool(section.enable_fdp, false),
 		enable_sonmp: shell_bool(section.enable_sonmp, false),
 		enable_edp: shell_bool(section.enable_edp, false),
-		enable_lldpmed: shell_bool(section.enable_lldpmed, false),
 		lldp_class: as_int(section.lldp_class),
 		lldp_description: section.lldp_description ?? null,
 		// lldpd reads `lldp_capability_advertisements`; uapi wrote `lldp_capabilities`,
@@ -29,8 +28,7 @@ function fromUci(section) {
 
 function toUci(json) {
 	let out = {};
-	let bool_fields = ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp",
-	                   "enable_lldpmed"];
+	let bool_fields = ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp"];
 	for (let f in bool_fields) {
 		if (json[f] != null) out[f] = json[f] ? "1" : "0";
 	}
@@ -68,8 +66,6 @@ return {
 		                     description: "Emit Nortel SONMP frames" },
 		enable_edp:        { type: "boolean", default: false,
 		                     description: "Emit Extreme Discovery Protocol frames" },
-		enable_lldpmed:    { deprecated: true, type: "boolean", default: false,
-		                     description: "Deprecated, removed in v3: nothing reads this. LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`), not a runtime option." },
 		lldp_class:        { type: "integer", minimum: 1, maximum: 4 },
 		// Free text, not a flag: lldpd.init reads it with config_get and emits it
 		// verbatim as the system description. Typed boolean, a write replaced the

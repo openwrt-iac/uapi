@@ -310,11 +310,13 @@ p.write_text(s)
 EOF
 }
 
+# v3 removed every deprecated property, so this plants one rather than stripping the reason
+# off a real field. The rule guards the next deprecation, which is the only kind there is now.
 mut_deprecated_no_reason() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-del d['components']['schemas']['DhcpHosts']['properties']['mac']['description']
+d['components']['schemas']['DhcpHosts']['properties']['ip']['deprecated'] = True
 json.dump(d, open(p, 'w'))
 EOF
 }

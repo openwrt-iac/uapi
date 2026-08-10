@@ -29,7 +29,6 @@ function fromUci(section) {
 		remote_update_interval:        as_int(section.remote_update_interval),
 		remote_node_timeout:           as_int(section.remote_node_timeout),
 		assoc_steering:                normalize_bool(section.assoc_steering, false),
-		max_assoc_sta:                 as_int(section.max_assoc_sta),
 		min_connect_snr:               as_int(section.min_connect_snr),
 		min_snr:                       as_int(section.min_snr),
 		min_snr_kick_delay:            as_int(section.min_snr_kick_delay),
@@ -67,7 +66,6 @@ function toUci(json) {
 	if (json.remote_update_interval != null)     out.remote_update_interval = "" + json.remote_update_interval;
 	if (json.remote_node_timeout != null)        out.remote_node_timeout = "" + json.remote_node_timeout;
 	if (json.assoc_steering != null)             out.assoc_steering = json.assoc_steering ? "1" : "0";
-	if (json.max_assoc_sta != null)              out.max_assoc_sta = "" + json.max_assoc_sta;
 	if (json.min_connect_snr != null)            out.min_connect_snr = "" + json.min_connect_snr;
 	if (json.min_snr != null)                    out.min_snr = "" + json.min_snr;
 	if (json.min_snr_kick_delay != null)         out.min_snr_kick_delay = "" + json.min_snr_kick_delay;
@@ -115,8 +113,6 @@ return {
 		remote_update_interval:        { type: ["integer", "null"], minimum: 0 },
 		remote_node_timeout:           { type: ["integer", "null"], minimum: 0 },
 		assoc_steering:                { type: "boolean", default: false },
-		max_assoc_sta:                 { deprecated: true, type: ["integer", "null"], minimum: 0, maximum: 255,
-		                                 description: "Deprecated, removed in v3: nothing reads this. usteer's init forwards a fixed list of uci options to the daemon over ubus and this is not on it; the daemon's own `max_assoc` knob is not bridged from uci at all." },
 		min_connect_snr:               { type: ["integer", "null"], description: "Refuse association below this SNR (dBm)." },
 		min_snr:                       { type: ["integer", "null"], description: "Disconnect clients below this SNR (dBm)." },
 		min_snr_kick_delay:            { type: ["integer", "null"], minimum: 0 },

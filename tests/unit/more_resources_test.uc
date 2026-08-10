@@ -129,53 +129,12 @@ t.describe('network.interfaces', () => {
 
 	// v2.0.2 C1: caller-supplied `name` for wireguard interfaces.
 	const WG = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";  // example key
-	t.it('validate accepts a wireguard interface with a valid short name', () => {
-		let errs = interfaces.validate({ proto: 'wireguard', name: 'wg_prod',
-			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
-		t.assert_equal(length(errs), 0);
-	});
-
-	t.it('validate accepts `name` on any proto (LuCI parity)', () => {
-		let errs_static = interfaces.validate({ proto: 'static', name: 'lan',
-			ipaddr: '192.168.1.1' }, null);
-		let ne_static = filter(errs_static, function(e) { return e.field == "name"; });
-		t.assert_equal(length(ne_static), 0);
-
-		let errs_dhcp = interfaces.validate({ proto: 'dhcp', name: 'wan' }, null);
-		let ne_dhcp = filter(errs_dhcp, function(e) { return e.field == "name"; });
-		t.assert_equal(length(ne_dhcp), 0);
-	});
-
-	t.it('validate rejects `name` that fails the IFNAMSIZ pattern', () => {
-		let errs = interfaces.validate({ proto: 'wireguard',
-			name: 'this-name-is-way-too-long-and-hyphenated',
-			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'invalid_format');
-	});
-
-	t.it('validate rejects `name` of length 16', () => {
-		let errs = interfaces.validate({ proto: 'wireguard',
-			name: 'wg_16chars_total',  // length 16
-			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'invalid_format');
-	});
-
-	t.it('validate rejects `name` of length 0 / empty string', () => {
-		let errs = interfaces.validate({ proto: 'wireguard', name: '',
-			private_key: WG, addresses: ['10.0.0.1/24'] }, null);
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'invalid_format');
-	});
-
-	t.it('validate rejects `name` on PATCH (id != null) - rename via DELETE+POST only', () => {
-		let errs = interfaces.validate({ proto: 'wireguard', name: 'wg1',
-			private_key: WG, addresses: ['10.0.0.1/24'] }, null, "wg0");
-		let ne = filter(errs, function(e) { return e.field == "name"; });
-		t.assert_equal(ne[0].code, 'read_only');
-	});
-
+	
+	
+	
+	
+	
+	
 	// 2.2.0: `name` is deprecated in favour of `id`. Both accepted during
 	// the deprecation window; must match if both supplied.
 	t.it('validate accepts id alone (the 2.2.0 canonical input)', () => {
@@ -191,13 +150,7 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(ne), 0);
 	});
 
-	t.it('validate rejects mismatched id and name', () => {
-		let errs = interfaces.validate({ proto: 'static', id: 'lan', name: 'wan',
-			ipaddr: '192.168.1.1' }, null);
-		let ne = filter(errs, function(e) { return e.field == "name" && e.code == "conflict"; });
-		t.assert_equal(length(ne), 1);
-	});
-
+	
 	t.it('validate rejects id that exceeds IFNAMSIZ for proto=wireguard', () => {
 		let errs = interfaces.validate({ proto: 'wireguard',
 			id: 'this_is_way_too_long_for_ifnamsiz',
@@ -206,15 +159,7 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(ie), 1);
 	});
 
-	t.it('id_for_create echoes the caller-supplied name regardless of proto', () => {
-		// Iterates so a future proto-specific normalisation (lowercase,
-		// prefix, etc.) would surface as a divergence between protos.
-		for (let proto in ['wireguard', 'static', 'dhcp', 'pppoe']) {
-			t.assert_equal(interfaces.id_for_create({ proto: proto, name: 'lan' }), 'lan',
-			               sprintf("proto=%s should echo name", proto));
-		}
-	});
-
+	
 	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent and proto=wireguard', () => {
 		let id = interfaces.id_for_create({ proto: 'wireguard' });
 		t.assert_equal(length(id), 14);
@@ -622,9 +567,11 @@ t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () 
 		t.assert_deep_equal(u.ipaddr, ['192.168.1.1', '192.168.1.2']);
 	});
 
-	t.it('toUci: bare ipaddr (string) writes a uci option', () => {
+	// `ipaddr` is read-only from v3: it is the first entry of the uci list, and a body
+	// carrying it writes nothing. `ipaddrs` is the only write name.
+	t.it('toUci: a bare ipaddr is ignored, since only ipaddrs writes', () => {
 		let u = interfaces.toUci({ proto: 'static', ipaddr: '192.168.1.1' });
-		t.assert_equal(u.ipaddr, '192.168.1.1');
+		t.assert_equal(u.ipaddr, null);
 	});
 
 	t.it('validate: ipaddrs with bad entries reports per-index invalid_format', () => {
@@ -779,131 +726,7 @@ t.describe('firewall.redirects SNAT', () => {
 	});
 });
 
-// `ipaddr` and `ipaddrs` are two wire names for one `list ipaddr`, and toUci
-// prefers the list. A body carrying both with a differing scalar had half of it
-// discarded and answered 200, so the caller re-read the value it sent and saw its
-// write vanish. That is the shape a Terraform optional+computed attribute
-// produces on every apply: the previously-read list travels beside the changed
-// scalar, so the address could never be changed through `ipaddr`.
-t.describe('network.interfaces ipaddr vs ipaddrs', () => {
-	let ifaces = loadfile('src/resources/network.interfaces.uc')();
 
-	function conflicts(body) {
-		return filter(ifaces.validate(body, null),
-		              function(e) { return e.field == "ipaddr" && e.code == "conflict"; });
-	}
-
-	t.it('rejects a body whose scalar disagrees with the list', () => {
-		let e = conflicts({ proto: 'static', ipaddr: '10.9.9.9', ipaddrs: ['192.0.2.4'] });
-		t.assert_equal(length(e), 1);
-	});
-
-	// What a faithful GET-then-PUT round trip sends, so it has to keep working.
-	t.it('accepts agreement between the scalar and the first entry', () => {
-		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '192.0.2.4',
-		                                  ipaddrs: ['192.0.2.4'] })), 0);
-	});
-
-	t.it('accepts a multi-address list whose first entry matches the scalar', () => {
-		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '192.0.2.4',
-		                                  ipaddrs: ['192.0.2.4', '10.0.0.7'] })), 0);
-	});
-
-	t.it('accepts either field alone', () => {
-		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '10.9.9.9' })), 0);
-		t.assert_equal(length(conflicts({ proto: 'static', ipaddrs: ['10.9.9.9'] })), 0);
-	});
-
-	t.it('treats an empty list as no list, so the scalar stands', () => {
-		t.assert_equal(length(conflicts({ proto: 'static', ipaddr: '10.9.9.9', ipaddrs: [] })), 0);
-	});
-
-	// The default merge folded the read view in, so a PATCH naming only the scalar
-	// arrived carrying the ipaddrs just read and lost to it: 200, nothing changed.
-	t.it('a patch naming only the scalar drops the list read off the server', () => {
-		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
-		                                    { ipaddr: '10.9.9.9' });
-		t.assert_equal(merged.ipaddr, '10.9.9.9');
-		t.assert_equal(merged.ipaddrs, null);
-		t.assert_equal(ifaces.toUci(merged).ipaddr, '10.9.9.9');
-	});
-
-	t.it('a patch naming only the list drops the stale scalar', () => {
-		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
-		                                    { ipaddrs: ['10.0.0.1', '10.0.0.2'] });
-		t.assert_equal(merged.ipaddr, null);
-		t.assert_deep_equal(ifaces.toUci(merged).ipaddr, ['10.0.0.1', '10.0.0.2']);
-	});
-
-	t.it('a patch naming both keeps both, so the conflict is still caught', () => {
-		let merged = ifaces.merge_for_patch({ ipaddr: '192.0.2.4', ipaddrs: ['192.0.2.4'] },
-		                                    { ipaddr: '10.9.9.9', ipaddrs: ['192.0.2.4'] });
-		t.assert_equal(length(conflicts({ ...merged, proto: 'static' })), 1);
-	});
-});
-
-// JSON Patch never went through merge_for_patch, so a single `replace /ipaddr`
-// produced a document asserting both names with different values and was refused:
-// a legitimate op made impossible. Both patch flavours now resolve the alias the
-// same way, off the fields the ops actually name.
-t.describe('network.interfaces ipaddr under JSON Patch', () => {
-	let ifaces = loadfile('src/resources/network.interfaces.uc')();
-	let handler = require('handler');
-
-	function make() {
-		return handler.make(ifaces, {
-			tx: {
-				acquire: function() { return {}; },
-				release: function() {},
-				reload: function() { return null; },
-				check_services: function() { return null; },
-			},
-		});
-	}
-
-	function conn() {
-		return ubus.stub({ uci: { network: {
-			iptest: { '.type': 'interface', '.anonymous': false,
-			          proto: 'static', ipaddr: ['192.0.2.4'], netmask: '255.255.255.0' },
-		} } });
-	}
-
-	function ctx() { return { request_id: "01hx0000000000000000000000", json_patch: true }; }
-
-	t.it('replacing only /ipaddr applies, rather than conflicting with the read view', () => {
-		let c = conn();
-		let r = make().patch(c, ctx(), 'iptest',
-		                     [{ op: 'replace', path: '/ipaddr', value: '10.9.9.9' }]);
-		t.assert_equal(r.status, 200);
-		t.assert_equal(c.uci_get('network', 'iptest', 'ipaddr'), '10.9.9.9');
-	});
-
-	t.it('replacing only /ipaddrs still applies the list', () => {
-		let c = conn();
-		let r = make().patch(c, ctx(), 'iptest',
-		                     [{ op: 'replace', path: '/ipaddrs', value: ['10.1.1.1', '10.2.2.2'] }]);
-		t.assert_equal(r.status, 200);
-		t.assert_deep_equal(c.uci_get('network', 'iptest', 'ipaddr'), ['10.1.1.1', '10.2.2.2']);
-	});
-
-	// A patch that really does assert both, disagreeing, is still a contradiction.
-	t.it('replacing both with different addresses is still refused', () => {
-		let r = make().patch(conn(), ctx(), 'iptest', [
-			{ op: 'replace', path: '/ipaddr', value: '10.9.9.9' },
-			{ op: 'replace', path: '/ipaddrs', value: ['192.0.2.4'] },
-		]);
-		t.assert_equal(r.status, 422);
-	});
-
-	t.it('a patch on an unrelated field leaves the address alone', () => {
-		let c = conn();
-		let r = make().patch(c, ctx(), 'iptest',
-		                     [{ op: 'replace', path: '/netmask', value: '255.255.0.0' }]);
-		t.assert_equal(r.status, 200);
-		t.assert_equal(c.uci_get('network', 'iptest', 'netmask'), '255.255.0.0');
-		t.assert_deep_equal(c.uci_get('network', 'iptest', 'ipaddr'), ['192.0.2.4']);
-	});
-});
 
 // Both messages stated enum sets their constants contradict: `protocol` advertised
 // `auto`, which the validator rejects, and omitted three values it accepts, while

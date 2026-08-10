@@ -1,14 +1,10 @@
 let values = require('values');
-let as_int = values.as_int;
 let as_list = values.as_list;
 
 function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		database_dir:        section.DatabaseDir ?? null,
-		interface_5min_hours: as_int(section.Interface5MinHours),
-		month_rotate:        as_int(section.MonthRotate),
 		// The only option vnstat's init actually reads. It walks `config vnstat` sections
 		// and takes the `list interface` inside them (vnstat.init:21,28), then runs
 		// `vnstat --add -i <name>` per entry. Values are DEVICE names as the kernel shows
@@ -20,9 +16,6 @@ function fromUci(section) {
 
 function toUci(json) {
 	let out = {};
-	if (json.database_dir != null)         out.DatabaseDir = json.database_dir;
-	if (json.interface_5min_hours != null) out.Interface5MinHours = "" + json.interface_5min_hours;
-	if (json.month_rotate != null)         out.MonthRotate = "" + json.month_rotate;
 	if (json.interfaces != null)           out.interface = json.interfaces;
 	return out;
 }
@@ -48,12 +41,6 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		database_dir:         { deprecated: true, type: "string",
-		                        description: "Deprecated, removed in v3: nothing reads this. vnstat's database directory is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it." },
-		interface_5min_hours: { deprecated: true, type: "integer", minimum: 0,
-		                        description: "Deprecated, removed in v3: nothing reads this. 5-minute retention is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it." },
-		month_rotate:         { deprecated: true, type: "integer", minimum: 1, maximum: 31,
-		                        description: "Deprecated, removed in v3: nothing reads this. The monthly rollover day is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it." },
 		interfaces:           { type: "array", items: { type: "string" },
 		                        description: "Devices vnstat tracks, as the kernel names them (`br-lan`, `eth0`), not uci interface names. This is the only vnstat option any shipped code reads; see docs/deprecations.md for why `vnstat/interfaces` is being removed in favour of it." },
 	},

@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "2.5.0",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v3 (announced, not yet in effect)\n\nThis major accepts both forms for everything below; v3 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.name` as a create input** - send `id`. Flagged `deprecated: true` on the property, so a generator warns.\n- **`network/interfaces.ipaddr` as a write input** - send `ipaddrs`. Not flagged, because the field survives as a read; v3 makes it `readOnly`.\n- **List-valued fields will read back `null`, not `[]`, when the uci key is absent.** This is a convention change across every curated resource, so it carries no per-field flag: uci cannot store an empty list, so `[]` already means absent and distinguishes nothing. A client generated against the current `{\"type\": \"array\"}` schema will fail response validation in v3 unless it accepts null.\n- **`dhcp/hosts.tag` will stop accepting a space-separated string on write.** Responses are already always an array, including for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. The string remains valid in a request because the 2.4.1 spec declared one; v3 drops it and the field becomes array-only in both directions.\n- **`dhcp/hosts.mac`** - send and read `macs`, the whole uci `list mac` as one array. `mac` was its first entry only, so a client had to read two fields to learn what a reservation matched. Flagged `deprecated: true`; unlike `network/interfaces.ipaddr` it does not survive as a read, because uci has no scalar `mac` option on a host for it to correspond to.\n- **`vnstat/interfaces` will be removed as an endpoint** - use the `interfaces` array on the `vnstat/config` singleton, added in 2.5.0. The endpoint has never worked: uapi models `config interface` sections while vnstat only reads a `list interface` inside `config vnstat`, so a POST returns 200 and changes nothing the daemon looks at. Note the values differ in kind, not just in location: the old endpoint took uci interface names (`lan`), vnstat wants device names (`br-lan`).\n- **`dhcp/hosts.mac_aliases`** - send and read `macs`. This held every entry of the same `list mac` after the first, and was the one place in the API where a uci list option did not surface as a JSON array. Flagged `deprecated: true`, and removed rather than kept as a read for the same reason as `mac`.\n- **Fields that write a uci option no OpenWrt component reads will be removed** - `mwan3/globals.rtmon_interval` and `local_source`, `vnstat/config.database_dir`, `interface_5min_hours` and `month_rotate`, `lldpd/config.enable_lldpmed`, `unbound/server.enabled` and `prefetch`, `prometheus_node_exporter_lua/config.listen_ipv6` plus its seventeen collector toggles, and `usteer/config.max_assoc_sta`. Each was modelled against an option name the owning daemon does not consult, so writing it has never had any effect, and there is nothing to repoint them at. Requests carrying these keys are already ignored; the read side is what changes, since each is currently returned with a `default:` annotation.\n- **`managed` leaves the request half of every resource schema** - it is derived from uci's `.anonymous` flag and no write path reads it, so `PUT` with `managed: false` has always answered 200 with `managed: true`. It is annotated `readOnly` from 2.5.0, so a regenerated client already stops sending it; v3 completes the split.\n- **Each resource gains a separate request schema and response schema** - one schema serves both directions today, which is why `dhcp/hosts.tag` keeps `string` in its type for writers while responses are always an array, and why `network/interfaces.ipaddr` is described in prose rather than as `readOnly`. Generated model names change for every resource.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v3 (announced, not yet in effect)\n\nThis major accepts both forms for everything below; v3 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.name` as a create input** - send `id`. Flagged `deprecated: true` on the property, so a generator warns.\n- **`network/interfaces.ipaddr` as a write input** - send `ipaddrs`. Not flagged, because the field survives as a read; v3 makes it `readOnly`.\n- **List-valued fields will read back `null`, not `[]`, when the uci key is absent.** This is a convention change across every curated resource, so it carries no per-field flag: uci cannot store an empty list, so `[]` already means absent and distinguishes nothing. A client generated against the current `{\"type\": \"array\"}` schema will fail response validation in v3 unless it accepts null.\n- **`dhcp/hosts.tag` will stop accepting a space-separated string on write.** Responses are already always an array, including for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. The string remains valid in a request because the 2.4.1 spec declared one; v3 drops it and the field becomes array-only in both directions.\n- **`dhcp/hosts.mac`** - send and read `macs`, the whole uci `list mac` as one array. `mac` was its first entry only, so a client had to read two fields to learn what a reservation matched. Flagged `deprecated: true`; unlike `network/interfaces.ipaddr` it does not survive as a read, because uci has no scalar `mac` option on a host for it to correspond to.\n- **`dhcp/hosts.mac_aliases`** - send and read `macs`. This held every entry of the same `list mac` after the first, and was the one place in the API where a uci list option did not surface as a JSON array. Flagged `deprecated: true`, and removed rather than kept as a read for the same reason as `mac`.\n- **`managed` leaves the request half of every resource schema** - it is derived from uci's `.anonymous` flag and no write path reads it, so `PUT` with `managed: false` has always answered 200 with `managed: true`. It is annotated `readOnly` from 2.5.0, so a regenerated client already stops sending it; v3 completes the split.\n- **Each resource gains a separate request schema and response schema** - one schema serves both directions today, which is why `dhcp/hosts.tag` keeps `string` in its type for writers while responses are always an array, and why `network/interfaces.ipaddr` is described in prose rather than as `readOnly`. Generated model names change for every resource.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/raspbeguy/uapi"
@@ -15318,561 +15318,6 @@
 				]
 			}
 		},
-		"/vnstat/interfaces": {
-			"get": {
-				"summary": "List interfaces",
-				"parameters": [
-					{
-						"name": "managed",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"enum": [
-								"true",
-								"false"
-							]
-						},
-						"description": "Filter by managed flag"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "OK",
-						"headers": {
-							"Link": {
-								"$ref": "#/components/headers/Link"
-							},
-							"X-Next-Cursor": {
-								"$ref": "#/components/headers/XNextCursor"
-							},
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							}
-						},
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/VnstatInterfaces"
-									}
-								}
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true,
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`)."
-			},
-			"post": {
-				"summary": "Create a interfaces",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/VnstatInterfaces"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Created",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VnstatInterfaces"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"Idempotent-Replayed": {
-								"$ref": "#/components/headers/IdempotentReplayed"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true,
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`)."
-			}
-		},
-		"/vnstat/interfaces/{id}": {
-			"parameters": [
-				{
-					"name": "id",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string"
-					},
-					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
-				}
-			],
-			"get": {
-				"summary": "Get one interfaces",
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`).\n\nSupports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VnstatInterfaces"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"304": {
-						"description": "If-None-Match matched current ETag",
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true
-			},
-			"put": {
-				"summary": "Replace a interfaces",
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`).\n\nHonors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/VnstatInterfaces"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Replaced",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VnstatInterfaces"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true
-			},
-			"patch": {
-				"summary": "Partially update a interfaces",
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`).\n\nDefault content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"type": "object",
-								"description": "merge-patch partial body"
-							}
-						},
-						"application/json-patch+json": {
-							"schema": {
-								"$ref": "#/components/schemas/JsonPatch"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Updated",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VnstatInterfaces"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true
-			},
-			"delete": {
-				"summary": "Delete a interfaces",
-				"responses": {
-					"204": {
-						"description": "Deleted",
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true,
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`)."
-			}
-		},
-		"/vnstat/interfaces/{id}/adopt": {
-			"parameters": [
-				{
-					"name": "id",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string"
-					},
-					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
-				}
-			],
-			"post": {
-				"summary": "Adopt an anonymous vnstat interface",
-				"description": "Removed in v3: this endpoint models `config interface` sections, which vnstat never reads. Use the `interfaces` array on the `vnstat/config` singleton. Note the values differ in kind: this took uci interface names (`lan`), vnstat wants device names (`br-lan`).\n\nAdopt an anonymous vnstat interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
-				"responses": {
-					"200": {
-						"description": "Adopted",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VnstatInterfaces"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"Idempotent-Replayed": {
-								"$ref": "#/components/headers/IdempotentReplayed"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Vnstat / Interfaces"
-				],
-				"deprecated": true
-			}
-		},
 		"/mwan3/globals": {
 			"get": {
 				"summary": "Get the mwan3 singleton",
@@ -22501,12 +21946,6 @@
 						},
 						"readOnly": true
 					},
-					"name": {
-						"type": "string",
-						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,14}$",
-						"deprecated": true,
-						"description": "DEPRECATED in 2.2.0: use `id` instead (the universal section-name input across every resource). Both are accepted during the deprecation window; if both are supplied they must match. `name` is scheduled for removal in v3. See docs/deprecations.md."
-					},
 					"addresses": {
 						"type": "array",
 						"items": {
@@ -23378,24 +22817,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "MAC addresses for this reservation (the uci list mac). Wins over mac and mac_aliases when non-empty."
-					},
-					"mac": {
-						"type": [
-							"string",
-							"null"
-						],
-						"pattern": "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: use macs. First entry of the uci list mac. macs wins when both are sent."
-					},
-					"mac_aliases": {
-						"type": "array",
-						"items": {
-							"type": "string"
-						},
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: use macs. Entries of the uci list mac after the first. macs wins when both are sent."
+						"description": "MAC addresses for this reservation, the whole uci `list mac`."
 					},
 					"duid": {
 						"type": [
@@ -23460,11 +22882,6 @@
 							{
 								"required": [
 									"macs"
-								]
-							},
-							{
-								"required": [
-									"mac"
 								]
 							},
 							{
@@ -24213,12 +23630,6 @@
 						"type": "boolean",
 						"readOnly": true
 					},
-					"enabled": {
-						"deprecated": true,
-						"type": "boolean",
-						"default": true,
-						"description": "Deprecated, removed in v3: nothing reads this. `enabled` is read only on `config zone`; the daemon itself is enabled through procd."
-					},
 					"listen_port": {
 						"type": "integer",
 						"minimum": 1,
@@ -24289,12 +23700,6 @@
 					"query_minimize": {
 						"type": "boolean",
 						"default": false
-					},
-					"prefetch": {
-						"deprecated": true,
-						"type": "boolean",
-						"default": false,
-						"description": "Deprecated, removed in v3: nothing reads this. The only similar option is `prefetch_root`, a different feature; unbound's own `prefetch:` directive is derived from `recursion`, which this resource already exposes."
 					},
 					"manual_conf": {
 						"type": "boolean",
@@ -24776,12 +24181,6 @@
 						"default": false,
 						"description": "Emit Extreme Discovery Protocol frames"
 					},
-					"enable_lldpmed": {
-						"deprecated": true,
-						"type": "boolean",
-						"default": false,
-						"description": "Deprecated, removed in v3: nothing reads this. LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`), not a runtime option."
-					},
 					"lldp_class": {
 						"type": "integer",
 						"minimum": 1,
@@ -24832,12 +24231,6 @@
 						"type": "boolean",
 						"readOnly": true
 					},
-					"listen_ipv6": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The IPv6 bind is derived from listen_interface."
-					},
 					"listen_interface": {
 						"type": "string",
 						"description": "Bind to a specific network interface (uci interface name)"
@@ -24851,108 +24244,6 @@
 					"runtime": {
 						"type": "object",
 						"readOnly": true
-					},
-					"cpu": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The cpu collector is enabled by its .lua file being present, not by uci."
-					},
-					"meminfo": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The meminfo collector is enabled by its .lua file being present, not by uci."
-					},
-					"netdev": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The netdev collector is enabled by its .lua file being present, not by uci."
-					},
-					"loadavg": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The loadavg collector is enabled by its .lua file being present, not by uci."
-					},
-					"filesystem": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The filesystem collector is enabled by its .lua file being present, not by uci."
-					},
-					"diskstats": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The diskstats collector is enabled by its .lua file being present, not by uci."
-					},
-					"uname": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The uname collector is enabled by its .lua file being present, not by uci."
-					},
-					"netstat": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The netstat collector is enabled by its .lua file being present, not by uci."
-					},
-					"stat": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The stat collector is enabled by its .lua file being present, not by uci."
-					},
-					"vmstat": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The vmstat collector is enabled by its .lua file being present, not by uci."
-					},
-					"boottime": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The boottime collector is enabled by its .lua file being present, not by uci."
-					},
-					"entropy": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The entropy collector is enabled by its .lua file being present, not by uci."
-					},
-					"time": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The time collector is enabled by its .lua file being present, not by uci."
-					},
-					"hwmon": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The hwmon collector is enabled by its .lua file being present, not by uci."
-					},
-					"textfile": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The textfile collector is enabled by its .lua file being present, not by uci."
-					},
-					"thermal_zone": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The thermal_zone collector is enabled by its .lua file being present, not by uci."
-					},
-					"edac": {
-						"type": "boolean",
-						"default": false,
-						"deprecated": true,
-						"description": "Deprecated, removed in v3: nothing reads this. The edac collector is enabled by its .lua file being present, not by uci."
 					}
 				}
 			},
@@ -24970,24 +24261,6 @@
 						"type": "boolean",
 						"readOnly": true
 					},
-					"database_dir": {
-						"deprecated": true,
-						"type": "string",
-						"description": "Deprecated, removed in v3: nothing reads this. vnstat's database directory is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
-					},
-					"interface_5min_hours": {
-						"deprecated": true,
-						"type": "integer",
-						"minimum": 0,
-						"description": "Deprecated, removed in v3: nothing reads this. 5-minute retention is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
-					},
-					"month_rotate": {
-						"deprecated": true,
-						"type": "integer",
-						"minimum": 1,
-						"maximum": 31,
-						"description": "Deprecated, removed in v3: nothing reads this. The monthly rollover day is a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it."
-					},
 					"interfaces": {
 						"type": "array",
 						"items": {
@@ -25000,37 +24273,6 @@
 						"readOnly": true
 					}
 				}
-			},
-			"VnstatInterfaces": {
-				"type": "object",
-				"description": "uapi resource backed by uci vnstat.interface",
-				"properties": {
-					"id": {
-						"type": "string",
-						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
-					},
-					"managed": {
-						"type": "boolean",
-						"readOnly": true
-					},
-					"interface": {
-						"type": "string",
-						"description": "Network interface to track (must exist in network/interfaces)"
-					},
-					"enabled": {
-						"type": "boolean",
-						"default": true,
-						"description": "Whether vnstat tracks this interface"
-					},
-					"runtime": {
-						"type": "object",
-						"readOnly": true
-					}
-				},
-				"required": [
-					"interface"
-				]
 			},
 			"Mwan3Globals": {
 				"type": "object",
@@ -25054,14 +24296,6 @@
 						"pattern": "^0x[0-9A-Fa-f]+$",
 						"description": "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)."
 					},
-					"local_source": {
-						"deprecated": true,
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Deprecated, removed in v3: nothing reads this. The live knob is `source_routing`, a boolean about route-line parsing, not an interface name, so there is nothing to rename this to."
-					},
 					"logging": {
 						"type": "boolean",
 						"default": false,
@@ -25083,16 +24317,6 @@
 							"debug"
 						],
 						"description": "syslog facility level (notice/info/debug/etc.)."
-					},
-					"rtmon_interval": {
-						"deprecated": true,
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 1,
-						"maximum": 86400,
-						"description": "Deprecated, removed in v3: nothing reads this. `mwan3rtmon` is driven by `ip monitor route`, so there is no polling interval to set."
 					},
 					"runtime": {
 						"type": "object",
@@ -25602,16 +24826,6 @@
 					"assoc_steering": {
 						"type": "boolean",
 						"default": false
-					},
-					"max_assoc_sta": {
-						"deprecated": true,
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 255,
-						"description": "Deprecated, removed in v3: nothing reads this. usteer's init forwards a fixed list of uci options to the daemon over ubus and this is not on it; the daemon's own `max_assoc` knob is not bridged from uci at all."
 					},
 					"min_connect_snr": {
 						"type": [

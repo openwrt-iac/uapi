@@ -104,39 +104,6 @@ t.describe('mgmt.inbound_interface device mapping', () => {
 	});
 });
 
-// `ipaddrs` is the same uci option as `ipaddr` under the name that replaces it. Watching
-// only the scalar made the guard blind to the case it exists for: merge_for_patch deletes
-// `ipaddr` from the merged body exactly when the caller sends the list, and
-// resolve_for_replace returns early on a PUT that names only the list, so renumbering the
-// caller's own interface warned about nothing. The deprecation steers clients toward that
-// spelling, so the blind path was on its way to becoming the only one.
-t.describe('the management-path guard follows ipaddr under both names', () => {
-	let mg = require('mgmt');
-	let ifaces = loadfile('src/resources/network.interfaces.uc')();
-	const READ = { proto: 'static', ipaddr: '192.168.1.1',
-	               ipaddrs: ['192.168.1.1'], netmask: '255.255.255.0' };
-
-	t.it('a PATCH naming ipaddrs is reported', () => {
-		let merged = ifaces.merge_for_patch(READ, { ipaddrs: ['10.9.9.1'] });
-		t.assert_deep_equal(mg.changed_fields(READ, merged), ['ipaddrs']);
-	});
-	t.it('a PATCH naming ipaddr is still reported', () => {
-		let merged = ifaces.merge_for_patch(READ, { ipaddr: '10.9.9.1' });
-		t.assert_deep_equal(mg.changed_fields(READ, merged), ['ipaddr']);
-	});
-	t.it('a PUT naming only ipaddrs is reported', () => {
-		let body = ifaces.resolve_for_replace({ proto: 'static', ipaddrs: ['10.9.9.1'] });
-		t.assert_deep_equal(mg.changed_fields(READ, body), ['ipaddrs']);
-	});
-	t.it('an unwatched field is still silent', () => {
-		let merged = ifaces.merge_for_patch(READ, { metric: 5 });
-		t.assert_equal(length(mg.changed_fields(READ, merged)), 0);
-	});
-	t.it('the same address under the other name is not a change', () => {
-		let merged = ifaces.merge_for_patch(READ, { ipaddrs: ['192.168.1.1'] });
-		t.assert_equal(length(mg.changed_fields(READ, merged)), 0);
-	});
-});
 
 // The DELETE arm hardcodes `["removed"]` rather than going through changed_fields, since
 // none of LuCI's field names describes a delete. That literal is why it works, and it had

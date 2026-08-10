@@ -88,6 +88,7 @@ CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-s
 | Release process (signed tags, multi-arch build, feed publication) | `docs/release-process.md` | Cutting a tag or troubleshooting a release workflow. |
 | Lock-state audit (the transaction and token paths; 17 of 36 sites, see the doc) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
 | Migration v1 to v2 (rename map, breaking changes) | `docs/migration-v1-to-v2.md` | Supporting operators upgrading across the v2 boundary. |
+| Migration v2 to v3 (removals, the `/api/v3` prefix, schema split) | `docs/migration-v2-to-v3.md` | Supporting operators upgrading across the v3 boundary. |
 | Field-level deprecation log | `docs/deprecations.md` | Renaming or removing a wire-surface field. |
 | Roadmap (shipped, in-flight, deferred, out of scope) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |
 

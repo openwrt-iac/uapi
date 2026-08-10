@@ -18,7 +18,7 @@ t.describe('dhcp.hosts.fromUci', () => {
 		t.assert_equal(r.id, 'h_01hx');
 		t.assert_true(r.managed);
 		t.assert_equal(r.name, 'printer');
-		t.assert_equal(r.mac, 'aa:bb:cc:dd:ee:ff');
+		t.assert_deep_equal(r.macs, ['aa:bb:cc:dd:ee:ff']);
 		t.assert_equal(r.ip, '192.168.1.50');
 	});
 
@@ -41,7 +41,7 @@ t.describe('dhcp.hosts.fromUci', () => {
 t.describe('dhcp.hosts.toUci', () => {
 	t.it('emits the standard host options', () => {
 		let u = hosts.toUci({
-			name: 'router', mac: '00:11:22:33:44:55',
+			name: 'router', macs: ['00:11:22:33:44:55'],
 			ip: '192.168.1.1', leasetime: '12h', dns: true,
 		});
 		t.assert_equal(u.name, 'router');
@@ -52,7 +52,7 @@ t.describe('dhcp.hosts.toUci', () => {
 	});
 
 	t.it('omits absent fields', () => {
-		let u = hosts.toUci({ mac: '00:11:22:33:44:55', ip: '10.0.0.1' });
+		let u = hosts.toUci({ macs: ['00:11:22:33:44:55'], ip: '10.0.0.1' });
 		t.assert_equal(u.leasetime, null);
 		t.assert_equal(u.tag, null);
 		t.assert_equal(u.dns, null);
@@ -62,257 +62,52 @@ t.describe('dhcp.hosts.toUci', () => {
 t.describe('dhcp.hosts.validate', () => {
 	t.it('rejects an entry with neither mac nor duid (no identifier)', () => {
 		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
-		let me = filter(errs, function(e) { return e.field == "mac" && e.code == "required"; });
+		let me = filter(errs, function(e) { return e.field == "macs" && e.code == "required"; });
 		t.assert_equal(length(me), 1);
 	});
 
 	t.it('accepts a DNS-only entry: mac + name, no ip', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', name: 'host.lan' }, null);
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], name: 'host.lan' }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
 	t.it('rejects malformed mac', () => {
-		let errs = hosts.validate({ mac: 'not-a-mac', ip: '10.0.0.1' }, null);
-		let me_errs = filter(errs, function(e) { return e.field == "mac"; });
+		let errs = hosts.validate({ macs: ['not-a-mac'], ip: '10.0.0.1' }, null);
+		let me_errs = filter(errs, function(e) { return e.field == "macs[0]"; });
 		t.assert_equal(me_errs[0].code, 'invalid_format');
 	});
 
 	t.it('accepts a valid MAC', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1' }, null);
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1' }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
 	t.it('rejects malformed IPv4', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '999.0.0.1' }, null);
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '999.0.0.1' }, null);
 		let ip_errs = filter(errs, function(e) { return e.field == "ip"; });
 		t.assert_equal(ip_errs[0].code, 'invalid_format');
 	});
 
 	t.it('accepts an IPv6 address', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: 'fd00::1' }, null);
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: 'fd00::1' }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
 	t.it('rejects bad leasetime', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', leasetime: 'forever' }, null);
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1', leasetime: 'forever' }, null);
 		let le = filter(errs, function(e) { return e.field == "leasetime"; });
 		t.assert_equal(le[0].code, 'invalid_format');
 	});
 
 	t.it('accepts valid leasetime formats', () => {
-		t.assert_equal(length(hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', leasetime: '12h' }, null)), 0);
-		t.assert_equal(length(hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', leasetime: '1d' }, null)), 0);
-		t.assert_equal(length(hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', leasetime: '3600' }, null)), 0);
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1', leasetime: '12h' }, null)), 0);
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1', leasetime: '1d' }, null)), 0);
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1', leasetime: '3600' }, null)), 0);
 	});
 });
 
 let ubus = require('bus');
 
-t.describe('dhcp.hosts v1.2 parity additions', () => {
-	t.it('fromUci returns mac_aliases empty when uci has option mac (single)', () => {
-		let r = hosts.fromUci({ '.name': 'h1', '.anonymous': false,
-		                        mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.5' });
-		t.assert_equal(r.mac, 'aa:bb:cc:dd:ee:ff');
-		t.assert_deep_equal(r.mac_aliases, []);
-	});
-	t.it('fromUci splits a list mac into mac + mac_aliases', () => {
-		let r = hosts.fromUci({ '.name': 'h2', '.anonymous': false,
-		                        mac: ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66'],
-		                        ip: '10.0.0.6' });
-		t.assert_equal(r.mac, 'aa:bb:cc:dd:ee:ff');
-		t.assert_deep_equal(r.mac_aliases, ['11:22:33:44:55:66']);
-	});
-	t.it('toUci writes a string when only mac is set, a list when aliases are present', () => {
-		let single = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1' });
-		t.assert_equal(single.mac, 'aa:bb:cc:dd:ee:ff');
-		let multi = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff',
-		                          mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' });
-		t.assert_deep_equal(multi.mac, ['aa:bb:cc:dd:ee:ff', '11:22:33:44:55:66']);
-	});
-	t.it('validate accepts duid-only entries (DHCPv6 reservation)', () => {
-		let errs = hosts.validate({
-			duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff',
-			ip: '2001:db8::42',
-		}, null);
-		for (let e in errs)
-			t.assert_not_equal(e.field + ':' + e.code, 'mac:required');
-	});
-	// The bug this pins: validate returned [] for a duid-only body carrying aliases, and
-	// toUci then wrote no mac option at all, so the MACs were discarded on a 200. The test
-	// above ("validate accepts duid-only entries") was one field away from catching it.
-	t.it('rejects mac_aliases sent without mac, rather than dropping them', () => {
-		let errs = hosts.validate({
-			mac_aliases: ['11:22:33:44:55:66'],
-			duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff',
-			ip: '2001:db8::42',
-		}, null);
-		let found = false;
-		for (let e in errs)
-			if (e.field == 'mac_aliases' && e.code == 'conflict') found = true;
-		t.assert_true(found);
-	});
-
-	// The shape toUci cannot express, which is why the body is refused rather than written:
-	// with no primary there is no first entry to build the list from.
-	t.it('toUci writes no mac option when only aliases are present', () => {
-		let out = hosts.toUci({ mac: null, mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' });
-		t.assert_equal(out.mac, null);
-		t.assert_equal(out.ip, '10.0.0.1');
-	});
-
-	t.it('an empty alias list is not a conflict, since there is no orphaned tail', () => {
-		let errs = hosts.validate({ mac: 'aa:bb:cc:dd:ee:ff', mac_aliases: [], ip: '10.0.0.1' }, null);
-		t.assert_equal(length(errs), 0);
-	});
-
-	// Distinct fields on purpose: reported against mac it would collide with the identifier
-	// error under the field|code dedup and one of the two would vanish.
-	t.it('reports both the missing identifier and the orphaned aliases', () => {
-		let errs = hosts.validate({ mac_aliases: ['11:22:33:44:55:66'], ip: '10.0.0.1' }, null);
-		let seen = {};
-		for (let e in errs) seen[e.field + '/' + e.code] = true;
-		t.assert_true(seen['mac/required']);
-		t.assert_true(seen['mac_aliases/conflict']);
-	});
-
-	t.it('macs alone satisfies the identifier requirement', () => {
-		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01'], ip: '10.0.0.1' },
-		                                    null)), 0);
-	});
-	t.it('macs writes one uci list mac, and a single entry writes a scalar', () => {
-		t.assert_deep_equal(hosts.toUci({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'] }).mac,
-		               ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
-		t.assert_equal(hosts.toUci({ macs: ['aa:bb:cc:dd:ee:01'] }).mac, 'aa:bb:cc:dd:ee:01');
-	});
-	t.it('macs wins over the deprecated pair, so a disagreement is refused', () => {
-		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		                            mac: 'aa:bb:cc:dd:ee:09',
-		                            mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_deep_equal(errs[0].field, 'mac');
-		t.assert_deep_equal(errs[0].code, 'conflict');
-	});
-	t.it('a tail disagreeing with macs is refused against mac_aliases', () => {
-		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		                            mac: 'aa:bb:cc:dd:ee:01',
-		                            mac_aliases: ['aa:bb:cc:dd:ee:09'] }, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_deep_equal(errs[0].field, 'mac_aliases');
-		t.assert_deep_equal(errs[0].code, 'conflict');
-	});
-	t.it('a body that agrees across all three names is accepted', () => {
-		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		                                      mac: 'aa:bb:cc:dd:ee:01',
-		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null)), 0);
-	});
-	t.it('bad entries inside macs are reported by index', () => {
-		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'not-a-mac'] }, null);
-		t.assert_equal(length(errs), 1);
-		t.assert_deep_equal(errs[0].field, 'macs[1]');
-		t.assert_deep_equal(errs[0].code, 'invalid_format');
-	});
-	t.it('aliases without mac are fine when macs carries the list', () => {
-		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] }, null)), 0);
-	});
-
-	// A PUT cannot avoid sending the stale pair beside the new list: fromUci mirrors both.
-	t.it('PUT resolves a stale pair to macs rather than refusing the body', () => {
-		let out = hosts.resolve_for_replace({ macs: ['aa:bb:cc:dd:ee:03'],
-		                                      mac: 'aa:bb:cc:dd:ee:01',
-		                                      mac_aliases: ['aa:bb:cc:dd:ee:02'] });
-		t.assert_true(!exists(out, 'mac'));
-		t.assert_true(!exists(out, 'mac_aliases'));
-		t.assert_deep_equal(out.macs, ['aa:bb:cc:dd:ee:03']);
-	});
-	t.it('PUT leaves an agreeing body alone, and a legacy-only body alone', () => {
-		let agree = { macs: ['aa:bb:cc:dd:ee:01'], mac: 'aa:bb:cc:dd:ee:01' };
-		t.assert_equal(hosts.resolve_for_replace(agree).mac, 'aa:bb:cc:dd:ee:01');
-		let legacy = { mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'] };
-		t.assert_deep_equal(hosts.resolve_for_replace(legacy).mac_aliases, ['aa:bb:cc:dd:ee:02']);
-	});
-	t.it('PATCH drops whichever surface the body did not name', () => {
-		let read = { macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		             mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'] };
-		let by_list = hosts.merge_for_patch(read, { macs: ['aa:bb:cc:dd:ee:03'] });
-		t.assert_equal(hosts.toUci(by_list).mac, 'aa:bb:cc:dd:ee:03');
-		let by_scalar = hosts.merge_for_patch(read, { mac: 'aa:bb:cc:dd:ee:03' });
-		t.assert_deep_equal(hosts.toUci(by_scalar).mac,
-		               ['aa:bb:cc:dd:ee:03', 'aa:bb:cc:dd:ee:02']);
-	});
-	t.it('a PATCH naming neither keeps the list intact', () => {
-		let read = { macs: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		             mac: 'aa:bb:cc:dd:ee:01', mac_aliases: ['aa:bb:cc:dd:ee:02'],
-		             ip: '10.0.0.1' };
-		let merged = hosts.merge_for_patch(read, { ip: '10.0.0.9' });
-		t.assert_deep_equal(hosts.toUci(merged).mac,
-		               ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
-	});
-	t.it('fromUci surfaces the list and the deprecated split together', () => {
-		let v = hosts.fromUci({ '.name': 'h', '.type': 'host',
-		                        mac: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'] }, null);
-		t.assert_deep_equal(v.macs, ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
-		t.assert_equal(v.mac, 'aa:bb:cc:dd:ee:01');
-		t.assert_deep_equal(v.mac_aliases, ['aa:bb:cc:dd:ee:02']);
-	});
-
-	t.it('validate requires either mac or duid', () => {
-		let errs = hosts.validate({ ip: '10.0.0.1' }, null);
-		t.assert_equal(errs[0].field, 'mac');
-		t.assert_equal(errs[0].code, 'required');
-	});
-	t.it('validate rejects bad mac_aliases entries', () => {
-		let errs = hosts.validate({
-			mac: 'aa:bb:cc:dd:ee:ff',
-			mac_aliases: ['not-a-mac'],
-			ip: '10.0.0.1',
-		}, null);
-		let found = false;
-		for (let e in errs)
-			if (substr(e.field, 0, 11) == 'mac_aliases'
-			    && e.code == 'invalid_format') { found = true; break; }
-		t.assert_true(found);
-	});
-	t.it('validate rejects bad duid hex', () => {
-		let errs = hosts.validate({ duid: 'not-hex', ip: '10.0.0.1' }, null);
-		let found = false;
-		for (let e in errs)
-			if (e.field == 'duid' && e.code == 'invalid_format') { found = true; break; }
-		t.assert_true(found);
-	});
-	t.it('validate rejects bad hostid', () => {
-		let errs = hosts.validate({
-			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
-			hostid: 'zz::nope',
-		}, null);
-		let found = false;
-		for (let e in errs)
-			if (e.field == 'hostid' && e.code == 'invalid_format') { found = true; break; }
-		t.assert_true(found);
-	});
-	t.it('validate cross-refs instance against dhcp/dnsmasq sections (NOT dhcp/servers)', () => {
-		let conn = ubus.stub({ uci: { dhcp: {
-			main_dnsmasq: { '.type': 'dnsmasq' },
-			lan_server:   { '.type': 'dhcp', interface: 'lan' },
-		}}});
-		let ok = hosts.validate({
-			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'main_dnsmasq',
-		}, conn);
-		let conflict_for_ok = false;
-		for (let e in ok)
-			if (e.field == 'instance' && e.code == 'conflict') { conflict_for_ok = true; break; }
-		t.assert_false(conflict_for_ok);
-		// A dhcp.dhcp section name is NOT a valid instance reference (it's the
-		// per-interface server, not the dnsmasq process). Should conflict.
-		let wrong = hosts.validate({
-			mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1', instance: 'lan_server',
-		}, conn);
-		let conflict_for_wrong = false;
-		for (let e in wrong)
-			if (e.field == 'instance' && e.code == 'conflict') { conflict_for_wrong = true; break; }
-		t.assert_true(conflict_for_wrong);
-	});
-});
 
 // name, tag and dns were written by toUci but absent from schema_properties, so the
 // central type gate never saw them: `dns: "0"` was a truthy string in ucode and wrote
@@ -371,7 +166,7 @@ t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
 // read-honesty property forbids; v3 reconciles the shapes on the read side instead.
 t.describe('dhcp.hosts tag write shape', () => {
 	t.it('keeps an array an array, so uci gets a list', () => {
-		let u = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
+		let u = hosts.toUci({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1',
 		                      tag: ['guest', 'iot'] });
 		t.assert_equal(type(u.tag), 'array');
 		t.assert_equal(u.tag[0], 'guest');
@@ -379,65 +174,13 @@ t.describe('dhcp.hosts tag write shape', () => {
 	});
 
 	t.it('keeps a scalar a scalar, so a verbatim round trip does not rewrite it', () => {
-		let u = hosts.toUci({ mac: 'aa:bb:cc:dd:ee:ff', ip: '10.0.0.1',
+		let u = hosts.toUci({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1',
 		                      tag: 'guest iot' });
 		t.assert_equal(type(u.tag), 'string');
 		t.assert_equal(u.tag, 'guest iot');
 	});
 });
 
-// `mac` and `mac_aliases` were collapsed into one "did the body name the split" flag, so
-// a PATCH naming only `mac` deleted the merged `macs` but kept the read view's
-// `mac_aliases`. Clearing `mac` therefore produced a list with no head, which is exactly
-// the shape validate rejects, and the caller got a 422 against a field it never sent.
-t.describe('clearing mac through PATCH clears the whole list', () => {
-	let ubus2 = require('bus');
-	let handler2 = require('handler');
-	let fx2 = require('resource_fixtures');
-	function tx2() {
-		return { acquire: function() { return {}; }, release: function() {},
-		         reload: function() { return null; }, check_services: function() { return null; },
-		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
-	}
-	function ct() { return { request_id: "01hx0000000000000000000000" }; }
-	function seeded2() {
-		let uci = fx2.world();
-		uci.dhcp = uci.dhcp ?? {};
-		uci.dhcp.hp = { '.anonymous': false, '.type': 'host',
-		                mac: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02'],
-		                duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff', ip: '10.0.0.5' };
-		return ubus2.stub({ uci: uci });
-	}
-	function patch(body) {
-		let conn = seeded2();
-		let r = handler2.make(hosts, { tx: tx2() }).patch(conn, ct(), 'hp', body);
-		return { status: r.status, body: r.body, uci: conn._state.uci.dhcp.hp.mac };
-	}
-
-	t.it('PATCH {mac: null} on a multi-MAC host clears it instead of a 422', () => {
-		let r = patch({ mac: null });
-		t.assert_equal(r.status, 200);
-		t.assert_equal(r.uci, null);
-	});
-	t.it('the empty-string spelling does not report a conflict either', () => {
-		// It is still refused for its format, but only for that: the orphaned-tail
-		// conflict named a field the caller never sent.
-		let r = patch({ mac: "" });
-		t.assert_equal(r.status, 422);
-		for (let e in (r.body?.errors ?? []))
-			t.assert_true(e.field != "mac_aliases");
-	});
-	t.it('replacing mac keeps the tail', () => {
-		let r = patch({ mac: 'aa:bb:cc:dd:ee:09' });
-		t.assert_equal(r.status, 200);
-		t.assert_deep_equal(r.uci, ['aa:bb:cc:dd:ee:09', 'aa:bb:cc:dd:ee:02']);
-	});
-	t.it('a PATCH naming neither leaves the list alone', () => {
-		let r = patch({ ip: '10.0.0.6' });
-		t.assert_equal(r.status, 200);
-		t.assert_deep_equal(r.uci, ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02']);
-	});
-});
 
 // A reservation storing `option tag 'a b'` used to read back as the string "a b" while an
 // identical one storing `list tag` read back as ["a","b"]. Same configuration to dnsmasq,

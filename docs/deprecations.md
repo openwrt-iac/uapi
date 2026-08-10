@@ -10,10 +10,7 @@ Policy: a deprecation in a minor release means both forms (old and new) are acce
 
 | Field | Replaced by | Deprecated since | Removal target | Migration |
 |---|---|---|---|---|
-| `network/interfaces.name` (request input) | `network/interfaces.id` | 2.2.0 | v3 | Send `id` instead of `name` at create time. Both fields accept the same charset (uci section-name rules); on `proto=wireguard` both are IFNAMSIZ-tight (15 char cap). If both are supplied they must match or the request returns `422 conflict`. The `id` field is the universal "section name at create" input across every CRUD resource in 2.2.0; `name` was a 2.1.0-era shim that only worked on `network/interfaces`. |
-| `network/interfaces.ipaddr` (request input) | `network/interfaces.ipaddrs` | 2.5.0 (targeted, not yet released) | v3 | Send `ipaddrs` instead. Both name the same uci `list ipaddr`, and the list already wins on write, so the migration is to stop sending the scalar rather than to change any value. `ipaddr` stays in responses after removal, carrying the first entry of the list; only the write is going away. See the note below on why this row carries no `deprecated: true` flag. |
-| `dhcp/hosts.mac` (request and response) | `dhcp/hosts.macs` | 2.5.0 (targeted, not yet released) | v3 | Send `macs` instead, and read it instead. All three names describe one uci `list mac`: `macs` is the whole list, `mac` its first entry and `mac_aliases` the rest. The list wins on write, so the migration is to stop sending the split rather than to change any value. Unlike `network/interfaces.ipaddr`, this one does not survive as a read field, which is why it carries the `deprecated: true` flag: uci has no scalar `option mac` for a host, so `mac` was never a uci field at all, only uapi's positional half of a list. There is nothing for it to keep meaning once `macs` exists. |
-| `dhcp/hosts.mac_aliases` (request and response) | `dhcp/hosts.macs` | 2.5.0 (targeted, not yet released) | v3 | Send `macs` instead, and read it instead. Same single uci `list mac` as the row above: `mac_aliases` held every entry after the first, so a client had to concatenate two fields to learn what the reservation actually matched. Flagged `deprecated: true` for the same reason. |
+| `network/interfaces.ipaddr` (request input) | `network/interfaces.ipaddrs` | 2.5.0 | v3 | Send `ipaddrs` instead. Both name the same uci `list ipaddr`, and the list already wins on write, so the migration is to stop sending the scalar rather than to change any value. `ipaddr` stays in responses after removal, carrying the first entry of the list; only the write is going away. See the note below on why this row carries no `deprecated: true` flag. |
 
 Every entry above must also appear in the published spec's own description, under
 "Upcoming in v3". That is checked by `make lint-doc-refs`: the ledger and the spec are
@@ -78,55 +75,6 @@ before the major that makes them.
   Deferring the read shape cost every client a release of handling two shapes to learn one
   thing, and bought nothing.
 
-- **`vnstat/interfaces` will be removed as an endpoint**, targeted at v3. Use the
-  `interfaces` array on the `vnstat/config` singleton, added in 2.5.0.
-
-  The endpoint has never worked. uapi models `config interface` sections; vnstat's init
-  only ever visits `config vnstat` sections and reads a `list interface` inside them
-  (`vnstat.init:21,28`), so neither the `interface` nor the `enabled` option on a
-  `config interface` section is read by anything. A `POST` returns 200, writes a section,
-  and vnstat continues tracking exactly what it tracked before. A `GET` returns `[]` on a
-  box that is genuinely collecting statistics.
-
-  Seen on a real router, where both shapes are present at once:
-
-  ```
-  vnstat.@vnstat[0].interface='br-lan' 'eth0'      <- tracked
-  vnstat.i_01kvbfpp7f...interface='vlan30'         <- created through uapi, ignored
-  vnstat.i_01kvbfppd8...interface='lan'            <- created through uapi, ignored
-  ```
-
-  **The values differ in kind, not just in place.** The dead endpoint accepted uci
-  interface section names (`lan`); vnstat wants device names as the kernel shows them
-  (`br-lan`). Migrating is not a copy: `lan` becomes `br-lan`. The new field documents this
-  and validates that entries are non-empty strings, which is as far as validation can go
-  without asking the kernel.
-
-- **Fields that write a uci option no OpenWrt component reads will be removed**, targeted
-  at v3. Each was modelled against an option name the owning daemon does not consult, so
-  the field has never had any effect: a write is accepted and stored, and the daemon
-  carries on as before. They are removed rather than repointed because, unlike the three
-  corrected in 2.5.0, there is nothing to point them at.
-
-  | field | why there is no target |
-  |---|---|
-  | `mwan3/globals.rtmon_interval` | `mwan3rtmon` is driven by `ip monitor route`; there is no polling interval |
-  | `mwan3/globals.local_source` | the live knob is `source_routing`, a boolean about route-line parsing, not an interface name |
-  | `vnstat/config.database_dir` | a key of `/etc/vnstat.conf`, which ships from upstream; nothing bridges uci to it |
-  | `vnstat/config.interface_5min_hours` | as above |
-  | `vnstat/config.month_rotate` | as above |
-  | `lldpd/config.enable_lldpmed` | LLDP-MED is a build-time switch (`CONFIG_LLDPD_WITH_LLDPMED`) |
-  | `unbound/server.enabled` | `enabled` is read only on `config zone`; the daemon is enabled through procd |
-  | `unbound/server.prefetch` | the only similar option is `prefetch_root`, a different feature; unbound's `prefetch:` directive is derived from `recursion`, which uapi already exposes |
-  | `prometheus_node_exporter_lua/config.listen_ipv6` | the v6 bind is derived from `listen_interface` |
-  | `usteer/config.max_assoc_sta` | usteer's init forwards a fixed list of uci options to the daemon over ubus and this is not on it; the daemon's own knob is `max_assoc`, which nothing bridges from uci |
-  | its seventeen collector toggles | collectors are enumerated from `/usr/lib/lua/prometheus-collectors/*.lua`; **seven of the seventeen name collectors that do not exist in that package at all** |
-
-  Requests carrying these keys are ignored today, so nothing on the write side needs
-  migrating. The read side does: each is returned on `GET` with a `default:` annotation,
-  which is what an IaC client reads to keep an attribute sticky, and a generated response
-  model for `prometheus_node_exporter_lua/config` loses eighteen of its properties.
-
 - **`managed` leaves the request half of every resource schema**, targeted at v3. It is
   derived from uci's `.anonymous` flag and no `toUci` reads it, so a `PUT` sending
   `managed: false` has always answered 200 with `managed: true`; management state moves
@@ -142,4 +90,25 @@ before the major that makes them.
 
 ## Removed in past releases
 
-(none yet; uapi has not cut a v3.)
+### 3.0.0
+
+| Field | Replaced by | Deprecated since | Removed in |
+|---|---|---|---|
+| `network/interfaces.name` (request input) | `network/interfaces.id` | 2.2.0 | 3.0.0 |
+| `dhcp/hosts.mac` (request and response) | `dhcp/hosts.macs` | 2.5.0 | 3.0.0 |
+| `dhcp/hosts.mac_aliases` (request and response) | `dhcp/hosts.macs` | 2.5.0 | 3.0.0 |
+
+Also removed in 3.0.0, announced as response-shape changes rather than as ledger rows because
+neither survived as a read:
+
+- **`vnstat/interfaces`, the whole endpoint.** It modelled `config interface` sections, which
+  vnstat never reads. Use the `interfaces` array on `vnstat/config`, remembering that the values
+  differ in kind: the dead endpoint took uci interface names (`lan`), vnstat wants device names
+  (`br-lan`).
+- **The 27 fields that wrote a uci option no OpenWrt component reads**, in `mwan3/globals`,
+  `vnstat/config`, `lldpd/config`, `unbound/server`, `usteer/config` and
+  `prometheus_node_exporter_lua/config`. Writes carrying them were already ignored; what changes
+  is the read side, since each was returned with a `default:` annotation. The per-field reasons
+  are in the 2.5.0 announcement, preserved in that release's changelog entry.
+
+See `docs/migration-v2-to-v3.md` for the full upgrade path.
