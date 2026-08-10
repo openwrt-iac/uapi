@@ -2,7 +2,7 @@
 
 This document indexes the 45 curated resources shipped in v2.x. For the full
 schema (every field, its type, enum values, ranges, patterns), read
-`build/openapi.json` (also served at `/api/v2/openapi.json` on a live
+`build/openapi.json` (also served at `/api/v3/openapi.json` on a live
 router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
@@ -28,7 +28,7 @@ write. The pre-flight check is part of the atomic transaction recipe;
 no partial state is left behind.
 
 Install the daemon either out of band (`apk add unbound`, etc.) or
-through uapi itself via `POST /api/v2/packages/installed`. The latter
+through uapi itself via `POST /api/v3/packages/installed`. The latter
 is what a Terraform configuration would chain via `depends_on` on a
 `uapi_package` resource. The base uapi package's `Depends:` only
 covers what uapi *itself* needs to run (uhttpd, ucode mods); per-daemon
@@ -165,7 +165,7 @@ Sections that already have a `.name` (e.g. LuCI-named `myrule`) are managed norm
 
 ## Generic raw passthrough
 
-`/api/v2/raw/<package>/<id>` is the escape hatch for any uci config type
+`/api/v3/raw/<package>/<id>` is the escape hatch for any uci config type
 uapi doesn't curate. See `docs/raw.md` for full semantics, scope
 composition rules, and stability caveat.
 

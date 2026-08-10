@@ -60,7 +60,7 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 - **Mechanism.** Shells out to `/bin/busybox passwd <user>` and pipes `<pw>\n<pw>\n` through stdin (the same recipe LuCI uses for its "Router Password" page).
 - **Validation.** `user` must match `^(root|[a-z][a-z0-9_-]*)$`. `password` must be at least 8 characters.
 - **Audit.** Successful sets emit `uapi-passwd-set <request_id> user="..."`. Failures emit `uapi-passwd-failure <request_id> user="..." exit=<n>`. The password VALUE is never logged.
-- **HTTP shape.** `POST /api/v2/system/password` returns `204`. There is no `GET` (password hashes don't leak through the API at all).
+- **HTTP shape.** `POST /api/v3/system/password` returns `204`. There is no `GET` (password hashes don't leak through the API at all).
 - **Why not uci.** OpenWrt has no uci wrapper for local user credentials. Cloud-init / image-bake (uci-defaults dropping a `passwd -d root` line, etc.) is the alternative for purely offline provisioning.
 
 ### `system/authorized_keys`
@@ -80,7 +80,7 @@ The following items are real configuration concerns that uapi deliberately does 
 ### Unbound listen-address binding
 
 - **Why excluded.** OpenWrt's `unbound` uci has no clean option for binding the recursive server to a specific address (e.g. loopback-only). The upstream init script emits `interface-automatic: yes` unconditionally when `interface_auto=1`; there is no uci path that produces an `interface: 127.0.0.1` line. uapi's `unbound/server` resource curates every uci option the upstream init script actually consumes, but it deliberately does not invent an option that uci doesn't expose.
-- **Recommended path.** Drop your overrides into `/etc/unbound/unbound_srv.conf` (auto-included inside the `server:` clause), or set `manual_conf=1` via `PATCH /api/v2/unbound/server` and write the full `/etc/unbound/unbound.conf` yourself. The `unbound_srv.conf` file ships as a stub from the upstream package precisely for this use.
+- **Recommended path.** Drop your overrides into `/etc/unbound/unbound_srv.conf` (auto-included inside the `server:` clause), or set `manual_conf=1` via `PATCH /api/v3/unbound/server` and write the full `/etc/unbound/unbound.conf` yourself. The `unbound_srv.conf` file ships as a stub from the upstream package precisely for this use.
 
 ### Serial console / inittab
 

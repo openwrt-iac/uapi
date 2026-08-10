@@ -4,19 +4,19 @@ v3 removes what 2.5.0 announced and nothing else. Every change below appeared in
 spec's own "Upcoming in v3" block and in `docs/deprecations.md`, so a client generated against
 2.5.0 has already been warned by its codegen about the flagged fields.
 
-A given uapi installation serves exactly one API major. There is no parallel `/api/v2/` and
+A given uapi installation serves exactly one API major. There is no parallel `/api/v3/` and
 `/api/v3/` mount in the same binary. Operators who need to keep a v2 client working keep the
 `2.5.x` package installed; the 2.5.0 APK stays on its GitHub Release and the signed `v2.5.0`
 tag is the canonical v2 contract document.
 
-**The URL prefix changes from `/api/v2/` to `/api/v3/`.** Update every client-side base URL.
+**The URL prefix changes from `/api/v3/` to `/api/v3/`.** Update every client-side base URL.
 Upgrading the package removes the v2 prefix from uhttpd's `ucode_prefix` list and adds the v3
 one, so no manual uci edit is needed.
 
 ## Upgrade path
 
 1. `apk update && apk upgrade uapi`
-2. Change your base URL from `/api/v2` to `/api/v3`
+2. Change your base URL from `/api/v3` to `/api/v3`
 3. Regenerate any typed client. Model names change: every resource now has a separate
    `<Name>Request` and `<Name>Response` schema
 4. Verify: `GET /api/v3/healthz` returns `{"status":"ok","version":"3.0.0",...}`

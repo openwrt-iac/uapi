@@ -177,7 +177,7 @@ const CASES = [
 	{
 		file: "uhttpd.instances.uc", id: "main", pkg: "uhttpd",
 		section: { no_dirlists: '1', no_symlinks: '1', rfc1918_filter: '1', '.type': 'uhttpd', listen_http: ['0.0.0.0:80', '[::]:80'], home: '/www',
-		           ucode_prefix: ['/api/v2=/usr/share/uapi/main.uc',
+		           ucode_prefix: ['/api/v3=/usr/share/uapi/main.uc',
 		                          '/probe=/usr/share/uapi/main.uc'] },
 	},
 	{

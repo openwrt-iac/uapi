@@ -12,7 +12,7 @@ modes are.
 no `procd` service definition, no procmon entry.
 
 The code runs inside `uhttpd`'s existing fork-per-request CGI workers via
-`uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v2=/usr/share/uapi/main.uc'`
+`uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'`
 entry in `/etc/config/uhttpd` is the entire wiring.
 
 Specifically, uapi shares the default `main` uhttpd instance with LuCI. Both serve configuration use cases; sharing keeps the footprint minimal and lets uapi inherit whatever TLS configuration the operator already set up for LuCI (acme certs, custom listen addresses, etc.). A dedicated uapi uhttpd instance was considered and rejected: it doubles the runtime cost without earning the isolation back (an attacker who can reach LuCI can already reach the same box).

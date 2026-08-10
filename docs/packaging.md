@@ -103,17 +103,17 @@ The CLI prints the cleartext bearer to stdout exactly once. Save it.
 
 The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live installs (not chroots/INSTROOT builds) and then deletes the script. That single run:
 
-1. Checks if `uhttpd.main.ucode_prefix` already lists `/api/v2=/usr/share/uapi/main.uc`. If so, exits cleanly.
+1. Checks if `uhttpd.main.ucode_prefix` already lists `/api/v3=/usr/share/uapi/main.uc`. If so, exits cleanly.
 2. Otherwise adds the entry, commits the uhttpd config, and reloads uhttpd.
 
-After that, `https://<router>/api/v2/healthz` is reachable.
+After that, `https://<router>/api/v3/healthz` is reachable.
 
 The post-install message printed to the operator:
 
 ```
 uapi installed. To start using it:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
-  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v2/system
+  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v3/system
   3. See docs at:       /usr/share/uapi/openapi.json
 ```
 
@@ -125,7 +125,7 @@ uapi installed. To start using it:
 2. Commits uhttpd.
 3. Reloads uhttpd.
 
-These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v2/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
+These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v3/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
 
 The token store at `/etc/config/uapi` is preserved (conffile semantics). To wipe it: `rm /etc/config/uapi` after removal.
 

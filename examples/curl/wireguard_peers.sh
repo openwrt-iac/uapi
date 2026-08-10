@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v2}"
+: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v3}"
 : "${UAPI_TOKEN:?set UAPI_TOKEN to a bearer with network:wireguard_peers:rw and network:interfaces:rw}"
 
 H_AUTH="Authorization: Bearer $UAPI_TOKEN"

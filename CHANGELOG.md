@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Changed
 
+- **The URL prefix moves from `/api/v2/` to `/api/v3/`**, as it did across the v1 boundary. Upgrading the package strips every older mount and adds the new one, so uhttpd never serves the same `main.uc` under two prefixes: a stale `/api/v2` would otherwise look like the removed v2 surface while answering with v3 semantics. Verified by replaying the install hook against a box holding a v2 mount, which produced one `del_list`, one `add_list` and a single final prefix.
+
+
 - **Every resource is now described by two schemas, `<Name>Request` and `<Name>Response`.** One schema served both directions until now, which is why `network/interfaces.ipaddr` had to be described in prose rather than as `readOnly`, why `dhcp/hosts.tag` kept `string` in its type for writers although responses were always an array, and why `runtime` and `managed` needed a `readOnly` annotation to stay out of a generated request model. Generated model names change for every resource. 46 pairs, and the 13 singletons gain a real request schema in place of the untyped `{"type": "object"}` patch body they carried before.
 
   Three announced changes ride on it, none of them expressible before: `managed` is absent from every request schema, `network/interfaces.ipaddr` is `readOnly` in the response half and absent from the request one, and `dhcp/hosts.tag` is array-only in both directions.

@@ -10,7 +10,7 @@ set -eu
 # Shown on dhcp/hosts because a stock router usually has a static lease or two already, but
 # every curated collection behaves the same way.
 
-: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v2}"
+: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v3}"
 : "${UAPI_TOKEN:?set UAPI_TOKEN to a bearer with dhcp:hosts:rw}"
 
 H_AUTH="Authorization: Bearer $UAPI_TOKEN"

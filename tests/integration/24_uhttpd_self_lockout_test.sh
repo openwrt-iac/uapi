@@ -4,12 +4,12 @@ set -eu
 . tests/integration/lib/install_uapi.sh
 install_uapi
 
-URL=http://127.0.0.1:8080/api/v2
+URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-UAPI_PREFIX="/api/v2=/usr/share/uapi/main.uc"
+UAPI_PREFIX="/api/v3=/usr/share/uapi/main.uc"
 
 echo "--- uhttpd/instances: GET main shows uapi's ucode_prefix entry ---"
 got=$(call "$URL/uhttpd/instances/main")
