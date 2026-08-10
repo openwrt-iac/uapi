@@ -407,15 +407,25 @@ function mgmt_device_of(resource, body, existing) {
 	return length(out) > 0 ? out : null;
 }
 
-function attach_mgmt_warning(resp, conn, ctx, id, changed, devices) {
+// Resolved before the transaction, because afterwards the answer can be gone: the lookup asks
+// the kernel for the route back to the caller, and a write that just claimed the caller's
+// device leaves nothing to route. Only guarded resources pay for it.
+function mgmt_path_before(resource, conn, ctx) {
+	if (!resource?.mgmt_path_guard) return null;
+	return mgmt.inbound_interface(conn, ctx.remote_addr, ctx.device_lookup);
+}
+
+function attach_mgmt_warning(resp, conn, ctx, id, changed, devices, path) {
 	if (changed == null || length(changed) == 0) return resp;
 	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
 	// not happen, and there is nothing to warn about.
 	if (resp == null || (resp.status != 200 && resp.status != 204)) return resp;
-	// The third argument is mgmt.uc's existing route-lookup seam. Production never sets
-	// it, so this is the real `ip route get`; a test can substitute one, which is the
-	// only way to reach the DELETE arm without stranding the box running the test.
-	let path = mgmt.inbound_interface(conn, ctx.remote_addr, ctx.device_lookup);
+	// The path is resolved by the caller, before the transaction, and handed in. Resolving
+	// it here instead made the guard silent in exactly the case it exists for: the lookup is
+	// `ip route get` against the caller, and a write that has already claimed the caller's
+	// device leaves no route to find, so `path` came back null and the warning was dropped.
+	// Measured on hardware: a create naming an unrelated device resolved `device: eth1`,
+	// and the same create naming `eth1` resolved null.
 	if (path == null) return resp;
 
 	// Two ways a write reaches the caller. A `network/interfaces` write moves the interface
@@ -677,6 +687,7 @@ function make(resource, opts) {
 
 	function create(conn, ctx, body) {
 		let kops = ctx.kernel_sink ?? [];
+		let mgmt_path = mgmt_path_before(resource, conn, ctx);
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -724,12 +735,13 @@ function make(resource, opts) {
 
 		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, null,
 		                           resource.mgmt_path_guard ? [ "created" ] : null,
-		                           mgmt_device_of(resource, body, null));
+		                           mgmt_device_of(resource, body, null), mgmt_path);
 	}
 
 	function replace(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
 		let mgmt_changed = null, mgmt_device = null;
+		let mgmt_path = mgmt_path_before(resource, conn, ctx);
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -776,12 +788,13 @@ function make(resource, opts) {
 			},
 		}));
 
-		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device, mgmt_path);
 	}
 
 	function patch(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
 		let mgmt_changed = null, mgmt_device = null;
+		let mgmt_path = mgmt_path_before(resource, conn, ctx);
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -828,7 +841,7 @@ function make(resource, opts) {
 			},
 		}));
 
-		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device, mgmt_path);
 	}
 
 	function remove(conn, ctx, id) {
@@ -837,6 +850,7 @@ function make(resource, opts) {
 		// renumbering it, and none of LuCI's four field names covers a delete.
 		let mgmt_changed = resource.mgmt_path_guard ? [ "removed" ] : null;
 		let mgmt_device = null;
+		let mgmt_path = mgmt_path_before(resource, conn, ctx);
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -861,7 +875,7 @@ function make(resource, opts) {
 
 		if (result.ok)
 			return attach_mgmt_warning(attach_reload_headers(errors.no_content(ctx), result),
-			                           conn, ctx, id, mgmt_changed, mgmt_device);
+			                           conn, ctx, id, mgmt_changed, mgmt_device, mgmt_path);
 		return translate_tx(ctx, result);
 	}
 
