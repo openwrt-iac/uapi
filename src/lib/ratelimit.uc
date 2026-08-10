@@ -1,7 +1,5 @@
 let fs = require('fs');
 
-// File-backed token-bucket per token id:
-//   /tmp/uapi-ratelimit/<token>.txt   "<tokens_float> <last_refill_ms>"
 // Atomic tmpfile+rename writes; no flock (every authed request passes here).
 const DIR = "/tmp/uapi-ratelimit";
 const DEFAULT_RATE = 100;
@@ -46,12 +44,6 @@ function _write_state(token_id, state) {
 	return ok;
 }
 
-// check(token_id, opts) returns { allowed, retry_after_seconds }.
-//   opts.now        epoch seconds (caller supplies)
-//   opts.rate       tokens per second (default 100)
-//   opts.burst      bucket capacity (default 200)
-//
-// On the first request for a token the bucket starts full.
 function check(token_id, opts) {
 	let o = opts ?? {};
 	let rate = o.rate ?? DEFAULT_RATE;
@@ -81,7 +73,6 @@ function check(token_id, opts) {
 	return { allowed, retry_after_seconds: retry };
 }
 
-// load_config reads the optional `config ratelimit` section from /etc/config/uapi.
 function load_config(conn) {
 	let rate = DEFAULT_RATE;
 	let burst = DEFAULT_BURST;
@@ -98,8 +89,6 @@ function load_config(conn) {
 	return { rate, burst };
 }
 
-// override(rate, burst, token_record) lets a per-token override beat the
-// global config. Returns the effective { rate, burst }.
 function effective_limits(global, token_record) {
 	let r = global.rate;
 	let b = global.burst;

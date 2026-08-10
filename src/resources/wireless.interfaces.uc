@@ -59,7 +59,7 @@ function fetch_runtime(conn, section_name) {
 
 function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
-	let view = {
+	return {
 		id: section['.name'],
 		managed: !anonymous,
 		device: section.device ?? null,
@@ -77,7 +77,6 @@ function fromUci(section, conn) {
 		// write-only flag (openvpn.instances, network.wireguard_peers).
 		has_key: (section.key != null && section.key != ""),
 	};
-	return view;
 }
 
 function toUci(json) {

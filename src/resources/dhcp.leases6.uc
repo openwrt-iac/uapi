@@ -18,8 +18,7 @@ function parse_leases(content) {
 		let trimmed = trim(line);
 		if (trimmed == "" || substr(trimmed, 0, 1) == "#") continue;
 		// Split on any whitespace (space OR tab) so trailing tabs or mixed
-		// separators don't shift columns. odhcpd's statefile format also
-		// varies across versions, so the parser fails soft on shape drift.
+		// separators don't shift columns.
 		let parts = split(trimmed, /[ \t]+/);
 		if (length(parts) < 7) continue;
 		let duid     = parts[0];

@@ -246,7 +246,6 @@ return {
 		log_append:       { type: ["string", "null"] },
 		verb:             { type: ["integer", "null"], minimum: 0, maximum: 11 },
 		mute:             { type: ["integer", "null"], minimum: 0 },
-		// Sensitive paths. Write-only on the wire; read returns has_<field>.
 		key:              { type: "string", writeOnly: true,
 		                    description: "Path to private key PEM. Write-only; reads return has_key." },
 		tls_auth:         { type: "string", writeOnly: true,

@@ -56,8 +56,6 @@ const ALL_CODES = [
 
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
-// new_context accepts an optional client-supplied request id (from the
-// X-Request-Id header). Invalid or missing values fall back to a fresh ULID.
 function new_context(inbound_request_id) {
 	if (type(inbound_request_id) == "string" && match(inbound_request_id, REQUEST_ID_RE))
 		return { request_id: inbound_request_id };
@@ -125,8 +123,7 @@ function validation_failed(ctx, field_errors) {
 }
 
 // `info` identifies which lock is held; pass the result.lock_kind /
-// result.package fields from transaction.uc verbatim. The from-result
-// shortcut is `locked_from(ctx, retry_after, result)`.
+// result.package fields from transaction.uc verbatim.
 function locked(ctx, retry_after, info) {
 	let msg;
 	if (type(info) == "object" && info.lock_kind == "package" && type(info.package) == "string")

@@ -1,6 +1,5 @@
 let fs = require('fs');
 
-// File-backed counter+histogram store under /tmp/uapi-metrics.
 // Each series is one file with the bare integer count. Histograms are
 // represented as one file per (series, le-bucket). Atomic increment uses
 // read+1+atomic-rename to avoid losing increments under concurrent forks.
@@ -28,10 +27,6 @@ function _safe_label(v) {
 	if (type(v) != "string") v = "" + v;
 	if (v == "" || !match(v, LABEL_RE)) return null;
 	return v;
-}
-
-function _series_dir(series) {
-	return DIR + "/" + series;
 }
 
 // Label values may contain `/` (request paths, scope strings) so they get

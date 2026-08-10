@@ -39,11 +39,6 @@ function compute_etag(body) {
 	return _hash(sprintf("%J", canon));
 }
 
-// Cursor pagination for collection GETs. The cursor is `c_<last_seen_id>`;
-// items after the matching id (lexicographic walk through the result array)
-// form the next page. Clients without ?cursor get items 0..limit-1; when
-// further items exist, the response carries `Link: <...?cursor=...>; rel="next"`
-// (RFC 8288). Without `?limit` the default is 100; the maximum is 500.
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 const CURSOR_RE = /^c_[A-Za-z0-9_-]+$/;
@@ -88,15 +83,10 @@ function paginate(ctx, items, query) {
 function set_etag_header(resp, body) {
 	let etag = compute_etag(body);
 	if (etag == null) return resp;
-	if (resp.headers == null) resp.headers = {};
 	resp.headers["ETag"] = "\"" + etag + "\"";
 	return resp;
 }
 
-// Returns either the literal "*" or an array of tag strings (without quotes
-// or W/ weak prefix), or null when no If-Match was supplied. Empty / malformed
-// values resolve to a non-matching sentinel so writes are denied rather than
-// silently allowed.
 function parse_if_match(header_value) {
 	if (type(header_value) != "string") return null;
 	let v = trim(header_value);
@@ -129,7 +119,7 @@ function parse_if_match(header_value) {
 function none_match_check(ctx, existing_body) {
 	let want = parse_if_match(ctx.if_none_match);
 	if (want == null) return null;
-	if (existing_body == null) return null;         // nothing there: the condition holds
+	if (existing_body == null) return null;
 	if (want == "*")
 		return errors.error(ctx, "precondition_failed",
 			"If-None-Match: * requires the resource not to exist");
@@ -156,8 +146,6 @@ function precondition_check(ctx, existing_body) {
 			sprintf("If-Match did not match current ETag (current=\"%s\")", have));
 	return none_match_check(ctx, existing_body);
 }
-
-
 
 function build_field_errors(raw_errs) {
 	let out = [];
@@ -421,7 +409,7 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed, devices, path) {
 	if (changed == null || length(changed) == 0) return resp;
 	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
 	// not happen, and there is nothing to warn about.
-	if (resp == null || (resp.status != 200 && resp.status != 204)) return resp;
+	if (resp.status != 200 && resp.status != 204) return resp;
 	// The path is resolved by the caller, before the transaction, and handed in. Resolving
 	// it here instead made the guard silent in exactly the case it exists for: the lookup is
 	// `ip route get` against the caller, and a write that has already claimed the caller's
@@ -449,7 +437,6 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed, devices, path) {
 		subject = sprintf("interface=%s", id);
 	}
 
-	if (resp.headers == null) resp.headers = {};
 	resp.headers["X-Mgmt-Path-Warning"] =
 		sprintf("%s changed=%s", subject, join(",", changed));
 	return resp;
@@ -608,7 +595,6 @@ function default_merge_for_patch(existing_json, body) {
 
 function load_section(conn, pkg, id) {
 	let s = conn.uci_get(pkg, id);
-	if (!s) return null;
 	if (type(s) != "object") return null;
 	let view = { ...s };
 	view['.name'] = id;
@@ -621,11 +607,9 @@ function make(resource, opts) {
 	let reload_services = resource.reload ?? [];
 	let tx_overrides = (opts != null && opts.tx != null) ? opts.tx : {};
 
-	// Dynamic-type hooks (default to static behavior).
 	let type_predicate = resource.type_predicate ?? function(t) { return t == sec_type; };
 	let create_type = resource.create_type ?? function(body) { return sec_type; };
 	let id_prefix = resource.id_prefix ?? substr(sec_type, 0, 1);
-	// Optional per-resource id chooser; null falls through to the default ULID.
 	let id_for_create = resource.id_for_create ?? function(body) { return null; };
 
 	// unique_field on a dynamic-type resource would iterate by the sentinel

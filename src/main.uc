@@ -192,10 +192,6 @@ function split_path(path) {
 	return parts;
 }
 
-function load_tokens(conn) {
-	return token_store.list_for_auth(conn);
-}
-
 function hash_bearer(salt, bearer) {
 	return digest.sha256(salt + ":" + bearer);
 }
@@ -305,9 +301,6 @@ function healthz_response(ctx) {
 }
 
 function schema_response(ctx, parts) {
-	// /schema                           → list of resource keys
-	// /schema/<package>                 → all resources under that package
-	// /schema/<package>/<resource>      → one resource's schema_properties
 	if (length(parts) == 1) {
 		let keys = [];
 		for (let k in RESOURCE_SOURCES) push(keys, k);
@@ -445,8 +438,6 @@ function record_metrics_for(method, path, status, duration_ms, token) {
 	metrics.record_request(method, tpl, status, duration_ms, token_id);
 }
 
-// Pull (package, reload_services) from a sub-request path. Returns null if
-// the path does not target a writable, batch-eligible resource.
 function batch_resolve_target(parts) {
 	if (length(parts) < 1) return null;
 	let key = (length(parts) == 1) ? parts[0] : parts[0] + ":" + parts[1];
@@ -508,10 +499,6 @@ function batch_run_one(conn, sub_ctx, scopes, op) {
 		sprintf("Method %s not allowed on %s", m, op.path));
 }
 
-function _is_write_method(m) {
-	return m == "POST" || m == "PUT" || m == "PATCH" || m == "DELETE";
-}
-
 function batch_dispatch(conn, ctx, token, method, body) {
 	if (method != "POST")
 		return errors.error(ctx, "method_not_allowed", "batch only supports POST");
@@ -536,7 +523,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		if (tgt == null)
 			return errors.error(ctx, "not_found",
 				sprintf("operations[%d]: no batch-eligible handler for %s", i, op.path));
-		if (_is_write_method(op.method ?? "")) {
+		if (op.method == "POST" || op.method == "PUT"
+		    || op.method == "PATCH" || op.method == "DELETE") {
 			packages_seen[tgt.package] = true;
 			for (let svc in tgt.reload) reload_seen[svc] = true;
 		}
@@ -862,7 +850,7 @@ function dispatch(env) {
 	// body parse and the ubus connect all run above this for every path, so an
 	// unauthenticated caller can also receive tls_required, bad_request or
 	// service_unavailable. See docs/security.md § Public endpoints.
-	let tokens = load_tokens(conn);
+	let tokens = token_store.list_for_auth(conn);
 	let now_epoch;
 	try { now_epoch = time(); } catch (_) { now_epoch = null; }
 	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION, hash_bearer,
@@ -900,8 +888,6 @@ function dispatch(env) {
 		return { ctx, token, resp };
 	}
 
-	// Idempotency for POST. A repeat of the same (token, key, body) replays
-	// the cached response; a same-key/different-body POST returns 409.
 	if (method == "POST" && ctx.idempotency_key != null) {
 		if (!idempotency.validate_key(ctx.idempotency_key))
 			return { ctx, token,

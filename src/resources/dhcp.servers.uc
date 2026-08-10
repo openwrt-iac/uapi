@@ -17,7 +17,6 @@ function read_file_or_empty(path) {
 
 // Lightweight counters; deliberately not reusing dhcp.leases*.uc modules to
 // avoid an inter-module loadfile dependency that breaks unit-test isolation.
-// We don't surface the lease bodies here, just the counts.
 //
 // active_leases_v4 is a box-total: dnsmasq's /tmp/dhcp.leases does not reliably
 // tag leases by serving interface, so per-interface counts are not available.
