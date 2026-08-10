@@ -51,21 +51,27 @@ function inbound_interface(conn, addr, device_lookup) {
 // Matching that scope is deliberate; predicting a firewall lockout means modelling fw4
 // zone and rule ordering, which cannot be done honestly from a resource module.
 //
-// `ipaddrs` is the same option as `ipaddr` under the name that replaces it, and watching
-// only the scalar made the guard blind to the exact case it exists for. A PATCH naming
-// `ipaddrs` has its `ipaddr` deleted by merge_for_patch, and a PUT naming only `ipaddrs`
-// leaves resolve_for_replace's early return untouched, so renumbering the caller's own
-// interface produced no warning at all. The deprecation is steering every client toward
-// that spelling, so the blind path was becoming the normal one.
-const WATCHED = [ "disabled", "proto", "ipaddr", "ipaddrs", "netmask" ];
+// `ipaddrs` is watched and the scalar `ipaddr` is not, because 3.0.0 made `ipaddr` read-only:
+// it is derived from the list on the way out and ignored on the way in, so a body changing it
+// describes a write that cannot happen, and comparing it can only produce warnings for writes
+// that do not occur.
+const WATCHED = [ "disabled", "proto", "ipaddrs", "netmask" ];
 
-function changed_fields(existing, incoming) {
+// `replace` distinguishes PUT from PATCH, and the distinction is the whole point on the write
+// that is easiest to get wrong. Under PUT an omitted field is deleted, so a v2 client sending
+// the retired `ipaddr` and no `ipaddrs` strips the interface's addresses: measured on a test
+// box, the section went from `192.0.2.88` to empty. Comparing only the keys the body names
+// reports nothing there, because the deletion is expressed by an absence. Under PATCH the same
+// absence means "leave it alone" and must stay silent.
+function changed_fields(existing, incoming, replace) {
 	let out = [];
 	for (let f in WATCHED) {
-		if (!exists(incoming, f)) continue;
 		let before = (existing ?? {})[f];
-		let after = incoming[f];
-		if (sprintf("%J", before) != sprintf("%J", after)) push(out, f);
+		if (!exists(incoming, f)) {
+			if (replace && before != null) push(out, f);
+			continue;
+		}
+		if (sprintf("%J", before) != sprintf("%J", incoming[f])) push(out, f);
 	}
 	return out;
 }

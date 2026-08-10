@@ -23307,11 +23307,6 @@
 							"anyOf": [
 								{
 									"required": [
-										"ipaddr"
-									]
-								},
-								{
-									"required": [
 										"ipaddrs"
 									]
 								}

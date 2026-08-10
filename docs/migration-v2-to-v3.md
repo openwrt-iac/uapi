@@ -4,22 +4,56 @@ v3 removes what 2.5.0 announced and nothing else. Every change below appeared in
 spec's own "Upcoming in v3" block and in `docs/deprecations.md`, so a client generated against
 2.5.0 has already been warned by its codegen about the flagged fields.
 
-A given uapi installation serves exactly one API major. There is no parallel `/api/v3/` and
+A given uapi installation serves exactly one API major. There is no parallel `/api/v2/` and
 `/api/v3/` mount in the same binary. Operators who need to keep a v2 client working keep the
 `2.5.x` package installed; the 2.5.0 APK stays on its GitHub Release and the signed `v2.5.0`
 tag is the canonical v2 contract document.
 
-**The URL prefix changes from `/api/v3/` to `/api/v3/`.** Update every client-side base URL.
+**The URL prefix changes from `/api/v2/` to `/api/v3/`.** Update every client-side base URL.
 Upgrading the package removes the v2 prefix from uhttpd's `ucode_prefix` list and adds the v3
 one, so no manual uci edit is needed.
 
 ## Upgrade path
 
 1. `apk update && apk upgrade uapi`
-2. Change your base URL from `/api/v3` to `/api/v3`
+2. Change your base URL from `/api/v2` to `/api/v3`
 3. Regenerate any typed client. Model names change: every resource now has a separate
    `<Name>Request` and `<Name>Response` schema
 4. Verify: `GET /api/v3/healthz` returns `{"status":"ok","version":"3.0.0",...}`
+
+## Removed request fields are ignored, not rejected
+
+Read this before assuming a green test run means a client has migrated.
+
+uapi drops request keys it does not model, and a removed field is indistinguishable from a key
+that never existed. So a v2 client that still sends `mac`, `mac_aliases`, `ipaddr`, `managed` or
+any of the dead fields below gets `200`, and the value goes nowhere:
+
+```
+# against v3, on a host whose reservation lists two MACs
+PATCH /api/v3/dhcp/hosts/printer {"mac": "aa:bb:cc:dd:ee:01"}
+-> 200, and uci still holds both original entries
+```
+
+That is the same rule every unknown key has always followed, and changing it for these five
+names alone would mean carrying the removed vocabulary into v3 just to refuse it. The cost is
+that a stale write fails silently, which is why regenerating the client matters more here than
+across a normal upgrade: codegen against the v3 spec turns each of these into a compile error
+instead of a no-op.
+
+**`network/interfaces.name` on create is the sharpest case.** It does not 422. A section name is
+required to create anything, so when `id` is absent uapi emits one, exactly as it does for a
+body that names no section at all:
+
+```
+POST /api/v3/network/interfaces {"name": "lan2", "proto": "static", "ipaddrs": ["192.0.2.77"]}
+-> 200 {"id": "i_01kznhag1a6yg3qgmv85bgmhh7", ...}
+```
+
+The interface exists and carries the right addresses, under a name the caller never chose and
+will not find again by the name it sent. An IaC client that keys resources by the name it
+requested reads that back as drift and creates a second one on the next apply. Rename the field
+to `id` before upgrading, not after the first apply.
 
 ## Field removals (Breaking)
 

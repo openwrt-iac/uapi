@@ -184,6 +184,26 @@ for (let name in schemas) {
 		if (type(props[p]) == "object" && props[p].readOnly === true)
 			note(sprintf("/components/schemas/%s/properties/%s", name, p),
 			     "is readOnly, so it belongs in the response half only");
+
+	// A `required` inside a conditional names keys on the instance and has no sibling
+	// `properties`, so the structural walk above cannot check it and a request half can
+	// require a field it does not declare. That shipped: the static-proto arm accepted
+	// `ipaddr` alone, which is exactly the body the write path ignores, so a client
+	// validating against the schema would send an address that never landed.
+	for (let i = 0; i < length(schemas[name].allOf ?? []); i++) {
+		let c = schemas[name].allOf[i];
+		let groups = [];
+		if (type(c.anyOf) == "array") push(groups, ...c.anyOf);
+		if (type(c.then) == "object") {
+			if (type(c.then.required) == "array") push(groups, c.then);
+			if (type(c.then.anyOf) == "array") push(groups, ...c.then.anyOf);
+		}
+		for (let g in groups)
+			for (let r in g.required ?? [])
+				if (!exists(props, r))
+					note(sprintf("/components/schemas/%s/allOf/%d", name, i),
+					     sprintf("requires %J, which this half does not declare", r));
+	}
 }
 
 // A collection segment names a set, so it reads plural, and every curated one

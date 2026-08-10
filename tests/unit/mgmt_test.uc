@@ -27,32 +27,54 @@ t.describe('mgmt.inbound_interface', () => {
 
 t.describe('mgmt.changed_fields', () => {
 	t.it('names only the watched fields the body actually moves', () => {
-		let before = { proto: 'static', ipaddr: '192.168.1.1', netmask: '255.255.255.0' };
-		t.assert_deep_equal(m.changed_fields(before, { proto: 'dhcp' }), ['proto']);
-		t.assert_deep_equal(m.changed_fields(before, { ipaddr: '10.0.0.1' }), ['ipaddr']);
-		t.assert_deep_equal(m.changed_fields(before, { proto: 'dhcp', netmask: '255.0.0.0' }),
+		let before = { proto: 'static', ipaddrs: ['192.168.1.1'], netmask: '255.255.255.0' };
+		t.assert_deep_equal(m.changed_fields(before, { proto: 'dhcp' }, false), ['proto']);
+		t.assert_deep_equal(m.changed_fields(before, { ipaddrs: ['10.0.0.1'] }, false), ['ipaddrs']);
+		t.assert_deep_equal(m.changed_fields(before, { proto: 'dhcp', netmask: '255.0.0.0' }, false),
 		                    ['proto', 'netmask']);
 	});
 
 	t.it('stays quiet when a watched field is sent unchanged', () => {
-		let before = { proto: 'static', ipaddr: '192.168.1.1' };
-		t.assert_deep_equal(m.changed_fields(before, { proto: 'static' }), []);
-		t.assert_deep_equal(m.changed_fields(before, { proto: 'static', ipaddr: '192.168.1.1' }), []);
+		let before = { proto: 'static', ipaddrs: ['192.168.1.1'] };
+		t.assert_deep_equal(m.changed_fields(before, { proto: 'static' }, false), []);
+		t.assert_deep_equal(
+			m.changed_fields(before, { proto: 'static', ipaddrs: ['192.168.1.1'] }, false), []);
+	});
+
+	t.it('ignores the retired scalar, which no write path can act on', () => {
+		let before = { proto: 'static', ipaddr: '192.168.1.1', ipaddrs: ['192.168.1.1'] };
+		t.assert_deep_equal(m.changed_fields(before, { ipaddr: '10.0.0.1' }, false), []);
+		t.assert_deep_equal(m.changed_fields(before, { ipaddr: '10.0.0.1' }, true),
+		                    ['proto', 'ipaddrs']);
+	});
+
+	t.it('under replace, an omitted watched field is a deletion and counts as a change', () => {
+		let before = { proto: 'static', ipaddrs: ['192.168.1.1'], netmask: '255.255.255.0' };
+		t.assert_deep_equal(m.changed_fields(before, { proto: 'static' }, true),
+		                    ['ipaddrs', 'netmask']);
+		t.assert_deep_equal(
+			m.changed_fields(before, { proto: 'static', ipaddrs: ['192.168.1.1'],
+			                           netmask: '255.255.255.0' }, true), []);
+	});
+
+	t.it('under replace, a field absent from both sides is not a deletion', () => {
+		t.assert_deep_equal(m.changed_fields({ proto: 'dhcp' }, { proto: 'dhcp' }, true), []);
 	});
 
 	t.it('ignores fields outside the watched set, however risky they look', () => {
 		// LuCI's scope is these four and no firewall analysis; `device` and `gateway`
 		// can strand a caller too, and are deliberately not claimed here.
-		t.assert_deep_equal(m.changed_fields({ device: 'br-lan' }, { device: 'eth9' }), []);
-		t.assert_deep_equal(m.changed_fields({}, { gateway: '10.0.0.1' }), []);
+		t.assert_deep_equal(m.changed_fields({ device: 'br-lan' }, { device: 'eth9' }, false), []);
+		t.assert_deep_equal(m.changed_fields({}, { gateway: '10.0.0.1' }, false), []);
 	});
 
 	// An absent field becoming an explicit value is a change: `disabled` unset then
 	// sent as true is exactly the write that strands a caller.
 	t.it('counts an absent field becoming set', () => {
-		t.assert_deep_equal(m.changed_fields({}, { disabled: true }), ['disabled']);
-		t.assert_deep_equal(m.changed_fields({ disabled: false }, { disabled: true }), ['disabled']);
-		t.assert_deep_equal(m.changed_fields({ disabled: false }, { disabled: false }), []);
+		t.assert_deep_equal(m.changed_fields({}, { disabled: true }, false), ['disabled']);
+		t.assert_deep_equal(m.changed_fields({ disabled: false }, { disabled: true }, false),
+		                    ['disabled']);
+		t.assert_deep_equal(m.changed_fields({ disabled: false }, { disabled: false }, false), []);
 	});
 });
 
