@@ -82,6 +82,23 @@ t.describe('dhcp.hosts.validate', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
+	// The index has to be the loop counter, not a constant. Every other case here puts the
+	// bad entry first, which a hardcoded `macs[0]` would satisfy, so a caller fixing the
+	// address the error named would have been editing the wrong list entry.
+	t.it('reports a bad mac against its own index, not the first', () => {
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff', 'not-a-mac'], ip: '10.0.0.1' }, null);
+		let bad = filter(errs, function(e) { return e.code == 'invalid_format'; });
+		t.assert_equal(length(bad), 1);
+		t.assert_equal(bad[0].field, 'macs[1]');
+	});
+
+	t.it('rejects a hostid that is not an IPv6 suffix, and accepts one that is', () => {
+		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], hostid: 'nonsense' }, null);
+		let he = filter(errs, function(e) { return e.field == 'hostid'; });
+		t.assert_equal(he[0].code, 'invalid_format');
+		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], hostid: '::abcd' }, null)), 0);
+	});
+
 	t.it('rejects malformed IPv4', () => {
 		let errs = hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ip: '999.0.0.1' }, null);
 		let ip_errs = filter(errs, function(e) { return e.field == "ip"; });
