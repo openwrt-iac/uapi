@@ -7,7 +7,6 @@ install_uapi
 URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
-SSH="tests/vm/ssh.sh"
 
 # Track ids we create across tests so we always clean up.
 CLEANUP_IDS=""

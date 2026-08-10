@@ -3,11 +3,33 @@ let ubus = require('bus');
 let handler = require('handler');
 let wgp = loadfile('src/resources/network.wireguard_peers.uc')();
 
+const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
+const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
+
 function full_validate(r, body, conn) {
 	let out = [];
 	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
 	return out;
+}
+
+function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+
+function with_wg() {
+	return ubus.stub({
+		uci: {
+			network: {
+				wg1: { '.type': 'interface', '.anonymous': false,
+				       proto: 'wireguard',
+				       private_key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' },
+				g_existing: {
+					'.type': 'wireguard_wg1', '.anonymous': false,
+					public_key: PK,
+					allowed_ips: ['10.42.0.2/32'],
+				},
+			},
+		},
+	});
 }
 
 t.describe('network.wireguard_peers contract', () => {
@@ -140,8 +162,6 @@ t.describe('network.wireguard_peers.validate', () => {
 	});
 });
 
-let handler = require('handler');
-
 t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', () => {
 	function make_handler() {
 		return handler.make(wgp, {
@@ -150,25 +170,6 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 				release: function() {},
 				reload: function() { return null; },
 				check_services: function() { return null; },
-			},
-		});
-	}
-
-	function ctx() { return { request_id: "01hx0000000000000000000000" }; }
-
-	function with_wg() {
-		return ubus.stub({
-			uci: {
-				network: {
-					wg1: { '.type': 'interface', '.anonymous': false,
-					       proto: 'wireguard',
-					       private_key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' },
-					g_existing: {
-						'.type': 'wireguard_wg1', '.anonymous': false,
-						public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-						allowed_ips: ['10.42.0.2/32'],
-					},
-				},
 			},
 		});
 	}
@@ -237,9 +238,6 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 // and a delete does not revoke it. Every write has to emit the peer operations
 // the transaction then pushes to the kernel.
 t.describe('network.wireguard_peers kernel apply', () => {
-	const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
-	const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
-
 	function op_tracking_handler(sink) {
 		return handler.make(wgp, {
 			tx: {
@@ -249,25 +247,6 @@ t.describe('network.wireguard_peers kernel apply', () => {
 				check_services: function() { return null; },
 				wg_apply: function(conn, ops) { for (let o in ops) push(sink, o); return null; },
 				wg_reconcile: function() { return null; },
-			},
-		});
-	}
-
-	function ctx() { return { request_id: "01hx0000000000000000000000" }; }
-
-	function with_wg() {
-		return ubus.stub({
-			uci: {
-				network: {
-					wg1: { '.type': 'interface', '.anonymous': false,
-					       proto: 'wireguard',
-					       private_key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' },
-					g_existing: {
-						'.type': 'wireguard_wg1', '.anonymous': false,
-						public_key: PK,
-						allowed_ips: ['10.42.0.2/32'],
-					},
-				},
 			},
 		});
 	}

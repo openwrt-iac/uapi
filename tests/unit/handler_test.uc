@@ -377,8 +377,6 @@ t.describe('handler.replace', () => {
 	});
 
 	t.it('normalizes away unmodeled uci options (PUT = full replace, uapi owns the section)', () => {
-		// Counterpart to the PATCH-preserve test: PUT is a whole-resource
-		// replace, so an option uapi does not model is intentionally dropped.
 		let c = with_existing();
 		c._state.uci.firewall.r_existing.icmp_type = ['echo-request'];
 		let r = rules.replace(c, ctx(), 'r_existing', {
@@ -463,7 +461,6 @@ t.describe('handler.replace write-only secret carry-forward', () => {
 			reload: function() { return null; }, check_services: function() { return null; },
 		},
 	});
-	function rctx() { return { request_id: "01hx0000000000000000000000" }; }
 	function seeded() {
 		return ubus.stub({ uci: { wireless: {
 			w1: { '.type': 'wifi-iface', '.anonymous': false,
@@ -476,7 +473,7 @@ t.describe('handler.replace write-only secret carry-forward', () => {
 	// carry-forward this was a 422 with no way to write the section at all.
 	t.it('PUT of the masked read view succeeds and keeps the key', () => {
 		let c = seeded();
-		let r = wiface.replace(c, rctx(), 'w1',
+		let r = wiface.replace(c, ctx(), 'w1',
 			{ device: 'radio0', ssid: 'home2', encryption: 'psk2' });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.ssid, 'home2');
@@ -485,7 +482,7 @@ t.describe('handler.replace write-only secret carry-forward', () => {
 
 	t.it('PUT that supplies a new key still replaces it', () => {
 		let c = seeded();
-		let r = wiface.replace(c, rctx(), 'w1',
+		let r = wiface.replace(c, ctx(), 'w1',
 			{ device: 'radio0', ssid: 'home', encryption: 'psk2', key: 'newsecret' });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
@@ -495,7 +492,7 @@ t.describe('handler.replace write-only secret carry-forward', () => {
 	// destroy a working key, so null means keep, exactly as omission does.
 	t.it('PUT with an explicit null keeps the key rather than clearing it', () => {
 		let c = seeded();
-		let r = wiface.replace(c, rctx(), 'w1',
+		let r = wiface.replace(c, ctx(), 'w1',
 			{ device: 'radio0', ssid: 'home', encryption: 'psk2', key: null });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.key, 'secretpw');
@@ -503,7 +500,7 @@ t.describe('handler.replace write-only secret carry-forward', () => {
 
 	t.it('still reports validation before not_found on an unknown id', () => {
 		let c = seeded();
-		let r = wiface.replace(c, rctx(), 'nope', { ssid: 'x', encryption: 'psk2' });
+		let r = wiface.replace(c, ctx(), 'nope', { ssid: 'x', encryption: 'psk2' });
 		t.assert_equal(r.status, 422);
 	});
 });
@@ -760,7 +757,6 @@ t.describe('handler ETags / If-Match', () => {
 
 t.describe('handler ETag regressions', () => {
 	function res_with_runtime() {
-		// Minimal resource that has a runtime block.
 		return {
 			package: "firewall",
 			type: "rule",
@@ -771,7 +767,10 @@ t.describe('handler ETag regressions', () => {
 					managed: !s['.anonymous'],
 					target: s.target ?? null,
 					src: s.src ?? null,
-					runtime: { now: 1 },
+					// Derived from the section so the test can move it. A constant here
+					// made the case below pass whether or not compute_etag stripped the
+					// block, which is how the strip survived with no coverage at all.
+					runtime: { drift: s._drift ?? 0 },
 				};
 			},
 			toUci: function(j) {
@@ -794,9 +793,12 @@ t.describe('handler ETag regressions', () => {
 			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' },
 		}}});
 		let a = h.get_one(c, ctx(), 'r1');
-		// Hack the cursor so the runtime field DIFFERS while uci stays the same.
-		c._state.uci.firewall.r1._unrelated_drift = "ignored";
+		// Moves `runtime` without touching any hashed field: live ubus state drifts
+		// second to second on an unchanged section, and hashing it would 412 every
+		// If-Match round-trip.
+		c._state.uci.firewall.r1._drift = 1;
 		let b = h.get_one(c, ctx(), 'r1');
+		t.assert_true(a.body.runtime.drift != b.body.runtime.drift);
 		t.assert_equal(a.headers.ETag, b.headers.ETag);
 	});
 
@@ -820,7 +822,6 @@ t.describe('handler ETag regressions', () => {
 		}}});
 		let initial = h.get_one(c, ctx(), 'r1').headers.ETag;
 
-		// Add an unrelated sibling of the same type.
 		c._state.uci.firewall.r2 = { '.type': 'rule', '.anonymous': false,
 		                              target: 'REJECT', src: 'lan' };
 		let after_add = h.get_one(c, ctx(), 'r1').headers.ETag;
@@ -831,7 +832,6 @@ t.describe('handler ETag regressions', () => {
 		let after_other_type = h.get_one(c, ctx(), 'r1').headers.ETag;
 		t.assert_equal(initial, after_other_type);
 
-		// Delete both. ETag must still be the original (pure function of r1's body).
 		delete c._state.uci.firewall.r2;
 		delete c._state.uci.firewall.z1;
 		let after_delete = h.get_one(c, ctx(), 'r1').headers.ETag;
@@ -847,7 +847,6 @@ t.describe('handler ETag regressions', () => {
 		let ctx_stale = { request_id: "01hxdelmismatch", if_match: "\"deadbeef0000\"" };
 		let r = rules.remove(c, ctx_stale, 'r_existing');
 		t.assert_equal(r.status, 412);
-		// Verify the section is still there.
 		let get_after = rules.get_one(c, ctx(), 'r_existing');
 		t.assert_equal(get_after.status, 200);
 	});
@@ -924,7 +923,7 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 		let c = with_zones();
 		let r = rules.create(c, ctx(), {
 			target: "ACCEPT",
-			match: "wan",  // should be an object
+			match: "wan",
 		});
 		t.assert_equal(r.status, 422);
 		let errs = r.body.errors;
@@ -980,7 +979,6 @@ t.describe('handler schema-type check (silent-drop guard)', () => {
 
 	t.it('error message uses JSON Schema vocabulary (got integer, not got int)', () => {
 		let c = with_zones();
-		// target wants string; pass a JSON integer.
 		let r = rules.create(c, ctx(), { target: 42, match: { src_zone: "wan" } });
 		t.assert_equal(r.status, 422);
 		let hit = null;
@@ -1020,7 +1018,6 @@ t.describe('handler schema-type check: PATCH does not re-validate uci-string fie
 		let c = ubus.stub({ uci: { dropbear: {
 			d_main: { '.type': 'dropbear', '.anonymous': false, Port: '22' },
 		}}});
-		// port as a string in the delta: schema_properties declares integer.
 		let r = dropbear.patch(c, ctx(), 'd_main', { port: 'not-a-number' });
 		t.assert_equal(r.status, 422);
 		let hit = null;
@@ -1282,7 +1279,6 @@ t.describe('handler kernel-apply headers', () => {
 			},
 		});
 	}
-	function kctx() { return { request_id: "01hx0000000000000000000000" }; }
 	function seeded() {
 		return ubus.stub({ uci: { network: {
 			wg0: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
@@ -1295,7 +1291,7 @@ t.describe('handler kernel-apply headers', () => {
 
 	t.it('names the interface a peer write reached', () => {
 		let h = peers_with(function(c, o, applied) { push(applied, "wg0"); return null; });
-		let r = h.create(seeded(), kctx(), body());
+		let r = h.create(seeded(), ctx(), body());
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.headers["X-Kernel-Status"], "ok");
 		t.assert_equal(r.headers["X-Kernel-Applied"], "wg0");
@@ -1305,7 +1301,7 @@ t.describe('handler kernel-apply headers', () => {
 	// correct, but the client must not read that as having reached the kernel.
 	t.it('reports skipped without an applied list when the tunnel is down', () => {
 		let h = peers_with(function(c, o, applied) { return null; });
-		let r = h.create(seeded(), kctx(), body());
+		let r = h.create(seeded(), ctx(), body());
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.headers["X-Kernel-Status"], "skipped");
 		t.assert_equal(r.headers["X-Kernel-Applied"], null);
@@ -1321,7 +1317,7 @@ t.describe('handler kernel-apply headers', () => {
 			         public_key: PK, allowed_ips: ['10.0.0.9/32'] },
 		} } });
 		let h = peers_with(function(cc, o, applied) { push(applied, "wg0"); return null; });
-		let r = h.create(c, kctx(), body());
+		let r = h.create(c, ctx(), body());
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.headers["X-Kernel-Applied"], "wg0");
 	});
@@ -1525,7 +1521,6 @@ t.describe('clearing a list option actually clears it', () => {
 		         reload: function() { return null; }, check_services: function() { return null; },
 		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
 	}
-	function c() { return { request_id: "01hx0000000000000000000000" }; }
 	function seeded() {
 		let fx = require('resource_fixtures');
 		let uci = fx.world();
@@ -1539,7 +1534,7 @@ t.describe('clearing a list option actually clears it', () => {
 	t.it('PATCH with an empty array deletes the uci option', () => {
 		let conn = seeded();
 		let h = handler.make(mod, { tx: tx_ok() });
-		let r = h.patch(conn, c(), 'hclr', { tag: [] });
+		let r = h.patch(conn, ctx(), 'hclr', { tag: [] });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(conn._state.uci.dhcp.hclr.tag, null);
 	});
@@ -1547,7 +1542,7 @@ t.describe('clearing a list option actually clears it', () => {
 	t.it('PUT with an empty array deletes it too', () => {
 		let conn = seeded();
 		let h = handler.make(mod, { tx: tx_ok() });
-		let r = h.replace(conn, c(), 'hclr', { macs: ['00:11:22:33:44:99'], ip: '10.0.0.9', tag: [] });
+		let r = h.replace(conn, ctx(), 'hclr', { macs: ['00:11:22:33:44:99'], ip: '10.0.0.9', tag: [] });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(conn._state.uci.dhcp.hclr.tag, null);
 	});
@@ -1555,7 +1550,7 @@ t.describe('clearing a list option actually clears it', () => {
 	t.it('a non-empty list is still written', () => {
 		let conn = seeded();
 		let h = handler.make(mod, { tx: tx_ok() });
-		h.patch(conn, c(), 'hclr', { tag: ['a', 'b'] });
+		h.patch(conn, ctx(), 'hclr', { tag: ['a', 'b'] });
 		t.assert_deep_equal(conn._state.uci.dhcp.hclr.tag, ['a', 'b']);
 	});
 
@@ -1574,7 +1569,7 @@ t.describe('clearing a list option actually clears it', () => {
 		uci.dhcp = uci.dhcp ?? {};
 		let conn = ubus.stub({ uci: uci });
 		let h = handler.make(mod, { tx: tx_ok() });
-		let r = h.create(conn, c(), { id: 'hnew', macs: ['00:11:22:33:44:aa'],
+		let r = h.create(conn, ctx(), { id: 'hnew', macs: ['00:11:22:33:44:aa'],
 		                              ip: '10.0.0.77', tag: [] });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(conn._state.uci.dhcp.hnew.tag, null);

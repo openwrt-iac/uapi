@@ -19,10 +19,7 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 # is not enough on its own; ensure_wireguard handles the restart. If it cannot be
 # made to work the netdev assertions below are meaningless, so this fails rather
 # than quietly downgrading to uci-only checks, which is how they went unrun.
-WG_KMOD_AVAILABLE=0
-if ensure_wireguard; then
-	WG_KMOD_AVAILABLE=1
-else
+if ! ensure_wireguard; then
 	echo "[35_wg] FAIL: no usable wireguard support; the netdev assertions cannot run"
 	echo "[35_wg] uname -r: $($SSH 'uname -r')"
 	exit 1
@@ -45,19 +42,15 @@ id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$
 echo "--- the uci section is named wgci (not a 28-char ULID) ---"
 $SSH "uci get network.wgci" >/dev/null || fail "section network.wgci not in uci"
 
-if [ "$WG_KMOD_AVAILABLE" = "1" ]; then
-	echo "--- ip link show wgci returns a real kernel netdev ---"
-	# netifd is async; poll up to 15s for the netdev to appear instead of a
-	# bare sleep (flaky on slow CI runners).
-	for i in $(seq 1 15); do
-		$SSH "ip link show wgci" >/dev/null 2>&1 && break
-		sleep 1
-	done
-	$SSH "ip link show wgci" >/dev/null 2>&1 \
-		|| fail "ip link show wgci failed (the v2.0.0 bug); netifd could not create the netdev"
-else
-	echo "[35_wg] skipping wgci netdev assertion (no kmod)"
-fi
+echo "--- ip link show wgci returns a real kernel netdev ---"
+# netifd is async; poll up to 15s for the netdev to appear instead of a
+# bare sleep (flaky on slow CI runners).
+for i in $(seq 1 15); do
+	$SSH "ip link show wgci" >/dev/null 2>&1 && break
+	sleep 1
+done
+$SSH "ip link show wgci" >/dev/null 2>&1 \
+	|| fail "ip link show wgci failed (the v2.0.0 bug); netifd could not create the netdev"
 
 echo "--- DELETE wireguard interface ---"
 del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/interfaces/wgci")
@@ -75,16 +68,12 @@ echo "$id" | grep -qE '^wg_[0-9a-hjkmnp-tv-z]{11}$' \
 	|| fail "expected id=wg_<11-char>, got id=$id"
 test "$(echo -n "$id" | wc -c)" -le 15 \
 	|| fail "id $id exceeds IFNAMSIZ (15 chars)"
-if [ "$WG_KMOD_AVAILABLE" = "1" ]; then
-	for i in $(seq 1 15); do
-		$SSH "ip link show $id" >/dev/null 2>&1 && break
-		sleep 1
-	done
-	$SSH "ip link show $id" >/dev/null 2>&1 \
-		|| fail "ip link show $id failed; netifd could not create the netdev"
-else
-	echo "[35_wg] skipping $id netdev assertion (no kmod)"
-fi
+for i in $(seq 1 15); do
+	$SSH "ip link show $id" >/dev/null 2>&1 && break
+	sleep 1
+done
+$SSH "ip link show $id" >/dev/null 2>&1 \
+	|| fail "ip link show $id failed; netifd could not create the netdev"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/$id"
 
 echo "--- id on a non-wireguard create -> 200 (any proto accepts a caller-supplied section name) ---"

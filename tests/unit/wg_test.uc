@@ -191,8 +191,7 @@ t.describe('wg route prefixes', () => {
 // installed into main would leave the peer without a path.
 t.describe('wg.route_table', () => {
 	function conn_with(opts) {
-		let c = ubus.stub({ uci: { network: { wg1: { '.type': 'interface', ...opts } } } });
-		return c;
+		return ubus.stub({ uci: { network: { wg1: { '.type': 'interface', ...opts } } } });
 	}
 	t.it('is null when the interface sets no table', () => {
 		t.assert_equal(wg.route_table(conn_with({}), 'wg1', false), null);

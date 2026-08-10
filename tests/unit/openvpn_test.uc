@@ -28,7 +28,6 @@ t.describe('openvpn.instances contract', () => {
 		t.assert_equal(r.has_key, true);
 		t.assert_equal(r.has_tls_auth, true);
 		t.assert_equal(r.has_pkcs12, true);
-		// Sensitive values themselves must NOT be in the response body.
 		t.assert_equal(r.key, null);
 		t.assert_equal(r.tls_auth, null);
 		t.assert_equal(r.pkcs12, null);

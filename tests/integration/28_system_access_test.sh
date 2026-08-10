@@ -55,7 +55,6 @@ init=$(call "$URL/system/authorized_keys")
 echo "$init" | tail -1 | grep -q '^200$' || fail "list expected 200"
 
 KEY1='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9k0xZJ0c5RT9YhqpQQfX9hyyExampleKey1AAAA= test-key-1'
-KEY2='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDifferentKeyContentHereExampleKey2BB= test-key-2'
 
 echo "--- system/authorized_keys: POST adds a key ---"
 added=$(call -X POST -H 'Content-Type: application/json' "$URL/system/authorized_keys" \

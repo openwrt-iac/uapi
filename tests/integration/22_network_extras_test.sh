@@ -82,6 +82,4 @@ echo "$no_bridge" | tail -1 | grep -q '^422$' || fail "missing bridge expected 4
 echo "--- network/bridge_vlans: DELETE ---"
 call -X DELETE "$URL/network/bridge_vlans/$vid" | tail -1 | grep -q '^204$' || fail "DELETE bridge_vlans expected 204"
 
-# Cleanup runs from the EXIT trap above.
-
 echo "network/routes + rules + bridge_vlans CRUD ok."

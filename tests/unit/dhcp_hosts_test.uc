@@ -155,9 +155,6 @@ t.describe('dhcp.hosts.validate', () => {
 	});
 });
 
-let ubus = require('bus');
-
-
 // name, tag and dns were written by toUci but absent from schema_properties, so the
 // central type gate never saw them: `dns: "0"` was a truthy string in ucode and wrote
 // dns=1, the inverse of the request. These assert the gate now covers them.
@@ -188,10 +185,6 @@ t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
 		t.assert_equal(length(types({ name: null })), 0);
 	});
 
-	// `tag` keeps the union on the request side only: the 2.4.1 spec declared a
-	// string, so clients generated against it send one, and dnsmasq word-splits a
-	// scalar identically. Responses are always an array (see the round-trip test
-	// below); v3 removes the write form.
 	// The space-separated string was accepted only because the 2.4.1 spec declared one.
 	// v3 drops it: the field is an array in both directions.
 	t.it('accepts an array or null, and refuses the string form', () => {
