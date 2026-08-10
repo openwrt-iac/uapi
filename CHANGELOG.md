@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Changed
 
+- **Every resource is now described by two schemas, `<Name>Request` and `<Name>Response`.** One schema served both directions until now, which is why `network/interfaces.ipaddr` had to be described in prose rather than as `readOnly`, why `dhcp/hosts.tag` kept `string` in its type for writers although responses were always an array, and why `runtime` and `managed` needed a `readOnly` annotation to stay out of a generated request model. Generated model names change for every resource. 46 pairs, and the 13 singletons gain a real request schema in place of the untyped `{"type": "object"}` patch body they carried before.
+
+  Three announced changes ride on it, none of them expressible before: `managed` is absent from every request schema, `network/interfaces.ipaddr` is `readOnly` in the response half and absent from the request one, and `dhcp/hosts.tag` is array-only in both directions.
+
+  `make lint-openapi-shape` gains a rule that a request schema may not carry `managed`, `runtime`, or any `readOnly` property, so the split cannot silently regrow. `GET /schema/<package>/<resource>` still serves the module's declared set as one object, and now says so.
+
+
 - **List-valued fields read back `null`, not `[]`, when the uci key is absent.** uci cannot store an empty list, so `[]` already meant "absent" and distinguished nothing; a client could not tell the two apart because there were never two states. 46 properties across 22 resources widen to `["array", "null"]`. The request and response envelopes are untouched, where `[]` means empty rather than absent, as are the four `runtime` arrays, which come from ubus rather than uci. Verified that the four `runtime` arrays kept `[]` rather than being swept along with the rest.
 
   The payoff is that a list field can now carry `x-uapi-clear-on-omit`, which was impossible before: the flag requires a shape that reads absent as null, and `as_list` returned `[]`. `make lint-defaults` accepts the new `as_list_or_null(...)` shape alongside `section.X ?? null`, and still rejects plain `as_list`, verified in both directions.

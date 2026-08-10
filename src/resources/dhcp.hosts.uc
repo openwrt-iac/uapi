@@ -152,11 +152,8 @@ return {
 		               description: "Hostname dnsmasq answers for this reservation" },
 		// Responses are always an array; the string stays in the type only because a
 		// request may still send one, and one schema serves both directions here. The
-		// 2.4.1 spec declared `string`, so clients generated against it send one, and
-		// rejecting that would break every existing writer for no gain: dnsmasq
-		// word-splits a scalar identically. v3 removes the write form.
-		tag:           { type: ["string", "array", "null"], items: { type: "string" },
-		               description: "dnsmasq tags for this reservation; a request must match all of them. **Responses are always an array**, including for a section storing a space-separated scalar, which dnsmasq treats the same way. A space-separated string is still accepted on write; v3 removes that and the field becomes array-only. See docs/deprecations.md" },
+		tag:           { type: ["array", "null"], items: { type: "string" },
+		                 description: "dnsmasq tags for this reservation; a request must match all of them. A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way." },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.
