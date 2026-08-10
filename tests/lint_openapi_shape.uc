@@ -337,24 +337,23 @@ for (let p in paths_for_body) {
 // minus the response-only and readOnly entries, and this pins that rather than trusting it.
 // The hand-written operation pairs are legitimately request-only in places (a token create
 // sends scopes and gets back a token) and are not in the generator's endpoint catalog.
+// The Response names the generator emits for a curated resource, taken from what each curated
+// GET actually returns rather than by re-deriving the naming rule here.
+let generated_responses = {};
+for (let p in curated)
+	collect_refs(paths_for_body[p]?.get?.responses?.["200"]?.content?.["application/json"]?.schema ?? {},
+	             generated_responses);
+
 let superset_pairs = 0;
 for (let name in schemas) {
 	if (substr(name, -7) != "Request") continue;
 	let base = substr(name, 0, length(name) - 7);
-	if (!exists(schemas, base + "Response")) continue;
-	if (!body_refs[name]) continue;
-	let rq = schemas[name].properties ?? {};
-	let rs = schemas[base + "Response"].properties ?? {};
-	let generated = false;
-	for (let p in curated) {
-		let ref = paths_for_body[p]?.get?.responses?.["200"]?.content?.["application/json"]?.schema;
-		let r = {};
-		collect_refs(ref ?? {}, r);
-		if (r[base + "Response"]) generated = true;
-	}
-	if (!generated) continue;
+	// An unreferenced Request is already reported above; a pair with no generated Response is
+	// one of the hand-written operation shapes.
+	if (!body_refs[name] || !generated_responses[base + "Response"]) continue;
 	superset_pairs++;
-	for (let f in rq)
+	let rs = schemas[base + "Response"].properties ?? {};
+	for (let f in schemas[name].properties ?? {})
 		if (!exists(rs, f))
 			note(sprintf("/components/schemas/%s/properties/%s", name, f),
 			     sprintf("is in the request half but not in %sResponse, so a generated client would emit it as computed and no one could set it", base));
