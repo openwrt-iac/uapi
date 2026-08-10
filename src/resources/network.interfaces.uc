@@ -205,9 +205,41 @@ function validate(json, conn, id) {
 		push(errs, { field: "id", code: "invalid_format",
 		             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (proto=wireguard binds the uci section name to the kernel netdev name; IFNAMSIZ caps it at 15 chars)" });
 
+	// Whether an address is REQUIRED depends on the proto; whether a value IS an address
+	// does not. Keeping the format checks inside the static branch meant a body naming
+	// another proto skipped them while toUci wrote the option anyway, so uapi accepted
+	// `broadcast: "999.999.999.999"` and `ip6gw: "not-an-address"` on a dhcp interface and
+	// committed both. Measured on a box before this was split apart.
+	if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
+		push(errs, { field: "netmask", code: "invalid_format",
+		             message: "must be a valid IPv4 netmask" });
+	if (json.gateway != null && json.gateway != "" && !is_valid_ipv4(json.gateway))
+		push(errs, { field: "gateway", code: "invalid_format",
+		             message: "must be a valid IPv4 address" });
+	if (json.broadcast != null && json.broadcast != "" && !is_valid_ipv4(json.broadcast))
+		push(errs, { field: "broadcast", code: "invalid_format",
+		             message: "must be a valid IPv4 address" });
+	// netifd wants a bare address for the gateway and accepts a prefix length on the routed
+	// prefix, which is the same split LuCI encodes as ip6addr("nomask") against ip6addr.
+	if (json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
+		push(errs, { field: "ip6gw", code: "invalid_format",
+		             message: "must be a valid IPv6 address without a prefix length" });
+	if (json.ip6prefix != null && json.ip6prefix != ""
+	    && !is_valid_ipv6_cidr(json.ip6prefix) && !is_valid_ipv6(json.ip6prefix))
+		push(errs, { field: "ip6prefix", code: "invalid_format",
+		             message: "must be a valid IPv6 address or prefix" });
+	for (let i = 0; i < length(json.ipaddrs); i++) {
+		if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
+			push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
+			             message: "must be a valid IPv4 address or CIDR" });
+	}
+	for (let i = 0; i < length(json.ip6addrs); i++) {
+		if (!is_valid_ipv6(json.ip6addrs[i]) && !is_valid_ipv6_cidr(json.ip6addrs[i]))
+			push(errs, { field: sprintf("ip6addrs[%d]", i), code: "invalid_format",
+			             message: "must be a valid IPv6 address or CIDR" });
+	}
+
 	if (json.proto == "static") {
-		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
-		let has_v6 = type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0;
 		// One address family is enough, matching LuCI, whose static form marks neither
 		// `ipaddr` nor `ip6addr` required. Demanding IPv4 made an IPv6-only interface
 		// unwritable and so unable to round-trip its own read.
@@ -215,39 +247,11 @@ function validate(json, conn, id) {
 		// The read-only `ipaddr` deliberately does not count. Only `ipaddrs` and `ip6addrs`
 		// write, so a body carrying the scalar alone once satisfied the requirement and then
 		// wrote nothing: uapi created an addressless static interface and answered 200.
+		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
+		let has_v6 = type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0;
 		if (!has_list && !has_v6)
 			push(errs, { field: "ipaddrs", code: "required",
 			             message: "either ipaddrs or ip6addrs is required when proto is static" });
-		if (has_list) {
-			for (let i = 0; i < length(json.ipaddrs); i++) {
-				if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
-					push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
-					             message: "must be a valid IPv4 address or CIDR" });
-			}
-		}
-		if (has_v6) {
-			for (let i = 0; i < length(json.ip6addrs); i++) {
-				if (!is_valid_ipv6(json.ip6addrs[i]) && !is_valid_ipv6_cidr(json.ip6addrs[i]))
-					push(errs, { field: sprintf("ip6addrs[%d]", i), code: "invalid_format",
-					             message: "must be a valid IPv6 address or CIDR" });
-			}
-		}
-		if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
-			push(errs, { field: "netmask", code: "invalid_format",
-			             message: "must be a valid IPv4 netmask" });
-		if (json.broadcast != null && json.broadcast != "" && !is_valid_ipv4(json.broadcast))
-			push(errs, { field: "broadcast", code: "invalid_format",
-			             message: "must be a valid IPv4 address" });
-		// netifd wants a bare address for the gateway and accepts a prefix length on the
-		// routed prefix, which is the same split LuCI encodes as ip6addr("nomask") against
-		// ip6addr.
-		if (json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
-			push(errs, { field: "ip6gw", code: "invalid_format",
-			             message: "must be a valid IPv6 address without a prefix length" });
-		if (json.ip6prefix != null && json.ip6prefix != ""
-		    && !is_valid_ipv6_cidr(json.ip6prefix) && !is_valid_ipv6(json.ip6prefix))
-			push(errs, { field: "ip6prefix", code: "invalid_format",
-			             message: "must be a valid IPv6 address or prefix" });
 	}
 
 	if (json.proto == "wireguard") {
