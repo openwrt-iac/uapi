@@ -68,7 +68,13 @@ function changed_fields(existing, incoming, replace) {
 	for (let f in WATCHED) {
 		let before = (existing ?? {})[f];
 		if (!exists(incoming, f)) {
-			if (replace && before != null) push(out, f);
+			// An omission only deletes something if the stored value differs from what
+			// absence itself reads as. `null` alone is the wrong test: the read view
+			// synthesises defaults, so an absent `disabled` reads as `false`, and treating
+			// that as a value made every replace that left the field out warn about
+			// deleting a key the section never had. Measured on a box: a PUT changing
+			// nothing reported `changed=disabled`, which is how a guard gets ignored.
+			if (replace && before != null && before !== false) push(out, f);
 			continue;
 		}
 		if (sprintf("%J", before) != sprintf("%J", incoming[f])) push(out, f);

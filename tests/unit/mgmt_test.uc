@@ -61,6 +61,23 @@ t.describe('mgmt.changed_fields', () => {
 		t.assert_deep_equal(m.changed_fields({ proto: 'dhcp' }, { proto: 'dhcp' }, true), []);
 	});
 
+	// The read view synthesises `disabled: false` for a section with no such key, so a
+	// null-only absence test reported a deletion on every replace that left it out. A PUT
+	// changing nothing warned `changed=disabled` on a real box.
+	t.it('under replace, omitting a field whose stored value equals absence is silent', () => {
+		let never_set = { proto: 'static', ipaddrs: ['192.168.1.1'], disabled: false };
+		t.assert_deep_equal(
+			m.changed_fields(never_set, { proto: 'static', ipaddrs: ['192.168.1.1'] }, true), []);
+	});
+
+	// The true positive the rule above must not swallow: dropping `disabled` from a section
+	// that really is disabled brings the interface back up.
+	t.it('under replace, omitting a disabled that is set is still a change', () => {
+		let off = { proto: 'static', ipaddrs: ['192.168.1.1'], disabled: true };
+		t.assert_deep_equal(
+			m.changed_fields(off, { proto: 'static', ipaddrs: ['192.168.1.1'] }, true), ['disabled']);
+	});
+
 	t.it('ignores fields outside the watched set, however risky they look', () => {
 		// LuCI's scope is these four and no firewall analysis; `device` and `gateway`
 		// can strand a caller too, and are deliberately not claimed here.
