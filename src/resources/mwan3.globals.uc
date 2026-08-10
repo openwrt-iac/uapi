@@ -1,6 +1,5 @@
 let values = require('values');
 let strict_bool = values.strict_bool;
-let as_int = values.as_int;
 
 const VALID_LOGLEVEL = {
 	"emerg": true, "alert": true, "crit": true, "err": true,

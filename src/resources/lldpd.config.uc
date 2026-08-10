@@ -1,6 +1,5 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 let as_list_or_null = values.as_list_or_null;
 

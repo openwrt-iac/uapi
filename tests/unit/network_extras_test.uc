@@ -205,10 +205,10 @@ t.describe('network.interfaces wireguard addresses accept both families', () => 
 	});
 
 	// The static-proto v4 fields must not have been widened along with it.
-	t.it('leaves ipaddr and ipaddrs IPv4-only', () => {
-		let errs = ifaces.validate({ proto: 'static', ipaddr: 'fd00::1/64' }, null) ?? [];
+	t.it('leaves ipaddrs IPv4-only', () => {
+		let errs = ifaces.validate({ proto: 'static', ipaddrs: ['fd00::1/64'] }, null) ?? [];
 		let found = false;
-		for (let e in errs) if (e.field == "ipaddr" && e.code == "invalid_format") found = true;
+		for (let e in errs) if (e.field == "ipaddrs[0]" && e.code == "invalid_format") found = true;
 		t.assert_true(found);
 	});
 });

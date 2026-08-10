@@ -199,13 +199,12 @@ function validate(json, conn, id) {
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;
-		let has_single = json.ipaddr != null && json.ipaddr != "";
-		if (!has_list && !has_single)
-			push(errs, { field: "ipaddr", code: "required",
-			             message: "is required when proto is static (use 'ipaddr' for a single address or 'ipaddrs' for a list)" });
-		if (has_single && !is_valid_ipv4(json.ipaddr) && !is_valid_cidr(json.ipaddr))
-			push(errs, { field: "ipaddr", code: "invalid_format",
-			             message: "must be a valid IPv4 address or CIDR" });
+		// Only `ipaddrs` writes. Counting the read-only `ipaddr` as an address here let a
+		// body carrying it alone satisfy the requirement and then write nothing, so uapi
+		// created an addressless static interface and answered 200.
+		if (!has_list)
+			push(errs, { field: "ipaddrs", code: "required",
+			             message: "is required when proto is static" });
 		if (has_list) {
 			for (let i = 0; i < length(json.ipaddrs); i++) {
 				if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))

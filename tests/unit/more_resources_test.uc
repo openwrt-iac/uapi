@@ -116,13 +116,22 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(r.netmask, '255.255.255.0');
 	});
 
-	t.it('validate requires ipaddr for static proto', () => {
+	t.it('validate requires ipaddrs for static proto', () => {
 		let errs = interfaces.validate({ proto: 'static' }, null);
-		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+		let ip = filter(errs, function(e) { return e.field == "ipaddrs"; });
 		t.assert_equal(ip[0].code, 'required');
 	});
 
-	t.it('validate accepts dhcp without ipaddr', () => {
+	// `ipaddr` is read-only from 3.0.0 and nothing writes it, so a body carrying it alone
+	// must not satisfy the requirement: doing so created an addressless static interface
+	// and answered 200.
+	t.it('validate does not accept the read-only ipaddr in place of ipaddrs', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddr: '192.0.2.99' }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddrs" && e.code == "required"; });
+		t.assert_equal(length(ip), 1);
+	});
+
+	t.it('validate accepts dhcp without an address', () => {
 		let errs = interfaces.validate({ proto: 'dhcp' }, null);
 		t.assert_equal(length(errs), 0);
 	});
@@ -160,7 +169,7 @@ t.describe('network.interfaces', () => {
 	});
 
 	
-	t.it('id_for_create falls back to a `wg_<11-char>` id when name is absent and proto=wireguard', () => {
+	t.it('id_for_create falls back to a `wg_<11-char>` id when no id is given and proto=wireguard', () => {
 		let id = interfaces.id_for_create({ proto: 'wireguard' });
 		t.assert_equal(length(id), 14);
 		t.assert_match(id, /^wg_[0-9a-hjkmnp-tv-z]{11}$/);
@@ -183,15 +192,15 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(pe[0].code, 'not_in_enum');
 	});
 
-	t.it('validate rejects octets > 255 in ipaddr CIDR', () => {
-		let errs = interfaces.validate({ proto: 'static', ipaddr: '999.0.0.1/24' }, null);
-		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+	t.it('validate rejects octets > 255 in an ipaddrs CIDR', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddrs: ['999.0.0.1/24'] }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddrs[0]"; });
 		t.assert_equal(ip[0].code, 'invalid_format');
 	});
 
-	t.it('validate rejects prefix > 32 in ipaddr CIDR', () => {
-		let errs = interfaces.validate({ proto: 'static', ipaddr: '192.168.1.0/99' }, null);
-		let ip = filter(errs, function(e) { return e.field == "ipaddr"; });
+	t.it('validate rejects prefix > 32 in an ipaddrs CIDR', () => {
+		let errs = interfaces.validate({ proto: 'static', ipaddrs: ['192.168.1.0/99'] }, null);
+		let ip = filter(errs, function(e) { return e.field == "ipaddrs[0]"; });
 		t.assert_equal(ip[0].code, 'invalid_format');
 	});
 
@@ -585,11 +594,11 @@ t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () 
 		t.assert_true(found);
 	});
 
-	t.it('validate: static proto with neither ipaddr nor ipaddrs reports required', () => {
+	t.it('validate: static proto with no ipaddrs reports required', () => {
 		let errs = interfaces.validate({ proto: 'static', device: 'eth0' });
 		let found = false;
 		for (let e in errs)
-			if (e.field == 'ipaddr' && e.code == 'required') { found = true; break; }
+			if (e.field == 'ipaddrs' && e.code == 'required') { found = true; break; }
 		t.assert_true(found);
 	});
 });

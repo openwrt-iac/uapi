@@ -1,4 +1,5 @@
 let t = require('harness');
+let ubus = require('bus');
 let hosts = loadfile('src/resources/dhcp.hosts.uc')();
 
 t.describe('dhcp.hosts contract', () => {
@@ -97,6 +98,37 @@ t.describe('dhcp.hosts.validate', () => {
 		let he = filter(errs, function(e) { return e.field == 'hostid'; });
 		t.assert_equal(he[0].code, 'invalid_format');
 		t.assert_equal(length(hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], hostid: '::abcd' }, null)), 0);
+	});
+
+	// duid is the DHCPv6 half of the identifier rule. Only its absence was covered, so the
+	// rule read as "macs required" from the tests alone.
+	t.it('accepts a duid-only reservation, with no macs at all', () => {
+		let errs = hosts.validate({ duid: '00:01:00:01:24:24:24:24:aa:bb:cc:dd:ee:ff',
+		                            ip: '2001:db8::42' }, null);
+		t.assert_equal(length(errs), 0);
+	});
+
+	t.it('rejects a duid that is not hex', () => {
+		let errs = hosts.validate({ duid: 'not-hex', ip: '10.0.0.1' }, null);
+		let de = filter(errs, function(e) { return e.field == 'duid'; });
+		t.assert_equal(de[0].code, 'invalid_format');
+	});
+
+	// The only rule here that needs a bus, which is why it is also the only one whose
+	// deletion left no trace in the remaining cases. `instance` names the dnsmasq process,
+	// and a `config dhcp` section name is a different thing that reads plausibly.
+	t.it('cross-refs instance against dnsmasq sections, not against dhcp servers', () => {
+		let conn = ubus.stub({ uci: { dhcp: {
+			main_dnsmasq: { '.type': 'dnsmasq' },
+			lan_server:   { '.type': 'dhcp', interface: 'lan' },
+		}}});
+		let host = { macs: ['aa:bb:cc:dd:ee:ff'], ip: '10.0.0.1' };
+		let ok = filter(hosts.validate({ ...host, instance: 'main_dnsmasq' }, conn),
+		                function(e) { return e.field == 'instance'; });
+		t.assert_equal(length(ok), 0);
+		let wrong = filter(hosts.validate({ ...host, instance: 'lan_server' }, conn),
+		                   function(e) { return e.field == 'instance'; });
+		t.assert_equal(wrong[0].code, 'conflict');
 	});
 
 	t.it('rejects malformed IPv4', () => {
