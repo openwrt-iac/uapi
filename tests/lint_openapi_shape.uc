@@ -337,6 +337,23 @@ for (let p in paths_for_body) {
 // minus the response-only and readOnly entries, and this pins that rather than trusting it.
 // The hand-written operation pairs are legitimately request-only in places (a token create
 // sends scopes and gets back a token) and are not in the generator's endpoint catalog.
+// Recursive, because a curated resource can nest: `firewall/redirects` carries its whole
+// match under one object, and a client generating from these walks into it. Comparing only the
+// top level left the nested half unguarded, which a request-only key under `match` proved.
+function missing_in_response(rq, rs, path, base) {
+	for (let f in rq) {
+		if (!exists(rs, f)) {
+			note(path + "/" + f,
+			     sprintf("is in the request half but not in %sResponse, so a generated client would emit it as computed and no one could set it", base));
+			continue;
+		}
+		if (type(rq[f]) == "object" && type(rq[f].properties) == "object"
+		    && type(rs[f]) == "object" && type(rs[f].properties) == "object")
+			missing_in_response(rq[f].properties, rs[f].properties,
+			                    path + "/" + f + "/properties", base);
+	}
+}
+
 // The Response names the generator emits for a curated resource, taken from what each curated
 // GET actually returns rather than by re-deriving the naming rule here.
 let generated_responses = {};
@@ -352,11 +369,9 @@ for (let name in schemas) {
 	// one of the hand-written operation shapes.
 	if (!body_refs[name] || !generated_responses[base + "Response"]) continue;
 	superset_pairs++;
-	let rs = schemas[base + "Response"].properties ?? {};
-	for (let f in schemas[name].properties ?? {})
-		if (!exists(rs, f))
-			note(sprintf("/components/schemas/%s/properties/%s", name, f),
-			     sprintf("is in the request half but not in %sResponse, so a generated client would emit it as computed and no one could set it", base));
+	missing_in_response(schemas[name].properties ?? {},
+	                    schemas[base + "Response"].properties ?? {},
+	                    sprintf("/components/schemas/%s/properties", name), base);
 }
 
 
