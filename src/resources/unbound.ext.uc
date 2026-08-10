@@ -1,6 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let check_lines = values.check_lines;
 
 const LINE_ITEM = { type: "string", pattern: values.LINE_RE };
@@ -10,7 +10,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: true,
 		enabled: shell_bool(section.enabled, false),
-		ext_line: as_list(section.ext_line),
+		ext_line: as_list_or_null(section.ext_line),
 		runtime: {},
 	};
 }
@@ -39,7 +39,7 @@ return {
 	validate: validate,
 	schema_properties: {
 		enabled:  { type: "boolean", default: false },
-		ext_line: { type: "array", items: LINE_ITEM,
+		ext_line: { type: ["array", "null"], items: LINE_ITEM,
 		            description: "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line; build whole `forward-zone:`, `view:`, `stub:`, or `remote-control:` clauses by listing them in order. `unbound-checkconf` validates grammar after restart." },
 	},
 };

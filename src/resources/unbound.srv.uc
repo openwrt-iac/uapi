@@ -1,7 +1,7 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let normalize_bool = values.normalize_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let check_lines = values.check_lines;
 
 const LINE_ITEM = { type: "string", pattern: values.LINE_RE };
@@ -13,9 +13,9 @@ function fromUci(section) {
 		enabled: shell_bool(section.enabled, false),
 		ip_transparent: (section.ip_transparent != null)
 			? normalize_bool(section.ip_transparent, false) : null,
-		interface_bind: as_list(section.interface_bind),
-		interface_outgoing: as_list(section.interface_outgoing),
-		srv_line: as_list(section.srv_line),
+		interface_bind: as_list_or_null(section.interface_bind),
+		interface_outgoing: as_list_or_null(section.interface_outgoing),
+		srv_line: as_list_or_null(section.srv_line),
 		runtime: {},
 	};
 }
@@ -53,11 +53,11 @@ return {
 		enabled:            { type: "boolean", default: false },
 		ip_transparent:     { type: ["boolean", "null"],
 		                      description: "Bind to addresses that are not yet up / VIP / alias addresses." },
-		interface_bind:     { type: "array", items: LINE_ITEM,
+		interface_bind:     { type: ["array", "null"], items: LINE_ITEM,
 		                      description: "Addresses unbound binds on (`addr` or `addr@port`). Pair with `unbound.@unbound[0].interface_auto = false` on the main unbound UCI for exclusive binding." },
-		interface_outgoing: { type: "array", items: LINE_ITEM,
+		interface_outgoing: { type: ["array", "null"], items: LINE_ITEM,
 		                      description: "Source addresses for upstream recursion (multi-WAN egress)." },
-		srv_line:           { type: "array", items: LINE_ITEM,
+		srv_line:           { type: ["array", "null"], items: LINE_ITEM,
 		                      description: "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line; `unbound-checkconf` validates grammar after restart." },
 	},
 };

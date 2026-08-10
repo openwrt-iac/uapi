@@ -1,6 +1,7 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const VALID_TARGETS = {
 	"ACCEPT": true, "REJECT": true, "DROP": true,
@@ -39,11 +40,11 @@ function fromUci(section) {
 		match: {
 			src_zone: section.src ?? null,
 			dest_zone: section.dest ?? null,
-			src_ip: as_list(section.src_ip),
-			dest_ip: as_list(section.dest_ip),
-			src_port: as_list(section.src_port),
-			dest_port: as_list(section.dest_port),
-			proto: as_list(section.proto),
+			src_ip: as_list_or_null(section.src_ip),
+			dest_ip: as_list_or_null(section.dest_ip),
+			src_port: as_list_or_null(section.src_port),
+			dest_port: as_list_or_null(section.dest_port),
+			proto: as_list_or_null(section.proto),
 			family: section.family ?? "any",
 			mark: section.mark ?? null,
 			dscp: section.dscp ?? null,
@@ -251,11 +252,11 @@ return {
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
-				src_ip:    { type: "array", items: { type: "string" } },
-				dest_ip:   { type: "array", items: { type: "string" } },
-				src_port:  { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
-				dest_port: { type: "array", items: { type: "string", pattern: values.PORT_MATCH_RE } },
-				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
+				src_ip:    { type: ["array", "null"], items: { type: "string" } },
+				dest_ip:   { type: ["array", "null"], items: { type: "string" } },
+				src_port:  { type: ["array", "null"], items: { type: "string", pattern: values.PORT_MATCH_RE } },
+				dest_port: { type: ["array", "null"], items: { type: "string", pattern: values.PORT_MATCH_RE } },
+				proto:     { type: ["array", "null"], items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a rule matching the whole protocol. Defaults to tcpudp when unset" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,

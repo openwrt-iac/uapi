@@ -1,7 +1,7 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let fs = require('fs');
 
 const LEASES4_PATH = "/tmp/dhcp.leases";
@@ -90,7 +90,7 @@ function fromUci(section, conn) {
 		dhcpv6: section.dhcpv6 ?? null,
 		ra_default: as_int(section.ra_default),
 		domain: section.domain ?? null,
-		dhcp_option: as_list(section.dhcp_option),
+		dhcp_option: as_list_or_null(section.dhcp_option),
 		runtime: runtime,
 	};
 }
@@ -169,6 +169,6 @@ return {
 		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
 		               description: "0 default, 1 deprecate prefix, 2 advertise as router" },
 		domain:      { type: ["string", "null"] },
-		dhcp_option: { type: "array", items: { type: "string" } },
+		dhcp_option: { type: ["array", "null"], items: { type: "string" } },
 	},
 };

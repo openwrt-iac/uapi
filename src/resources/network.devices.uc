@@ -1,6 +1,6 @@
 let values = require('values');
 let platform_bool = values.platform_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 
 const VALID_TYPES = {
@@ -15,7 +15,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		type: section.type ?? null,
-		ports: as_list(section.ports),
+		ports: as_list_or_null(section.ports),
 		vid: as_int(section.vid),
 		ifname: section.ifname ?? null,
 		mtu: as_int(section.mtu),
@@ -81,7 +81,7 @@ return {
 		name:    { type: "string",
 		           description: "Device name as seen by netifd / the kernel" },
 		type:    { type: "string", enum: keys(VALID_TYPES) },
-		ports:   { type: "array", items: { type: "string" } },
+		ports:   { type: ["array", "null"], items: { type: "string" } },
 		vid:     { type: "integer", minimum: 1, maximum: 4094,
 		           description: "VLAN id for 8021q / 8021ad devices" },
 		ifname:  { type: ["string", "null"],

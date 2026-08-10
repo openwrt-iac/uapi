@@ -1,6 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 let is_valid_ip = values.is_valid_ip;
 
@@ -16,7 +16,7 @@ function fromUci(section) {
 		// enabled, and any PATCH persisted that read view as `enabled='1'`, switching it on.
 		enabled:                shell_bool(section.enabled, false),
 		family:                 section.family ?? null,
-		track_ip:               as_list(section.track_ip),
+		track_ip:               as_list_or_null(section.track_ip),
 		track_method:           section.track_method ?? null,
 		reliability:            as_int(section.reliability),
 		probe_count:            as_int(section.count),
@@ -34,7 +34,7 @@ function fromUci(section) {
 		keep_failure_interval:  shell_bool(section.keep_failure_interval, false),
 		down:                   as_int(section.down),
 		up:                     as_int(section.up),
-		flush_conntrack:        as_list(section.flush_conntrack),
+		flush_conntrack:        as_list_or_null(section.flush_conntrack),
 		runtime: {},
 	};
 }
@@ -91,7 +91,7 @@ return {
 		enabled:               { type: "boolean", default: false },
 		family:                { type: "string", enum: keys(VALID_FAMILY),
 		                         description: "Address family this interface tracks." },
-		track_ip:              { type: "array", items: { type: "string" },
+		track_ip:              { type: ["array", "null"], items: { type: "string" },
 		                         description: "List of IPs to ping for reachability." },
 		track_method:          { type: ["string", "null"], enum: ["ping", "arping", "httping", "nping-tcp", "nping-udp", null] },
 		reliability:           { type: ["integer", "null"], minimum: 1,
@@ -116,7 +116,7 @@ return {
 		                         description: "Consecutive failed probes before marking down." },
 		up:                    { type: ["integer", "null"], minimum: 1,
 		                         description: "Consecutive successful probes before marking up." },
-		flush_conntrack:       { type: "array", items: { type: "string", enum: ["ifup", "ifdown", "connected", "disconnected", "never"] },
+		flush_conntrack:       { type: ["array", "null"], items: { type: "string", enum: ["ifup", "ifdown", "connected", "disconnected", "never"] },
 		                         description: "Events that flush conntrack table." },
 	},
 };

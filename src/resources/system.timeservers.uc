@@ -1,6 +1,7 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -10,7 +11,7 @@ function fromUci(section) {
 		enabled: normalize_bool(section.enabled, true),
 		enable_server: normalize_bool(section.enable_server, false),
 		interface: section.interface ?? null,
-		server: as_list(section.server),
+		server: as_list_or_null(section.server),
 		use_dhcp: normalize_bool(section.use_dhcp, true),
 		runtime: {},
 	};
@@ -56,7 +57,7 @@ return {
 		                 description: "Also serve time to LAN clients" },
 		interface:     { type: ["string", "null"],
 		                 description: "Bind sysntpd to a specific network interface" },
-		server:        { type: "array", items: { type: "string" } },
+		server:        { type: ["array", "null"], items: { type: "string" } },
 		use_dhcp:      { type: "boolean", default: true,
 		                 description: "Accept NTP servers learned via DHCP option 42" },
 	},

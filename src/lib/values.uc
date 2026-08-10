@@ -61,6 +61,20 @@ function as_list(v) {
 	return [v];
 }
 
+// The read-side sibling. uci cannot store an empty list, so an absent key and an empty one are
+// the same state, and `[]` distinguished nothing while forcing every list field to be
+// non-nullable. Reading absent as `null` is what lets a list carry `x-uapi-clear-on-omit` and
+// lets an IaC client model the field as a plain optional.
+//
+// Separate from as_list rather than a change to it: 14 call sites pass a caller-supplied value
+// rather than a uci key, and there `[]` is right because it means the caller sent nothing to
+// iterate, not that the device holds nothing.
+function as_list_or_null(v) {
+	if (v == null) return null;
+	if (type(v) == "array") return length(v) > 0 ? v : null;
+	return [v];
+}
+
 // Single-line passthrough validation shared by resources that mirror
 // unbound-uci-ext's seam-file generator. The regex pattern uses a literal
 // newline in the character class because ucode's regex parser treats `\n`
@@ -490,7 +504,7 @@ function section_index(conn, pkg, sec_type, key, filter) {
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
-	strict_bool, as_list, as_int,
+	strict_bool, as_list, as_list_or_null, as_int,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,

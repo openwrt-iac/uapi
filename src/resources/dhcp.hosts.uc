@@ -1,6 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let is_valid_ip = values.is_valid_ip;
 
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
@@ -30,7 +30,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		macs: as_list(section.mac),
+		macs: as_list_or_null(section.mac),
 		duid: section.duid ?? null,
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
@@ -135,7 +135,7 @@ return {
 		  ] },
 	],
 	schema_properties: {
-		macs:        { type: "array", items: { type: "string" },
+		macs:        { type: ["array", "null"], items: { type: "string" },
 		               description: "MAC addresses for this reservation, the whole uci `list mac`." },
 		duid:        { type: ["string", "null"],
 		               description: "Client DUID for DHCPv6 reservation" },

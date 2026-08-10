@@ -2,6 +2,7 @@ let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const UAPI_PREFIX = "/api/v2=/usr/share/uapi/main.uc";
 
@@ -10,21 +11,21 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		listen_http: as_list(section.listen_http),
-		listen_https: as_list(section.listen_https),
+		listen_http: as_list_or_null(section.listen_http),
+		listen_https: as_list_or_null(section.listen_https),
 		home: section.home ?? null,
 		cert: section.cert ?? null,
 		key: section.key ?? null,
 		cgi_prefix: section.cgi_prefix ?? null,
-		lua_prefix: as_list(section.lua_prefix),
-		ucode_prefix: as_list(section.ucode_prefix),
+		lua_prefix: as_list_or_null(section.lua_prefix),
+		ucode_prefix: as_list_or_null(section.ucode_prefix),
 		max_requests: as_int(section.max_requests),
 		max_connections: as_int(section.max_connections),
 		script_timeout: as_int(section.script_timeout),
 		network_timeout: as_int(section.network_timeout),
 		http_keepalive: as_int(section.http_keepalive),
 		tcp_keepalive: as_int(section.tcp_keepalive),
-		index_page: as_list(section.index_page),
+		index_page: as_list_or_null(section.index_page),
 		error_page: section.error_page ?? null,
 		no_dirlists: shell_bool(section.no_dirlists, false),
 		no_symlinks: shell_bool(section.no_symlinks, false),
@@ -88,8 +89,8 @@ return {
 	validate: validate,
 	openapi_singular: "uhttpd instance",
 	schema_properties: {
-		listen_http:     { type: "array", items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
-		listen_https:    { type: "array", items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
+		listen_http:     { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
+		listen_https:    { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
 		home:            { type: ["string", "null"],
 		                   description: "Document root" },
 		cert:            { type: ["string", "null"],
@@ -98,9 +99,9 @@ return {
 		                   description: "Path to TLS key file" },
 		cgi_prefix:      { type: ["string", "null"],
 		                   description: "URL prefix served as CGI" },
-		ucode_prefix:    { type: "array", items: { type: "string" } },
-		lua_prefix:      { type: "array", items: { type: "string" } },
-		index_page:      { type: "array", items: { type: "string" } },
+		ucode_prefix:    { type: ["array", "null"], items: { type: "string" } },
+		lua_prefix:      { type: ["array", "null"], items: { type: "string" } },
+		index_page:      { type: ["array", "null"], items: { type: "string" } },
 		error_page:      { type: ["string", "null"],
 		                   description: "Path served when a request 404s" },
 		max_requests:    { type: "integer", minimum: 0 },

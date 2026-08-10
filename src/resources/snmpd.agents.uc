@@ -1,12 +1,12 @@
 let values = require('values');
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		agentaddress: as_list(section.agentaddress),
+		agentaddress: as_list_or_null(section.agentaddress),
 		runtime: {},
 	};
 }
@@ -32,6 +32,6 @@ return {
 	validate: validate,
 	openapi_singular: "SNMP agent",
 	schema_properties: {
-		agentaddress: { type: "array", items: { type: "string" } },
+		agentaddress: { type: ["array", "null"], items: { type: "string" } },
 	},
 };

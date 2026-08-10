@@ -2,6 +2,7 @@ let values = require('values');
 let hints = require('openapi_hints');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const VALID_TARGETS = { "DNAT": true, "SNAT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
@@ -31,19 +32,19 @@ function fromUci(section) {
 		match: {
 			src_zone: section.src ?? null,
 			dest_zone: section.dest ?? null,
-			src_ip: as_list(section.src_ip),
-			src_port: as_list(section.src_port),
-			src_dport: as_list(section.src_dport),
-			src_dip: as_list(section.src_dip),
-			dest_ip: as_list(section.dest_ip),
-			dest_port: as_list(section.dest_port),
-			proto: as_list(section.proto),
+			src_ip: as_list_or_null(section.src_ip),
+			src_port: as_list_or_null(section.src_port),
+			src_dport: as_list_or_null(section.src_dport),
+			src_dip: as_list_or_null(section.src_dip),
+			dest_ip: as_list_or_null(section.dest_ip),
+			dest_port: as_list_or_null(section.dest_port),
+			proto: as_list_or_null(section.proto),
 			family: section.family ?? "any",
 			mark: section.mark ?? null,
 		},
 		reflection: (section.reflection != null) ? normalize_bool(section.reflection, true) : null,
 		reflection_src: section.reflection_src ?? null,
-		reflection_zone: as_list(section.reflection_zone),
+		reflection_zone: as_list_or_null(section.reflection_zone),
 		runtime: {},
 	};
 }
@@ -217,19 +218,19 @@ return {
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
-				src_ip:    { type: "array", maxItems: 1, items: { type: "string" },
+				src_ip:    { type: ["array", "null"], maxItems: 1, items: { type: "string" },
 				             description: "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name" },
-				src_port:  { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				src_port:  { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "Match source port or range, one value per redirect" },
-				src_dport: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				src_dport: { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect" },
-				src_dip:   { type: "array", maxItems: 1, items: { type: "string" },
+				src_dip:   { type: ["array", "null"], maxItems: 1, items: { type: "string" },
 				             description: "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect" },
-				dest_ip:   { type: "array", maxItems: 1, items: { type: "string" },
+				dest_ip:   { type: ["array", "null"], maxItems: 1, items: { type: "string" },
 				             description: "Rewrite destination address, one value per redirect" },
-				dest_port: { type: "array", maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				dest_port: { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
 				             description: "Rewrite destination port or range, one value per redirect" },
-				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
+				proto:     { type: ["array", "null"], items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a redirect matching the whole protocol. Defaults to tcpudp when unset" },
 				family:    { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
@@ -240,7 +241,7 @@ return {
 		              description: "Enable NAT loopback / hairpinning for this redirect (fw4 default true)" },
 		reflection_src: { type: "string", enum: keys(VALID_REFLECTION_SRC),
 		                  description: "Source address used for hairpinned packets: internal LAN or external WAN" },
-		reflection_zone: { type: "array", items: { type: "string" },
+		reflection_zone: { type: ["array", "null"], items: { type: "string" },
 		                   description: "Zones in which NAT reflection is allowed (uci list reflection_zone)" },
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this redirect" },

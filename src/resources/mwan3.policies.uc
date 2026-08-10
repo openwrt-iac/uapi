@@ -1,5 +1,5 @@
 let values = require('values');
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const VALID_LAST_RESORT = {
 	"default":     true,
@@ -13,7 +13,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		last_resort: section.last_resort ?? null,
-		use_members: as_list(section.use_member),
+		use_members: as_list_or_null(section.use_member),
 		runtime: {},
 	};
 }
@@ -59,7 +59,7 @@ return {
 	schema_properties: {
 		last_resort: { type: ["string", "null"], enum: [...keys(VALID_LAST_RESORT), null],
 		               description: "Fallback when no member is reachable." },
-		use_members: { type: "array", items: { type: "string" },
+		use_members: { type: ["array", "null"], items: { type: "string" },
 		               description: "Member section names. Equal metric balances; lower metric is preferred." },
 	},
 };

@@ -32,7 +32,7 @@ t.describe('unbound.ext resource', () => {
 		t.assert_equal(r.id, 'main');
 		t.assert_true(r.managed);
 		t.assert_false(r.enabled);
-		t.assert_deep_equal(r.ext_line, []);
+		t.assert_equal(r.ext_line, null);
 	});
 
 	t.it('fromUci promotes a scalar ext_line option to a one-element array', () => {
@@ -98,7 +98,7 @@ t.describe('handler.make_singleton(unbound.ext)', () => {
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.id, 'main');
 		t.assert_false(r.body.enabled);
-		t.assert_deep_equal(r.body.ext_line, []);
+		t.assert_equal(r.body.ext_line, null);
 	});
 
 	t.it('patch updates enabled and ext_line', () => {

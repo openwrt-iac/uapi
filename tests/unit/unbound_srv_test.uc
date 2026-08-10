@@ -33,9 +33,9 @@ t.describe('unbound.srv resource', () => {
 		t.assert_true(r.managed);
 		t.assert_false(r.enabled);
 		t.assert_equal(r.ip_transparent, null);
-		t.assert_deep_equal(r.interface_bind, []);
-		t.assert_deep_equal(r.interface_outgoing, []);
-		t.assert_deep_equal(r.srv_line, []);
+		t.assert_equal(r.interface_bind, null);
+		t.assert_equal(r.interface_outgoing, null);
+		t.assert_equal(r.srv_line, null);
 	});
 
 	t.it('fromUci normalises enabled and tri-states ip_transparent', () => {
@@ -142,7 +142,7 @@ t.describe('handler.make_singleton(unbound.srv)', () => {
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.id, 'main');
 		t.assert_false(r.body.enabled);
-		t.assert_deep_equal(r.body.interface_bind, []);
+		t.assert_equal(r.body.interface_bind, null);
 	});
 
 	t.it('get returns 404 if the section is absent', () => {

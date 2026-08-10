@@ -134,9 +134,13 @@ function find_clear_on_omit_fields(content) {
 function check_clear_on_omit_shape(content, fields) {
 	let errors = [];
 	for (let field in fields) {
-		let safe_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
-		if (!match(content, safe_re))
-			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not the safe `section.X ?? null` shape (Terraform plain-Optional reads back null only; as_list/derived/aliased values trip 'Provider produced inconsistent result')", field));
+		// Two shapes read back null for an absent key, which is what a plain-Optional
+		// attribute requires. `as_list` is still excluded: it returns `[]`, which is the
+		// inconsistent-result trap this rule exists for.
+		let scalar_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
+		let list_re = regexp(sprintf('\\b%s:\\s*as_list_or_null\\(', field));
+		if (!match(content, scalar_re) && !match(content, list_re))
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is neither `section.X ?? null` nor `as_list_or_null(...)`; both read absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
 	}
 	return errors;
 }

@@ -123,7 +123,11 @@ gateway: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 
 ```ucode
 // fromUci: gateway: section.gateway ?? null
+// fromUci: dns:     as_list_or_null(section.dns)
 ```
+
+Both read an absent key as `null`, which is what a plain-Optional attribute needs. Lists could
+not be flagged before 3.0.0, because `as_list` returned `[]` for absent.
 
 Unsafe (lint fails):
 

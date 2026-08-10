@@ -1,7 +1,7 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 function fromUci(section) {
 	return {
@@ -21,8 +21,8 @@ function fromUci(section) {
 		readethers: shell_bool(section.readethers, true),
 		leasefile: section.leasefile ?? null,
 		resolvfile: section.resolvfile ?? null,
-		server: as_list(section.server),
-		address: as_list(section.address),
+		server: as_list_or_null(section.server),
+		address: as_list_or_null(section.address),
 		nonwildcard: shell_bool(section.nonwildcard, true),
 		runtime: {},
 	};
@@ -81,8 +81,8 @@ return {
 		readethers:        { type: "boolean", default: true },
 		leasefile:         { type: ["string", "null"] },
 		resolvfile:        { type: ["string", "null"] },
-		server:            { type: "array", items: { type: "string" } },
-		address:           { type: "array", items: { type: "string" } },
+		server:            { type: ["array", "null"], items: { type: "string" } },
+		address:           { type: ["array", "null"], items: { type: "string" } },
 		nonwildcard:       { type: "boolean", default: true },
 	},
 };

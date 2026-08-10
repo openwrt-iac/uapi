@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "2.5.0",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v3 (announced, not yet in effect)\n\nThis major accepts both forms for everything below; v3 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.name` as a create input** - send `id`. Flagged `deprecated: true` on the property, so a generator warns.\n- **`network/interfaces.ipaddr` as a write input** - send `ipaddrs`. Not flagged, because the field survives as a read; v3 makes it `readOnly`.\n- **List-valued fields will read back `null`, not `[]`, when the uci key is absent.** This is a convention change across every curated resource, so it carries no per-field flag: uci cannot store an empty list, so `[]` already means absent and distinguishes nothing. A client generated against the current `{\"type\": \"array\"}` schema will fail response validation in v3 unless it accepts null.\n- **`dhcp/hosts.tag` will stop accepting a space-separated string on write.** Responses are already always an array, including for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. The string remains valid in a request because the 2.4.1 spec declared one; v3 drops it and the field becomes array-only in both directions.\n- **`dhcp/hosts.mac`** - send and read `macs`, the whole uci `list mac` as one array. `mac` was its first entry only, so a client had to read two fields to learn what a reservation matched. Flagged `deprecated: true`; unlike `network/interfaces.ipaddr` it does not survive as a read, because uci has no scalar `mac` option on a host for it to correspond to.\n- **`dhcp/hosts.mac_aliases`** - send and read `macs`. This held every entry of the same `list mac` after the first, and was the one place in the API where a uci list option did not surface as a JSON array. Flagged `deprecated: true`, and removed rather than kept as a read for the same reason as `mac`.\n- **`managed` leaves the request half of every resource schema** - it is derived from uci's `.anonymous` flag and no write path reads it, so `PUT` with `managed: false` has always answered 200 with `managed: true`. It is annotated `readOnly` from 2.5.0, so a regenerated client already stops sending it; v3 completes the split.\n- **Each resource gains a separate request schema and response schema** - one schema serves both directions today, which is why `dhcp/hosts.tag` keeps `string` in its type for writers while responses are always an array, and why `network/interfaces.ipaddr` is described in prose rather than as `readOnly`. Generated model names change for every resource.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v3 (announced, not yet in effect)\n\nThis major accepts both forms for everything below; v3 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.name` as a create input** - send `id`. Flagged `deprecated: true` on the property, so a generator warns.\n- **`network/interfaces.ipaddr` as a write input** - send `ipaddrs`. Not flagged, because the field survives as a read; v3 makes it `readOnly`.\n- **`dhcp/hosts.tag` will stop accepting a space-separated string on write.** Responses are already always an array, including for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. The string remains valid in a request because the 2.4.1 spec declared one; v3 drops it and the field becomes array-only in both directions.\n- **`dhcp/hosts.mac`** - send and read `macs`, the whole uci `list mac` as one array. `mac` was its first entry only, so a client had to read two fields to learn what a reservation matched. Flagged `deprecated: true`; unlike `network/interfaces.ipaddr` it does not survive as a read, because uci has no scalar `mac` option on a host for it to correspond to.\n- **`dhcp/hosts.mac_aliases`** - send and read `macs`. This held every entry of the same `list mac` after the first, and was the one place in the API where a uci list option did not surface as a JSON array. Flagged `deprecated: true`, and removed rather than kept as a read for the same reason as `mac`.\n- **`managed` leaves the request half of every resource schema** - it is derived from uci's `.anonymous` flag and no write path reads it, so `PUT` with `managed: false` has always answered 200 with `managed: true`. It is annotated `readOnly` from 2.5.0, so a regenerated client already stops sending it; v3 completes the split.\n- **Each resource gains a separate request schema and response schema** - one schema serves both directions today, which is why `dhcp/hosts.tag` keeps `string` in its type for writers while responses are always an array, and why `network/interfaces.ipaddr` is described in prose rather than as `readOnly`. Generated model names change for every resource.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/raspbeguy/uapi"
@@ -21079,33 +21079,48 @@
 								]
 							},
 							"src_ip": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string"
 								}
 							},
 							"dest_ip": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string"
 								}
 							},
 							"src_port": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string",
 									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"dest_port": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string",
 									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"proto": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
@@ -21268,7 +21283,10 @@
 						"default": "REJECT"
 					},
 					"network": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -21353,7 +21371,10 @@
 								]
 							},
 							"src_ip": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string"
@@ -21361,7 +21382,10 @@
 								"description": "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name"
 							},
 							"src_port": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string",
@@ -21370,7 +21394,10 @@
 								"description": "Match source port or range, one value per redirect"
 							},
 							"src_dport": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string",
@@ -21379,7 +21406,10 @@
 								"description": "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect"
 							},
 							"src_dip": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string"
@@ -21387,7 +21417,10 @@
 								"description": "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect"
 							},
 							"dest_ip": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string"
@@ -21395,7 +21428,10 @@
 								"description": "Rewrite destination address, one value per redirect"
 							},
 							"dest_port": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"maxItems": 1,
 								"items": {
 									"type": "string",
@@ -21404,7 +21440,10 @@
 								"description": "Rewrite destination port or range, one value per redirect"
 							},
 							"proto": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
@@ -21443,7 +21482,10 @@
 						"description": "Source address used for hairpinned packets: internal LAN or external WAN"
 					},
 					"reflection_zone": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -21600,7 +21642,10 @@
 								"description": "Match destination port or range, optionally negated with a leading '!'"
 							},
 							"proto": {
-								"type": "array",
+								"type": [
+									"array",
+									"null"
+								],
 								"items": {
 									"type": "string",
 									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
@@ -21831,7 +21876,10 @@
 						"description": "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice. DEPRECATED as a write input: send `ipaddrs`. Reads keep this field, which is why it is not flagged `deprecated`, but v3 makes it read-only. See docs/deprecations.md."
 					},
 					"ipaddrs": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -21854,7 +21902,10 @@
 						"description": "IPv4 default gateway (static proto)"
 					},
 					"dns": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -21947,7 +21998,10 @@
 						"readOnly": true
 					},
 					"addresses": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -22111,7 +22165,10 @@
 						]
 					},
 					"ports": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -22445,7 +22502,10 @@
 						"maximum": 4094
 					},
 					"ports": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^[A-Za-z0-9._-]+(:[tu*]+)?$"
@@ -22495,7 +22555,10 @@
 						"readOnly": true
 					},
 					"allowed_ips": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -22813,7 +22876,10 @@
 						"description": "Hostname dnsmasq answers for this reservation"
 					},
 					"macs": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -23053,7 +23119,10 @@
 						]
 					},
 					"dhcp_option": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -23162,13 +23231,19 @@
 						]
 					},
 					"server": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
 					},
 					"address": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -23344,7 +23419,10 @@
 						"description": "Bind sysntpd to a specific network interface"
 					},
 					"server": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -23451,14 +23529,20 @@
 						"readOnly": true
 					},
 					"listen_http": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"listen_https": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
@@ -23493,13 +23577,19 @@
 						"description": "URL prefix served as CGI"
 					},
 					"lua_prefix": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
 					},
 					"ucode_prefix": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -23529,7 +23619,10 @@
 						"minimum": 0
 					},
 					"index_page": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -23791,7 +23884,10 @@
 						"description": "Bind to addresses that are not yet up / VIP / alias addresses."
 					},
 					"interface_bind": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^[^\n]+$"
@@ -23799,7 +23895,10 @@
 						"description": "Addresses unbound binds on (`addr` or `addr@port`). Pair with `unbound.@unbound[0].interface_auto = false` on the main unbound UCI for exclusive binding."
 					},
 					"interface_outgoing": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^[^\n]+$"
@@ -23807,7 +23906,10 @@
 						"description": "Source addresses for upstream recursion (multi-WAN egress)."
 					},
 					"srv_line": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^[^\n]+$"
@@ -23839,7 +23941,10 @@
 						"default": false
 					},
 					"ext_line": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"pattern": "^[^\n]+$"
@@ -23935,7 +24040,10 @@
 						"readOnly": true
 					},
 					"agentaddress": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -24206,7 +24314,10 @@
 						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
@@ -24262,7 +24373,10 @@
 						"readOnly": true
 					},
 					"interfaces": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -24350,7 +24464,10 @@
 						"description": "Address family this interface tracks."
 					},
 					"track_ip": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -24492,7 +24609,10 @@
 						"description": "Consecutive successful probes before marking up."
 					},
 					"flush_conntrack": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string",
 							"enum": [
@@ -24585,7 +24705,10 @@
 						"description": "Fallback when no member is reachable."
 					},
 					"use_members": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -24910,14 +25033,20 @@
 						"description": "Path to a hook script run on peer changes."
 					},
 					"event_log_types": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
 						"description": "Log categories: probe_req, beacon, auth, assoc, load_kick, signal_kick, etc."
 					},
 					"ssid_list": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -25015,7 +25144,10 @@
 						"maximum": 65535
 					},
 					"remote": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
@@ -25062,14 +25194,20 @@
 						]
 					},
 					"push": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						},
 						"description": "Server-mode directives pushed to clients."
 					},
 					"route": {
-						"type": "array",
+						"type": [
+							"array",
+							"null"
+						],
 						"items": {
 							"type": "string"
 						}
