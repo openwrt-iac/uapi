@@ -178,6 +178,28 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(g[0].code, 'invalid_format');
 	});
 
+	// Whether an address is required depends on the proto; whether a value is an address
+	// does not. Gating the format checks on static let a dhcp body carry nonsense that
+	// toUci wrote anyway: `999.999.999.999` reached uci on a real box.
+	t.it('validates address formats whatever the proto says', () => {
+		let errs = interfaces.validate({ proto: 'dhcp', broadcast: '999.999.999.999',
+		                                 ip6gw: 'not-an-address', gateway: 'nope' }, null);
+		for (let f in ['broadcast', 'ip6gw', 'gateway']) {
+			let e = filter(errs, function(x) { return x.field == f; });
+			t.assert_equal(length(e), 1);
+			t.assert_equal(e[0].code, 'invalid_format');
+		}
+	});
+
+	t.it('still asks for an address only when the proto is static', () => {
+		let dhcp = filter(interfaces.validate({ proto: 'dhcp' }, null),
+		                  function(e) { return e.code == 'required'; });
+		t.assert_equal(length(dhcp), 0);
+		let stat = filter(interfaces.validate({ proto: 'static' }, null),
+		                  function(e) { return e.field == 'ipaddrs' && e.code == 'required'; });
+		t.assert_equal(length(stat), 1);
+	});
+
 	t.it('accepts ip6prefix with or without a prefix length', () => {
 		for (let v in ['fd00:beef::/48', 'fd00:beef::1'])
 			t.assert_equal(length(interfaces.validate(
