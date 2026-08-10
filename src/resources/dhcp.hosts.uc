@@ -35,11 +35,6 @@ function fromUci(section) {
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
-		// dnsmasq word-splits whatever it reads, so `option tag 'a b'` and `list tag`
-		// are the same configuration to it and uci holds either. Reading the raw shape
-		// meant the same reservation answered with a string on one box and an array on
-		// another, and a generated client had to handle both to learn one thing. The
-		// read is the array now; a stored scalar is split on the way out.
 		tag: split_tags(section.tag),
 		dns: shell_bool(section.dns, false),
 		broadcast: (section.broadcast != null) ? shell_bool(section.broadcast, false) : null,
@@ -67,13 +62,6 @@ function toUci(json) {
 	if (json.broadcast != null) out.broadcast = json.broadcast ? "1" : "0";
 	if (json.instance != null)  out.instance = json.instance;
 	return out;
-}
-
-// `dhcp.host.instance` references a dnsmasq instance (the dhcp.dnsmasq section
-// name), not a per-interface dhcp.dhcp section. dnsmasq's init reads
-// config_get_bool ... "$instance" against `config dnsmasq` entries.
-function dnsmasq_instance_exists(conn, name) {
-	return values.section_index(conn, 'dhcp', 'dnsmasq', '.name')[name] != null;
 }
 
 function validate(json, conn) {
@@ -110,8 +98,11 @@ function validate(json, conn) {
 		push(errs, { field: "leasetime", code: "invalid_format",
 		             message: "must look like 12h, 30m, 1d, or a plain number of seconds" });
 
+	// `dhcp.host.instance` references a dnsmasq instance (the dhcp.dnsmasq section
+	// name), not a per-interface dhcp.dhcp section. dnsmasq's init reads
+	// config_get_bool ... "$instance" against `config dnsmasq` entries.
 	if (conn != null && json.instance != null && json.instance != "") {
-		if (!dnsmasq_instance_exists(conn, json.instance))
+		if (values.section_index(conn, 'dhcp', 'dnsmasq', '.name')[json.instance] == null)
 			push(errs, { field: "instance", code: "conflict",
 			             message: sprintf("no dhcp/dnsmasq section named %J exists",
 			                              json.instance) });
@@ -150,8 +141,6 @@ return {
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation" },
-		// Responses are always an array; the string stays in the type only because a
-		// request may still send one, and one schema serves both directions here. The
 		tag:           { type: ["array", "null"], items: { type: "string" },
 		                 description: "dnsmasq tags for this reservation; a request must match all of them. A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way." },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,

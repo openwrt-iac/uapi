@@ -172,8 +172,7 @@ function is_valid_ipv6_cidr(s) {
 	return prefix >= 0 && prefix <= 128;
 }
 
-// is_valid_cidr_any accepts both IPv4 (a.b.c.d/N) and IPv6 (xxxx::/N) CIDR
-// notation. Stock OpenWrt configs ship IPv6 CIDRs in several places
+// Stock OpenWrt configs ship IPv6 CIDRs in several places
 // (mwan3 default_rule_v6's `option dest_ip '::/0'` is the forcing case).
 function is_valid_cidr_any(s) {
 	return is_valid_cidr(s) || is_valid_ipv6_cidr(s);
@@ -342,9 +341,8 @@ const PORT_MAX = 65535;
 const PORT_CRE = regexp(PORT_RE);
 const PORT_MATCH_CRE = regexp(PORT_MATCH_RE);
 
-// Returns null when the value is absent or acceptable, otherwise the {code,
-// message} for a field error. A port fw4 cannot parse makes it discard the
-// whole section, so passing one through would be a silent no-op.
+// A port fw4 cannot parse makes it discard the whole section, so passing one
+// through would be a silent no-op.
 function port_problem(v, allow_invert) {
 	if (type(v) != "string") return null;
 	if (v == "") return { code: "invalid_format", message: "must not be empty" };

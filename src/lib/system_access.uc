@@ -40,14 +40,6 @@ const VALID_KEY_TYPES = {
 	"sk-ecdsa-sha2-nistp256@openssh.com": true,
 };
 
-function audit_password(ctx, user) {
-	non_uci.audit_notice(ctx, "passwd-set", { user: user });
-}
-
-function audit_passwd_failure(ctx, user, exit_code) {
-	non_uci.audit_warning(ctx, "passwd-failure", { user: user, exit: exit_code });
-}
-
 function set_password(ctx, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
@@ -91,12 +83,12 @@ function set_password(ctx, body) {
 	if (lr.envelope) return lr.envelope;
 	let r = lr.result;
 	if (!r.ok) {
-		audit_passwd_failure(ctx, user, r.exit_code);
+		non_uci.audit_warning(ctx, "passwd-failure", { user: user, exit: r.exit_code });
 		return errors.error(ctx, "internal_error",
 			sprintf("passwd failed (exit %d); see syslog %s for details",
 				r.exit_code, ctx.request_id));
 	}
-	audit_password(ctx, user);
+	non_uci.audit_notice(ctx, "passwd-set", { user: user });
 	return errors.no_content(ctx);
 }
 

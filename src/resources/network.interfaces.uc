@@ -131,7 +131,6 @@ function toUci(json) {
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.proto != null) out.proto = json.proto;
-	// Prefer ipaddrs (list form) when present; fall back to ipaddr (string).
 	// uci handles both `option ipaddr` and `list ipaddr` semantically; the
 	// list form is required for multi-address static interfaces.
 	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
@@ -179,11 +178,6 @@ function validate(json, conn, id) {
 	// `id` is the universal section-name input and goes through the framework's
 	// validate_section_id for the broader uci section-name rules; the tighter IFNAMSIZ
 	// cap below applies only where netifd uses the section name as the kernel netdev name.
-	let push_ifnamsiz_err = function(field, ctx) {
-		push(errs, { field: field, code: "invalid_format",
-		             message: sprintf("must match [A-Za-z][A-Za-z0-9_]{0,14} (%s)", ctx) });
-	};
-	// Reject id at PATCH time (read-only post-create).
 	if (id != null && json.id != null && json.id != id)
 		push(errs, { field: "id", code: "read_only",
 		             message: "id can only be set at create time; rename via DELETE + POST" });
@@ -194,8 +188,8 @@ function validate(json, conn, id) {
 	// wireguard interface.
 	if (id == null && json.id != null && json.proto == "wireguard"
 	    && (type(json.id) != "string" || !match(json.id, IFNAMSIZ_RE)))
-		push_ifnamsiz_err("id",
-			"proto=wireguard binds the uci section name to the kernel netdev name; IFNAMSIZ caps it at 15 chars");
+		push(errs, { field: "id", code: "invalid_format",
+		             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (proto=wireguard binds the uci section name to the kernel netdev name; IFNAMSIZ caps it at 15 chars)" });
 
 	if (json.proto == "static") {
 		let has_list = type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0;

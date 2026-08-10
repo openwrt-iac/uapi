@@ -37,15 +37,11 @@ function toUci(json) {
 	return out;
 }
 
-function interface_exists(conn, name) {
-	return values.section_index(conn, 'network', 'interface', '.name')[name] != null;
-}
-
 function validate(json, conn) {
 	let errs = [];
 	values.require_present(errs, json, "interface");
 	if (conn != null && json.interface != null && json.interface != "") {
-		if (!interface_exists(conn, json.interface))
+		if (values.section_index(conn, 'network', 'interface', '.name')[json.interface] == null)
 			push(errs, { field: "interface", code: "conflict",
 			             message: sprintf("interface %J does not exist", json.interface) });
 	}

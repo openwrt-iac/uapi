@@ -43,10 +43,6 @@ function toUci(json) {
 	return out;
 }
 
-function _load_policy_names(conn) {
-	return values.section_index(conn, "mwan3", "policy", '.name');
-}
-
 // src_ip / dest_ip accept either a bare IP (v4 or v6) or a CIDR (v4 or v6).
 // Stock mwan3 default_rule_v6 ships `option dest_ip '::/0'`.
 function _is_valid_addr_or_cidr(s) {
@@ -58,7 +54,7 @@ function validate(json, conn) {
 	if (json.use_policy == null || json.use_policy == "") {
 		push(errs, { field: "use_policy", code: "required", message: "is required" });
 	} else if (conn != null) {
-		let known = _load_policy_names(conn);
+		let known = values.section_index(conn, "mwan3", "policy", '.name');
 		if (!known[json.use_policy])
 			push(errs, { field: "use_policy", code: "conflict",
 			             message: sprintf("no mwan3 policy named %J", json.use_policy) });

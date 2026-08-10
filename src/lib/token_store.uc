@@ -151,7 +151,8 @@ function _validate_create_body(body) {
 	return errs;
 }
 
-// create runs under the uapi-package transaction (per-package flock + snapshot).
+// Runs under the uapi-package transaction, so the lock held is the per-package flock plus a
+// snapshot, not a token-specific one.
 // No reload service - the token store is re-read by the HTTP path on every
 // request, so a write is visible to the very next handler fork.
 // tx_overrides lets unit tests bypass the real flock + uci_export by passing

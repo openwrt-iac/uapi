@@ -216,10 +216,8 @@ function subsets(outer_scopes, requested_scopes) {
 	return true;
 }
 
-// Convenience: scope-check + structured envelope. Returns null on pass,
-// or an error response (insufficient_scope) on deny. `description` is a
-// short noun phrase ("this operation on firewall:rules", "minting a
-// token") that fills in "Token does not permit <description>".
+// `description` is a short noun phrase ("this operation on firewall:rules",
+// "minting a token") that fills in "Token does not permit <description>".
 function require_or_deny(errors_mod, ctx, scopes, path_segments, verb, description) {
 	if (permits(scopes, path_segments, verb)) return null;
 	let what = description != null
@@ -229,10 +227,10 @@ function require_or_deny(errors_mod, ctx, scopes, path_segments, verb, descripti
 	                        sprintf("Token does not permit %s", what));
 }
 
-// Sorted snapshot of the known scope tree. External consumers (the LuCI
-// frontend, fleet-inventory tooling, openapi-codegen users that want a
-// scope-picker UI) need an enumeration mechanism that doesn't require
-// parsing this file or hardcoding a copy that drifts across releases.
+// External consumers (the LuCI frontend, fleet-inventory tooling,
+// openapi-codegen users that want a scope-picker UI) need an enumeration
+// mechanism that doesn't require parsing this file or hardcoding a copy
+// that drifts across releases.
 // Accessor (not direct KNOWN_PATHS export) so the underlying representation
 // can change without breaking consumers.
 function known_paths() {

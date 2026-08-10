@@ -34,15 +34,11 @@ function toUci(json) {
 	return out;
 }
 
-function group_exists(conn, name) {
-	return values.section_index(conn, 'snmpd', 'group', 'group')[name] != null;
-}
-
 function validate(json, conn) {
 	let errs = [];
 	values.require_present(errs, json, "group");
 	if (conn != null && json.group != null && json.group != "") {
-		if (!group_exists(conn, json.group))
+		if (values.section_index(conn, 'snmpd', 'group', 'group')[json.group] == null)
 			push(errs, { field: "group", code: "conflict",
 			             message: sprintf("no snmpd group named %J exists", json.group) });
 	}

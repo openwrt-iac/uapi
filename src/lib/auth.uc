@@ -2,13 +2,6 @@ let values = require('values');
 
 const BEARER_RE = /^Bearer[ \t]+([A-Za-z0-9_-]+)$/;
 
-// authorize accepts the loaded token records (with optional expires_at and
-// allowed_cidrs metadata), the inbound Authorization header, a hash function,
-// and a `req` envelope { remote_addr, now }. It returns:
-//   { ok: true,  token: { name, scopes, expires_at, allowed_cidrs } }
-//   { ok: false, kind: "unauthorized"  }   // missing/malformed header
-//   { ok: false, kind: "invalid_token", reason: "no_match" | "expired"
-//                                              | "ip_not_permitted" }
 // `reason` shapes the user-visible message but the wire `kind` stays
 // `invalid_token` for all hash/expiry/ip failures (operators correlate via the
 // audit log; clients should not learn whether the token exists).
