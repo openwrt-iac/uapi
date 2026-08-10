@@ -90,3 +90,25 @@ Property schemas under `components.schemas.*.properties` carry two non-standard 
 - **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client can safely send explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. The flag is mutually exclusive with `default:` (a defaulted-and-clearable field produces perpetual non-converging diffs).
 
 Both annotations are enforced by `make lint-defaults`. See `docs/adding-a-resource.md` for the authoring rules.
+
+## What the request and response halves guarantee
+
+A generated client can rely on two properties of the split, both enforced by `lint-openapi-shape`
+rather than left to the generator's habits.
+
+**A `<Name>Request` exists exactly when the resource can be written.** Read-only endpoints get a
+response schema and no request schema, so a client may treat a missing request half as "not
+writable, or removed". That inference is what makes a removed resource fail codegen loudly
+instead of generating something that no longer exists.
+
+**For a curated resource, the response half contains every field of the request half.** The
+request half is the response's property map minus the response-only entries (`runtime`,
+`managed`) and anything marked `readOnly`, so the containment is structural rather than a
+coincidence of the current field set. A client may therefore derive writability by membership:
+a field present in the response and absent from the request is server-derived, which is how
+`network/interfaces.ipaddr` reads as computed with no special case.
+
+The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
+than generated from a resource module, and are legitimately request-only in places: a token
+create sends scopes and gets back a token. They are outside the rule, and outside the lint.
+

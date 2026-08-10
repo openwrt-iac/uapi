@@ -24967,90 +24967,9 @@
 					}
 				}
 			},
-			"DhcpLeasesRequest": {
-				"type": "object",
-				"description": "Request body for the uapi resource backed by uci dhcp.lease.",
-				"properties": {
-					"expires_at": {
-						"type": "integer",
-						"description": "Unix epoch seconds when the lease expires"
-					},
-					"mac": {
-						"type": "string",
-						"description": "Client MAC address"
-					},
-					"ip": {
-						"type": "string",
-						"description": "Assigned IP address"
-					},
-					"hostname": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"duid": {
-						"type": [
-							"string",
-							"null"
-						]
-					}
-				}
-			},
 			"DhcpLeases6Response": {
 				"type": "object",
 				"description": "uapi resource backed by uci dhcp.lease6",
-				"properties": {
-					"duid": {
-						"type": "string",
-						"description": "Client DUID (hex)"
-					},
-					"iaid": {
-						"type": "string",
-						"description": "Identity Association ID (hex)"
-					},
-					"hostname": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"interface": {
-						"type": "string",
-						"description": "Server-side interface that issued the lease"
-					},
-					"ia_type": {
-						"type": "string",
-						"enum": [
-							"IA_NA",
-							"IA_TA",
-							"IA_PD"
-						],
-						"description": "DHCPv6 Identity Association type"
-					},
-					"ip": {
-						"type": "string",
-						"description": "Assigned IPv6 address or prefix"
-					},
-					"prefix_length": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"description": "Prefix length for IA_PD; null for IA_NA"
-					},
-					"expires_at": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"description": "Unix epoch seconds when the lease expires; null for non-numeric values like 'forever'"
-					}
-				}
-			},
-			"DhcpLeases6Request": {
-				"type": "object",
-				"description": "Request body for the uapi resource backed by uci dhcp.lease6.",
 				"properties": {
 					"duid": {
 						"type": "string",
