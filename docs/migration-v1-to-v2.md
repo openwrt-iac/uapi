@@ -135,7 +135,7 @@ The most common-to-touch ones:
   port specs like `firewall/rules.match.dest_port[]` also stay strings to
   preserve range syntax `"22-25"` - check `/schema/<pkg>/<res>` for the
   authoritative type per field)
-- `system`: `log_size`, `log_remote_port`
+- `system`: `log_size`
 
 Run your client through a staging router and capture any 422 responses on
 PATCH/PUT to find the call sites that need updating.
@@ -269,6 +269,5 @@ strictly more accurate - no behavior change required.
 - The error envelope shape (`code`, `message`, `request_id`, optional `errors[]`).
 - The bearer-token + scope-tree authn/authz model (scopes are additive; new
   ones added, no existing ones renamed or removed).
-- The `/api/v2/` URL prefix.
 - The fork-per-request CGI execution model.
 - The "no daemon of our own" architectural principle.

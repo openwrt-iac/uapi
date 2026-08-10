@@ -52,8 +52,9 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
 
-`unsupported_media_type` is reserved and never emitted. uapi does not inspect
-`Content-Type` on a request body at all: `text/plain`, or no header, is accepted
+`unsupported_media_type` is reserved and never emitted. uapi never rejects a body
+on `Content-Type`; the header is read for one thing only, switching a PATCH into
+RFC 6902 mode on `application/json-patch+json`. `text/plain`, or no header, is accepted
 and the write takes effect, so nothing can reach a 415. The code stays in the
 published `ErrorEnvelope.code` enum so a client that already branches on it does
 not have the value disappear, and no operation declares a 415 response. Enforcing
@@ -118,29 +119,41 @@ Every response carries:
 |------------------------------|-------------------------------------|------------------------------------------------------------------------|
 | `X-Request-Id`               | always                              | ULID for log correlation.                                              |
 | `Content-Type: application/json` | always (except 204 no-content / `/metrics` text) | -                                                                      |
-| `Strict-Transport-Security`  | always                              | 1 year, includeSubDomains.                                             |
-| `X-Content-Type-Options`     | always                              | `nosniff`.                                                             |
-| `Referrer-Policy`            | always                              | `no-referrer` (request_id appears in URLs).                            |
-| `Cache-Control`              | always                              | `no-store` (token-scoped data).                                        |
+| `Strict-Transport-Security`  | 200 and error responses (see below) | 1 year, includeSubDomains.                                             |
+| `X-Content-Type-Options`     | 200 and error responses (see below) | `nosniff`.                                                             |
+| `Referrer-Policy`            | 200 and error responses (see below) | `no-referrer` (request_id appears in URLs).                            |
+| `Cache-Control`              | 200 and error responses (see below) | `no-store` (token-scoped data).                                        |
 | `ETag`                       | curated GET 200/304 and write success | Quoted hash of this resource's own body (runtime block excluded). Sibling sections do not influence the value. Absent on raw passthrough, the non-uci endpoints and the read-only lease views, which therefore support neither conditional GET nor `If-Match`. |
 | `WWW-Authenticate: Bearer`   | every 401                           | `realm="uapi", error="<code>"` (RFC 7235 + RFC 6750).                  |
 | `Retry-After: <seconds>`     | 423 locked, 429 too_many_requests   | Honor with jittered backoff.                                           |
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`.                                       |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on curated-resource writes      | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
-| `X-Reload-Services`          | curated-resource writes, when status=ok | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
-| `X-Kernel-Status`            | 2xx on curated-resource writes      | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
-| `X-Kernel-Applied`           | curated-resource writes, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
-| `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddr`. Advisory: the write already happened and was not refused. Present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
+| `X-Reload-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Services`          | curated-resource writes and the `POST /batch` 207, when status=ok | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
+| `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
+| `X-Kernel-Applied`           | curated-resource writes and the `POST /batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
+| `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
 The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than "writes" because that is
-measured, not assumed: raw passthrough (`/raw/...`), `POST /batch`, and the non-uci writes
+measured, not assumed: raw passthrough (`/raw/...`) and the non-uci writes
 (`/packages/...`, `/tokens`, `/system/password`, `/system/authorized_keys`) never reach
 `attach_reload_headers` and return none of them. Until 2.5.0 the OpenAPI document declared
 the reload pair on those responses anyway, which is why the wording here matters: a client
 generated from the spec was told to expect a header that was never going to arrive.
+`POST /batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
+carries the same four headers from the batch handler's own aggregation: a batch commits
+and reloads once for the whole set, so there is one outcome to report rather than one per
+sub-request, and the results array carries `{status, body}` with no room for sub-response
+headers. A pure-read batch runs no transaction and carries none of them.
+
+The four security headers (`Strict-Transport-Security`, `X-Content-Type-Options`,
+`Referrer-Policy`, `Cache-Control`) come from the shared envelope builder, so they ride
+every response whose body it builds and are absent from the ones assembled by hand:
+`204 No Content`, the `POST /batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A
+`304 Not Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
+it replaces, and nothing else.
 
 `X-Reload-Status: no_reload` is documented but not currently reachable: every writable
 resource declares at least one reload service, so shipped responses always say `ok`.

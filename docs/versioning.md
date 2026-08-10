@@ -1,6 +1,6 @@
 # API versioning policy
 
-The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 2.x serves under `/api/v3/`, a future v3 would mount at `/api/v3/`. Within a given installed major, additions are backwards-compatible.
+The URL prefix `/api/v<N>/` tracks the wire-contract major: uapi 3.x serves under `/api/v3/`, a future v4 would mount at `/api/v4/`. Within a given installed major, additions are backwards-compatible.
 
 ## Package version mirrors API major
 
@@ -35,8 +35,8 @@ applied literally; when a change does not qualify, the answer is to queue it for
 rather than to widen a carve-out. A rule bent once stops being a rule.
 
 **Queued debt has to be written down or it will not be swept.** Anything deferred with "this
-needs a major" belongs in `docs/roadmap.md` under the v3 objectives, with enough detail to
-act on years later. The failure mode is not shipping a breaking change; it is arriving at a
+needs a major" belongs in `docs/roadmap.md` under the objectives for the next major,
+with enough detail to act on years later. The failure mode is not shipping a breaking change; it is arriving at a
 major, shipping the three items someone remembered, and paying the whole cost again for the
 rest.
 

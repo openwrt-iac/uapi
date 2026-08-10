@@ -7,7 +7,7 @@ The curated endpoints (`/firewall/rules`, `/network/interfaces`, etc.) wrap a sm
 ## Stability
 
 **URL structure, verbs, auth/scope behavior, and error envelope are
-stable within a package major** (today: v2.x). The composition rule
+stable within a package major** (today: v3.x). The composition rule
 (`raw:*` permission + the section's domain-tree permission both
 required) is part of the contract and will not loosen across minor
 bumps.
@@ -75,7 +75,7 @@ Every raw request needs **two** scope checks, evaluated independently:
 
 The dual check exists so granting `raw:rw` does not silently bypass a carefully-scoped `firewall:rules:ro`. If the deepest matching scope on either tree denies, the request is denied.
 
-For unknown packages (e.g. `dropbear`, `openvpn`), only `*:rw` or a package-level scope like `dropbear:rw` permits the domain side.
+For packages absent from that map (e.g. `openvpn`, `mwan3`, `usteer`), only `*:rw` or a package-level scope like `openvpn:rw` permits the domain side.
 
 ## Reload mapping
 

@@ -72,6 +72,7 @@ Two flock files, used in three patterns:
 | Operation | Global lock | Per-package lock                          |
 |-----------|-------------|--------------------------------------------|
 | Read (any)         | none  | none                                       |
+| Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
 | uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
 | Non-uci write (apk, system/access) | EX | none                              |
@@ -81,20 +82,22 @@ The interactions:
 - Two writes against different packages: both take SH on the global file
   (compatible), each takes EX on its own per-package file → run in parallel.
 - Two writes against the same package: both take SH on the global,
-  contend on the per-package EX → second blocks (or returns
-  `423 locked` with `Retry-After: 1` if its `LOCK_NB` attempt fails).
+  contend on the per-package EX → the second's `LOCK_NB` attempt fails, so
+  it returns `423 locked` with `Retry-After: 1`.
 - A non-uci write (apk install / authorized_keys write) takes EX on the
-  global → waits for any in-flight uci transaction (any package), and
-  blocks new ones until done. Apk's own DB lock is downstream; the global
-  EX ensures uapi never has two apk writers in flight.
+  global → refused with `423 locked` while any uci transaction is in flight
+  (any package), and refuses new ones the same way until it is done. Apk's
+  own DB lock is downstream; the global EX ensures uapi never has two apk
+  writers in flight.
 
 All locks are non-blocking (`LOCK_NB`); contention surfaces as `423
 locked` so the client can decide whether to back off and retry. The HTTP
 worker never sleeps holding a lock.
 
-Audit and verification: `docs/lock-state-audit.md` lists every fd-open and
-lock-acquire site in the codebase, with proof of release on every exit path
-including `die()`.
+Audit and verification: `docs/lock-state-audit.md` covers the fd-open and
+lock-acquire sites on the transaction and token paths, with proof of release
+on every exit path including `die()`. Its own summary marks the coverage
+partial and names the modules the table does not reach.
 
 ## Transaction recipe
 
@@ -102,7 +105,7 @@ Every write request follows this sequence. Failure at any step short-circuits
 without uci state change.
 
 0. **Pre-flight init-script check.** For each entry in the resource's
-   `reload_services`, confirm `/etc/init.d/<svc>` exists and the name matches
+   `reload` list, confirm `/etc/init.d/<svc>` exists and the name matches
    `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
    no uci write attempted.
 1. **Acquire flock.** SH on global + EX on the per-package file
@@ -246,10 +249,12 @@ walks it on every write to enforce:
   `tags[1]`)
 - `properties` (nested object recursion)
 
-PATCH schema-checks the WIRE DELTA only (the merged-with-existing post-image
-inherits fromUci's string-form view of integer-typed fields, so type-checking
-the merge would falsely 422 on integer-untouched patches). The full merged
-body still goes through `resource.validate()` for cross-field logic.
+A merge PATCH schema-checks the WIRE DELTA only (the merged-with-existing
+post-image inherits fromUci's string-form view of integer-typed fields, so
+type-checking the merge would falsely 422 on integer-untouched patches). A
+JSON Patch body synthesises the full post-image, so that is what gets
+schema-checked. The full merged body still goes through
+`resource.validate()` for cross-field logic.
 
 ### Unmodeled uci options: PUT replaces, PATCH preserves
 
@@ -320,7 +325,7 @@ the headers still works via the header path.
 ## Rate limit token bucket
 
 Per-token bucket, file-backed at `/tmp/uapi-ratelimit/<token-id>.txt`
-containing two floats: `<tokens_remaining> <last_refill_epoch_ms>`.
+containing a float and an integer: `<tokens_remaining> <last_refill_epoch_ms>`.
 
 On each authed request:
 
@@ -328,7 +333,7 @@ On each authed request:
 elapsed_ms = now_ms - last_refill
 refilled = min(burst, tokens + elapsed_ms * rate / 1000)
 if refilled >= 1: allow, tokens = refilled - 1
-else:             deny, retry_after = ceil((1 - refilled) * 1000 / rate)
+else:             deny, retry_after = floor((1 - refilled) * 1000 / rate) + 1
 write {tokens, last_refill = now_ms} atomically (tmpfile + rename)
 ```
 
@@ -350,8 +355,8 @@ combination:
 ```
 /tmp/uapi-metrics/
   uapi_requests_total/
-    method=GET/path=%2Ffirewall%2Frules/status=200.txt   "1247\n"
-    method=POST/path=%2Ffirewall%2Frules/status=422.txt  "13\n"
+    method=GET/path=%2Ffirewall%2Frules/status=200/token_id=tf_prod.txt   "1247\n"
+    method=POST/path=%2Ffirewall%2Frules/status=422/token_id=tf_prod.txt  "13\n"
   uapi_request_duration_seconds_bucket/
     le=0.01/method=GET/path=%2Ffirewall%2Frules.txt
     ...
@@ -388,9 +393,9 @@ On second arrival:
 - Different fingerprint → `409 idempotency_key_conflict`.
 - Past TTL → cache miss; the new request runs and re-populates.
 
-Cache hits skip the entire handler stack except auth - they don't even
-touch ubus. A client retrying a network-blipped POST gets the original
-response back, never a duplicate resource.
+Cache hits skip the entire handler stack except auth and the rate limiter -
+the resource handler never runs. A client retrying a network-blipped POST
+gets the original response back, never a duplicate resource.
 
 ## Audit and request_id
 
@@ -398,8 +403,9 @@ Every response carries `X-Request-Id` (a ULID by default; client-supplied
 via `X-Request-Id` header or `?request_id=` query param, validated against
 `^[A-Za-z0-9_-]{8,128}$`).
 
-One syslog line per writeable request (POST/PUT/DELETE/PATCH) at NOTICE,
-plus per-401/403/5xx at WARNING/ERROR. Reads are NOT audit-logged at
+One syslog line per successful (2xx) writeable request (POST/PUT/DELETE/PATCH)
+at NOTICE, plus per-401/403/5xx at WARNING/ERROR. Other 4xx writes get no
+NOTICE line at all. Reads are NOT audit-logged at
 NOTICE level (the request_id still appears in any error line). `/healthz`
 is excluded from all logging.
 

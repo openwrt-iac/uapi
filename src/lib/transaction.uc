@@ -14,8 +14,8 @@ let wg = require('wg');
 // each EX on its own file -> parallel.
 // Two on the same package: both SH on global, only one EX on the package
 // file -> serialized on the package one.
-// A non-uci write takes EX on the global -> waits for any in-flight uci
-// transaction (any package) and blocks new ones until done.
+// A non-uci write takes EX on the global. Every acquire here is LOCK_NB, so it does not
+// wait: it fails immediately and the caller answers 423 rather than queueing.
 const LOCK_PATH = "/var/lock/uapi.lock";
 const PKG_LOCK_PREFIX = "/var/lock/uapi.pkg.";
 // Same charset for both: uci package names and init-script names must match
