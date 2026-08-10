@@ -9,10 +9,12 @@ const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 
 
-// fw4 marks only proto, src_mac and reflection_zone as list options on a
-// `config redirect`; the rest are scalars, and its parse_opt refuses a list
-// outright, discarding the whole section. These stay arrays on the wire
-// (changing the type would break clients) but may carry at most one value.
+// fw4 marks only proto, src_mac and reflection_zone as list options on a `config redirect`;
+// the rest are scalars, and its parse_opt refuses a list outright, discarding the whole
+// section. They were arrays capped at one entry until 3.0.0, because narrowing the type
+// needed a major: the cap was a runtime 422 at apply, where a scalar makes the same mistake a
+// type error before anything is written. LuCI models them the same way, passing no multiple
+// flag to addIPOption on the forwards form where the rules form passes one.
 const SCALAR_MATCH_KEYS = [
 	"src_ip", "src_port", "src_dport", "src_dip", "dest_ip", "dest_port",
 ];
@@ -32,12 +34,12 @@ function fromUci(section) {
 		match: {
 			src_zone: section.src ?? null,
 			dest_zone: section.dest ?? null,
-			src_ip: as_list_or_null(section.src_ip),
-			src_port: as_list_or_null(section.src_port),
-			src_dport: as_list_or_null(section.src_dport),
-			src_dip: as_list_or_null(section.src_dip),
-			dest_ip: as_list_or_null(section.dest_ip),
-			dest_port: as_list_or_null(section.dest_port),
+			src_ip: as_list(section.src_ip)[0] ?? null,
+			src_port: as_list(section.src_port)[0] ?? null,
+			src_dport: as_list(section.src_dport)[0] ?? null,
+			src_dip: as_list(section.src_dip)[0] ?? null,
+			dest_ip: as_list(section.dest_ip)[0] ?? null,
+			dest_port: as_list(section.dest_port)[0] ?? null,
 			proto: as_list_or_null(section.proto),
 			family: section.family ?? "any",
 			mark: section.mark ?? null,
@@ -58,8 +60,7 @@ function toUci(json) {
 	if (is_set(m.src_zone)) out.src = m.src_zone;
 	if (is_set(m.dest_zone)) out.dest = m.dest_zone;
 	for (let key in SCALAR_MATCH_KEYS) {
-		let v = as_list(m[key])[0];
-		if (type(v) == "string" && v != "") out[key] = v;
+		if (is_set(m[key])) out[key] = m[key];
 	}
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
@@ -85,7 +86,7 @@ function validate(json, conn) {
 	// target defaults to DNAT in fromUci, but validate sees the raw body, so a
 	// request that omits it arrives as null and still means DNAT.
 	if ((json.target ?? "DNAT") == "DNAT") {
-		let dip = as_list(m.dest_ip)[0];
+		let dip = m.dest_ip;
 		if (is_set(dip)) {
 			if (substr(dip, 0, 1) == "!")
 				push(errs, { field: "match.dest_ip", code: "invalid_format",
@@ -103,7 +104,7 @@ function validate(json, conn) {
 		if (!is_set(m.dest_zone) || m.dest_zone == "*")
 			push(errs, { field: "match.dest_zone", code: "required",
 			             message: "a named destination zone is required when target is SNAT" });
-		let dip = as_list(m.src_dip)[0];
+		let dip = m.src_dip;
 		if (!is_set(dip))
 			push(errs, { field: "match.src_dip", code: "required",
 			             message: "the source address to rewrite to is required when target is SNAT" });
@@ -113,14 +114,6 @@ function validate(json, conn) {
 		else if (values.has_noncontiguous_mask(dip))
 			push(errs, { field: "match.src_dip", code: "invalid_format",
 			             message: "must not use a non-contiguous mask" });
-	}
-
-	// A second value would be written as a uci list, which fw4 refuses on these
-	// options, discarding the redirect entirely.
-	for (let key in SCALAR_MATCH_KEYS) {
-		if (length(as_list(m[key])) > 1)
-			push(errs, { field: "match." + key, code: "conflict",
-			             message: "firewall4 accepts only one value for this option on a redirect" });
 	}
 
 	if (type(json.name) == "string" && length(json.name) > values.NAME_MAX)
@@ -138,23 +131,18 @@ function validate(json, conn) {
 	}
 
 	for (let key in ["src_ip", "dest_ip", "src_dip"]) {
-		let addrs = as_list(m[key]);
-		for (let i = 0; i < length(addrs); i++) {
-			let a = values.address_problem(addrs[i]);
-			if (a != null)
-				push(errs, { field: sprintf("match.%s[%d]", key, i), code: a.code, message: a.message });
-		}
+		let a = is_set(m[key]) ? values.address_problem(m[key]) : null;
+		if (a != null)
+			push(errs, { field: "match." + key, code: a.code, message: a.message });
 	}
 
 	let has_port = false;
 	for (let key in ["src_port", "src_dport", "dest_port"]) {
-		let ports = as_list(m[key]);
-		if (length(ports) > 0) has_port = true;
-		for (let i = 0; i < length(ports); i++) {
-			let p = values.port_problem(ports[i], true);
-			if (p != null)
-				push(errs, { field: sprintf("match.%s[%d]", key, i), code: p.code, message: p.message });
-		}
+		if (!is_set(m[key])) continue;
+		has_port = true;
+		let p = values.port_problem(m[key], true);
+		if (p != null)
+			push(errs, { field: "match." + key, code: p.code, message: p.message });
 	}
 
 	// A redirect has no ensure_tcpudp rewrite, so even a wildcard drops the ports
@@ -218,17 +206,17 @@ return {
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
-				src_ip:    { type: ["array", "null"], maxItems: 1, items: { type: "string" },
+				src_ip:    { type: ["string", "null"],
 				             description: "Match source address. firewall4 accepts one value per redirect, resolving an address, a prefix in either family, or a uci network name" },
-				src_port:  { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				src_port:  { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match source port or range, one value per redirect" },
-				src_dport: { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				src_dport: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect" },
-				src_dip:   { type: ["array", "null"], maxItems: 1, items: { type: "string" },
+				src_dip:   { type: ["string", "null"],
 				             description: "With target DNAT, the external destination address to match, which also selects the address used for NAT reflection. With target SNAT, the source address to rewrite to, and required. One value per redirect" },
-				dest_ip:   { type: ["array", "null"], maxItems: 1, items: { type: "string" },
+				dest_ip:   { type: ["string", "null"],
 				             description: "Rewrite destination address, one value per redirect" },
-				dest_port: { type: ["array", "null"], maxItems: 1, items: { type: "string", pattern: values.PORT_MATCH_RE },
+				dest_port: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Rewrite destination port or range, one value per redirect" },
 				proto:     { type: ["array", "null"], items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any / tcpudp. Every protocol must be tcp or udp when a port is matched, because firewall4 keeps a port match only on those and would otherwise emit a redirect matching the whole protocol. Defaults to tcpudp when unset" },

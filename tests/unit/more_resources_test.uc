@@ -79,25 +79,39 @@ t.describe('firewall.redirects', () => {
 
 	// fw4 marks src_dport a scalar on a redirect, so a second value would be
 	// written as a uci list and make it discard the whole section.
-	t.it('validate rejects a second value on a scalar-typed match option', () => {
-		let errs = redirects.validate({ target: 'DNAT',
-		                                match: { src_zone: 'wan', src_dport: ['8000-8100', '9000'] } }, null);
+	// Two values used to be a 422 at apply from a hand-written rule. The scalar type says the
+	// same thing earlier and in a form a generated client can see, so the check moved from
+	// validate() to the central type gate.
+	t.it('a second value on a scalar match option is a type error, not a late conflict', () => {
+		let handler = require('handler');
+		let errs = handler.check_schema_types(redirects.schema_properties,
+		                                      { match: { src_dport: ['8000-8100', '9000'] } });
 		let e = filter(errs, function(x) { return x.field == "match.src_dport"; });
-		t.assert_equal(e[0].code, "conflict");
+		t.assert_equal(e[0].code, "invalid_type");
 	});
 
 	t.it('validate accepts a single port range', () => {
 		let errs = redirects.validate({ target: 'DNAT',
-		                                match: { src_zone: 'wan', src_dport: ['8000-8100'] } }, null);
+		                                match: { src_zone: 'wan', src_dport: '8000-8100' } }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
-	t.it('fromUci lifts scalar port options to arrays (matching firewall.rules)', () => {
+	t.it('fromUci surfaces the scalar match options as scalars', () => {
 		let r = redirects.fromUci({ '.name': 'fwd1', '.anonymous': false, '.type': 'redirect',
 		                            src: 'wan', src_dport: '8443', dest_port: '443', dest_ip: '192.168.1.10' });
-		t.assert_deep_equal(r.match.src_dport, ['8443']);
-		t.assert_deep_equal(r.match.dest_port, ['443']);
-		t.assert_deep_equal(r.match.dest_ip, ['192.168.1.10']);
+		t.assert_equal(r.match.src_dport, '8443');
+		t.assert_equal(r.match.dest_port, '443');
+		t.assert_equal(r.match.dest_ip, '192.168.1.10');
+		t.assert_equal(r.match.src_ip, null);
+	});
+
+	// A hand-written `list dest_ip` is a section fw4 discards whole, and there is no field
+	// here to say so. The first value is what the declared type can carry; the old array
+	// shape promised at most one anyway, so nothing that used to be reported is lost.
+	t.it('reports the first value when uci holds a list fw4 would reject', () => {
+		let r = redirects.fromUci({ '.name': 'fwd2', '.anonymous': false, '.type': 'redirect',
+		                            src: 'wan', dest_ip: ['192.168.1.10', '192.168.1.11'] });
+		t.assert_equal(r.match.dest_ip, '192.168.1.10');
 	});
 });
 
@@ -704,8 +718,8 @@ t.describe('firewall.redirects DNAT dest_ip', () => {
 	// request that omits it has to take the same branch.
 	t.it('refuses a negated or non-contiguously masked dest_ip, target given or not', () => {
 		for (let dip in ['!192.168.1.10', '10.0.0.0/255.0.255.0']) {
-			for (let body in [{ target: 'DNAT', match: { src_zone: 'wan', dest_ip: [dip] } },
-			                  { match: { src_zone: 'wan', dest_ip: [dip] } }]) {
+			for (let body in [{ target: 'DNAT', match: { src_zone: 'wan', dest_ip: dip } },
+			                  { match: { src_zone: 'wan', dest_ip: dip } }]) {
 				let e = filter(redirects.validate(body, null),
 				               function(x) { return x.field == "match.dest_ip"; });
 				t.assert_equal(e[0].code, "invalid_format");
@@ -724,7 +738,7 @@ t.describe('firewall.redirects DNAT dest_ip', () => {
 	t.it('leaves dest_ip alone when the target is not DNAT', () => {
 		for (let dip in ['!10.0.0.1', '10.0.0.0/255.0.255.0']) {
 			let e = filter(redirects.validate({ target: 'SNAT',
-				match: { src_zone: 'lan', dest_zone: 'wan', src_dip: ['1.2.3.4'], dest_ip: [dip] } }, null),
+				match: { src_zone: 'lan', dest_zone: 'wan', src_dip: '1.2.3.4', dest_ip: [dip] } }, null),
 				function(x) { return x.field == "match.dest_ip"; });
 			t.assert_equal(length(e), 0);
 		}
@@ -742,9 +756,9 @@ t.describe('firewall.redirects ports and protocol wildcards', () => {
 
 	t.it('refuses a port beside any protocol that would lose it', () => {
 		for (let p in [['tcp'], ['udp'], ['tcpudp'], ['tcp', 'udp']])
-			t.assert_true(gate(p, { src_dport: ['8443'] }));
+			t.assert_true(gate(p, { src_dport: '8443' }));
 		for (let p in [['gre'], ['icmp'], ['tcp', 'gre'], ['all'], ['any'], ['*']])
-			t.assert_false(gate(p, { src_dport: ['8443'] }));
+			t.assert_false(gate(p, { src_dport: '8443' }));
 	});
 
 	t.it('leaves a protocol alone when no port is matched', () => {
@@ -760,18 +774,18 @@ t.describe('firewall.redirects SNAT', () => {
 	t.it('accepts SNAT once fw4 requirements are met', () => {
 		let errs = full_validate(redirects,
 			{ target: 'SNAT', match: { src_zone: 'lan', dest_zone: 'wan',
-			                           src_dip: ['192.168.1.7'] } }, null);
+			                           src_dip: '192.168.1.7' } }, null);
 		t.assert_equal(length(errs), 0);
 	});
 
 	t.it('refuses SNAT where firewall4 would drop the section', () => {
 		let cases = [
 			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan' } },
-			{ f: "match.dest_zone", m: { src_zone: 'lan', src_dip: ['192.168.1.7'] } },
-			{ f: "match.dest_zone", m: { src_zone: 'lan', dest_zone: '*', src_dip: ['192.168.1.7'] } },
-			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan', src_dip: ['!192.168.1.7'] } },
+			{ f: "match.dest_zone", m: { src_zone: 'lan', src_dip: '192.168.1.7' } },
+			{ f: "match.dest_zone", m: { src_zone: 'lan', dest_zone: '*', src_dip: '192.168.1.7' } },
+			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan', src_dip: '!192.168.1.7' } },
 			{ f: "match.src_dip",   m: { src_zone: 'lan', dest_zone: 'wan',
-			                             src_dip: ['10.0.0.0/255.0.255.0'] } },
+			                             src_dip: '10.0.0.0/255.0.255.0' } },
 		];
 		for (let c in cases) {
 			let errs = redirects.validate({ target: 'SNAT', match: c.m }, null);
@@ -793,14 +807,14 @@ t.describe('firewall.redirects SNAT', () => {
 	// fw4 reads src_dip on the DNAT path too, as the external address for NAT
 	// reflection, so modelling it fixes the same data loss there.
 	t.it('keeps src_dip on a DNAT reflection section', () => {
-		let body = { target: 'DNAT', match: { src_zone: 'wan', src_dport: ['80'],
-		                                      src_dip: ['203.0.113.5'], dest_ip: ['10.0.0.1'] } };
+		let body = { target: 'DNAT', match: { src_zone: 'wan', src_dport: '80',
+		                                      src_dip: '203.0.113.5', dest_ip: '10.0.0.1' } };
 		t.assert_equal(length(full_validate(redirects, body, null)), 0);
 		t.assert_equal(redirects.toUci(body).src_dip, '203.0.113.5');
 	});
 
 	t.it('still accepts DNAT and the DNAT default', () => {
-		let body = { match: { src_zone: 'wan', src_dport: ['80'], dest_ip: ['10.0.0.1'] } };
+		let body = { match: { src_zone: 'wan', src_dport: '80', dest_ip: '10.0.0.1' } };
 		t.assert_equal(length(full_validate(redirects, body, null)), 0);
 		body.target = 'DNAT';
 		t.assert_equal(length(full_validate(redirects, body, null)), 0);

@@ -21,8 +21,8 @@ zid=$(echo "$zone" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"
 echo "--- POST /firewall/redirects against the new zone ---"
 redirect=$(call -X POST -H 'Content-Type: application/json' "$URL/firewall/redirects" -d '{
 	"target": "DNAT",
-	"match": { "src_zone": "uapi_test", "src_dport": ["8443"],
-	           "dest_ip": ["192.168.1.10"], "dest_port": ["443"], "proto": ["tcp"] }
+	"match": { "src_zone": "uapi_test", "src_dport": "8443",
+	           "dest_ip": "192.168.1.10", "dest_port": "443", "proto": ["tcp"] }
 }')
 echo "$redirect" | tail -1 | grep -q '^200$' || fail "redirect POST expected 200"
 rid=$(echo "$redirect" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
