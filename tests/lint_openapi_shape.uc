@@ -297,8 +297,12 @@ for (let p in paths) {
 if (length(keys(curated)) == 0)
 	note("build/gen_openapi.uc", "the ENDPOINTS catalog parsed to zero paths, so the check above proved nothing");
 
-// X-Mgmt-Path-Warning is per-resource and per-verb: only an item write on a resource whose
-// module sets `mgmt_path_guard` can move the interface the request arrived through.
+// X-Mgmt-Path-Warning is per-resource and per-verb: only a write on a resource whose module
+// sets `mgmt_path_guard` can move the caller's own path. Each such resource declares it on
+// its collection create and on all three item writes, which is what `attach_mgmt_warning`
+// reaches. The create arm exists because a new section can claim the management device, and a
+// bridge-vlan created on the management bridge is the write that took a box off the network
+// with no warning at all.
 let guarded = 0;
 for (let f in fs.lsdir("src/resources", "*.uc") ?? []) {
 	let fh = fs.open("src/resources/" + f, "r");
@@ -318,14 +322,17 @@ for (let p in paths) {
 		}
 	}
 }
-if (length(keys(mgmt_paths)) != guarded)
+// Two path keys per guarded resource: the collection carries the create, the item carries the
+// three writes.
+if (length(keys(mgmt_paths)) != guarded * 2)
 	note("X-Mgmt-Path-Warning",
-	     sprintf("%d resource(s) set mgmt_path_guard but the header is declared on %d path(s)",
-	             guarded, length(keys(mgmt_paths))));
+	     sprintf("%d resource(s) set mgmt_path_guard, so %d path(s) should declare the header; %d do",
+	             guarded, guarded * 2, length(keys(mgmt_paths))));
 for (let p in mgmt_paths) {
 	let got = join(", ", sort(mgmt_paths[p]));
-	if (got != "delete 204, patch 200, put 200")
-		note(p, sprintf("declares X-Mgmt-Path-Warning on %J; attach_mgmt_warning reaches only PUT 200, PATCH 200 and DELETE 204", got));
+	let want = (substr(p, -5) == "/{id}") ? "delete 204, patch 200, put 200" : "post 200";
+	if (got != want)
+		note(p, sprintf("declares X-Mgmt-Path-Warning on %J; attach_mgmt_warning reaches %J on this path", got, want));
 }
 
 if (length(problems) > 0) {

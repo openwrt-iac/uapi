@@ -70,4 +70,36 @@ function changed_fields(existing, incoming) {
 	return out;
 }
 
-return { inbound_device, inbound_interface, changed_fields, WATCHED };
+// Whether a write aimed at `device` can move the caller's own path. Two resources reach the
+// caller without touching `config interface` at all: a `bridge-vlan` on the bridge carrying
+// the request turns on VLAN filtering, which drops untagged traffic, and a `device` write can
+// change that bridge's ports or its name. A bridge-vlan on `br-lan` took a test box off the
+// network mid-suite and, because the follow-up delete never ran, it stayed off until someone
+// reached a console.
+//
+// Two ways to match. The write names the caller's device outright, or it names a bridge the
+// caller's device is a port of, which is the common shape: the request arrives on `br-lan`
+// and the write targets `br-lan`, or it arrives on `eth0` and the write reconfigures the
+// bridge `eth0` belongs to.
+function targets_mgmt_device(conn, dev, target) {
+	if (dev == null || target == null) return false;
+	if (dev == target) return true;
+	if (conn == null) return false;
+
+	// Bridge membership comes from uci rather than from the kernel: a write can add a port
+	// to a bridge that has not been applied yet, and the caller is on the path uci is about
+	// to describe.
+	let member = false;
+	try {
+		conn.uci_foreach("network", "device", function(sec) {
+			if (sec.name != target) return;
+			let ports = sec.ports;
+			if (type(ports) == "string") ports = [ ports ];
+			for (let port in ports ?? [])
+				if (port == dev) member = true;
+		});
+	} catch (e) { return false; }
+	return member;
+}
+
+return { inbound_device, inbound_interface, changed_fields, targets_mgmt_device, WATCHED };
