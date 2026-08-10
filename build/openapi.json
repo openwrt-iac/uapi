@@ -22886,6 +22886,30 @@
 						"x-uapi-clear-on-omit": true,
 						"description": "IPv4 default gateway (static proto)"
 					},
+					"broadcast": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 broadcast address (static proto)"
+					},
+					"ip6gw": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
+					},
+					"ip6prefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 prefix routed to this device for delegation to clients (static proto)"
+					},
 					"dns": {
 						"type": [
 							"array",
@@ -23191,6 +23215,30 @@
 						],
 						"x-uapi-clear-on-omit": true,
 						"description": "IPv4 default gateway (static proto)"
+					},
+					"broadcast": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 broadcast address (static proto)"
+					},
+					"ip6gw": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
+					},
+					"ip6prefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 prefix routed to this device for delegation to clients (static proto)"
 					},
 					"dns": {
 						"type": [

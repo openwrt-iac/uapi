@@ -84,6 +84,9 @@ function fromUci(section, conn) {
 		ip6addrs: as_list_or_null(section.ip6addr),
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
+		broadcast: section.broadcast ?? null,
+		ip6gw: section.ip6gw ?? null,
+		ip6prefix: section.ip6prefix ?? null,
 		dns: as_list_or_null(section.dns),
 		ip6assign: as_int(section.ip6assign),
 		mtu: as_int(section.mtu),
@@ -146,6 +149,9 @@ function toUci(json) {
 
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
+	if (json.broadcast != null) out.broadcast = json.broadcast;
+	if (json.ip6gw != null) out.ip6gw = json.ip6gw;
+	if (json.ip6prefix != null) out.ip6prefix = json.ip6prefix;
 	if (type(json.dns) == "array" && length(json.dns) > 0) out.dns = json.dns;
 	if (json.ip6assign != null) out.ip6assign = "" + json.ip6assign;
 	if (json.mtu != null) out.mtu = "" + json.mtu;
@@ -229,6 +235,19 @@ function validate(json, conn, id) {
 		if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
 			push(errs, { field: "netmask", code: "invalid_format",
 			             message: "must be a valid IPv4 netmask" });
+		if (json.broadcast != null && json.broadcast != "" && !is_valid_ipv4(json.broadcast))
+			push(errs, { field: "broadcast", code: "invalid_format",
+			             message: "must be a valid IPv4 address" });
+		// netifd wants a bare address for the gateway and accepts a prefix length on the
+		// routed prefix, which is the same split LuCI encodes as ip6addr("nomask") against
+		// ip6addr.
+		if (json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
+			push(errs, { field: "ip6gw", code: "invalid_format",
+			             message: "must be a valid IPv6 address without a prefix length" });
+		if (json.ip6prefix != null && json.ip6prefix != ""
+		    && !is_valid_ipv6_cidr(json.ip6prefix) && !is_valid_ipv6(json.ip6prefix))
+			push(errs, { field: "ip6prefix", code: "invalid_format",
+			             message: "must be a valid IPv6 address or prefix" });
 	}
 
 	if (json.proto == "wireguard") {
@@ -332,6 +351,12 @@ return {
 		             description: "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
+		broadcast: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		             description: "IPv4 broadcast address (static proto)" },
+		ip6gw:     { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		             description: "IPv6 default gateway, a bare address with no prefix length (static proto)" },
+		ip6prefix: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		             description: "IPv6 prefix routed to this device for delegation to clients (static proto)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
 		dns:       { type: ["array", "null"], items: { type: "string" } },

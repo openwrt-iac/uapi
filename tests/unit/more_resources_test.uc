@@ -158,6 +158,32 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(v4.ip6addrs, null);
 	});
 
+	// The three fields LuCI offers on a static interface that had no counterpart here. Each
+	// has a distinct accepted shape, which is the only reason they are worth separate cases.
+	t.it('accepts the static IPv6 and broadcast fields LuCI declares', () => {
+		t.assert_equal(length(interfaces.validate(
+			{ proto: 'static', ipaddrs: ['192.0.2.1/24'], broadcast: '192.0.2.255',
+			  ip6addrs: ['fd00::1/64'], ip6gw: 'fd00::ffff', ip6prefix: 'fd00:beef::/48' }, null)), 0);
+	});
+
+	t.it('rejects a broadcast that is not IPv4, and a prefixed ip6gw', () => {
+		let b = filter(interfaces.validate({ proto: 'static', ipaddrs: ['192.0.2.1/24'],
+		                                     broadcast: 'fd00::1' }, null),
+		               function(e) { return e.field == 'broadcast'; });
+		t.assert_equal(b[0].code, 'invalid_format');
+		// netifd wants the gateway bare; a prefix length here is the common mistake.
+		let g = filter(interfaces.validate({ proto: 'static', ipaddrs: ['192.0.2.1/24'],
+		                                     ip6gw: 'fd00::ffff/64' }, null),
+		               function(e) { return e.field == 'ip6gw'; });
+		t.assert_equal(g[0].code, 'invalid_format');
+	});
+
+	t.it('accepts ip6prefix with or without a prefix length', () => {
+		for (let v in ['fd00:beef::/48', 'fd00:beef::1'])
+			t.assert_equal(length(interfaces.validate(
+				{ proto: 'static', ipaddrs: ['192.0.2.1/24'], ip6prefix: v }, null)), 0);
+	});
+
 	t.it('toUci writes ip6addrs onto the uci ip6addr option', () => {
 		let u = interfaces.toUci({ proto: 'static', ip6addrs: ['fd00::1/64'] });
 		t.assert_deep_equal(u.ip6addr, ['fd00::1/64']);

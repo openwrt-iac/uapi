@@ -82,7 +82,7 @@ const CASES = [
 	{
 		file: "network.interfaces.uc", id: "lan", pkg: "network",
 		modify: { key: "ipaddrs", value: ["192.168.78.1/24"] },
-		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'] },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'], broadcast: '192.168.1.255' },
 	},
 	{
 		// A static interface addressed only over IPv6, which uci and LuCI both accept and
@@ -91,7 +91,7 @@ const CASES = [
 		file: "network.interfaces.uc", id: "v6only", pkg: "network",
 		modify: { key: "ip6addrs", value: ["fd00:db8::2/64"] },
 		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'eth7',
-		           ip6addr: ['fd00:db8::1/64'] },
+		           ip6addr: ['fd00:db8::1/64'], ip6gw: 'fd00:db8::ffff', ip6prefix: 'fd00:beef::/48' },
 	},
 	{
 		// A second network.interfaces case: the masked private_key is a different shape
