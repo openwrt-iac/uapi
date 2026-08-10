@@ -28,6 +28,9 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Removed
 
+- **The `resolve_for_replace` seam in the handler.** Both implementors went with the mirrored names, and an extension point with no implementor is a permanent tax on every future change to the code around it. Its contract is gone from `docs/adding-a-resource.md` with it, along with the `Mirrored field pairs` section, which documented a hazard that no longer exists: a uci option now gets exactly one writable name, and a field that reads differently from how it writes is expressible as `readOnly` in the response half.
+
+
 - **`dhcp/hosts.mac` and `dhcp/hosts.mac_aliases`.** `macs` is the only name, and it is the whole uci `list mac` as one array. Neither removed name was ever a uci option: `mac` was the list's first entry and `mac_aliases` the rest, so a client had to read two fields to learn what one reservation matched. Validation errors previously reported against `mac` now report against `macs`.
 
 - **`network/interfaces.name` as a create input.** Send `id`, the universal section-name input since 2.2.0. The `422 conflict` for a disagreeing `id` and `name` goes with the field.

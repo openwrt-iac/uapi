@@ -535,11 +535,12 @@ function carry_write_only(resource, body, existing) {
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
 // check only the delta. Returns either { ok: true, merged, schema_body } or
 // an error result that the caller short-circuits with.
-// The top-level fields a JSON Patch names, taken from the first segment of each
-// op path. A resource whose read view exposes one uci option under two names has
-// to know which of them the caller actually touched, and with merge-patch that is
-// simply the body's keys. Without this the JSON Patch flavour cannot tell, and a
-// single `replace /ipaddr` looked like a body asserting two different addresses.
+// The top-level fields a JSON Patch names, taken from the first segment of each op path. A
+// `merge_for_patch` hook needs to know which fields the caller actually named, and under
+// merge-patch that is simply the body's keys; JSON Patch has to be told. The mirrored-name
+// pairs this was written for are gone as of 3.0.0, but the two hooks that remain, on
+// `openvpn/instances` and `network/wireguard_peers`, carry write-only secrets forward and
+// need the same distinction.
 function patch_touched_fields(ops, patched) {
 	if (type(ops) != "array" || type(patched) != "object") return null;
 	let out = {};
@@ -749,8 +750,6 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				let write_body = carry_write_only(resource, body, existing);
-				if (resource.resolve_for_replace != null)
-					write_body = resource.resolve_for_replace(write_body);
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
