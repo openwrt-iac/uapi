@@ -81,25 +81,36 @@ function changed_fields(existing, incoming) {
 // caller's device is a port of, which is the common shape: the request arrives on `br-lan`
 // and the write targets `br-lan`, or it arrives on `eth0` and the write reconfigures the
 // bridge `eth0` belongs to.
-function targets_mgmt_device(conn, dev, target) {
-	if (dev == null || target == null) return false;
-	if (dev == target) return true;
-	if (conn == null) return false;
+// Takes one device name or a list of them, and returns the one that matches so the caller can
+// name it in the warning. A list is scanned in one uci pass rather than one pass per
+// candidate: a bridge write names its own device plus every port, and a per-candidate scan
+// walked the whole package that many times for a single write.
+function targets_mgmt_device(conn, dev, targets) {
+	if (dev == null || targets == null) return null;
+	if (type(targets) == "string") targets = [ targets ];
+
+	let want = {};
+	for (let t in targets) {
+		if (type(t) != "string" || t == "") continue;
+		if (t == dev) return t;
+		want[t] = true;
+	}
+	if (conn == null || length(keys(want)) == 0) return null;
 
 	// Bridge membership comes from uci rather than from the kernel: a write can add a port
 	// to a bridge that has not been applied yet, and the caller is on the path uci is about
 	// to describe.
-	let member = false;
+	let hit = null;
 	try {
 		conn.uci_foreach("network", "device", function(sec) {
-			if (sec.name != target) return;
+			if (hit != null || !want[sec.name]) return;
 			let ports = sec.ports;
 			if (type(ports) == "string") ports = [ ports ];
 			for (let port in ports ?? [])
-				if (port == dev) member = true;
+				if (port == dev) hit = sec.name;
 		});
-	} catch (e) { return false; }
-	return member;
+	} catch (e) { return null; }
+	return hit;
 }
 
 return { inbound_device, inbound_interface, changed_fields, targets_mgmt_device, WATCHED };

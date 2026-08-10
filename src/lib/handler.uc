@@ -438,9 +438,7 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed, devices, path) {
 		// Every device the write names, not just the section's own: a `device` write that
 		// adds the caller's interface to a bridge moves the path as surely as one aimed at
 		// the bridge, and `ports` is where that shows up.
-		let hit = null;
-		for (let d in devices)
-			if (mgmt.targets_mgmt_device(conn, path.device, d)) { hit = d; break; }
+		let hit = mgmt.targets_mgmt_device(conn, path.device, devices);
 		if (hit == null) return resp;
 		subject = sprintf("device=%s", hit);
 	}
