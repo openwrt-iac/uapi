@@ -272,6 +272,95 @@ function is_curated(p) {
 	return false;
 }
 
+// The Request half is a codegen signal rather than decoration: a generated client reads a
+// missing Request as "this resource is not writable, or has gone", which is what made the
+// removal of vnstat/interfaces fail generation loudly instead of quietly. That inference only
+// survives while both directions hold, so both are checked here.
+function collect_refs(node, out) {
+	if (type(node) != "object") return;
+	if (type(node["$ref"]) == "string") {
+		let m = match(node["$ref"], /^#\/components\/schemas\/(.+)$/);
+		if (m) out[m[1]] = true;
+	}
+	for (let k in node) {
+		let v = node[k];
+		if (type(v) == "object") collect_refs(v, out);
+		else if (type(v) == "array")
+			for (let e in v) collect_refs(e, out);
+	}
+}
+
+let body_refs = {};
+let paths_for_body = spec.paths ?? {};
+for (let p in paths_for_body)
+	for (let verb in paths_for_body[p]) {
+		let op = paths_for_body[p][verb];
+		if (type(op) != "object" || type(op.requestBody) != "object") continue;
+		collect_refs(op.requestBody, body_refs);
+	}
+
+let request_schemas = 0;
+for (let name in schemas) {
+	if (substr(name, -7) != "Request") continue;
+	request_schemas++;
+	if (!body_refs[name])
+		note(sprintf("/components/schemas/%s", name),
+		     "is a Request schema no request body references, so it describes a write that cannot happen");
+}
+
+// The reverse: a curated write that carries a body must name the Request half, or a client
+// reading writability off the schema set sees a writable resource as read-only. Scoped to
+// curated paths, since /raw/ and the auth and package endpoints have their own hand-written
+// bodies, and only to verbs that actually take a body: `adopt` is a POST with none, which is
+// correct rather than a gap.
+let writable_bodies = 0;
+for (let p in paths_for_body) {
+	if (!is_curated(p)) continue;
+	for (let verb in paths_for_body[p]) {
+		if (verb != "post" && verb != "put" && verb != "patch") continue;
+		let op = paths_for_body[p][verb];
+		if (type(op) != "object" || type(op.requestBody) != "object") continue;
+		writable_bodies++;
+		let r = {}; collect_refs(op.requestBody, r);
+		let named = false;
+		for (let n in r) if (substr(n, -7) == "Request") named = true;
+		if (!named)
+			note(sprintf("/paths%s/%s/requestBody", p, verb),
+			     "is a curated write body that references no *Request schema");
+	}
+}
+
+// Direction is expressible as membership only while the Response is a superset of the Request:
+// a generated client emits response-only fields as computed, so a request field the response
+// omits would surface as an unsettable attribute, with no symptom in the document itself. This
+// holds by construction for curated resources, whose request half is the response property map
+// minus the response-only and readOnly entries, and this pins that rather than trusting it.
+// The hand-written operation pairs are legitimately request-only in places (a token create
+// sends scopes and gets back a token) and are not in the generator's endpoint catalog.
+let superset_pairs = 0;
+for (let name in schemas) {
+	if (substr(name, -7) != "Request") continue;
+	let base = substr(name, 0, length(name) - 7);
+	if (!exists(schemas, base + "Response")) continue;
+	if (!body_refs[name]) continue;
+	let rq = schemas[name].properties ?? {};
+	let rs = schemas[base + "Response"].properties ?? {};
+	let generated = false;
+	for (let p in curated) {
+		let ref = paths_for_body[p]?.get?.responses?.["200"]?.content?.["application/json"]?.schema;
+		let r = {};
+		collect_refs(ref ?? {}, r);
+		if (r[base + "Response"]) generated = true;
+	}
+	if (!generated) continue;
+	superset_pairs++;
+	for (let f in rq)
+		if (!exists(rs, f))
+			note(sprintf("/components/schemas/%s/properties/%s", name, f),
+			     sprintf("is in the request half but not in %sResponse, so a generated client would emit it as computed and no one could set it", base));
+}
+
+
 // ETag comes from set_etag_header, which the curated CRUD and singleton handlers call and
 // nothing else does. make_collection.get_one returns errors.ok bare, so a collection-kind
 // resource is curated and still carries no ETag: "curated" alone is the wrong test, which

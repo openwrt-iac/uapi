@@ -204,6 +204,24 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_orphan_request_schema() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['GhostRequest'] = {'type': 'object', 'properties': {}}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_request_field_not_in_response() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['DhcpHostsRequest']['properties']['ghost_field'] = {'type': 'string'}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_empty_enum() {
 	python3 - <<'EOF'
 import json
@@ -402,6 +420,8 @@ EOF
 probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
 probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
+probe lint-openapi-shape "a Request schema nothing references"   "describes a write that cannot happen" mut_orphan_request_schema
+probe lint-openapi-shape "a request field the response omits"    "would emit it as computed"          mut_request_field_not_in_response
 probe lint-openapi-shape "a conditional requiring an undeclared prop" "which this half does not declare" mut_conditional_requires_undeclared
 probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
 probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value

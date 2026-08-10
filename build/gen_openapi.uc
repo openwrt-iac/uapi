@@ -1301,7 +1301,12 @@ function build_schemas() {
 			let cond = request_conditional(mod.openapi_conditional, req_props, ep.path);
 			if (length(cond) > 0) req.allOf = cond;
 		}
-		schemas[request_name(ep)] = req;
+		// Only for an endpoint that can actually be written. A generated client reads a
+		// missing Request as "not writable, or gone", and that inference is what made the
+		// removal of vnstat/interfaces fail codegen loudly instead of quietly; minting one
+		// for a read-only endpoint would blunt it.
+		if (ep.kind != "collection")
+			schemas[request_name(ep)] = req;
 	}
 
 	return schemas;
