@@ -6,7 +6,6 @@ install_uapi
 
 URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
-RO="Authorization: Bearer $RO_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 
 echo "--- /healthz returns subsystem checks ---"

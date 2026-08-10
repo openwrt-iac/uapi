@@ -284,12 +284,10 @@ t.describe('firewall.rules mark / DSCP', () => {
 	});
 
 	t.it('accepts the DSCP target', () => {
-		for (let c in [{ target: 'DSCP', set_dscp: 'CS0' }]) {
-			c.match = { src_zone: 'lan' };
-			let te = filter(full_validate(rules, c, null),
-			                function(e) { return e.field == "target"; });
-			t.assert_equal(length(te), 0);
-		}
+		let te = filter(full_validate(rules,
+			{ target: 'DSCP', set_dscp: 'CS0', match: { src_zone: 'lan' } }, null),
+			function(e) { return e.field == "target"; });
+		t.assert_equal(length(te), 0);
 	});
 
 	// Each of these validates clean today and is then silently discarded by

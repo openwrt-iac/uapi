@@ -341,7 +341,8 @@ t.describe('a device write that adopts the caller device warns', () => {
 			               "a warning");
 			return;
 		}
-		t.assert_true(warn != null);
+		t.assert_true(index(warn, 'device=eth1') >= 0);
+		t.assert_true(index(warn, 'changed=created') >= 0);
 	});
 
 	t.it('a bridge over someone else stays silent', () => {

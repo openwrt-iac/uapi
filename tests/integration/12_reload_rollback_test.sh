@@ -15,9 +15,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 # 500 reload_failed_restored, uci is back to the pre-write snapshot.
 # The VM ships a stub /etc/init.d/firewall (from tests/vm/setup.sh) that honors
 # /tmp/fw-fail-once: when present, reload_service consumes the marker and
-# returns 1 on this single reload, then returns 0 on subsequent calls. That's
-# exactly what the snapshot-restore recipe needs to exercise: first reload
-# fails, restore re-reload succeeds, response is 500 reload_failed_restored.
+# returns 1 on this single reload, then returns 0 on subsequent calls.
 cleanup() { $SSH 'rm -f /tmp/fw-fail-once' || true; }
 trap cleanup EXIT INT TERM
 

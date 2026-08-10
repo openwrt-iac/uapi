@@ -54,8 +54,7 @@ done
   git -c user.email=probe@localhost -c user.name=probe commit -q -m "probe baseline" \
   >/dev/null 2>&1 ) || true
 
-# --- the mutations. One function each, so quoting stays one level deep. ---
-
+# One function per mutation, so quoting stays one level deep.
 mut_emdash() { printf '\nplanted \342\200\224 here\n' >> docs/testing.md; }
 
 mut_syntax() { printf 'function (((\n' >> src/lib/values.uc; }
@@ -163,7 +162,6 @@ p.write_text(s.replace(a, 'PROBE hostname (alphanumerics', 1))
 EOF
 }
 
-# Defined as well as exported: an export with no definition would be a different defect.
 mut_dead_import() {
 	python3 - <<'EOF'
 from pathlib import Path
@@ -173,6 +171,7 @@ p.write_text('let probe_unused_import = values.as_int;\n' + s, )
 EOF
 }
 
+# Defined as well as exported: an export with no definition would be a different defect.
 mut_dead_export() {
 	python3 - <<'EOF'
 import pathlib

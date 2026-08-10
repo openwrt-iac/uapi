@@ -118,9 +118,8 @@ br_body=$(echo "$br_resp" | sed '$d')
 echo "$br_body" | grep -q '"id": "br_tftest"' || fail "expected id=br_tftest"
 $SSH "uci get network.br_tftest" >/dev/null || fail "uci section network.br_tftest not created"
 $SSH "uci -q get network.br_tftest.ports" && fail "uci should have no ports on a portless bridge" || true
-br_id="br_tftest"
 
-del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/devices/$br_id")
+del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/devices/br_tftest")
 [ "$del" = "204" ] || fail "DELETE portless bridge expected 204, got $del"
 
 echo "id-settable + adopt-keep-name + portless-bridge ok."

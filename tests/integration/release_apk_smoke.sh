@@ -6,7 +6,6 @@ APK_PATH=${1:-}
 [ -f "$APK_PATH" ] || { echo "no such file: $APK_PATH"; exit 1; }
 
 SSH="tests/vm/ssh.sh"
-SCP_KEY="-i tests/vm/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
 URL=http://127.0.0.1:8080/api/v3
 
 fail() { echo "FAIL: $*"; exit 1; }

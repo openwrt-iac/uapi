@@ -138,12 +138,7 @@ t.describe('network.interfaces', () => {
 
 	// v2.0.2 C1: caller-supplied `name` for wireguard interfaces.
 	const WG = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";  // example key
-	
-	
-	
-	
-	
-	
+
 	// 2.2.0: `name` is deprecated in favour of `id`. Both accepted during
 	// the deprecation window; must match if both supplied.
 	t.it('validate accepts id alone (the 2.2.0 canonical input)', () => {
@@ -159,7 +154,6 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(ne), 0);
 	});
 
-	
 	t.it('validate rejects id that exceeds IFNAMSIZ for proto=wireguard', () => {
 		let errs = interfaces.validate({ proto: 'wireguard',
 			id: 'this_is_way_too_long_for_ifnamsiz',
@@ -168,7 +162,6 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(length(ie), 1);
 	});
 
-	
 	t.it('id_for_create falls back to a `wg_<11-char>` id when no id is given and proto=wireguard', () => {
 		let id = interfaces.id_for_create({ proto: 'wireguard' });
 		t.assert_equal(length(id), 14);
@@ -391,7 +384,6 @@ t.describe('network.interfaces effective_proto', () => {
 		t.assert_equal(r.runtime.effective_proto, 'wireguard');
 	});
 
-	// A write is never refused over this, so nothing here may produce an error.
 	t.it('never makes a write fail', () => {
 		let body = { proto: 'wwan' };
 		t.assert_equal(length(filter(interfaces.validate(body, with_status({ proto: 'none' })),
@@ -571,7 +563,7 @@ t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () 
 		let u = interfaces.toUci({
 			proto: 'static',
 			ipaddrs: ['192.168.1.1', '192.168.1.2'],
-			ipaddr: 'IGNORED',  // ipaddrs wins
+			ipaddr: 'IGNORED',
 		});
 		t.assert_deep_equal(u.ipaddr, ['192.168.1.1', '192.168.1.2']);
 	});
@@ -735,8 +727,6 @@ t.describe('firewall.redirects SNAT', () => {
 	});
 });
 
-
-
 // Both messages stated enum sets their constants contradict: `protocol` advertised
 // `auto`, which the validator rejects, and omitted three values it accepts, while
 // `resource_limits` omitted the accepted `default`. Derived now, so a new enum value
@@ -750,7 +740,6 @@ t.describe('unbound.server enum messages match what is accepted', () => {
 		return null;
 	}
 
-	// Every value the message names must actually be accepted.
 	function every_named_value_is_accepted(field, msg) {
 		let listed = split(replace(msg, "must be one of ", ""), ", ");
 		for (let v in listed) {

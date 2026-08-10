@@ -36,7 +36,6 @@ t.describe('error_ring', () => {
 			er.append({ ts: i, request_id: "r" + i, code: "bad_request", status: 400, message: "x" });
 		let v = er.read();
 		t.assert_equal(length(v), er.CAP);
-		// Oldest 5 dropped; ring should start at request_id "r5" and end at "r24".
 		t.assert_equal(v[0].request_id, "r5");
 		t.assert_equal(v[length(v) - 1].request_id, "r" + (er.CAP + 4));
 	});

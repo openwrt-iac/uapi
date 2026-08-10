@@ -25,8 +25,8 @@ echo "--- GET /tokens (admin lists tokens) ---"
 status=$(curl -sS -o /tmp/uapi_tokens_list.json -w '%{http_code}' -H "$ADMIN" "$URL/tokens")
 [ "$status" = "200" ] || fail "GET /tokens expected 200, got $status"
 grep -q '"test_admin"' /tmp/uapi_tokens_list.json || fail "list missing test_admin"
-grep -qv '"hash"' /tmp/uapi_tokens_list.json || fail "list must not expose hash"
-grep -qv '"salt"' /tmp/uapi_tokens_list.json || fail "list must not expose salt"
+grep -q '"hash"' /tmp/uapi_tokens_list.json && fail "list must not expose hash"
+grep -q '"salt"' /tmp/uapi_tokens_list.json && fail "list must not expose salt"
 
 echo "--- GET /tokens denied for ro caller (writes scope check excludes ro for create, but list needs *:ro - covered by *:rw) ---"
 # ro token has *:ro which subsumes uapi:tokens:ro -> list is allowed.

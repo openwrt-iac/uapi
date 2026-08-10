@@ -85,7 +85,6 @@ vnstat/config
 STRIP='del(.id, .managed, .runtime, .last_used_at, .last_used_ip)'
 
 assert_no_drift() {
-	# assert_no_drift <label> <before-json> <after-json>
 	# jq -S sorts keys so the diff is meaningful even if the server emits
 	# keys in a different order across two requests. Use temp files (not
 	# process substitution) so the script stays POSIX-compatible with
