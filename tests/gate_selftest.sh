@@ -164,6 +164,15 @@ EOF
 }
 
 # Defined as well as exported: an export with no definition would be a different defect.
+mut_dead_import() {
+	python3 - <<'EOF'
+from pathlib import Path
+p = Path('src/resources/dhcp.servers.uc')
+s = p.read_text()
+p.write_text('let probe_unused_import = values.as_int;\n' + s, )
+EOF
+}
+
 mut_dead_export() {
 	python3 - <<'EOF'
 import pathlib
@@ -421,6 +430,7 @@ probe lint-doc-refs      "a claim no test prints"               "no test prints 
 probe lint-doc-refs      "an error code nothing emits"         "nothing in src/ emits it"          mut_code_unemitted
 probe lint-doc-refs      "an enum code nothing documents"      "appears nowhere in docs/errors.md" mut_code_undocumented
 probe openapi-check      "a schema change not regenerated"     ""                                  mut_stale_spec
+probe coverage           "a module import nothing reads"    "DEAD MODULE IMPORTS"               mut_dead_import
 probe coverage           "a lib export nothing uses"           "DEAD LIB EXPORTS"                  mut_dead_export
 
 echo

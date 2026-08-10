@@ -92,6 +92,19 @@ The `422 conflict` that fired when `id` and `name` disagreed is gone with the fi
 `ipaddr` is now read-only. It still appears in responses carrying the first entry of the uci
 `list ipaddr`; it is simply absent from the request schema. Send `ipaddrs`.
 
+This is the one removed field that does **not** fail silently, and deliberately so. A static
+interface needs an address, and counting a field no write can act on as one produced an
+interface with no address and a `200`:
+
+```
+# v2: accepted, and the address landed
+# v3: 422, ipaddrs required
+POST /api/v3/network/interfaces {"id": "lan2", "proto": "static", "ipaddr": "192.0.2.99"}
+```
+
+A read-modify-write client is unaffected, because a `GET` returns `ipaddrs` alongside `ipaddr`
+and echoing the body back carries the list.
+
 ### Fields that wrote a uci option nothing reads
 
 Removed entirely, in both directions. Writes carrying them were already ignored, so nothing on

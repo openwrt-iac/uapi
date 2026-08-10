@@ -214,8 +214,38 @@ if (length(fn_dead) > 0) {
 		printf("  %-12s %s\n", mod, join(", ", fn_dead[mod]));
 }
 
+// The module-local counterpart of the check above. A file that stops using a helper keeps
+// importing it, and nothing notices: removing `mwan3/globals.rtmon_interval` in 3.0.0 left
+// `as_int` bound and unread. A major that deletes fields produces this rot in bulk, and the
+// binding is the only surviving evidence of a field that no longer exists.
+let dead_imports = {};
+for (let dir in [ "src/resources", "src/lib" ]) {
+	for (let f in list(dir)) {
+		if (!match(f, /\.uc$/)) continue;
+		let path = dir + "/" + f;
+		let body = read_all(path);
+		let dead = [];
+		for (let line in split(body, "\n")) {
+			let m = match(line, /^let[ \t]+([A-Za-z0-9_]+)[ \t]*=[ \t]*[A-Za-z0-9_]+\.[A-Za-z0-9_]+;/);
+			if (m == null) continue;
+			let uses = 0;
+			for (let l2 in split(body, "\n"))
+				if (l2 != line && match(l2, token_re(m[1]))) uses++;
+			if (uses == 0) push(dead, m[1]);
+		}
+		if (length(dead) > 0) dead_imports[path] = dead;
+	}
+}
+
+if (length(dead_imports) > 0) {
+	printf("\nDEAD MODULE IMPORTS (bound, never read):\n");
+	for (let p in keys(dead_imports))
+		printf("  %-46s %s\n", p, join(", ", dead_imports[p]));
+}
+
 let exit_code = 0;
 if (length(uncovered) > 0) exit_code = 1;
 if (unit_pct < FN_THRESHOLD) exit_code = 1;
 if (length(fn_dead) > 0) exit_code = 1;
+if (length(dead_imports) > 0) exit_code = 1;
 exit(exit_code);
