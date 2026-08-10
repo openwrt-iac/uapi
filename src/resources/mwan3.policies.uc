@@ -25,17 +25,13 @@ function toUci(json) {
 	return out;
 }
 
-function _load_member_names(conn) {
-	return values.section_index(conn, "mwan3", "member", '.name');
-}
-
 function validate(json, conn) {
 	let errs = [];
 	if (type(json.use_members) != "array" || length(json.use_members) == 0) {
 		push(errs, { field: "use_members", code: "required",
 		             message: "must list at least one mwan3:members entry" });
 	} else if (conn != null) {
-		let known = _load_member_names(conn);
+		let known = values.section_index(conn, "mwan3", "member", '.name');
 		for (let i = 0; i < length(json.use_members); i++) {
 			let m = json.use_members[i];
 			if (!known[m])

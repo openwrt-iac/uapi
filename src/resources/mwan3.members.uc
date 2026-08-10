@@ -21,16 +21,12 @@ function toUci(json) {
 	return out;
 }
 
-function _load_iface_names(conn) {
-	return values.section_index(conn, "mwan3", "interface", '.name');
-}
-
 function validate(json, conn) {
 	let errs = [];
 	if (json.interface == null || json.interface == "") {
 		push(errs, { field: "interface", code: "required", message: "is required" });
 	} else if (conn != null) {
-		let known = _load_iface_names(conn);
+		let known = values.section_index(conn, "mwan3", "interface", '.name');
 		if (!known[json.interface])
 			push(errs, { field: "interface", code: "conflict",
 			             message: sprintf("no mwan3 interface named %J", json.interface) });

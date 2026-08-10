@@ -27,8 +27,7 @@ function fromUci(section) {
 
 function toUci(json) {
 	let out = {};
-	let bool_fields = ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp"];
-	for (let f in bool_fields) {
+	for (let f in ["enable_cdp", "enable_fdp", "enable_sonmp", "enable_edp"]) {
 		if (json[f] != null) out[f] = json[f] ? "1" : "0";
 	}
 	// See unbound.server.uc: the legacy key has to be cleared explicitly or a PATCH that

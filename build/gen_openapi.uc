@@ -274,16 +274,12 @@ function attach_success_headers(resp, verb, status, opts) {
 	// fires on a 200 that had one, so the two are declared on exactly the same operations.
 	if (verb == "get" && (status == 200 || status == 304) && opts?.etag)
 		h["ETag"] = { "$ref": "#/components/headers/ETag" };
-	// Caller-supplied headers (e.g. Link, X-Next-Cursor on collections)
-	// win; this only fills gaps.
 	if (resp.headers == null) resp.headers = {};
 	for (let k in h)
 		if (resp.headers[k] == null) resp.headers[k] = h[k];
 	return resp;
 }
 
-// Merge a success-response block with the verb-appropriate error set.
-// `success` is an object like { "200": <response>, ["304": <response>] }.
 // X-Mgmt-Path-Warning is the one emitted header that is per-resource and per-verb: only a
 // write on a resource that can move the caller's own path carries it. Three do, and not only
 // through `config interface`: a bridge-vlan on the bridge carrying the request turns on VLAN
@@ -456,11 +452,8 @@ function build_collection_paths(ep) {
 	};
 }
 
-// Single source of truth for tag metadata. Each entry carries a name, the
-// group it belongs to under Redoc's x-tagGroups, a description (shown as the
-// section intro), and an optional path_prefix used by the static-tagging pass
-// for non-curated paths. Order matters: TAGS order drives the emitted tags[]
-// order, and first-seen group order drives the x-tagGroups order.
+// Order matters: TAGS order drives the emitted tags[] order, and first-seen
+// group order drives the x-tagGroups order.
 const TAGS = [
 	{ name: "Firewall / Zones",            group: "Firewall", description: "Firewall zones (`config zone`): input/output/forward policies, network lists, masq/mtu_fix toggles." },
 	{ name: "Firewall / Rules",            group: "Firewall", description: "Firewall rules (`config rule`): nested `match` block for src/dest zone, IPs, ports, proto, family, mark, dscp, plus the MARK and DSCP targets and their `set_*` values. Cross-refs `firewall/zones`." },
@@ -1295,8 +1288,6 @@ function build_schemas() {
 
 		schemas[response_name(ep)] = s;
 
-		// The request half: same properties minus the ones a write cannot carry, and minus
-		// the required/conditional blocks that describe a stored section rather than a body.
 		let req_props = request_properties(properties);
 		let req = {
 			"type": "object",

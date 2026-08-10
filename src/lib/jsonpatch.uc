@@ -2,11 +2,6 @@
 // mutated copy or a structured error describing which op failed and why.
 // The result is wrapped { ok: true, value } / { ok: false, ... } so the handler
 // can translate to the standard error envelope without raising.
-//
-// Supported ops: add, remove, replace, move, copy, test.
-//
-// Pointer syntax: RFC 6901. "" is the root, "/a/b/0" navigates into
-// objects and arrays. "-" as an array index in add/replace appends.
 
 function _unescape_token(t) {
 	let out = "";
@@ -77,8 +72,6 @@ function _deep_equal(a, b) {
 	return a == b;
 }
 
-// Walk to the parent of the target pointer. Returns { parent, key } or
-// { error } where key is either a string (object) or int (array).
 function _resolve_parent(root, parts) {
 	if (length(parts) == 0) return { error: "cannot operate on root parent" };
 	let cur = root;

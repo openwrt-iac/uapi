@@ -1,5 +1,4 @@
-// Shared openapi_conditional fragments. Cross-resource invariants live in
-// one literal rather than N copies, so changes to the contract land once.
+// Shared openapi_conditional fragments.
 
 return {
 	// Firewall resources whose `match` envelope must declare `src_zone` when

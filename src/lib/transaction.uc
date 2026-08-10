@@ -113,9 +113,6 @@ function _kernel_status(ops, applied) {
 	return (length(applied) == length(targets)) ? "ok" : "partial";
 }
 
-// Shape the post-reload result: success on reload_err == null, otherwise run
-// restore_fn (which performs uci_import + uci_commit + reload) and classify
-// as reload_failed_restored / reload_failed_unrecovered.
 function _finalize_after_reload(reload_err, restore_fn, body, services, ops, applied) {
 	if (reload_err == null) {
 		return { ok: true, body: body,
@@ -271,7 +268,6 @@ function multi_transaction(conn, params) {
 	for (let p in unique) push(sorted, p);
 	sort(sorted);
 
-	// Acquire global SH + per-package EX in sorted order.
 	let acquired = [];
 	let g = _lock_one(path, "s");
 	// Global SH contention means a non-uci writer holds EX (system/password,

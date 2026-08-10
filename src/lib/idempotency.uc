@@ -1,10 +1,5 @@
 let fs = require('fs');
 
-// File-backed idempotency cache: same client + same key + same body returns
-// the cached response without re-running the handler.
-//   /tmp/uapi-idempotency/<sha256(token || key)>.json
-//     { fingerprint, status, headers, body }
-// Entries are best-effort GC'd by mtime (TTL_SECONDS).
 const DIR = "/tmp/uapi-idempotency";
 const TTL_SECONDS = 86400;
 const KEY_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$/;

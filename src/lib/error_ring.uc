@@ -1,7 +1,6 @@
 let fs = require('fs');
 
-// Last 20 error envelopes surfaced via /diagnostics. Single JSON file at a
-// fixed path; each append re-writes the whole file via tmpfile + rename.
+// Last 20 error envelopes surfaced via /diagnostics.
 // Best-effort: any fs failure is swallowed because logging must never
 // disrupt the actual response.
 const DIR = "/tmp/uapi-error-ring";
