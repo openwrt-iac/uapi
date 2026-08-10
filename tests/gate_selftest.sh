@@ -186,6 +186,16 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_conditional_requires_undeclared() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+s = d['components']['schemas']['NetworkInterfacesRequest']
+s['allOf'][0]['then']['anyOf'].append({'required': ['ipaddr']})
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_empty_enum() {
 	python3 - <<'EOF'
 import json
@@ -384,6 +394,7 @@ EOF
 probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
 probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
+probe lint-openapi-shape "a conditional requiring an undeclared prop" "which this half does not declare" mut_conditional_requires_undeclared
 probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
 probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value
 probe lint-openapi-shape "a transaction header without its set" "declares only"                    mut_kernel_header_unpaired

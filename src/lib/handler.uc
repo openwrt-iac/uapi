@@ -392,7 +392,9 @@ function attach_reload_headers(resp, result) {
 // interface name. The module names its own field because that is where the field names
 // live: `network/bridge_vlans` calls it `device`, `network/devices` calls it `name`.
 // Falls back to the stored section, so a PATCH that does not resend the field is still
-// matched against the device the section already targets.
+// matched against the device the section already targets. The fallback is the read view, not
+// the raw uci section, so both arguments are keyed by API name: the two coincide for today's
+// fields, and a future field spelled differently on the wire would otherwise read as absent.
 function mgmt_device_of(resource, body, existing) {
 	let fields = resource?.mgmt_device_fields;
 	if (fields == null) return null;
@@ -691,19 +693,17 @@ function make(resource, opts) {
 			wg_ops: kops,
 			fn: function(c, p) {
 				// Section-name resolution: caller's body.id wins, else the
-				// per-resource id_for_create hook (e.g. network.interfaces
-				// aliasing body.name; wireguard's wg_<rand> IFNAMSIZ-tight
-				// fallback), else a server-emitted ULID.
+				// per-resource id_for_create hook (wireguard's wg_<rand>
+				// IFNAMSIZ-tight fallback), else a server-emitted ULID.
 				let caller_id = (type(body) == "object" && body.id != null) ? body.id : null;
 				let hook_id = (caller_id == null) ? id_for_create(body) : null;
 				let new_id = caller_id ?? hook_id ?? ids.new_id(id_prefix);
 
-				// Validate anything that wasn't a server-emitted ULID:
-				// body.id is caller-supplied; hook_id may be caller-derived
-				// (network.interfaces aliases body.name) or server-derived
-				// (wireguard short fallback). Server-derived ids match the
-				// rules by construction; we validate anyway so the cost is
-				// just one extra uci_get per non-ULID create.
+				// Validate anything that wasn't a server-emitted ULID: body.id
+				// is caller-supplied, and hook_id is server-derived but short
+				// enough to collide. Both match the rules by construction; we
+				// validate anyway so the cost is just one extra uci_get per
+				// non-ULID create.
 				if (caller_id != null || hook_id != null) {
 					let id_errs = validate_section_id(c, p, new_id);
 					if (length(id_errs) > 0)
@@ -770,8 +770,8 @@ function make(resource, opts) {
 					return { ok: false, kind: "validation", errors: uf_errs };
 
 				if (resource.mgmt_path_guard)
-					mgmt_changed = mgmt.changed_fields(existing_view, write_body);
-				mgmt_device = mgmt_device_of(resource, write_body, existing);
+					mgmt_changed = mgmt.changed_fields(existing_view, write_body, true);
+				mgmt_device = mgmt_device_of(resource, write_body, existing_view);
 
 				let new_opts = resource.toUci(write_body);
 				diff_apply(c, p, id, existing, new_opts);
@@ -823,8 +823,8 @@ function make(resource, opts) {
 				// Against the merged body, not the request body: a PATCH naming only
 				// `proto` still has to be compared field by field against what was there.
 				if (resource.mgmt_path_guard)
-					mgmt_changed = mgmt.changed_fields(existing_view, r.merged);
-				mgmt_device = mgmt_device_of(resource, r.merged, existing);
+					mgmt_changed = mgmt.changed_fields(existing_view, r.merged, false);
+				mgmt_device = mgmt_device_of(resource, r.merged, existing_view);
 
 				let new_opts = resource.toUci(r.merged);
 				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);

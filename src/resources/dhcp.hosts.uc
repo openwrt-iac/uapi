@@ -53,7 +53,7 @@ function toUci(json) {
 	if (json.name != null) out.name = json.name;
 
 	// uci cannot hold a one-element list distinctly from a scalar, so a single mac is
-	// written as a scalar and read back through as_list as a one-element array.
+	// written as a scalar and read back through as_list_or_null as a one-element array.
 	if (type(json.macs) == "array" && length(json.macs) > 0)
 		out.mac = (length(json.macs) > 1) ? json.macs : json.macs[0];
 

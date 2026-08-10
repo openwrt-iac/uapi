@@ -24,8 +24,10 @@ fail() { echo "FAIL: $*"; exit 1; }
 #
 # Both forms were validated by re-introducing the bug each claims to catch:
 # neutering carry_write_only empties `preshared_key` in uci while the response
-# stays 200, and neutering resolve_for_replace turns the one-field change into a
-# 422. The unit-level counterpart is tests/unit/read_honesty_test.uc.
+# stays 200. The modified-field form was validated the same way against 2.x, by
+# neutering resolve_for_replace; 3.0.0 deleted that seam, so the check now stands
+# on the class of bug rather than that one instance. The unit-level counterpart
+# is tests/unit/read_honesty_test.uc.
 
 ensure_wireguard || fail "no usable wireguard support, so the masked-credential cases cannot run"
 

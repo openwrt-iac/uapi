@@ -114,6 +114,62 @@ function request_properties(properties) {
 	return out;
 }
 
+function all_declared(names, props) {
+	for (let n in names)
+		if (!exists(props, n)) return false;
+	return true;
+}
+
+function keep_arms(arms, props, where) {
+	let out = [];
+	for (let a in arms) {
+		if (type(a) != "object" || type(a.required) != "array")
+			die(sprintf("%s openapi_conditional: anyOf arms must be { required: [...] }", where));
+		if (all_declared(a.required, props)) push(out, a);
+	}
+	return out;
+}
+
+// A `required` inside an `if`/`then` or a bare `anyOf` names keys on the instance and has no
+// sibling `properties` to be checked against, which is why the shape lint cannot see it and why
+// the request half inherited arms naming fields it does not declare. `proto: static` was
+// satisfiable by `ipaddr` alone, so the request schema blessed the one body the write path
+// ignores outright: a client validating against it would send an address that never lands.
+// Nested requirements under a `properties` block are keyed inside that property, not on the
+// instance, so they are left alone. Unrecognised shapes stop the build rather than being copied
+// through unexamined.
+function request_conditional(conditional, props, where) {
+	let out = [];
+	for (let c in conditional) {
+		if (type(c.anyOf) == "array") {
+			let arms = keep_arms(c.anyOf, props, where);
+			if (length(arms) == 0) continue;
+			push(out, { ...c, anyOf: arms });
+			continue;
+		}
+		if (type(c.then) != "object")
+			die(sprintf("%s openapi_conditional: entry needs a `then` object or a top-level `anyOf`, got %J", where, c));
+		let t = c.then, kept;
+		if (type(t.anyOf) == "array") {
+			let arms = keep_arms(t.anyOf, props, where);
+			// Every arm gone means nothing in the group is writable, so the whole
+			// conditional goes: an empty anyOf validates nothing at all.
+			if (length(arms) == 0) continue;
+			kept = { ...t, anyOf: arms };
+		}
+		else if (type(t.required) == "array") {
+			if (!all_declared(t.required, props)) continue;
+			kept = t;
+		}
+		// Constrains a sub-object only. Those requirements are keyed inside that
+		// property rather than on the instance, so this projection has no say over them.
+		else if (type(t.properties) == "object") kept = t;
+		else die(sprintf("%s openapi_conditional: unsupported `then` shape %J", where, t));
+		push(out, { ...c, then: kept });
+	}
+	return out;
+}
+
 function pretty(s) {
 	let parts = split(s, /[._-]/);
 	let out = [];
@@ -1241,16 +1297,19 @@ function build_schemas() {
 
 		// The request half: same properties minus the ones a write cannot carry, and minus
 		// the required/conditional blocks that describe a stored section rather than a body.
+		let req_props = request_properties(properties);
 		let req = {
 			"type": "object",
 			"description": sprintf("Request body for the uapi resource backed by uci %s.%s.",
 			                       mod.package, mod.type),
-			"properties": request_properties(properties),
+			"properties": req_props,
 		};
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			req.required = mod.openapi_required;
-		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
-			req.allOf = mod.openapi_conditional;
+		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
+			let cond = request_conditional(mod.openapi_conditional, req_props, ep.path);
+			if (length(cond) > 0) req.allOf = cond;
+		}
 		schemas[request_name(ep)] = req;
 	}
 
