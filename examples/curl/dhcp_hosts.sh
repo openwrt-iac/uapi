@@ -11,7 +11,7 @@ req() { curl -ksS -H "$H_AUTH" "$@"; }
 echo "# Static lease for the printer"
 created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/dhcp/hosts" -d '{
 	"name": "printer",
-	"mac": "aa:bb:cc:dd:ee:ff",
+	"macs": ["aa:bb:cc:dd:ee:ff"],
 	"ip": "192.168.1.50",
 	"leasetime": "12h"
 }')

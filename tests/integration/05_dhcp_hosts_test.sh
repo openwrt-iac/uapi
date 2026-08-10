@@ -13,7 +13,7 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 echo "--- POST /dhcp/hosts creates a static lease ---"
 created=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
 	"name": "printer",
-	"mac": "aa:bb:cc:dd:ee:ff",
+	"macs": ["aa:bb:cc:dd:ee:ff"],
 	"ip": "192.168.1.50",
 	"leasetime": "12h"
 }')
@@ -26,7 +26,7 @@ echo "  new id: $id"
 echo "--- GET shows the lease ---"
 got=$(call "$URL/dhcp/hosts/$id")
 echo "$got" | tail -1 | grep -q '^200$' || fail "GET expected 200"
-echo "$got" | grep -q '"mac": "aa:bb:cc:dd:ee:ff"' || fail "mac missing"
+echo "$got" | grep -q '"aa:bb:cc:dd:ee:ff"' || fail "mac missing"
 
 echo "--- and dnsmasq compiled it, which a 200 and a read-back do not prove ---"
 assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:ff,192.168.1.50,printer,12h"
@@ -34,7 +34,7 @@ assert_dnsmasq_loads
 
 echo "--- POST with invalid MAC returns 422 ---"
 invalid=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
-	"mac": "garbage", "ip": "10.0.0.1"
+	"macs": ["garbage"], "ip": "10.0.0.1"
 }')
 echo "$invalid" | tail -1 | grep -q '^422$' || fail "invalid mac expected 422"
 
@@ -55,7 +55,7 @@ assert_dnsmasq_loads
 
 echo "--- DNS-only entry: mac + name, no ip ---"
 dns_only=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
-	"name": "noiphost", "mac": "aa:bb:cc:dd:ee:01"
+	"name": "noiphost", "macs": ["aa:bb:cc:dd:ee:01"]
 }')
 echo "$dns_only" | tail -1 | grep -q '^200$' || fail "DNS-only host expected 200"
 dns_id=$(echo "$dns_only" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')

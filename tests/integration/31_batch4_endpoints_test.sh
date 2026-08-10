@@ -103,10 +103,10 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 echo "--- If-None-Match on a write is refused with 412, and writes nothing ---"
 $SSH "uci -q delete network.cget; uci commit network" >/dev/null 2>&1 || true
 curl -sS -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/network/interfaces" -d '{"id":"cget","proto":"static","ipaddr":"192.168.222.1/24"}'
+	-X POST "$URL/network/interfaces" -d '{"id":"cget","proto":"static","ipaddrs":["192.168.222.1/24"]}'
 code=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	-H 'Content-Type: application/json' \
-	-X PATCH "$URL/network/interfaces/cget?if_none_match=%2A" -d '{"ipaddr":"192.168.222.77/24"}')
+	-X PATCH "$URL/network/interfaces/cget?if_none_match=%2A" -d '{"ipaddrs":["192.168.222.77/24"]}')
 [ "$code" = "412" ] || fail "PATCH with if_none_match=* returned $code, expected 412"
 after=$($SSH "uci -q get network.cget.ipaddr" | tr -d '\r')
 [ "$after" = "192.168.222.1/24" ] || fail "the refused write still changed uci: $after"
@@ -117,7 +117,7 @@ etag=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/network/interfaces/cget" | t
 	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]"')
 code=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X PUT "$URL/network/interfaces/cget?if_none_match=$etag" \
-	-d '{"proto":"static","ipaddr":"192.168.222.88/24"}')
+	-d '{"proto":"static","ipaddrs":["192.168.222.88/24"]}')
 [ "$code" = "412" ] || fail "PUT with a matching if_none_match returned $code, expected 412"
 
 # A non-matching etag satisfies the condition, so the write proceeds and carries its

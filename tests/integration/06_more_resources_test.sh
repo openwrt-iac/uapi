@@ -82,7 +82,7 @@ iid=$(echo "$iface" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/
 
 echo "--- POST /network/interfaces with proto: static and bad ipaddr returns 422 ---"
 bad_if=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" -d '{
-	"proto": "static", "ipaddr": "999.0.0.1"
+	"proto": "static", "ipaddrs": ["999.0.0.1"]
 }')
 echo "$bad_if" | tail -1 | grep -q '^422$' || fail "bad ipaddr expected 422"
 

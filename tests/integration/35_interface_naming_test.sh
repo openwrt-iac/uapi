@@ -1,12 +1,11 @@
 #!/bin/sh
 set -eu
 
-# v2.0.2: network/interfaces accepts an optional caller-supplied `name`
-# field on every proto (LuCI parity - `lan`, `wan`, `guest`). When absent,
-# the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux
-# IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. The
-# wireguard subcase exists because v2.0.0/v2.0.1 silently created a config
-# that could never come up; that path is exercised end-to-end here.
+# network/interfaces takes a caller-supplied section name through `id`, on every proto. When
+# absent, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for
+# the kernel netdev) or a 28-char ULID otherwise. The wireguard subcase exists because
+# v2.0.0/v2.0.1 silently created a config that could never come up; that path is exercised
+# end-to-end here. `name` was the 2.1.0-era spelling of this input and was removed in 3.0.0.
 
 . tests/integration/lib/install_uapi.sh
 install_uapi
@@ -33,9 +32,9 @@ fi
 # real peer for netifd to accept the config + create the netdev.
 PRIV='yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk='
 
-echo "--- POST a wireguard interface with caller-supplied name=wgci ---"
+echo "--- POST a wireguard interface with caller-supplied id=wgci ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d "{\"proto\":\"wireguard\",\"name\":\"wgci\",
+	-d "{\"proto\":\"wireguard\",\"id\":\"wgci\",
 	    \"private_key\":\"$PRIV\",\"addresses\":[\"10.99.99.1/30\"]}")
 status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
@@ -64,13 +63,13 @@ echo "--- DELETE wireguard interface ---"
 del=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/network/interfaces/wgci")
 [ "$del" = "204" ] || fail "DELETE expected 204, got $del"
 
-echo "--- POST without a name -> server emits a wg_<11-char> id (14 chars, <= IFNAMSIZ) ---"
+echo "--- POST without an id -> server emits a wg_<11-char> id (14 chars, <= IFNAMSIZ) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
 	-d "{\"proto\":\"wireguard\",
 	    \"private_key\":\"$PRIV\",\"addresses\":[\"10.99.99.5/30\"]}")
 status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
-[ "$status" = "200" ] || fail "POST wireguard (no name) expected 200, got $status: $body"
+[ "$status" = "200" ] || fail "POST wireguard (no id) expected 200, got $status: $body"
 id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "$id" | grep -qE '^wg_[0-9a-hjkmnp-tv-z]{11}$' \
 	|| fail "expected id=wg_<11-char>, got id=$id"
@@ -88,29 +87,29 @@ else
 fi
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/$id"
 
-echo "--- name on a non-wireguard create -> 200 (any proto accepts caller-supplied name) ---"
+echo "--- id on a non-wireguard create -> 200 (any proto accepts a caller-supplied section name) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d '{"proto":"dhcp","name":"namedhcp"}')
+	-d '{"proto":"dhcp","id":"namedhcp"}')
 status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
-[ "$status" = "200" ] || fail "name on dhcp expected 200, got $status: $body"
+[ "$status" = "200" ] || fail "id on dhcp expected 200, got $status: $body"
 id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ "$id" = "namedhcp" ] || fail "expected id=namedhcp, got id=$id"
 $SSH "uci get network.namedhcp" >/dev/null || fail "section network.namedhcp not in uci"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/network/interfaces/namedhcp"
 
-echo "--- validation: 16-char name on wireguard -> 422 ---"
+echo "--- validation: 16-char id on wireguard -> 422 ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d "{\"proto\":\"wireguard\",\"name\":\"wg_16chars_total\",
+	-d "{\"proto\":\"wireguard\",\"id\":\"wg_16chars_total\",
 	    \"private_key\":\"$PRIV\",\"addresses\":[\"10.99.99.9/30\"]}")
 status=$(echo "$resp" | tail -1)
-[ "$status" = "422" ] || fail "16-char name expected 422, got $status"
+[ "$status" = "422" ] || fail "16-char id expected 422, got $status"
 
-echo "--- validation: hyphenated name -> 422 (uci section names are alphanumeric+underscore only) ---"
+echo "--- validation: hyphenated id -> 422 (uci section names are alphanumeric+underscore only) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d "{\"proto\":\"wireguard\",\"name\":\"wg-prod\",
+	-d "{\"proto\":\"wireguard\",\"id\":\"wg-prod\",
 	    \"private_key\":\"$PRIV\",\"addresses\":[\"10.99.99.13/30\"]}")
 status=$(echo "$resp" | tail -1)
-[ "$status" = "422" ] || fail "hyphenated name expected 422, got $status"
+[ "$status" = "422" ] || fail "hyphenated id expected 422, got $status"
 
-echo "interface naming: caller-supplied name accepted on every proto; IFNAMSIZ + uci charset enforced."
+echo "interface naming: caller-supplied id accepted on every proto; IFNAMSIZ + uci charset enforced."
