@@ -394,14 +394,20 @@ function attach_reload_headers(resp, result) {
 // Falls back to the stored section, so a PATCH that does not resend the field is still
 // matched against the device the section already targets.
 function mgmt_device_of(resource, body, existing) {
-	let field = resource?.mgmt_device_field;
-	if (field == null) return null;
-	let v = (type(body) == "object") ? body[field] : null;
-	if (v == null && type(existing) == "object") v = existing[field];
-	return (type(v) == "string" && v != "") ? v : null;
+	let fields = resource?.mgmt_device_fields;
+	if (fields == null) return null;
+	let out = [];
+	for (let field in fields) {
+		let v = (type(body) == "object") ? body[field] : null;
+		if (v == null && type(existing) == "object") v = existing[field];
+		if (type(v) == "string") v = [ v ];
+		for (let d in v ?? [])
+			if (type(d) == "string" && d != "") push(out, d);
+	}
+	return length(out) > 0 ? out : null;
 }
 
-function attach_mgmt_warning(resp, conn, ctx, id, changed, device) {
+function attach_mgmt_warning(resp, conn, ctx, id, changed, devices) {
 	if (changed == null || length(changed) == 0) return resp;
 	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
 	// not happen, and there is nothing to warn about.
@@ -418,9 +424,15 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed, device) {
 	// caller's device or the bridge that device is a port of. The second shape is what took
 	// a box off the network with no warning, because the guard only knew the first.
 	let subject;
-	if (device != null) {
-		if (!mgmt.targets_mgmt_device(conn, path.device, device)) return resp;
-		subject = sprintf("device=%s", device);
+	if (devices != null) {
+		// Every device the write names, not just the section's own: a `device` write that
+		// adds the caller's interface to a bridge moves the path as surely as one aimed at
+		// the bridge, and `ports` is where that shows up.
+		let hit = null;
+		for (let d in devices)
+			if (mgmt.targets_mgmt_device(conn, path.device, d)) { hit = d; break; }
+		if (hit == null) return resp;
+		subject = sprintf("device=%s", hit);
 	}
 	else {
 		if (path.interface == null || path.interface != id) return resp;
@@ -823,7 +835,7 @@ function make(resource, opts) {
 		let kops = ctx.kernel_sink ?? [];
 		// Deleting the interface the caller arrived through strands them as surely as
 		// renumbering it, and none of LuCI's four field names covers a delete.
-		let mgmt_changed = [ "removed" ];
+		let mgmt_changed = resource.mgmt_path_guard ? [ "removed" ] : null;
 		let mgmt_device = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
@@ -849,7 +861,7 @@ function make(resource, opts) {
 
 		if (result.ok)
 			return attach_mgmt_warning(attach_reload_headers(errors.no_content(ctx), result),
-			                           conn, ctx, id, mgmt_changed);
+			                           conn, ctx, id, mgmt_changed, mgmt_device);
 		return translate_tx(ctx, result);
 	}
 

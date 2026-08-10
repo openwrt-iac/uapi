@@ -54,7 +54,7 @@ return {
 	// resource never touches `config interface`, which is why the interface-name match could
 	// not see it.
 	mgmt_path_guard: true,
-	mgmt_device_field: "device",
+	mgmt_device_fields: [ "device" ],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

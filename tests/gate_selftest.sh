@@ -381,8 +381,8 @@ probe lint-openapi-shape "a writable managed property"        "must be readOnly"
 probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
 probe lint-wire-names    "an unaccounted alias name"            "is read by toUci but never written" mut_unaccounted_wire_name
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
-probe lint-openapi-shape "an emitted header declared nowhere"  "the header is declared on"         mut_mgmt_header_undeclared
-probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches only" mut_mgmt_header_wrong_verb
+probe lint-openapi-shape "an emitted header declared nowhere"  "path(s) should declare the header" mut_mgmt_header_undeclared
+probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_warning reaches"      mut_mgmt_header_wrong_verb
 probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywords"                mut_hcl_keyword
 probe lint-defaults      "a fromUci default, unannotated"      "absent from schema_properties"     mut_unannotated_default
 probe lint-defaults      "an unannotated shell_bool default"   "has fromUci default true but"      mut_unannotated_bool_default

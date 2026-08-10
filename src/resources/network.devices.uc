@@ -67,7 +67,7 @@ return {
 	// A device write can change the ports of the bridge carrying the request, or rename it,
 	// which reaches the caller without touching `config interface`.
 	mgmt_path_guard: true,
-	mgmt_device_field: "name",
+	mgmt_device_fields: [ "name", "ports" ],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

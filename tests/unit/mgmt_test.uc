@@ -301,3 +301,88 @@ t.describe('mgmt guard reaches bridge-vlan and device writes', () => {
 	});
 });
 
+// Moving the caller's device into a bridge is the third shape, and the one the first cut of
+// this guard missed: the write names a bridge the caller is not yet a port of, so matching
+// only against stored membership says nothing, while the ports the write carries are exactly
+// the change that reroutes the caller.
+t.describe('a device write that adopts the caller device warns', () => {
+	let h = require('handler');
+	let ubus5 = require('bus');
+	let devs = loadfile('src/resources/network.devices.uc')();
+
+	function tx5() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function box5() {
+		let conn = ubus5.stub({ uci: { network: {} } });
+		conn.call = function() { return null; };
+		return conn;
+	}
+	function ctx5() {
+		return { request_id: "01hx0000000000000000000000", remote_addr: "192.168.9.50",
+		         device_lookup: function() { return 'eth1'; } };
+	}
+
+	t.it('creating a bridge whose ports include the caller device warns', () => {
+		let r = h.make(devs, { tx: tx5() }).create(box5(), ctx5(),
+			{ id: 'd1', name: 'br-new', type: 'bridge', ports: [ 'eth1' ] });
+		t.assert_equal(r.status, 200);
+		let warn = r.headers?.['X-Mgmt-Path-Warning'];
+		if (warn == null) {
+			t.assert_equal("no X-Mgmt-Path-Warning when a bridge adopts the caller's device",
+			               "a warning");
+			return;
+		}
+		t.assert_true(warn != null);
+	});
+
+	t.it('a bridge over someone else stays silent', () => {
+		let r = h.make(devs, { tx: tx5() }).create(box5(), ctx5(),
+			{ id: 'd2', name: 'br-other', type: 'bridge', ports: [ 'eth7' ] });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers?.['X-Mgmt-Path-Warning'], null);
+	});
+});
+
+// Deleting the bridge the caller arrives through. The section is gone by the time the guard
+// runs, so stored membership can no longer answer, and matching only the section name misses
+// a caller who was on a port of it rather than on the bridge itself.
+t.describe('deleting the caller bridge warns', () => {
+	let h = require('handler');
+	let ubus6 = require('bus');
+	let devs = loadfile('src/resources/network.devices.uc')();
+
+	function tx6() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function box6() {
+		let conn = ubus6.stub({ uci: { network: {
+			brlan: { '.type': 'device', '.anonymous': false, name: 'br-lan',
+			         type: 'bridge', ports: [ 'eth0' ] },
+		} } });
+		conn.call = function() { return null; };
+		return conn;
+	}
+	// Arriving on eth0, a port of the bridge being deleted.
+	function ctx6() {
+		return { request_id: "01hx0000000000000000000000", remote_addr: "192.168.9.50",
+		         device_lookup: function() { return 'eth0'; } };
+	}
+
+	t.it('warns when the deleted bridge carries the caller', () => {
+		let r = h.make(devs, { tx: tx6() }).remove(box6(), ctx6(), 'brlan');
+		t.assert_equal(r.status, 204);
+		let warn = r.headers?.['X-Mgmt-Path-Warning'];
+		if (warn == null) {
+			t.assert_equal("no X-Mgmt-Path-Warning when deleting the bridge the caller is a port of",
+			               "a warning");
+			return;
+		}
+		t.assert_true(index(warn, 'changed=removed') >= 0);
+	});
+});
+
