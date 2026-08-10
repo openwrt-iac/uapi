@@ -25,6 +25,9 @@ if [ -f "$PIDFILE" ]; then
 		kill -9 "$PID" 2>/dev/null || true
 	fi
 	rm -f "$PIDFILE"
+	# The multiplexed master outlives the VM by ControlPersist, and a socket pointing at a
+	# dead VM makes the next run's first call wait for its own timeout before recovering.
+	rm -f /tmp/uapi-vm-* 2>/dev/null || true
 fi
 
 echo "VM stopped"
