@@ -218,7 +218,7 @@ call -X DELETE "$URL/network/wireguard_peers/$ds" >/dev/null
 echo "--- a peer written to a down tunnel is accepted, and applies on ifup ---"
 $SSH "ifdown $IFACE"; sleep 2
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"TWlzY2VsbGFuZW91c1BlZXJLZXlGb3JUZXN0aW5nMD0=\",
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER4\",
 	    \"allowed_ips\":[\"10.98.99.6/32\"]}")
 [ "$(status_of "$r")" = "200" ] || fail "POST to down tunnel expected 200: $(body_of "$r")"
 

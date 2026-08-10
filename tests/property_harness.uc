@@ -14,13 +14,6 @@ function rint(rng, min, max) {
 	return min + rng() % (max - min + 1);
 }
 
-function rpick(rng, arr) {
-	if (length(arr) == 0) return null;
-	return arr[rng() % length(arr)];
-}
-
-function rbool(rng) { return (rng() % 2) == 0; }
-
 const ALPHA  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const TYPABLE = "abc 123 !@#$%^&*()_+-=[]{}|;:'\",.<>/?`~\n\r\t\0";
 
@@ -53,13 +46,13 @@ function fuzz_any(rng) {
 	if (pick == 3) return rint(rng, -2147483647, 2147483647);
 	if (pick == 4) return rstring(rng, 0, 64, TYPABLE);
 	if (pick == 5) return rstring(rng, 0, 4096, TYPABLE);  // big string
-	if (pick == 6) {  // array
+	if (pick == 6) {
 		let n = rng() % 6;
 		let a = [];
 		for (let i = 0; i < n; i++) push(a, fuzz_any(rng));
 		return a;
 	}
-	if (pick == 7) {  // object
+	if (pick == 7) {
 		let n = rng() % 6;
 		let o = {};
 		for (let i = 0; i < n; i++) o[rstring(rng, 1, 8, ALPHA)] = fuzz_any(rng);
@@ -150,8 +143,6 @@ function check_round_trip(resource, sections, opts) {
 }
 
 return {
-	lcg, rint, rpick, rbool, rstring, rmac, ripv4, ripv4_cidr,
-	fuzz_any, fuzz_object,
 	check_validate_total, check_round_trip,
 	json_eq,
 };

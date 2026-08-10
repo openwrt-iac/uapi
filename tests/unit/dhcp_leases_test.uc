@@ -2,7 +2,6 @@ let t = require('harness');
 let bus = require('bus');
 let handler = require('handler');
 let leases_mod = loadfile('src/resources/dhcp.leases.uc')();
-let leases = handler.make_collection(leases_mod);
 
 function ctx() { return { request_id: "01hx0000000000000000000000" }; }
 

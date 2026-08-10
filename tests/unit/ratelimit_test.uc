@@ -28,7 +28,6 @@ t.describe('ratelimit.check, exhausting the bucket', () => {
 	t.it('returns not allowed once bucket is empty and refill window not elapsed', () => {
 		let tok = fresh_token();
 		clean(tok);
-		// burst=2 means the first two requests pass, third fails
 		t.assert_true(ratelimit.check(tok, { now: 1000, rate: 1, burst: 2 }).allowed);
 		t.assert_true(ratelimit.check(tok, { now: 1000, rate: 1, burst: 2 }).allowed);
 		let r = ratelimit.check(tok, { now: 1000, rate: 1, burst: 2 });
@@ -39,7 +38,6 @@ t.describe('ratelimit.check, exhausting the bucket', () => {
 	t.it('refills after enough time and allows again', () => {
 		let tok = fresh_token();
 		clean(tok);
-		// rate=1/sec, burst=1 - consume immediately, then wait 1s
 		t.assert_true(ratelimit.check(tok, { now: 1000, rate: 1, burst: 1 }).allowed);
 		t.assert_false(ratelimit.check(tok, { now: 1000, rate: 1, burst: 1 }).allowed);
 		t.assert_true(ratelimit.check(tok, { now: 1002, rate: 1, burst: 1 }).allowed);

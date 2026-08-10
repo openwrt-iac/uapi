@@ -67,7 +67,6 @@ echo "--- list no longer shows the revoked token ---"
 $SSH "uapi-token list" 2>&1 | grep -q '^lifecycle_test' \
 	&& fail "revoked token still in list" || echo "  list updated"
 
-# Cleanup the test-leftover token
 $SSH "uapi-token revoke future_scope 2>/dev/null" || true
 
 echo "token lifecycle CLI + revocation propagation ok."

@@ -6,7 +6,6 @@ install_uapi
 
 URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
-RO="Authorization: Bearer $RO_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
 
@@ -115,12 +114,10 @@ status=$(curl -sS -o /tmp/uapi_invalid_cursor.json -w '%{http_code}' \
 grep -q 'invalid_cursor' /tmp/uapi_invalid_cursor.json \
 	|| fail "expected invalid_cursor code"
 
-echo "--- rate limit: hit the limit then verify 429 + Retry-After ---"
-# Create a tight-limit per-token configuration. We can't easily clobber the
-# server defaults here, so instead create a token with no override but use
-# a low number of requests against the default 100/sec.
-# Skip the rate-limit drop test in CI since the default limits are generous;
-# verify only that no 429 fires for normal traffic.
+echo "--- rate limit: normal traffic is not rate-limited ---"
+# The 429 + Retry-After path needs a token with a tight override, which lives in
+# 32_tokens_route_test.sh; against the generous server defaults all this can say
+# is that ordinary traffic passes.
 final_status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" "$URL/firewall/rules")
 [ "$final_status" != "429" ] || fail "normal traffic must not be rate-limited"
 

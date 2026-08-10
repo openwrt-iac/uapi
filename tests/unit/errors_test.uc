@@ -1,6 +1,5 @@
 let t = require('harness');
 let errors = require('errors');
-let ids = require('ids');
 
 t.describe('errors.new_context', () => {
 	t.it('produces a fresh request_id per call', () => {

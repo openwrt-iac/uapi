@@ -172,7 +172,6 @@ t.describe('handler.make_singleton(unbound.srv)', () => {
 	// underlying section (e.g. operator wiped /etc/config/unbound_srv but the
 	// init script is still present). Without the flag the resource would 404.
 	t.it('patch creates the section if absent (create_if_missing)', () => {
-		// No unbound_srv fixture; uci_foreach finds nothing.
 		let c = bus.stub({ uci: {}, ubus: {} });
 		let r = srv_h.patch(c, ctx(), { enabled: true });
 		t.assert_equal(r.status, 200);

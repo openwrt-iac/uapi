@@ -180,7 +180,6 @@ t.describe('token_store.create validation', () => {
 		t.assert_true(r.ok);
 		t.assert_equal(r.body.name, "new_token");
 		t.assert_true(length(r.body.bearer) >= 16);
-		// verify uci side-effects
 		let stored = c._state.uci.uapi.new_token;
 		t.assert_equal(stored['.type'], 'token');
 		t.assert_equal(stored.expires_at, "" + (1700000000 + 3600));
