@@ -214,7 +214,14 @@ for (let file in corpus()) {
 // got no signal at all that every array field's type changes in v3, which is the one
 // notice most likely to break a generated client. The whole point of announcing in a minor
 // is that the notice reaches the artifact people consume.
-let dep_md = read("docs/deprecations.md") ?? "";
+let dep_md_full = read("docs/deprecations.md") ?? "";
+
+// Only what is still ACTIVE has to appear in the spec. The ledger keeps a record of past
+// removals in the same table shape, and scanning the whole file counted those as live
+// announcements, which after 3.0.0 meant demanding that the spec announce removals that had
+// already happened.
+let cut = index(dep_md_full, "## Removed in past releases");
+let dep_md = (cut >= 0) ? substr(dep_md_full, 0, cut) : dep_md_full;
 let spec_desc = "";
 let spec_raw = read("build/openapi.json");
 if (spec_raw != null) {
@@ -230,7 +237,7 @@ for (let line in split(dep_md, "\n")) {
 		if (index(spec_desc, row[1]) < 0)
 			report("docs/deprecations.md", 0,
 			       sprintf("%s is announced in the ledger but not in the spec's own description", row[1]),
-			       "Add it to the \"Upcoming in v3\" block in build/gen_openapi.uc, or the notice never reaches a generated client.");
+			       "Add it to the \"Upcoming in vN\" block in build/gen_openapi.uc, or the notice never reaches a generated client.");
 	}
 }
 // Response-shape bullets are prose. Matching them by a backticked token looked tidy and
@@ -249,13 +256,17 @@ announced += shape_bullets;
 let spec_bullets = 0;
 let in_upcoming = false;
 for (let line in split(spec_desc, "\n")) {
-	if (index(line, "## Upcoming in v3") == 0) { in_upcoming = true; continue; }
+	// Matched on the prefix, not on "v3": the heading carries the next major's number, so
+	// anchoring on the full string made the gate pass vacuously the moment 3.0.0 retitled it
+	// to "Upcoming in v4". Zero bullets then meant "heading not found", not "nothing
+	// announced", and the two are indistinguishable from the count alone.
+	if (index(line, "## Upcoming in v") == 0) { in_upcoming = true; continue; }
 	if (in_upcoming && substr(line, 0, 3) == "## ") in_upcoming = false;
 	if (in_upcoming && substr(line, 0, 4) == "- **") spec_bullets++;
 }
 if (spec_bullets != announced)
 	report("docs/deprecations.md", 0,
-	       sprintf("the ledger announces %d changes; the spec's \"Upcoming in v3\" block lists %d",
+	       sprintf("the ledger announces %d changes; the spec's \"Upcoming\" block lists %d",
 	               announced, spec_bullets),
 	       "Every announcement has to reach build/openapi.json, or a generated client gets no notice. Edit the block in build/gen_openapi.uc and regenerate.");
 

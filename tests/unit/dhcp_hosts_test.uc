@@ -143,10 +143,12 @@ t.describe('dhcp.hosts central type gate covers name, tag and dns', () => {
 	// string, so clients generated against it send one, and dnsmasq word-splits a
 	// scalar identically. Responses are always an array (see the round-trip test
 	// below); v3 removes the write form.
-	t.it('accepts both shapes a client may send, and null', () => {
+	// The space-separated string was accepted only because the 2.4.1 spec declared one.
+	// v3 drops it: the field is an array in both directions.
+	t.it('accepts an array or null, and refuses the string form', () => {
 		t.assert_equal(length(types({ tag: ["a", "b"] })), 0);
-		t.assert_equal(length(types({ tag: "a b" })), 0);
 		t.assert_equal(length(types({ tag: null })), 0);
+		t.assert_equal(length(types({ tag: "a b" })), 1);
 	});
 
 	// Undeclared meant unchecked, and unchecked meant an object reached toUci and

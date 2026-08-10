@@ -86,8 +86,32 @@ function pascal(s) {
 	return out;
 }
 
+// One schema served both directions until v3, which is why `ipaddr` had to be described in
+// prose rather than as readOnly, why `tag` kept `string` in its type for writers although
+// responses were always an array, and why `runtime` and `managed` needed a readOnly annotation
+// to stay out of a generated request model. Split, each half simply says what it is.
 function schema_name(endpoint) {
 	return pascal(endpoint.domain) + pascal(endpoint.subresource ?? "");
+}
+
+function request_name(endpoint) { return schema_name(endpoint) + "Request"; }
+function response_name(endpoint) { return schema_name(endpoint) + "Response"; }
+
+// A property a caller cannot write. Derived from uci or from ubus, ignored by every toUci, and
+// present only so a reader can see it. `id` is deliberately not here: it is the section name at
+// create, the universal input that replaced `network/interfaces.name`.
+const RESPONSE_ONLY = { "runtime": true, "managed": true };
+
+function request_properties(properties) {
+	let out = {};
+	for (let k in properties) {
+		if (RESPONSE_ONLY[k]) continue;
+		let v = properties[k];
+		// readOnly loses its job here: the property is simply absent from this half.
+		if (type(v) == "object" && v.readOnly === true) continue;
+		out[k] = v;
+	}
+	return out;
 }
 
 function pretty(s) {
@@ -225,7 +249,8 @@ function responses(verb, success, opts) {
 }
 
 function build_crud_paths(ep) {
-	let schema_ref = schema_name(ep);
+	let schema_ref = response_name(ep);
+	let request_ref = request_name(ep);
 	let mod = load_resource(ep.file);
 	if (type(mod.openapi_singular) != "string" || mod.openapi_singular == "")
 		die(sprintf("CRUD resource %s missing required `openapi_singular` declaration "
@@ -267,7 +292,7 @@ function build_crud_paths(ep) {
 				"required": true,
 				"content": {
 					"application/json": {
-						"schema": { "$ref": "#/components/schemas/" + schema_ref }
+						"schema": { "$ref": "#/components/schemas/" + request_ref }
 					}
 				}
 			},
@@ -286,14 +311,14 @@ function build_crud_paths(ep) {
 		            }, ETAG) },
 		"put":    { "summary": sprintf("Replace a %s", ep.subresource),
 		            "description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
-		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + schema_ref } } } },
+		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/" + request_ref } } } },
 		            "responses": responses("put", { "200": make_response(200, "Replaced", schema_ref) },
 		                                 mgmt_headers(mod, UCI_TX)) },
 		"patch":  { "summary": sprintf("Partially update a %s", ep.subresource),
 		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 		            "requestBody": { "required": true, "content": {
-		              "application/json":            { "schema": { "type": "object",
-		                                                            "description": "merge-patch partial body" } },
+		              "application/json":            { "schema": { "allOf": [ { "$ref": "#/components/schemas/" + request_ref } ],
+		                                                            "description": "merge-patch partial body: any subset of the request schema" } },
 		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 		            } },
 		            "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) },
@@ -323,7 +348,8 @@ function build_crud_paths(ep) {
 }
 
 function build_singleton_paths(ep) {
-	let schema_ref = schema_name(ep);
+	let schema_ref = response_name(ep);
+	let request_ref = request_name(ep);
 	return {
 		[ep.path]: {
 			"get":   { "summary": sprintf("Get the %s singleton", ep.domain),
@@ -335,7 +361,8 @@ function build_singleton_paths(ep) {
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "requestBody": { "required": true, "content": {
-			             "application/json":            { "schema": { "type": "object" } },
+			             "application/json":            { "schema": { "allOf": [ { "$ref": "#/components/schemas/" + request_ref } ],
+			                                                           "description": "merge-patch partial body: any subset of the request schema" } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
 			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }, UCI_TX) },
@@ -344,7 +371,8 @@ function build_singleton_paths(ep) {
 }
 
 function build_collection_paths(ep) {
-	let schema_ref = schema_name(ep);
+	let schema_ref = response_name(ep);
+	let request_ref = request_name(ep);
 	return {
 		[ep.path]: {
 			"get": {
@@ -925,7 +953,7 @@ function build_schemas() {
 				"id":      { "type": "string", "description": "<package>:<resource> key" },
 				"package": { "type": "string" },
 				"type":    { "type": "string", "description": "uci section type" },
-				"schema_properties": { "type": "object", "description": "JSON-Schema fragment for the resource body" },
+				"schema_properties": { "type": "object", "description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves." },
 			},
 		},
 		"WhoamiResponse": {
@@ -1206,7 +1234,21 @@ function build_schemas() {
 		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
 			s.allOf = mod.openapi_conditional;
 
-		schemas[schema_name(ep)] = s;
+		schemas[response_name(ep)] = s;
+
+		// The request half: same properties minus the ones a write cannot carry, and minus
+		// the required/conditional blocks that describe a stored section rather than a body.
+		let req = {
+			"type": "object",
+			"description": sprintf("Request body for the uapi resource backed by uci %s.%s.",
+			                       mod.package, mod.type),
+			"properties": request_properties(properties),
+		};
+		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
+			req.required = mod.openapi_required;
+		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
+			req.allOf = mod.openapi_conditional;
+		schemas[request_name(ep)] = req;
 	}
 
 	return schemas;
@@ -1219,7 +1261,7 @@ function build_doc() {
 		"info": {
 			"title": "uapi",
 			"version": VERSION,
-			"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v3 (announced, not yet in effect)\n\nThis major accepts both forms for everything below; v3 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.name` as a create input** - send `id`. Flagged `deprecated: true` on the property, so a generator warns.\n- **`network/interfaces.ipaddr` as a write input** - send `ipaddrs`. Not flagged, because the field survives as a read; v3 makes it `readOnly`.\n- **`dhcp/hosts.tag` will stop accepting a space-separated string on write.** Responses are already always an array, including for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. The string remains valid in a request because the 2.4.1 spec declared one; v3 drops it and the field becomes array-only in both directions.\n- **`dhcp/hosts.mac`** - send and read `macs`, the whole uci `list mac` as one array. `mac` was its first entry only, so a client had to read two fields to learn what a reservation matched. Flagged `deprecated: true`; unlike `network/interfaces.ipaddr` it does not survive as a read, because uci has no scalar `mac` option on a host for it to correspond to.\n- **`dhcp/hosts.mac_aliases`** - send and read `macs`. This held every entry of the same `list mac` after the first, and was the one place in the API where a uci list option did not surface as a JSON array. Flagged `deprecated: true`, and removed rather than kept as a read for the same reason as `mac`.\n- **`managed` leaves the request half of every resource schema** - it is derived from uci's `.anonymous` flag and no write path reads it, so `PUT` with `managed: false` has always answered 200 with `managed: true`. It is annotated `readOnly` from 2.5.0, so a regenerated client already stops sending it; v3 completes the split.\n- **Each resource gains a separate request schema and response schema** - one schema serves both directions today, which is why `dhcp/hosts.tag` keeps `string` in its type for writers while responses are always an array, and why `network/interfaces.ipaddr` is described in prose rather than as `readOnly`. Generated model names change for every resource.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+			"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v2/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v2/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v2/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nNothing is announced yet. Removals only happen in a major and only after a window announced in an earlier minor, so this section is where the next one will appear.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
 			"contact": { "name": "uapi", "url": "https://github.com/raspbeguy/uapi" },
 			"license": { "name": "MIT", "identifier": "MIT" },
 		},

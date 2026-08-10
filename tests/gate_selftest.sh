@@ -64,7 +64,7 @@ mut_reserved() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['properties']['count'] = {'type': 'string'}
+d['components']['schemas']['SystemResponse']['properties']['count'] = {'type': 'string'}
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -82,7 +82,7 @@ mut_if_without_then() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['allOf'] = [{'if': {'properties': {'hostname': {'const': 'x'}}}}]
+d['components']['schemas']['SystemResponse']['allOf'] = [{'if': {'properties': {'hostname': {'const': 'x'}}}}]
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -116,15 +116,16 @@ mut_doc_bad_target() { printf '\nRun `make nope-target`.\n' >> docs/testing.md; 
 
 # An announcement recorded in the ledger but absent from the published spec: the shape that
 # left the list-reads-null change invisible to every generated client.
+# 3.0.0 removed every announcement, so this plants an active ledger row instead of deleting a
+# spec bullet. Same defect either way: a deprecation the published document does not carry.
 mut_unannounced_deprecation() {
 	python3 - <<'EOF'
-import json, re
-p = 'build/openapi.json'; d = json.load(open(p))
-desc = d['info']['description']
-new = re.sub(r'\n- \*\*`dhcp/hosts\.tag`[^\n]*', '', desc, count=1)
-assert new != desc, 'upcoming bullet not found'
-d['info']['description'] = new
-json.dump(d, open(p, 'w'))
+import pathlib
+p = pathlib.Path('docs/deprecations.md'); s = p.read_text()
+row = "| `dhcp/hosts.probe_field` (request) | `dhcp/hosts.macs` | 3.0.0 | v4 | Invented by the gate self-test. |\n"
+assert '## How to migrate' in s
+s = s.replace('## How to migrate', row + '\n## How to migrate', 1)
+p.write_text(s)
 EOF
 }
 
@@ -180,7 +181,7 @@ mut_required_undeclared() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['required'] = ['nope_field']
+d['components']['schemas']['SystemResponse']['required'] = ['nope_field']
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -189,7 +190,7 @@ mut_empty_enum() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['properties']['hostname']['enum'] = []
+d['components']['schemas']['SystemResponse']['properties']['hostname']['enum'] = []
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -198,7 +199,7 @@ mut_then_without_if() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['allOf'] = [{'then': {'required': ['hostname']}}]
+d['components']['schemas']['SystemResponse']['allOf'] = [{'then': {'required': ['hostname']}}]
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -207,7 +208,7 @@ mut_nan_value() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['properties']['hostname']['maxLength'] = 'NaN'
+d['components']['schemas']['SystemResponse']['properties']['hostname']['maxLength'] = 'NaN'
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -216,7 +217,7 @@ mut_hcl_keyword() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['System']['properties']['resource'] = {'type': 'string'}
+d['components']['schemas']['SystemResponse']['properties']['resource'] = {'type': 'string'}
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -291,7 +292,7 @@ mut_managed_writable() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-del d['components']['schemas']['FirewallRules']['properties']['managed']['readOnly']
+del d['components']['schemas']['FirewallRulesResponse']['properties']['managed']['readOnly']
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -312,11 +313,20 @@ EOF
 
 # v3 removed every deprecated property, so this plants one rather than stripping the reason
 # off a real field. The rule guards the next deprecation, which is the only kind there is now.
+mut_request_regrows_managed() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['FirewallRulesRequest']['properties']['managed'] = {'type': 'boolean'}
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_deprecated_no_reason() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['DhcpHosts']['properties']['ip']['deprecated'] = True
+d['components']['schemas']['DhcpHostsResponse']['properties']['ip']['deprecated'] = True
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -381,6 +391,7 @@ probe lint-openapi-shape "a reload header on a raw write"      "never reaches at
 probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header is never reached"  mut_etag_on_raw
 probe lint-openapi-shape "a writable managed property"        "must be readOnly"                 mut_managed_writable
 probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
+probe lint-openapi-shape "a derived field in a request schema"  "must not appear in a request schema" mut_request_regrows_managed
 probe lint-wire-names    "an unaccounted alias name"            "is read by toUci but never written" mut_unaccounted_wire_name
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
 probe lint-openapi-shape "an emitted header declared nowhere"  "path(s) should declare the header" mut_mgmt_header_undeclared

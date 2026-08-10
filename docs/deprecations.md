@@ -8,17 +8,10 @@ Policy: a deprecation in a minor release means both forms (old and new) are acce
 
 ## Active deprecations
 
-| Field | Replaced by | Deprecated since | Removal target | Migration |
-|---|---|---|---|---|
-| `network/interfaces.ipaddr` (request input) | `network/interfaces.ipaddrs` | 2.5.0 | v3 | Send `ipaddrs` instead. Both name the same uci `list ipaddr`, and the list already wins on write, so the migration is to stop sending the scalar rather than to change any value. `ipaddr` stays in responses after removal, carrying the first entry of the list; only the write is going away. See the note below on why this row carries no `deprecated: true` flag. |
+None. 3.0.0 removed everything 2.5.0 had announced, and nothing new is deprecated yet.
 
-Every entry above must also appear in the published spec's own description, under
-"Upcoming in v3". That is checked by `make lint-doc-refs`: the ledger and the spec are
-compared, and a change announced in one but not the other fails the build. The check exists
-because the list-reads-`null` change was recorded here and in the changelog while appearing
-nowhere in `build/openapi.json`, so a consumer generating a client got no notice at all of
-the one change most likely to break its response validation. Announcing in a minor is only
-worth doing if the notice reaches the artifact people consume.
+A field belongs in this section if and only if it is currently accepted-but-deprecated. Once
+removed in a major it moves to `Removed in past releases` below.
 
 ## How to migrate
 
@@ -37,46 +30,7 @@ the request one.
 
 ## Announced response-shape changes
 
-Not field deprecations, so they are not in the table above, but they change the
-contract and are announced here for the same reason: so a client sees them
-before the major that makes them.
-
-- **`dhcp/hosts.tag` no longer accepts a space-separated string on write**, targeted at
-  v3. The read half of this has already landed: responses are always an array, including
-  for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. What
-  remains for v3 is the request side, where a string is still accepted because the 2.4.1
-  spec declared one and clients generated against it send one. One schema serves both
-  directions here, so the type stays `["string", "array", "null"]` until the major can
-  split them.
-
-  This was originally announced the other way round, as a v3 change to the read shape, on
-  the reasoning that normalizing storage would rewrite `option tag` into `list tag` the
-  first time a client touched a section. The observation was right and the conclusion did
-  not follow: splitting a stored scalar on the way *out* settles the read immediately, and
-  a read never touches storage. A write still converges it, measured on hardware:
-
-  ```
-  storage before PUT: dhcp.tgs.tag='guest iot'
-  storage after PUT:  dhcp.tgs.tag='guest' 'iot'
-  ```
-
-  That is acceptable precisely because it is invisible on the wire. dnsmasq compiles both
-  to `set:guest,set:iot`, and the view round-trips, which is the property that matters.
-  Deferring the read shape cost every client a release of handling two shapes to learn one
-  thing, and bought nothing.
-
-- **`managed` leaves the request half of every resource schema**, targeted at v3. It is
-  derived from uci's `.anonymous` flag and no `toUci` reads it, so a `PUT` sending
-  `managed: false` has always answered 200 with `managed: true`; management state moves
-  only through `POST /<resource>/{id}/adopt`. 2.5.0 annotates it `readOnly`, which is the
-  notice: a regenerated client stops putting it in request models. v3 completes the split.
-
-- **Each resource will be described by a separate request schema and response schema**,
-  targeted at v3. One schema serves both directions today, which is why `dhcp/hosts.tag`
-  keeps `string` in its type for writers while responses are always an array, why
-  `network/interfaces.ipaddr` is described in prose rather than as `readOnly`, and why any
-  read/write asymmetry is unstatable. Generated model names change for every resource.
-  This is the change the `ipaddr` row above already promises the consequence of.
+None. See `Removed in past releases` for what 3.0.0 carried out.
 
 ## Removed in past releases
 
@@ -105,5 +59,16 @@ neither survived as a read:
   store an empty list, so `[]` already meant "absent" and distinguished nothing. It also lets a
   list field carry `x-uapi-clear-on-omit`, which the old shape made impossible. The request and
   response envelopes keep `[]`, where it means empty rather than absent.
+
+- **`network/interfaces.ipaddr` lost its write half.** It is `readOnly` in the response schema
+  and absent from the request one. It still reads as the first entry of the uci `list ipaddr`;
+  send `ipaddrs`.
+- **`dhcp/hosts.tag` is array-only in both directions.** The string form existed only because
+  the 2.4.1 spec declared one.
+- **`managed` left the request half of every resource schema.** It is derived from uci's
+  `.anonymous` flag and no write path ever read it.
+- **Every resource is described by a separate request schema and response schema**, named
+  `<Name>Request` and `<Name>Response`. This is what makes the three above expressible: one
+  schema serving both directions could not say that a field is readable but not writable.
 
 See `docs/migration-v2-to-v3.md` for the full upgrade path.

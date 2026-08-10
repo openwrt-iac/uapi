@@ -163,6 +163,29 @@ for (let name in schemas) {
 	}
 }
 
+// Every curated resource is described by two schemas, and a property a caller cannot write
+// must not appear in the request half. Before v3 one schema served both directions, and the
+// only way to keep `runtime` and `managed` out of a generated request model was a readOnly
+// annotation the generator had to synthesise. The split states it structurally, and this is
+// what keeps it stated: a request schema that regrows one of these is a request model that
+// tells a client to send a field the server derives.
+let halves = 0;
+for (let name in schemas) {
+	if (substr(name, -7) != "Request") continue;
+	let base = substr(name, 0, length(name) - 7);
+	if (!exists(schemas, base + "Response")) continue;
+	halves++;
+	let props = schemas[name].properties ?? {};
+	for (let forbidden in [ "managed", "runtime" ])
+		if (exists(props, forbidden))
+			note(sprintf("/components/schemas/%s/properties/%s", name, forbidden),
+			     "is derived by the server and must not appear in a request schema");
+	for (let p in props)
+		if (type(props[p]) == "object" && props[p].readOnly === true)
+			note(sprintf("/components/schemas/%s/properties/%s", name, p),
+			     "is readOnly, so it belongs in the response half only");
+}
+
 // A collection segment names a set, so it reads plural, and every curated one
 // is the plural of its uci section type. The exceptions below are decisions,
 // not oversights, and each became load-bearing the moment it shipped: the path,
@@ -341,5 +364,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, managed_seen, deprecated_seen, collections, tx_responses, etag_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d request/response pairs, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, managed_seen, halves, deprecated_seen, collections, tx_responses, etag_responses);

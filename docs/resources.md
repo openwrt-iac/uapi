@@ -6,6 +6,12 @@ schema (every field, its type, enum values, ranges, patterns), read
 router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
+`GET /schema/<package>/<resource>` serves a module's declared properties as one set, without the
+request and response split the OpenAPI document makes. It is the module's own view: a property
+marked `readOnly` there is absent from that resource's `*Request` schema, and `id`, `managed`
+and `runtime` are stamped by the framework rather than declared by the module. For the two
+halves, read `build/openapi.json`.
+
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.
 
