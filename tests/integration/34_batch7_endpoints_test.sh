@@ -71,6 +71,28 @@ status=$(curl -sS -o /tmp/uapi_batch_ok.json -w '%{http_code}' \
 [ "$status" = "207" ] || fail "batch happy path expected 207, got $status"
 grep -q '"results"' /tmp/uapi_batch_ok.json || fail "batch missing results array"
 
+# A pure-read batch takes no lock and runs no transaction, so there is no reload outcome to
+# report and no header, which is what a read on any other endpoint does.
+echo "--- /batch read-only: no transaction headers ---"
+curl -sS -o /dev/null -D /tmp/uapi_batch_ro_h -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d '{"operations":[{"path":"/system","method":"GET"}]}'
+tr -d '\r' < /tmp/uapi_batch_ro_h | grep -qi '^X-Reload-Status:' \
+	&& fail "a read-only batch reported a reload it never ran"
+
+# A write batch commits and reloads once for the whole set, and the 207 is the only place
+# that outcome can be reported: the results array carries {status, body} and drops
+# sub-response headers.
+echo "--- /batch write: the 207 carries the transaction headers ---"
+zid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/zones" \
+	-d '{"name":"bhdr","input":"ACCEPT","output_policy":"ACCEPT","forward":"REJECT"}' \
+	| grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+curl -sS -o /dev/null -D /tmp/uapi_batch_w_h -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d "{\"operations\":[{\"path\":\"/firewall/zones/$zid\",\"method\":\"PATCH\",\"body\":{\"forward\":\"ACCEPT\"}}]}"
+hdrs=$(tr -d '\r' < /tmp/uapi_batch_w_h)
+echo "$hdrs" | grep -qi '^X-Reload-Status:' || fail "batch write 207 carries no X-Reload-Status: $hdrs"
+echo "$hdrs" | grep -qi '^X-Reload-Services:.*firewall' || fail "batch write 207 does not name the reloaded service"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/zones/$zid"
+
 echo "--- /batch abort: failing sub-request reverts all writes ---"
 # Sub 1 creates a rule; sub 2 references a missing resource (404).
 # Expect the rule to NOT exist after the batch.

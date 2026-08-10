@@ -613,12 +613,28 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		return errors.error(ctx, "internal_error",
 			sprintf("batch returned unknown kind %J", r.kind));
 
-	return {
+	// The transaction headers, aggregated over the sub-writes. A batch commits and reloads
+	// once for the whole set, so there is one reload outcome to report, not one per
+	// operation, and reporting it here is the only way it can be reported at all: the
+	// results array carries `{status, body}` and drops sub-response headers.
+	//
+	// A pure-read batch takes no lock and runs no transaction, so `r` carries nothing and
+	// no header is emitted, which matches a read on any other endpoint.
+	let resp = {
 		status: 207,
 		headers: { "Content-Type": "application/json",
 		           "X-Request-Id": ctx.request_id },
 		body: { results, request_id: ctx.request_id },
 	};
+	if (r.reload_status != null)
+		resp.headers["X-Reload-Status"] = r.reload_status;
+	if (type(r.reload_services) == "array" && length(r.reload_services) > 0)
+		resp.headers["X-Reload-Services"] = join(",", r.reload_services);
+	if (r.kernel_status != null)
+		resp.headers["X-Kernel-Status"] = r.kernel_status;
+	if (type(r.kernel_applied) == "array" && length(r.kernel_applied) > 0)
+		resp.headers["X-Kernel-Applied"] = join(",", r.kernel_applied);
+	return resp;
 }
 
 function metrics_response(ctx) {
