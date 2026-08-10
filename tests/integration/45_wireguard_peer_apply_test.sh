@@ -54,7 +54,7 @@ trap cleanup EXIT
 
 echo "--- create the parent wireguard interface ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d "{\"proto\":\"wireguard\",\"name\":\"$IFACE\",
+	-d "{\"proto\":\"wireguard\",\"id\":\"$IFACE\",
 	    \"private_key\":\"$PRIV\",\"addresses\":[\"10.98.98.1/30\"]}")
 [ "$(status_of "$r")" = "200" ] || fail "POST interface: $(body_of "$r")"
 

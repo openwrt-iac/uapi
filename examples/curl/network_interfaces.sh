@@ -17,7 +17,7 @@ echo "# Create a static IPv4 interface on br-guest"
 created=$(req -H "$H_JSON" -X POST "$UAPI_BASE/network/interfaces" -d '{
 	"device": "br-guest",
 	"proto": "static",
-	"ipaddr": "192.168.40.1",
+	"ipaddrs": ["192.168.40.1"],
 	"netmask": "255.255.255.0"
 }')
 echo "$created"

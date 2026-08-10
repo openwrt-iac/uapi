@@ -70,7 +70,7 @@ echo "--- a watched field on some other interface does not warn ---"
 $SSH 'uci -q delete network.mgmtprobe; uci commit network' >/dev/null 2>&1 || true
 curl -sS -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/network/interfaces" \
-	-d '{"id":"mgmtprobe","proto":"static","ipaddr":"192.168.221.1/24"}'
+	-d '{"id":"mgmtprobe","proto":"static","ipaddrs":["192.168.221.1/24"]}'
 curl -sS -D /tmp/uapi_mgmt_h3 -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X PATCH "$URL/network/interfaces/mgmtprobe" -d '{"proto":"dhcp"}'
 tr -d '\r' < /tmp/uapi_mgmt_h3 | grep -qi '^X-Mgmt-Path-Warning:' \

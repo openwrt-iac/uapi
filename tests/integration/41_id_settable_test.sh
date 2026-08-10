@@ -103,18 +103,11 @@ echo "$body" | grep -q '"id": "ztest"' || fail "expected id=ztest after adopt"
 
 echo "--- network/interfaces accepts id as alias for name (deprecated) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d '{"id":"itest","proto":"static","ipaddr":"192.0.2.1","netmask":"255.255.255.0"}')
+	-d '{"id":"itest","proto":"static","ipaddrs":["192.0.2.1"],"netmask":"255.255.255.0"}')
 status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
 [ "$status" = "200" ] || fail "POST /network/interfaces with id expected 200, got $status: $body"
 echo "$body" | grep -q '"id": "itest"' || fail "expected id=itest"
-
-echo "--- network/interfaces with mismatched id and name -> 422 ---"
-resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
-	-d '{"id":"a","name":"b","proto":"static","ipaddr":"192.0.2.2","netmask":"255.255.255.0"}')
-status=$(echo "$resp" | tail -1)
-body=$(echo "$resp" | sed '$d')
-[ "$status" = "422" ] || fail "expected 422 for id/name mismatch, got $status: $body"
 
 echo "--- portless bridge create succeeds ---"
 br_resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/devices" \
