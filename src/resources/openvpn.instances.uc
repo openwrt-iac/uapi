@@ -1,6 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 let is_valid_ip = values.is_valid_ip;
 
@@ -37,15 +37,15 @@ function fromUci(section) {
 		port:            as_int(section.port),
 		lport:           as_int(section.lport),
 		rport:           as_int(section.rport),
-		remote:          as_list(section.remote),
+		remote:          as_list_or_null(section.remote),
 		local:           section.local ?? null,
 		nobind:          shell_bool(section.nobind, false),
 		float:           shell_bool(section.float, false),
 		topology:        section.topology ?? null,
 		server:          section.server ?? null,
 		server_bridge:   section.server_bridge ?? null,
-		push:            as_list(section.push),
-		route:           as_list(section.route),
+		push:            as_list_or_null(section.push),
+		route:           as_list_or_null(section.route),
 		route_gateway:   section.route_gateway ?? null,
 		ifconfig:        section.ifconfig ?? null,
 		ifconfig_pool:   section.ifconfig_pool ?? null,
@@ -203,7 +203,7 @@ return {
 		port:             { type: ["integer", "null"], minimum: 1, maximum: 65535 },
 		lport:            { type: ["integer", "null"], minimum: 0, maximum: 65535 },
 		rport:            { type: ["integer", "null"], minimum: 1, maximum: 65535 },
-		remote:           { type: "array", items: { type: "string" },
+		remote:           { type: ["array", "null"], items: { type: "string" },
 		                    description: "host[:port] entries; client tries them in order." },
 		local:            { type: ["string", "null"], description: "Bind to this local IP." },
 		nobind:           { type: "boolean", default: false },
@@ -211,9 +211,9 @@ return {
 		topology:         { type: ["string", "null"], enum: ["net30", "p2p", "subnet", null] },
 		server:           { type: ["string", "null"], description: "Server-mode subnet (e.g. `10.8.0.0 255.255.255.0`)." },
 		server_bridge:    { type: ["string", "null"] },
-		push:             { type: "array", items: { type: "string" },
+		push:             { type: ["array", "null"], items: { type: "string" },
 		                    description: "Server-mode directives pushed to clients." },
-		route:            { type: "array", items: { type: "string" } },
+		route:            { type: ["array", "null"], items: { type: "string" } },
 		route_gateway:    { type: ["string", "null"] },
 		ifconfig:         { type: ["string", "null"] },
 		ifconfig_pool:    { type: ["string", "null"] },

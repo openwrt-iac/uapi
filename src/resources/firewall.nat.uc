@@ -1,6 +1,7 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
@@ -29,7 +30,7 @@ function fromUci(section) {
 			src_port: section.src_port ?? null,
 			dest_ip: section.dest_ip ?? null,
 			dest_port: section.dest_port ?? null,
-			proto: as_list(section.proto),
+			proto: as_list_or_null(section.proto),
 			mark: section.mark ?? null,
 			// Deliberately not defaulted to "any": fw4 treats an absent family
 			// on a nat section as IPv4-only for backwards compatibility, so
@@ -192,7 +193,7 @@ return {
 				             description: "Match destination address, in the same forms as src_ip" },
 				dest_port: { type: ["string", "null"], pattern: values.PORT_MATCH_RE,
 				             description: "Match destination port or range, optionally negated with a leading '!'" },
-				proto:     { type: "array", items: { type: "string", pattern: values.PROTO_RE },
+				proto:     { type: ["array", "null"], items: { type: "string", pattern: values.PROTO_RE },
 				             description: "Match protocols by name or number, e.g. tcp, udp, gre, sctp, 47, or the wildcards all / any. When a port is matched, every protocol must be tcp or udp, or all of them a wildcard that firewall4 rewrites to both. Defaults to all when unset" },
 				mark:      { type: ["string", "null"], pattern: values.MARK_MATCH_RE,
 				             description: "Match fwmark as value or value/mask, optionally negated with a leading '!'" },

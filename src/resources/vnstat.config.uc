@@ -1,5 +1,5 @@
 let values = require('values');
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 function fromUci(section) {
 	return {
@@ -9,7 +9,7 @@ function fromUci(section) {
 		// and takes the `list interface` inside them (vnstat.init:21,28), then runs
 		// `vnstat --add -i <name>` per entry. Values are DEVICE names as the kernel shows
 		// them (`br-lan`, `eth0`), not uci interface section names.
-		interfaces:          as_list(section.interface),
+		interfaces:          as_list_or_null(section.interface),
 		runtime: {},
 	};
 }
@@ -41,7 +41,7 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		interfaces:           { type: "array", items: { type: "string" },
+		interfaces:           { type: ["array", "null"], items: { type: "string" },
 		                        description: "Devices vnstat tracks, as the kernel names them (`br-lan`, `eth0`), not uci interface names. This is the only vnstat option any shipped code reads; see docs/deprecations.md for why `vnstat/interfaces` is being removed in favour of it." },
 	},
 };

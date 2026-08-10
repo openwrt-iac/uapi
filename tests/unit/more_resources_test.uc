@@ -555,7 +555,7 @@ t.describe('network.interfaces ipaddr / ipaddrs (uci option vs list forms)', () 
 			'.name': 'wan6', '.anonymous': false, proto: 'dhcpv6', device: 'eth1',
 		});
 		t.assert_equal(r.ipaddr, null);
-		t.assert_deep_equal(r.ipaddrs, []);
+		t.assert_equal(r.ipaddrs, null);
 	});
 
 	t.it('toUci: ipaddrs list takes precedence and writes a uci list', () => {

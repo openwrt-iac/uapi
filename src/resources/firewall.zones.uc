@@ -1,6 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 const VALID_POLICIES = { "ACCEPT": true, "REJECT": true, "DROP": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
@@ -14,7 +14,7 @@ function fromUci(section) {
 		input: section.input ?? "REJECT",
 		output_policy: section.output ?? "REJECT",
 		forward: section.forward ?? "REJECT",
-		network: as_list(section.network),
+		network: as_list_or_null(section.network),
 		masq: normalize_bool(section.masq, false),
 		mtu_fix: normalize_bool(section.mtu_fix, false),
 		family: section.family ?? "any",
@@ -61,7 +61,7 @@ return {
 		                 description: "Renamed on the wire from uci's `output` (HCL block keyword)." },
 		forward:       { type: "string", enum: keys(VALID_POLICIES), default: "REJECT" },
 		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
-		network: { type: "array", items: { type: "string" } },
+		network: { type: ["array", "null"], items: { type: "string" } },
 		masq:    { type: "boolean", default: false,
 		           description: "Enable IPv4 masquerading on this zone" },
 		mtu_fix: { type: "boolean", default: false,

@@ -41,16 +41,6 @@ Not field deprecations, so they are not in the table above, but they change the
 contract and are announced here for the same reason: so a client sees them
 before the major that makes them.
 
-- **List-valued fields will read back `null` when the uci key is absent, not
-  `[]`** ([#39](https://github.com/openwrt-iac/uapi/issues/39)), targeted at v3.
-  uci cannot store an empty list, so `[]` already means "absent" and
-  distinguishes nothing; `null` is what that state should be. This is a
-  convention change across every curated resource rather than a per-field one,
-  and it breaks response validation for clients generated against the current
-  `{"type": "array"}` schema. There is no way to stage it per field without
-  leaving the surface inconsistent, which is why it waits for a major instead of
-  arriving piecemeal.
-
 - **`dhcp/hosts.tag` no longer accepts a space-separated string on write**, targeted at
   v3. The read half of this has already landed: responses are always an array, including
   for a section storing `option tag 'a b'`, which dnsmasq word-splits identically. What
@@ -110,5 +100,10 @@ neither survived as a read:
   `prometheus_node_exporter_lua/config`. Writes carrying them were already ignored; what changes
   is the read side, since each was returned with a `default:` annotation. The per-field reasons
   are in the 2.5.0 announcement, preserved in that release's changelog entry.
+
+- **List-valued fields read back `null`, not `[]`, when the uci key is absent.** uci cannot
+  store an empty list, so `[]` already meant "absent" and distinguished nothing. It also lets a
+  list field carry `x-uapi-clear-on-omit`, which the old shape made impossible. The request and
+  response envelopes keep `[]`, where it means empty rather than absent.
 
 See `docs/migration-v2-to-v3.md` for the full upgrade path.

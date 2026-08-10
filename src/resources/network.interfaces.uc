@@ -3,6 +3,7 @@ let strict_bool = values.strict_bool;
 let ids = require('ids');
 let platform_bool = values.platform_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_cidr_any = values.is_valid_cidr_any;
@@ -63,10 +64,11 @@ function fromUci(section, conn) {
 	// older configs used `option ipaddr 'x.x.x.x'`. Surface BOTH forms:
 	// `ipaddr` keeps the v1.0/v1.1 contract (a single string; the first entry
 	// when uci has a list), and a new `ipaddrs` array holds the full set.
-	let ipaddr_raw = section.ipaddr;
-	let ipaddrs = (type(ipaddr_raw) == "array") ? ipaddr_raw
-	              : (ipaddr_raw != null && ipaddr_raw != "") ? [ipaddr_raw] : [];
-	let ipaddr_first = length(ipaddrs) > 0 ? ipaddrs[0] : null;
+	// Coerced by hand rather than through as_list_or_null because the empty string has to
+	// collapse too: a `option ipaddr ''` is uci's way of holding nothing here.
+	let ipaddr_raw = (section.ipaddr == "") ? null : section.ipaddr;
+	let ipaddrs = values.as_list_or_null(ipaddr_raw);
+	let ipaddr_first = (ipaddrs != null) ? ipaddrs[0] : null;
 	let view = {
 		id: section['.name'],
 		managed: !anonymous,
@@ -76,7 +78,7 @@ function fromUci(section, conn) {
 		ipaddrs: ipaddrs,
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
-		dns: as_list(section.dns),
+		dns: as_list_or_null(section.dns),
 		ip6assign: as_int(section.ip6assign),
 		mtu: as_int(section.mtu),
 		auto: platform_bool(section.auto, true),
@@ -97,7 +99,7 @@ function fromUci(section, conn) {
 	};
 	if (proto == "wireguard") {
 		view.listen_port = as_int(section.listen_port);
-		view.addresses = as_list(section.addresses);
+		view.addresses = as_list_or_null(section.addresses);
 		view.nohostroute = strict_bool(section.nohostroute);
 		view.ip4table = section.ip4table ?? null;
 		view.ip6table = section.ip6table ?? null;
@@ -310,13 +312,13 @@ return {
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"],
 		             description: "Static IPv4 address (single). Backward-compatible view of the first entry when uci has `list ipaddr`. The same uci option as `ipaddrs`, which wins on write when non-empty. On PUT a differing `ipaddr` is dropped in favour of the list, since a full-replace caller carries the mirrored scalar back whether or not it named it; POST and PATCH reject the pair instead, where naming both is a choice. DEPRECATED as a write input: send `ipaddrs`. Reads keep this field, which is why it is not flagged `deprecated`, but v3 makes it read-only. See docs/deprecations.md." },
-		ipaddrs:   { type: "array", items: { type: "string" },
+		ipaddrs:   { type: ["array", "null"], items: { type: "string" },
 		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). Preferred on write for multi-address interfaces, and takes precedence over `ipaddr`. On PUT that precedence is applied silently; on POST and PATCH a body carrying both with a differing `ipaddr` is rejected." },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
-		dns:       { type: "array", items: { type: "string" } },
+		dns:       { type: ["array", "null"], items: { type: "string" } },
 		ip6assign: { type: ["integer", "null"], minimum: 0, maximum: 128,
 		             description: "Prefix length to assign downstream from a delegated prefix" },
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535 },
@@ -324,7 +326,7 @@ return {
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
 		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed." },
-		addresses: { type: "array", items: { type: "string" } },
+		addresses: { type: ["array", "null"], items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },

@@ -372,8 +372,8 @@ t.describe('handler.replace', () => {
 		});
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.target, 'DROP');
-		t.assert_deep_equal(r.body.match.dest_port, []);
-		t.assert_deep_equal(r.body.match.proto, []);
+		t.assert_equal(r.body.match.dest_port, null);
+		t.assert_equal(r.body.match.proto, null);
 	});
 
 	t.it('normalizes away unmodeled uci options (PUT = full replace, uapi owns the section)', () => {
@@ -450,7 +450,7 @@ t.describe('handler.patch', () => {
 		let c = with_existing();
 		let r = rules.patch(c, ctx(), 'r_existing', { match: { dest_port: [] } });
 		t.assert_equal(r.status, 200);
-		t.assert_deep_equal(r.body.match.dest_port, []);
+		t.assert_equal(r.body.match.dest_port, null);
 		t.assert_equal(c._state.uci.firewall.r_existing.dest_port, null);
 	});
 });

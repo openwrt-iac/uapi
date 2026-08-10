@@ -1,6 +1,7 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 let as_int = values.as_int;
@@ -20,7 +21,7 @@ function fromUci(section) {
 		description: section.description ?? null,
 		public_key: section.public_key ?? null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
-		allowed_ips: as_list(section.allowed_ips),
+		allowed_ips: as_list_or_null(section.allowed_ips),
 		endpoint_host: section.endpoint_host ?? null,
 		endpoint_port: as_int(section.endpoint_port),
 		persistent_keepalive: as_int(section.persistent_keepalive),
@@ -181,7 +182,7 @@ return {
 		preshared_key:        { type: "string", writeOnly: true, pattern: "^[A-Za-z0-9+/]{43}=$",
 		                        description: "Optional preshared key; accepted on write, masked on read" },
 		has_preshared_key:    { type: "boolean", readOnly: true },
-		allowed_ips:          { type: "array", items: { type: "string" },
+		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint hostname or IP" },

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Changed
+
+- **List-valued fields read back `null`, not `[]`, when the uci key is absent.** uci cannot store an empty list, so `[]` already meant "absent" and distinguished nothing; a client could not tell the two apart because there were never two states. 46 properties across 22 resources widen to `["array", "null"]`. The request and response envelopes are untouched, where `[]` means empty rather than absent, as are the four `runtime` arrays, which come from ubus rather than uci. Verified that the four `runtime` arrays kept `[]` rather than being swept along with the rest.
+
+  The payoff is that a list field can now carry `x-uapi-clear-on-omit`, which was impossible before: the flag requires a shape that reads absent as null, and `as_list` returned `[]`. `make lint-defaults` accepts the new `as_list_or_null(...)` shape alongside `section.X ?? null`, and still rejects plain `as_list`, verified in both directions.
+
 ### Removed
 
 - **`dhcp/hosts.mac` and `dhcp/hosts.mac_aliases`.** `macs` is the only name, and it is the whole uci `list mac` as one array. Neither removed name was ever a uci option: `mac` was the list's first entry and `mac_aliases` the rest, so a client had to read two fields to learn what one reservation matched. Validation errors previously reported against `mac` now report against `macs`.

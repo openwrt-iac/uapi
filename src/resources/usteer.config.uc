@@ -1,6 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 
 function fromUci(section) {
@@ -41,8 +41,8 @@ function fromUci(section) {
 		roam_trigger_interval:         as_int(section.roam_trigger_interval),
 		signal_diff_threshold:         as_int(section.signal_diff_threshold),
 		node_up_script:                section.node_up_script ?? null,
-		event_log_types:               as_list(section.event_log_types),
-		ssid_list:                     as_list(section.ssid_list),
+		event_log_types:               as_list_or_null(section.event_log_types),
+		ssid_list:                     as_list_or_null(section.ssid_list),
 		runtime: {},
 	};
 }
@@ -125,9 +125,9 @@ return {
 		roam_trigger_interval:         { type: ["integer", "null"], minimum: 0 },
 		signal_diff_threshold:         { type: ["integer", "null"], minimum: 0 },
 		node_up_script:                { type: ["string", "null"], description: "Path to a hook script run on peer changes." },
-		event_log_types:               { type: "array", items: { type: "string" },
+		event_log_types:               { type: ["array", "null"], items: { type: "string" },
 		                                 description: "Log categories: probe_req, beacon, auth, assoc, load_kick, signal_kick, etc." },
-		ssid_list:                     { type: "array", items: { type: "string" },
+		ssid_list:                     { type: ["array", "null"], items: { type: "string" },
 		                                 description: "Filter usteer's action to these SSIDs (empty = all)." },
 	},
 };

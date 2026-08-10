@@ -1,5 +1,5 @@
 let values = require('values');
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 
 function fromUci(section) {
@@ -9,7 +9,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		device: section.device ?? null,
 		vlan: as_int(section.vlan),
-		ports: as_list(section.ports),
+		ports: as_list_or_null(section.ports),
 		runtime: {},
 	};
 }
@@ -64,7 +64,7 @@ return {
 		device: { type: "string",
 		          description: "Parent bridge device name (must exist in network/devices type=bridge)" },
 		vlan:   { type: "integer", minimum: 1, maximum: 4094 },
-		ports:  { type: "array", items: { type: "string", pattern: "^[A-Za-z0-9._-]+(:[tu*]+)?$" },
+		ports:  { type: ["array", "null"], items: { type: "string", pattern: "^[A-Za-z0-9._-]+(:[tu*]+)?$" },
 		          description: "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix" },
 	},
 };

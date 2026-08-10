@@ -2,7 +2,7 @@ let values = require('values');
 let shell_bool = values.shell_bool;
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
-let as_list = values.as_list;
+let as_list_or_null = values.as_list_or_null;
 
 function fromUci(section) {
 	return {
@@ -21,7 +21,7 @@ function fromUci(section) {
 		lldp_capabilities: shell_bool(section.lldp_capability_advertisements
 		                              ?? section.lldp_capabilities, true),
 		lldp_mgmt_ip: section.lldp_mgmt_ip ?? null,
-		interface: as_list(section.interface),
+		interface: as_list_or_null(section.interface),
 		runtime: {},
 	};
 }
@@ -76,6 +76,6 @@ return {
 		                     description: "Advertise the system capabilities TLV" },
 		lldp_mgmt_ip:      { type: ["string", "null"],
 		                     description: "Management IP advertised in LLDP frames" },
-		interface:         { type: "array", items: { type: "string" } },
+		interface:         { type: ["array", "null"], items: { type: "string" } },
 	},
 };
