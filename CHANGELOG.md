@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /batch` reports its transaction outcome.** The 207 now carries `X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status` and `X-Kernel-Applied`, aggregated over the sub-writes. A batch commits and reloads once for the whole set, so there is one outcome to report, and the 207 is the only place it can be reported: the results array carries `{status, body}` and drops sub-response headers. A pure-read batch takes no lock and runs no transaction, so it emits nothing, matching a read anywhere else.
+
+  This corrects a documented measurement rather than adding a new capability: the generator recorded that `/batch 207` returns none of these headers, which was true when measured and is now the thing being changed.
+
 ### Changed
 
 - **The URL prefix moves from `/api/v2/` to `/api/v3/`**, as it did across the v1 boundary. Upgrading the package strips every older mount and adds the new one, so uhttpd never serves the same `main.uc` under two prefixes: a stale `/api/v2` would otherwise look like the removed v2 surface while answering with v3 semantics. Verified by replaying the install hook against a box holding a v2 mount, which produced one `del_list`, one `add_list` and a single final prefix.

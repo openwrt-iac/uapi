@@ -175,10 +175,13 @@ function make_response(status, description, ref) {
 const SUCCESS_HEADERS_UNIVERSAL = {
 	"X-Request-Id": { "$ref": "#/components/headers/XRequestId" },
 };
-// All four come from attach_reload_headers, which only the curated-resource handler
-// reaches. Measured rather than reasoned: on a real box a curated write returns the reload
-// pair on POST, PUT, PATCH and DELETE 204, while raw (all four verbs), /batch 207,
-// packages, tokens and authorized_keys return none of them.
+// All four come from attach_reload_headers on a curated-resource write, and from the batch
+// handler's own aggregation on a 207. Measured rather than reasoned: on a real box a curated
+// write returns the reload pair on POST, PUT, PATCH and DELETE 204, while raw (all four
+// verbs), packages, tokens and authorized_keys return none of them. A batch commits and
+// reloads once for the whole set, so its 207 reports one outcome for the set rather than one
+// per sub-write, which is the only place it can be reported: the results array carries
+// `{status, body}` and drops sub-response headers.
 const SUCCESS_HEADERS_UCI_TX = {
 	"X-Reload-Status":   { "$ref": "#/components/headers/XReloadStatus" },
 	"X-Reload-Services": { "$ref": "#/components/headers/XReloadServices" },
@@ -757,7 +760,7 @@ function build_paths() {
 			"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchRequest" } } } },
 			"responses": responses("post", {
-				"207": { "description": "Multi-Status: every sub-request succeeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchResponse" } } } },
+				"207": { "description": "Multi-Status: every sub-request succeeded", "headers": SUCCESS_HEADERS_UCI_TX, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchResponse" } } } },
 			}),
 		},
 	};

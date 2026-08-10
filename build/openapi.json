@@ -20258,19 +20258,31 @@
 				"responses": {
 					"207": {
 						"description": "Multi-Status: every sub-request succeeded",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/BatchResponse"
-								}
-							}
-						},
 						"headers": {
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BatchResponse"
+								}
 							}
 						}
 					},

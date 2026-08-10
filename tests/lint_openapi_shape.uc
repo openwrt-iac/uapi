@@ -305,7 +305,17 @@ for (let p in paths) {
 			let present = [];
 			for (let n in TX_HEADERS) if (exists(h, n)) push(present, n);
 			let where = sprintf("%s %s %s", uc(verb), p, code);
-			if (is_curated(p)) {
+			// /batch commits and reloads once for the whole set, so its 207 carries the same
+			// four headers, aggregated. It is not a curated-resource path, so it needs naming
+			// here rather than falling into the "emits none of them" branch below.
+			if (p == "/batch") {
+				let want = (verb == "post" && code == "207");
+				if (want && length(present) != length(TX_HEADERS))
+					note(where, sprintf("the batch 207 declares %J; it emits all four, aggregated over the sub-writes", present));
+				else if (!want && length(present) > 0)
+					note(where, sprintf("declares %J, but only the batch 207 carries them", present));
+			}
+			else if (is_curated(p)) {
 				if (length(present) == 0)
 					note(where, "a curated-resource write declares none of the transaction headers; it emits all four");
 				else if (length(present) != length(TX_HEADERS))
