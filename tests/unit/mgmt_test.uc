@@ -200,3 +200,104 @@ t.describe('deleting the inbound interface warns', () => {
 		t.assert_equal(r.headers?.['X-Mgmt-Path-Warning'], null);
 	});
 });
+
+// The incident this arm exists for: a bridge-vlan on the bridge carrying the request turns on
+// VLAN filtering, untagged traffic stops, and the box goes off the network. It never touches
+// `config interface`, so the interface-name match could not see it and no warning was possible.
+t.describe('mgmt.targets_mgmt_device', () => {
+	// br-lan is a bridge over eth0 and eth1; br-guest is a bridge the caller is not on.
+	function box() {
+		return ubus.stub({ uci: { network: {
+			brlan:   { '.type': 'device', '.anonymous': false, name: 'br-lan',
+			           type: 'bridge', ports: [ 'eth0', 'eth1' ] },
+			brguest: { '.type': 'device', '.anonymous': false, name: 'br-guest',
+			           type: 'bridge', ports: [ 'eth2' ] },
+		} } });
+	}
+
+	t.it('matches the caller device named outright', () => {
+		t.assert_true(m.targets_mgmt_device(box(), 'br-lan', 'br-lan'));
+	});
+
+	t.it('matches the bridge the caller device is a port of', () => {
+		// Arriving on eth0, the write targets the bridge eth0 belongs to.
+		t.assert_true(m.targets_mgmt_device(box(), 'eth0', 'br-lan'));
+	});
+
+	t.it('does not match a bridge the caller is not a port of', () => {
+		t.assert_false(m.targets_mgmt_device(box(), 'eth0', 'br-guest'));
+	});
+
+	t.it('does not match an unrelated device', () => {
+		t.assert_false(m.targets_mgmt_device(box(), 'eth0', 'eth1'));
+	});
+
+	// A single-port bridge comes back from uci as a string rather than a list, and reading it
+	// as a list would silently never match.
+	t.it('handles a single port stored as a scalar', () => {
+		let conn = ubus.stub({ uci: { network: {
+			br: { '.type': 'device', '.anonymous': false, name: 'br-solo',
+			      type: 'bridge', ports: 'eth9' },
+		} } });
+		t.assert_true(m.targets_mgmt_device(conn, 'eth9', 'br-solo'));
+	});
+
+	t.it('says nothing without a device or a target', () => {
+		t.assert_false(m.targets_mgmt_device(box(), null, 'br-lan'));
+		t.assert_false(m.targets_mgmt_device(box(), 'eth0', null));
+	});
+});
+
+// The guard through the handler for the resources matched by device rather than by name.
+// Creating a bridge-vlan on the management bridge is the exact write from the incident: it
+// returned 200 with no warning, and because the follow-up delete never reached the box, the
+// section stayed committed and the box stayed off the network.
+t.describe('mgmt guard reaches bridge-vlan and device writes', () => {
+	let h = require('handler');
+	let ubus4 = require('bus');
+	let bvlans = loadfile('src/resources/network.bridge_vlans.uc')();
+
+	function tx4() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function box4() {
+		let conn = ubus4.stub({ uci: { network: {
+			brlan:   { '.type': 'device', '.anonymous': false, name: 'br-lan',
+			           type: 'bridge', ports: [ 'eth0' ] },
+			brguest: { '.type': 'device', '.anonymous': false, name: 'br-guest',
+			           type: 'bridge', ports: [ 'eth2' ] },
+		} } });
+		conn.call = function() { return null; };
+		return conn;
+	}
+	// Arriving on eth0, a port of br-lan, which is the shape that hides the risk: the write
+	// names a device the caller never mentions.
+	function ctx4() {
+		return { request_id: "01hx0000000000000000000000", remote_addr: "192.168.9.50",
+		         device_lookup: function() { return 'eth0'; } };
+	}
+
+	t.it('creating a bridge-vlan on the bridge carrying the request warns', () => {
+		let r = h.make(bvlans, { tx: tx4() }).create(box4(), ctx4(),
+			{ id: 'bv1', device: 'br-lan', vlan: 9 });
+		t.assert_equal(r.status, 200);
+		let warn = r.headers?.['X-Mgmt-Path-Warning'];
+		if (warn == null) {
+			t.assert_equal("no X-Mgmt-Path-Warning on a bridge-vlan create against the caller's bridge",
+			               "a warning");
+			return;
+		}
+		t.assert_true(index(warn, 'device=br-lan') >= 0);
+		t.assert_true(index(warn, 'changed=created') >= 0);
+	});
+
+	t.it('creating one on an unrelated bridge stays silent', () => {
+		let r = h.make(bvlans, { tx: tx4() }).create(box4(), ctx4(),
+			{ id: 'bv2', device: 'br-guest', vlan: 9 });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.headers?.['X-Mgmt-Path-Warning'], null);
+	});
+});
+

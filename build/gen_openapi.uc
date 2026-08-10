@@ -203,8 +203,11 @@ function attach_success_headers(resp, verb, status, opts) {
 // Merge a success-response block with the verb-appropriate error set.
 // `success` is an object like { "200": <response>, ["304": <response>] }.
 // X-Mgmt-Path-Warning is the one emitted header that is per-resource and per-verb: only a
-// network/interfaces item write can move the interface the request arrived through. It rides
-// the caller-supplied path rather than a global block for that reason.
+// write on a resource that can move the caller's own path carries it. Three do, and not only
+// through `config interface`: a bridge-vlan on the bridge carrying the request turns on VLAN
+// filtering and drops untagged traffic, and a device write can change that bridge's ports.
+// Create is included because a new section can claim the management device just as a write to
+// an existing one can. It rides the caller-supplied path rather than a global block.
 function mgmt_headers(mod, opts) {
 	if (!mod?.mgmt_path_guard) return opts;
 	return { ...opts,
@@ -269,7 +272,8 @@ function build_crud_paths(ep) {
 					}
 				}
 			},
-			"responses": responses("post", { "200": make_response(200, "Created", schema_ref) }, UCI_TX),
+			"responses": responses("post", { "200": make_response(200, "Created", schema_ref) },
+			                        mgmt_headers(mod, UCI_TX)),
 		},
 	};
 
@@ -1283,7 +1287,7 @@ function build_doc() {
 					"schema": { "type": "string", "example": "wg0" },
 				},
 				"XMgmtPathWarning": {
-					"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
+					"description": "Advisory: the write reached the path this request arrived through, so the connection carrying it may be about to break. Two shapes. `interface=<name> changed=<fields>` when a `network/interfaces` write moved or removed the interface the request came in on. `device=<name> changed=<fields>` when a `network/bridge_vlans` or `network/devices` write targeted the caller's device, or the bridge that device is a port of: a bridge-vlan enables VLAN filtering for the whole bridge and drops untagged traffic, and a device write can change that bridge's ports. Emitted on create as well as on the three item writes, because a new section can claim the management device. The write already happened and was not refused; severing your own path is a legitimate operation. Absent when the write could not be shown to reach the caller, which includes the case where uapi cannot resolve the inbound device at all.",
 					"schema": { "type": "string", "example": "interface=lan changed=ipaddr" },
 				},
 			},

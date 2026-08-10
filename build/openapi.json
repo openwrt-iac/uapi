@@ -3349,6 +3349,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -3903,6 +3906,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -4057,6 +4063,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -4145,6 +4154,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -4206,6 +4218,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -5538,6 +5553,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -5692,6 +5710,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -5780,6 +5801,9 @@
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -5841,6 +5865,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Mgmt-Path-Warning": {
+								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
 						}
 					},
@@ -26177,7 +26204,7 @@
 				}
 			},
 			"XMgmtPathWarning": {
-				"description": "Advisory: the write moved or removed the network interface this request arrived through, so the connection carrying it may be about to break. Format `interface=<name> changed=<fields>`. The write already happened and was not refused, because renumbering the management path is a legitimate operation. Present only on a `network/interfaces` item write that touched `disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask` on that one interface, or deleted it; see the `management_path` block of GET /diagnostics for the pre-flight half.",
+				"description": "Advisory: the write reached the path this request arrived through, so the connection carrying it may be about to break. Two shapes. `interface=<name> changed=<fields>` when a `network/interfaces` write moved or removed the interface the request came in on. `device=<name> changed=<fields>` when a `network/bridge_vlans` or `network/devices` write targeted the caller's device, or the bridge that device is a port of: a bridge-vlan enables VLAN filtering for the whole bridge and drops untagged traffic, and a device write can change that bridge's ports. Emitted on create as well as on the three item writes, because a new section can claim the management device. The write already happened and was not refused; severing your own path is a legitimate operation. Absent when the write could not be shown to reach the caller, which includes the case where uapi cannot resolve the inbound device at all.",
 				"schema": {
 					"type": "string",
 					"example": "interface=lan changed=ipaddr"

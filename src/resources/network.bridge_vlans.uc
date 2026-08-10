@@ -49,6 +49,12 @@ return {
 	package: "network",
 	type: "bridge-vlan",
 	reload: ["network"],
+	// A bridge-vlan turns on VLAN filtering for the whole bridge, so a write to the bridge
+	// carrying the request drops untagged traffic and takes the caller off the network. This
+	// resource never touches `config interface`, which is why the interface-name match could
+	// not see it.
+	mgmt_path_guard: true,
+	mgmt_device_field: "device",
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

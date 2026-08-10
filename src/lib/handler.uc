@@ -388,7 +388,20 @@ function attach_reload_headers(resp, result) {
 // does strand the caller, this response never arrives. It informs the survivable cases,
 // which are the majority, and `/diagnostics` carries the same information ahead of a
 // write for anyone who wants to check first.
-function attach_mgmt_warning(resp, conn, ctx, id, changed) {
+// Which device a write aims at, for the resources matched by device rather than by
+// interface name. The module names its own field because that is where the field names
+// live: `network/bridge_vlans` calls it `device`, `network/devices` calls it `name`.
+// Falls back to the stored section, so a PATCH that does not resend the field is still
+// matched against the device the section already targets.
+function mgmt_device_of(resource, body, existing) {
+	let field = resource?.mgmt_device_field;
+	if (field == null) return null;
+	let v = (type(body) == "object") ? body[field] : null;
+	if (v == null && type(existing) == "object") v = existing[field];
+	return (type(v) == "string" && v != "") ? v : null;
+}
+
+function attach_mgmt_warning(resp, conn, ctx, id, changed, device) {
 	if (changed == null || length(changed) == 0) return resp;
 	// 200 for a replace or patch, 204 for a delete. Anything else is a write that did
 	// not happen, and there is nothing to warn about.
@@ -397,10 +410,26 @@ function attach_mgmt_warning(resp, conn, ctx, id, changed) {
 	// it, so this is the real `ip route get`; a test can substitute one, which is the
 	// only way to reach the DELETE arm without stranding the box running the test.
 	let path = mgmt.inbound_interface(conn, ctx.remote_addr, ctx.device_lookup);
-	if (path == null || path.interface == null || path.interface != id) return resp;
+	if (path == null) return resp;
+
+	// Two ways a write reaches the caller. A `network/interfaces` write moves the interface
+	// the request arrived through, matched by name. A `bridge-vlan` or `device` write never
+	// touches `config interface` and is matched by device instead: it either names the
+	// caller's device or the bridge that device is a port of. The second shape is what took
+	// a box off the network with no warning, because the guard only knew the first.
+	let subject;
+	if (device != null) {
+		if (!mgmt.targets_mgmt_device(conn, path.device, device)) return resp;
+		subject = sprintf("device=%s", device);
+	}
+	else {
+		if (path.interface == null || path.interface != id) return resp;
+		subject = sprintf("interface=%s", id);
+	}
+
 	if (resp.headers == null) resp.headers = {};
 	resp.headers["X-Mgmt-Path-Warning"] =
-		sprintf("interface=%s changed=%s", id, join(",", changed));
+		sprintf("%s changed=%s", subject, join(",", changed));
 	return resp;
 }
 
@@ -681,12 +710,14 @@ function make(resource, opts) {
 			},
 		}));
 
-		return translate_tx(ctx, result);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, null,
+		                           resource.mgmt_path_guard ? [ "created" ] : null,
+		                           mgmt_device_of(resource, body, null));
 	}
 
 	function replace(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
-		let mgmt_changed = null;
+		let mgmt_changed = null, mgmt_device = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -719,6 +750,7 @@ function make(resource, opts) {
 
 				if (resource.mgmt_path_guard)
 					mgmt_changed = mgmt.changed_fields(existing_view, write_body);
+				mgmt_device = mgmt_device_of(resource, write_body, existing);
 
 				let new_opts = resource.toUci(write_body);
 				diff_apply(c, p, id, existing, new_opts);
@@ -732,12 +764,12 @@ function make(resource, opts) {
 			},
 		}));
 
-		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device);
 	}
 
 	function patch(conn, ctx, id, body) {
 		let kops = ctx.kernel_sink ?? [];
-		let mgmt_changed = null;
+		let mgmt_changed = null, mgmt_device = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -770,6 +802,7 @@ function make(resource, opts) {
 				// `proto` still has to be compared field by field against what was there.
 				if (resource.mgmt_path_guard)
 					mgmt_changed = mgmt.changed_fields(existing_view, r.merged);
+				mgmt_device = mgmt_device_of(resource, r.merged, existing);
 
 				let new_opts = resource.toUci(r.merged);
 				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
@@ -783,14 +816,15 @@ function make(resource, opts) {
 			},
 		}));
 
-		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed);
+		return attach_mgmt_warning(translate_tx(ctx, result), conn, ctx, id, mgmt_changed, mgmt_device);
 	}
 
 	function remove(conn, ctx, id) {
 		let kops = ctx.kernel_sink ?? [];
 		// Deleting the interface the caller arrived through strands them as surely as
 		// renumbering it, and none of LuCI's four field names covers a delete.
-		let mgmt_changed = resource.mgmt_path_guard ? [ "removed" ] : null;
+		let mgmt_changed = [ "removed" ];
+		let mgmt_device = null;
 		let result = transaction.transaction(conn, tx_params({
 			wg_ops: kops,
 			fn: function(c, p) {
@@ -806,6 +840,7 @@ function make(resource, opts) {
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
+				mgmt_device = mgmt_device_of(resource, null, existing_view);
 				c.uci_delete(p, id);
 				collect_kernel_ops(kops, "remove", null, existing['.type'], existing);
 				return { ok: true, body: null };
