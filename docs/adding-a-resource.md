@@ -10,7 +10,7 @@ Look at `/etc/config/<package>` on a real router. Find the section type you want
 
 ## 2. Create the resource module
 
-`src/resources/<package>.<plural-type>.uc`. Schemas live inline in the resource module, not in separate JSON Schema files. `schema_properties` is the centrally-enforced type/enum/range/pattern/items table (`handler.check_schema_types` walks it on every write and returns 422 on shape mismatches before `validate()` runs); `validate()` carries the cross-field, cross-section, and format-string logic that pure JSON Schema can't express (e.g. "src_zone must reference an existing zone").
+`src/resources/<package>.<plural-type>.uc`. Schemas live inline in the resource module, not in separate JSON Schema files. `schema_properties` is the centrally-enforced type/enum/range/pattern/items table (`handler.check_schema_types` walks it on every write); `validate()` carries the cross-field, cross-section, and format-string logic that pure JSON Schema can't express (e.g. "src_zone must reference an existing zone"). Both run on every write and their errors are merged, deduped by field+code, into one 422 with the shape errors first.
 
 Export the uniform contract:
 
@@ -35,6 +35,9 @@ return {
         properties: { up: { type: "boolean" }, ... },
         description: "Populated from ubus ...",
     },
+    openapi_singular: "firewall rule",            // required on CRUD resources (not singletons or
+                                                  // read-only collections); `make openapi` dies
+                                                  // without it. Fills the adopt operation summary.
 
     // Optional, less common:
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
@@ -85,7 +88,7 @@ The flag is string-only. The runtime check guards `type(val) == "string"` so non
 
 Resources can keep their own per-validate uniqueness logic in place; `unique_field` is opt-in.
 
-A separate question: should `validate()` reject a cross-resource reference (e.g. `dhcp.servers.interface` naming a non-existent `network.interface` section)? **Default: no.** Stock OpenWrt ships configs that reference resources absent on the running target (`config dhcp wan` against an absent `network.wan` on x86 generic), and daemons typically tolerate dangling refs (the section is silently inactive). Rejecting them would be stricter than the platform. Validate cross-refs only when the daemon itself errors on a dangling ref, not because the operator might typo; in practice no curated resource currently does.
+A separate question: should `validate()` reject a cross-resource reference (e.g. `dhcp.servers.interface` naming a non-existent `network.interface` section)? **Default: no.** Stock OpenWrt ships configs that reference resources absent on the running target (`config dhcp wan` against an absent `network.wan` on x86 generic), and daemons typically tolerate dangling refs (the section is silently inactive). Rejecting them would be stricter than the platform. Validate cross-refs only when the daemon itself errors on a dangling ref, not because the operator might typo. A few curated resources do reject one: `sqm/queues.interface` and `network/routes.interface` both 422 when the named `network.interface` section is absent.
 
 ### Server-side defaults (`default:`) and clear-on-omit safety (`x-uapi-clear-on-omit:`)
 
@@ -109,7 +112,7 @@ netmask: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 
 A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. The flag enforces two hard constraints (the framework's `lint-defaults` verifies both):
 
-1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null`. No `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
+1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null` or `<jsonkey>: as_list_or_null(section.<ucikey>)`, the two shapes that read an absent key as null. No plain `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
 
 2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type: ["string", "null"]`). The provider sends explicit JSON null to clear; a non-nullable type fails the spec itself.
 
@@ -139,7 +142,7 @@ Unsafe (lint fails):
 // schema:  dns: { type: "array", "x-uapi-clear-on-omit": true }   <-- non-nullable; lint type violation
 ```
 
-Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3 is `network/interfaces` `netmask` and `gateway`. The originally-considered set in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those fail the shape/type constraints above and were dropped; see `docs/deprecations.md` and the openwrt-iac/uapi#3 thread for the design discussion on how to handle the aliased/array-typed cases.
+Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3 is `network/interfaces` `netmask` and `gateway`. The originally-considered set in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those failed the shape/type constraints as they stood then and were dropped; see `docs/deprecations.md` and the openwrt-iac/uapi#3 thread for the design discussion on how to handle the aliased/array-typed cases.
 
 A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted fields would cause perpetual non-converging diffs if the provider treats them as clearable (apply clears uci, fromUci re-defaults, next plan diffs again). Either the field has a server-side default (sticky) or the operator fully owns it (clearable); never both.
 
@@ -156,7 +159,9 @@ fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
 
 `schema_properties` is the source of truth for type/enum/min/max/pattern/items
 shape checks - the central `handler.check_schema_types` walks this on every
-write and 422s shape mismatches BEFORE `validate()` runs. Per-field
+write and 422s shape mismatches. It does not gate `validate()`: both run and
+their findings are merged into one response, so a `validate()` that assumes the
+declared types already hold has to guard for itself. Per-field
 constraints that fit (type, enum, range, pattern, items recursion) belong
 here; cross-field / cross-section / format-string logic stays in `validate()`.
 
@@ -228,7 +233,7 @@ companion `has_<field>: bool` indicates presence on GET responses.
 Examples:
 
 - `wireless.interfaces.key` / `has_key`
-- `network.wireguard_peers.private_key` / `has_private_key`
+- `network.interfaces.private_key` / `has_private_key` (proto=wireguard)
 - `network.wireguard_peers.preshared_key` / `has_preshared_key`
 - `openvpn.instances.key` / `has_key`
 - `openvpn.instances.tls_auth` / `has_tls_auth`
@@ -289,7 +294,7 @@ let errs = mod.validate({ ... }, c);
 "<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>")),
 ```
 
-So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 45 resources already do; the filename simply is not written a second time.
+So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 44 resources already do; the filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
 for read-only runtime lists. Writable resources also automatically
@@ -320,7 +325,7 @@ This walks the resource modules and emits `build/openapi.json`. Add an entry for
 
 ## 8. Add a curl example
 
-`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to delete: ..." reminder. The suite is a representative subset rather than one file per resource, so this is expected when the new resource shows a shape the existing fifteen do not, and optional when it is another instance of one they already cover.
+`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to delete: ..." reminder. The suite is a representative subset rather than one file per resource, so this is expected when the new resource shows a shape the existing sixteen do not, and optional when it is another instance of one they already cover.
 
 ## 9. Update docs/tokens.md
 

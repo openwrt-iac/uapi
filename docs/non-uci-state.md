@@ -24,7 +24,7 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 
 ### `packages/installed`
 
-- **Source of truth.** The apk database. Reads enumerate via `apk info --installed`; writes shell out to `apk add <name>` and `apk del <name>` via `fs.popen`.
+- **Source of truth.** The apk database. Reads enumerate via `apk info` (apk-tools 3.x returns nothing for `--installed`); writes shell out to `apk add <name>` and `apk del <name>` via `fs.popen`.
 - **Lock.** `transaction.with_lock` on `/var/lock/uapi.lock`. apk has its own DB lock; the uapi flock serialises concurrent uapi requests so they don't race apk-vs-apk and surface as nondeterministic `5xx`s. Contention returns `423 locked` with `Retry-After: 1`.
 - **Reload.** None at the uapi layer. Each package's postinst runs as root and is responsible for wiring whatever the package installs (uci defaults, init scripts, etc.).
 - **Validation.** Package name must match `^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$`. Names starting with `-` or `.` are rejected to prevent apk-flag injection (`--allow-untrusted`, `--repository=...`); the shell-out also uses `apk add -- <name>` as a defense-in-depth separator.
@@ -69,7 +69,7 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 - **Lock.** `transaction.with_lock` for writes; reads are lock-free.
 - **Mechanism.** Direct file I/O. dropbear re-reads the file on every connection so no reload is needed.
 - **Validation.** Server-side parse of each key line as `<type> <base64-blob> [comment]`. Allowed types: `ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-nistp{256,384,521}`, `sk-ssh-ed25519@openssh.com`, `sk-ecdsa-sha2-nistp256@openssh.com`. Options blocks (`command="..."`, `no-pty`, etc.) before the key type are stripped from the canonical form.
-- **Stable id.** Derived from the blob's tail (12 chars, with `+/=` remapped to letters so it fits a URL-safe `^[a-z0-9]{12}$` pattern). Same key always gets the same id, idempotent across re-adds.
+- **Stable id.** The first 12 hex characters of the blob's sha256, matching `^[a-f0-9]{12}$`. Same key always gets the same id, idempotent across re-adds.
 - **HTTP shape.** `GET` lists; `POST` adds one; `PUT` replaces wholesale (dedup); `DELETE /<id>` removes one.
 - **Why not uci.** OpenWrt has no uci wrapper for SSH authorized keys. LuCI also writes the file directly via its rpcd `fs` plugin.
 
@@ -104,7 +104,7 @@ The following items are real configuration concerns that uapi deliberately does 
 
 ### RRD / NetFlow history
 
-- **Why excluded.** Historical timeseries data is not uci-state. uapi exposes `vnstat/config` and `vnstat/interfaces` for configuring the collector; the database itself stays where vnstat puts it.
+- **Why excluded.** Historical timeseries data is not uci-state. uapi exposes `vnstat/config` (including its `interfaces` list) for configuring the collector; the database itself stays where vnstat puts it.
 
 ## When you find a new gap
 

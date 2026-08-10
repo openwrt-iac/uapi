@@ -1,6 +1,6 @@
 # Curated resources
 
-This document indexes the 45 curated resources shipped in v2.x. For the full
+This document indexes the 44 curated resources shipped in v3.x. For the full
 schema (every field, its type, enum values, ranges, patterns), read
 `build/openapi.json` (also served at `/api/v3/openapi.json` on a live
 router) or open it in Swagger UI. Per-resource sample curls live in
@@ -19,7 +19,8 @@ the spec wins.
 
 Curated resources that drive a daemon shipped as a separate OpenWrt
 package (`unbound/server`, `sqm/queues`, `snmpd/*`, `openvpn/instances`,
-`mwan3/*`, `vnstat/*`, `lldpd/config`, `prometheus_node_exporter_lua/config`,
+`mwan3/*`, `vnstat/config`, `usteer/config`, `lldpd/config`,
+`prometheus_node_exporter_lua/config`,
 `uhttpd/instances` beyond `main`) need the underlying package installed
 before writes succeed. Writing to a resource whose daemon is absent
 returns `503 init_script_missing` with the missing
@@ -38,30 +39,26 @@ packages are deliberately not pulled in.
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. Optional `id` picks the section name at create time (uci section-name charset, 32 chars, tightened to 15 for `proto=wireguard` because netifd uses it as the kernel netdev name); absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `name` is the deprecated 2.1.0-era spelling of the same input, accepted until v3 (`docs/deprecations.md`). `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). |
+| `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. Optional `id` picks the section name at create time (uci section-name charset, 32 chars, tightened to 15 for `proto=wireguard` because netifd uses it as the kernel netdev name); absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). |
 | `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. |
 | `network/routes` | `config route` | Static routes; cross-refs interface. |
 | `network/rules` | `config rule` | Policy routing. |
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
 | `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. |
 
-**`option disabled` is not modelled on `network/interfaces`, `network/routes` or
-`network/rules`.** uci carries it on all three and netifd honours it, so a section
-disabled by hand or by another tool is inert on the router while these resources
-report it as ordinary active configuration: a `GET` shows the interface, route or
-rule as present and correct, and a declarative client sees nothing to apply. It
-also cannot be cleared through the API, because a `PUT` cannot unset a field the
-model does not have; deleting and recreating the section is the way back, since
-that rewrites it from the declared configuration.
+**`option disabled` is modelled on `network/interfaces`, `network/routes` and
+`network/rules`.** netifd drops a disabled section outright on all three: a disabled
+interface is never registered, so it has no ubus object and its addresses and routes
+are absent, and a disabled route or rule is never installed. Each resource reads the
+option with the helper matching its own parser, because netifd does not parse it the
+same way for all three: `strict_bool` on the interface, where netifd compares the
+value literally against `1`, and `platform_bool` on routes and rules, where it goes
+through the boolean blob converter that also accepts `true`. `network/wireguard_peers`
+models `disabled` as well.
 
-Until it is modelled, `runtime` is the check that does not lie. An interface with
-`runtime.up` false while nothing in its configuration explains why is the signal
-to read `/etc/config/network` directly. `network/wireguard_peers` does model
-`disabled`, so peers are unaffected.
-
-This is deferred rather than overlooked, on an upstream fix with no release date;
-[#64](https://github.com/openwrt-iac/uapi/issues/64) and `docs/roadmap.md` carry
-the reasoning and the alternatives that were turned down.
+[#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap while it was
+open; `docs/roadmap.md` carries the reasoning and the alternatives that were turned
+down.
 
 Reload: `network` (netifd).
 
@@ -104,7 +101,7 @@ Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 | `dhcp/leases` (read-only collection) | `/tmp/dhcp.leases` | IPv4 leases parsed from dnsmasq's lease file. |
 | `dhcp/leases6` (read-only collection) | `/tmp/(hosts/odhcpd|odhcpd.leases)` | IPv6 leases from odhcpd. Per-IA-address entries. |
 
-Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
+Reload: `dnsmasq`, except `dhcp/odhcpd`, which declares `odhcpd`.
 
 ## System
 
@@ -131,9 +128,16 @@ Reload: `dnsmasq` (the `dhcp` package's ucitrack fan-out covers odhcpd).
 | `snmpd/groups` | `config group` | SNMP group definitions. |
 | `snmpd/accesses` | `config access` | group-to-view ACLs. |
 | `snmpd/system` (singleton) | `config system` (snmpd) | sys_location, sys_contact, etc. (snake_case in v2). |
-| `lldpd/config` (singleton) | `config config` (lldpd) | LLDP/CDP/etc. toggles. |
-| `prometheus_node_exporter_lua/config` (singleton) | `config main` | listen + per-collector toggles. |
-| `vnstat/config` (singleton) | `config vnstat` | `interfaces`, the devices vnstat tracks. The other three fields are deprecated: they name keys of `/etc/vnstat.conf`, which nothing bridges from uci. |
+| `lldpd/config` (singleton) | `config lldpd 'config'` | LLDP/CDP/etc. toggles. |
+| `prometheus_node_exporter_lua/config` (singleton) | `config prometheus-node-exporter-lua 'main'` | `listen_interface` + `listen_port`. |
+| `vnstat/config` (singleton) | `config vnstat` | `interfaces`, the devices vnstat tracks (kernel device names, not uci interface names). The only vnstat option any shipped code reads. |
+| `mwan3/globals` (singleton) | `config globals` | `mmx_mask`, `logging`, `loglevel`. |
+| `mwan3/interfaces` | `config interface` (mwan3) | Per-WAN tracking: `track_ip`, `track_method`, probe sizing and timing, up/down thresholds, `flush_conntrack`. |
+| `mwan3/members` | `config member` | Binds an `mwan3/interfaces` section to a `metric` and a `weight`. |
+| `mwan3/policies` | `config policy` | `use_members` plus a `last_resort` verdict. |
+| `mwan3/rules` | `config rule` (mwan3) | Traffic match (family, proto, src/dest ip and port, ipset) routed to a `use_policy`. |
+| `openvpn/instances` | `config openvpn` | Per-instance OpenVPN config. `key`, `tls_auth` and `pkcs12` are write-only; responses carry `has_key` / `has_tls_auth` / `has_pkcs12`. |
+| `usteer/config` (singleton) | `config usteer` | Band-steering and roaming thresholds for the usteer daemon. |
 
 ## Packages (non-uci)
 
@@ -176,7 +180,7 @@ composition rules, and stability caveat.
 | `GET /healthz` | none | `{status, version, checks: {ubus, uci, lock_dir, time_sync}}`. 503 when any subsystem is degraded. |
 | `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
 | `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
-| `GET /auth/whoami` | any token | Token introspection: id, scopes, source_ip, expires_at, allowed_cidrs, last_used. |
+| `GET /auth/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
 | `GET /tokens`, `POST /tokens`, `DELETE /tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the requested scopes to be a strict subset of the caller's. |
 | `GET /metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
 | `GET /diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |

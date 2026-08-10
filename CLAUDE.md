@@ -76,7 +76,7 @@ CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-s
 | Raw passthrough stability + semantics | `docs/raw.md` | Working on `/raw/` or considering using it. |
 | Non-uci resources (apk, leases, password, authorized_keys) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
 | Token CLI, HTTP token mint, scope syntax, raw-access composition, per-token rate limit overrides | `docs/tokens.md` | Anything auth-shaped from the operator angle. |
-| Commit-confirmed apply: deferral decision + 2.4.0 design (built in rc1, removed before 2.3.0 stable) | `docs/commit-confirm.md` | Picking the feature back up, or understanding why the confirm surface is not in 2.3.0. |
+| Commit-confirmed apply: deferral decision + standalone-arm design (built in rc1, removed before 2.3.0 stable) | `docs/commit-confirm.md` | Picking the feature back up, or understanding why the confirm surface has not shipped. |
 | Threat model, TLS posture, public endpoints, design exclusions | `docs/security.md` | Security review, threat-model questions, "why not rpcd sessions?" |
 | Error envelope, top-level + field-level codes, response headers | `docs/errors.md` | Defining a new error code or auditing error shapes. |
 | Observability (log categories, format, global rate limit, metrics, diagnostics, healthz, capacity) | `docs/operations.md` | Operator-facing setup, log forwarding, debugging in the field. Cross-references `docs/architecture.md` § Rate limit / Metrics for the implementation-side mechanics. |

@@ -19,14 +19,13 @@ For each deprecated input field your client sends, switch to the replacement col
 
 The OpenAPI spec at `/openapi.json` carries `deprecated: true` on every deprecated request field. Codegen tools that respect that flag (openapi-generator, oapi-codegen, etc.) will emit warnings in the generated client when you regenerate; that's the signal your client has surface area to migrate.
 
-`network/interfaces.ipaddr` is the exception, and deliberately so. OpenAPI's
+`network/interfaces.ipaddr` was the exception, and deliberately so. OpenAPI's
 `deprecated` is a property-level flag with no read/write split, so setting it
-would tell a generator the field is disappearing when in fact it survives as a
-read field and only loses its write half. The v3 spec will say that precisely,
-with `readOnly: true`. Until then the announcement lives in this table and in
-the field's own `description`, which is the honest signal available. A client
-that generates separate request and response models should drop `ipaddr` from
-the request one.
+would have told a generator the field was disappearing when in fact it survives
+as a read field and only lost its write half. The v3 spec says it precisely:
+`readOnly: true` in the response schema, and no `ipaddr` at all in the request
+one. While the window was open the announcement lived in this table and in the
+field's own `description`, which was the honest signal available.
 
 ## Announced response-shape changes
 

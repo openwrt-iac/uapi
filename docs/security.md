@@ -48,19 +48,21 @@ What uapi defends against, what it doesn't, and what the operator should do.
 10. **Resource exhaustion via flood.** Per-token rate limit returns
     `429 too_many_requests` with `Retry-After`. Default is 100/s burst 200
     per token; tunable via `/etc/config/uapi`.
-11. **Bridge-vlan self-lockout.** Documented in `CLAUDE.md` and surfaced in
-    the project memory: writing bridge-vlans on `br-lan` of the management
-    bridge bricks the router. Use a throwaway bridge for tests; never POST
-    `bridge_vlans` on the management bridge.
+11. **Bridge-vlan self-lockout.** Surfaced in the project memory: writing
+    bridge-vlans on `br-lan` of the management bridge bricks the router. Use
+    a throwaway bridge for tests; never POST `bridge_vlans` on the management
+    bridge.
 12. **uhttpd self-lockout.** `uhttpd/instances` validate refuses any PATCH
     or PUT on the `main` instance that would strip uapi's own `ucode_prefix`
     entry - returning `422 conflict` instead of leaving uapi unreachable.
 13. **Network self-lockout.** Advisory rather than a refusal, because unlike
     item 12 there is a legitimate version of the write: renumbering the
     management VLAN or moving to an out-of-band path. A `network/interfaces`
-    write that moves the inbound interface's `disabled`, `proto`, `ipaddr`, `ipaddrs` or
-    `netmask` returns `X-Mgmt-Path-Warning`, and `GET /diagnostics` reports
-    `management_path` so a caller can check before writing. Firewall lockout is
+    write that moves the inbound interface's `disabled`, `proto`, `ipaddrs` or
+    `netmask` returns `X-Mgmt-Path-Warning`, and so does a `network/devices`
+    or `network/bridge_vlans` write naming the caller's device or the bridge
+    it is a port of. `GET /diagnostics` reports `management_path` so a caller
+    can check before writing. Firewall lockout is
     deliberately not covered: it would need fw4 ordering modelled, and the
     requesting connection survives the reload by design, so uapi cannot detect
     it by observation either. See `docs/operations.md`.
@@ -75,7 +77,7 @@ What uapi defends against, what it doesn't, and what the operator should do.
    constant-time (byte-XOR-accumulate via `values.constant_time_equals`)
    and the authorize loop iterates every token regardless of where the
    match occurs, so the dominant timing channel is closed. Pre-match work
-   (`type(t.salt) == "string"` checks, hash-function runtime itself) and
+   (the `t.salt == null || t.hash == null` skip, hash-function runtime itself) and
    downstream paths (expiry check, CIDR match, scope lookup) are not
    constant-time. A determined attacker with low-latency local access
    could in principle still extract bits, but tokens are 128 random bits
@@ -226,13 +228,14 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
 2. **Forward syslog to a remote collector** (`log_ip`). A locally-only
    audit log is destroyable by anyone who roots the box.
 3. **Use NTP.** Audit timestamps are useless if the clock is wrong.
-   `/healthz` checks `time_sync: ok` / `degraded` based on uptime > 60s
-   AND current epoch > 1700000000 (a sanity floor).
+   `/healthz` reports `time_sync: ok` when uptime > 60s AND current epoch >
+   1700000000 (a sanity floor), `unknown` for the first 60 seconds after
+   boot, and `degraded` once past that with the epoch still below the floor.
 4. **Pin tokens to source CIDRs.** `allowed_cidrs` defends against token
    theft from outside the management network.
-5. **Set token expiry.** `expires_in: 90d` on every minted token forces
-   rotation. The HTTP rotation endpoint (`POST /tokens`) makes this
-   ergonomic from automation.
+5. **Set token expiry.** `--expires-in 90d` on every minted token forces
+   rotation. The HTTP rotation endpoint (`POST /tokens`, which takes
+   `expires_in_seconds`) makes this ergonomic from automation.
 6. **Use mutual TLS** for service-account workloads (CI, Terraform). It's
    an independent factor on top of bearer auth and prevents a stolen
    bearer from being replayed without the cert.

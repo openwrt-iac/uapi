@@ -37,7 +37,7 @@ This compiles. It works on the first request. The cache is private to the fork; 
 
 ### No `conn.defer()` for ubus
 
-Use `conn.call()` only. Async ubus does not buy you any concurrency you don't already have from forking, and the synchronous failure path is easier to reason about. There is an existing lint that flags `defer()` in code review.
+Use `conn.call()` only. Async ubus does not buy you any concurrency you don't already have from forking, and the synchronous failure path is easier to reason about. No lint enforces this; it is a code-review rule.
 
 ### No "background" work after the response
 
@@ -49,7 +49,7 @@ Same reason as the cache: state does not survive `fork().exit()`.
 
 ## Lock layout
 
-Three lock files matter:
+Two lock files, in three patterns:
 
 | File | Holder | Purpose |
 |---|---|---|
@@ -59,7 +59,10 @@ Three lock files matter:
 
 This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead.
 
-GETs are lock-free. Reads of uci state run without acquiring any lock.
+Reading uci state acquires no lock. One thing rides along with a GET though: the
+last-used stamp on the presenting token is written through a real `uapi`-package transaction,
+so roughly one authed request per token per minute does take SH on the global lock plus EX on
+`uapi`. It is best-effort, and a 423 there is swallowed rather than failing the read.
 
 ### 423 message identity
 
@@ -71,8 +74,11 @@ common case: another uci writer holds the same package's EX) or
 
 - `Another write transaction holds the per-package lock for 'firewall'`:
   uci-vs-uci contention on the same package.
-- `A non-uci writer holds the global write lock`: a `with_lock` path
-  (apk install/remove, system/password, etc.) is in flight.
+- `A non-uci writer holds the global write lock`: the global file is
+  contended. Either a `with_lock` path (apk install/remove,
+  system/password, etc.) holds EX against a uci write, or a `with_lock`
+  path was itself refused while uci writers held SH; both report
+  `lock_kind: "global"` and so get this wording.
 
 The pre-2.0.2 wording ("Another write transaction holds the global
 lock") called every contention "global", which sent operator
@@ -117,7 +123,7 @@ If you add a code path that takes multiple locks at once, follow the same sorted
 The concurrency model is asserted by integration tests, not just docs:
 
 - `tests/integration/01_concurrency_model_test.sh` confirms fork-per-request (5 concurrent requests; the test asserts at least 2 distinct PIDs, since uhttpd caps concurrent CGI children at 3).
-- Lock granularity is asserted at two different levels, and the difference matters when reading a green run. The SAME-package half is live: `tests/integration/13_lock_contention_test.sh` claims "two concurrent writes to the SAME package serialize; the second gets 423 naming the lock". The DIFFERENT-packages half is a unit test over real flocks, not HTTP (`tests/unit/transaction_test.uc`, "per-package lock allows different packages to proceed in parallel").
+- Lock granularity is asserted at two different levels, and the difference matters when reading a green run. The live half is `tests/integration/13_lock_contention_test.sh`, which claims "two concurrent writes to the SAME package serialize; the second gets 423 naming the lock" but holds `/var/lock/uapi.lock` from outside and asserts the global-write-lock wording, so what it proves over HTTP is global contention. The per-package halves are unit tests over real flocks, not HTTP (`tests/unit/transaction_test.uc`, "per-package lock serializes same-package writes" and "per-package lock allows different packages to proceed in parallel").
 
 If you change the locking model, run integration tests in QEMU before opening the PR.
 

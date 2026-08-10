@@ -26,8 +26,9 @@ one, so no manual uci edit is needed.
 Read this before assuming a green test run means a client has migrated.
 
 uapi drops request keys it does not model, and a removed field is indistinguishable from a key
-that never existed. So a v2 client that still sends `mac`, `mac_aliases`, `ipaddr`, `managed` or
-any of the dead fields below gets `200`, and the value goes nowhere:
+that never existed. So a v2 client that still sends `mac`, `mac_aliases`, `managed` or
+any of the dead fields below gets `200`, and the value goes nowhere (`ipaddr` is the one
+exception, below):
 
 ```
 # against v3, on a host whose reservation lists two MACs
@@ -35,7 +36,7 @@ PATCH /api/v3/dhcp/hosts/printer {"mac": "aa:bb:cc:dd:ee:01"}
 -> 200, and uci still holds both original entries
 ```
 
-That is the same rule every unknown key has always followed, and changing it for these five
+That is the same rule every unknown key has always followed, and changing it for these four
 names alone would mean carrying the removed vocabulary into v3 just to refuse it. The cost is
 that a stale write fails silently, which is why regenerating the client matters more here than
 across a normal upgrade: codegen against the v3 spec turns each of these into a compile error

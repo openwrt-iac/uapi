@@ -1,10 +1,10 @@
 # Commit-confirmed apply (deferred design)
 
 **Status: DEFERRED, with the authz model now settled.** Not shipped in 2.3.0,
-2.4.0 or 2.4.1. The full per-write implementation was built, shipped in the
-2.3.0-rc1 pre-release, soaked on live hardware, and then removed before stable;
-it is recoverable from commit `a85a5cd`. This file is the design and decision
-record, not a description of shipped behavior.
+2.4.0, 2.4.1 or 2.5.0, and not in 3.0.0. The full per-write implementation was
+built, shipped in the 2.3.0-rc1 pre-release, soaked on live hardware, and then
+removed before stable; it is recoverable from commit `a85a5cd`. This file is the
+design and decision record, not a description of shipped behavior.
 
 Of the two gates that held it back, one is closed and one is not. The authz
 model is decided below, so the feature can now be scoped into a minor without
@@ -89,7 +89,8 @@ and the rc1 code in `a85a5cd` behaves as described here.) The Terraform-useful s
 `stage` primitive exposed over HTTP so a wrapper can arm once, run the apply,
 then ack once. Locked design (see `docs/roadmap.md`):
 
-- New `POST /confirm` (the bare-collection slot, today a 405). Originally
+- New `POST /confirm` (the bare-collection slot, unrouted today, so a 404 like
+  any unknown path; it was a 405 while the rc1 collection existed). Originally
   scoped for 2.4.0, which passed without it.
 - Body names curated **resources/scopes, never raw packages**; uapi derives
   the package set and reload-service union from `RESOURCE_SOURCES` (the same
@@ -110,7 +111,7 @@ the same. Status and list require only `uapi:confirm:ro`.
 ### Why arming cannot ride the write's own scope
 
 `apply-confirm` reverts whole uci packages, and one package backs many resources
-(`network` backs 7, `firewall` 5, `dhcp` 6). A token holding only
+(`network` backs 6, `firewall` 6, `dhcp` 6). A token holding only
 `network:routes:rw` could arm a window whose expiry restores the entire
 `network` package to its arm-time snapshot, discarding a concurrent and properly
 authorized write to `network:interfaces` that had already returned `200` and
