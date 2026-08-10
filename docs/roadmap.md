@@ -94,8 +94,8 @@ is still no target release. Design reference: `docs/commit-confirm.md`.
 
 ## Shipped in 2.5.0
 
-The next release is a minor, and its job is as much to make a clean 3.0.0
-possible as to ship features. The v3 list is in § v3 objectives above and has
+2.5.0 was a minor, and its job was as much to make a clean 3.0.0
+possible as to ship features. The v3 list is in § Shipped in 3.0.0 below and had
 grown past what a single major used to be expected to carry, which is the point:
 a major is expensive to have and cheap to fill. What a minor has to do first is
 serve the notice `docs/deprecations.md` requires, because the window runs from
@@ -142,7 +142,7 @@ Committed, in rough dependency order:
    lockout class commit-confirm was meant to cover: `GET /diagnostics` reports
    `management_path`, the interface this request arrived through, and a
    `network/interfaces` write that moves that interface's `disabled`, `proto`,
-   `ipaddr` or `netmask`, or deletes it, carries `X-Mgmt-Path-Warning`.
+   `ipaddrs` or `netmask`, or deletes it, carries `X-Mgmt-Path-Warning`.
 
    Advisory, not a refusal: renumbering the management path is legitimate, and
    LuCI warns rather than blocking on the same four field names. Scope is LuCI's
@@ -332,7 +332,8 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   `?confirm` write gets `409 already_armed` with its own change rolled back. The Terraform-useful shape is apply-confirm's
   `stage` primitive (arm once over a package set, ack once after the apply)
   exposed over HTTP, so a wrapper can arm, run the apply, then ack or let it
-  auto-revert with no SSH hop. `ac_stage` already exists and the bare
+  auto-revert with no SSH hop. `ac_stage` exists only in the reverted rc1 code
+  (commit `a85a5cd`), and the bare
   `POST /confirm` slot is free (unrouted, so 404 like any unknown path). Locked design constraints if
   built: the body names curated **resources/scopes, never raw packages**, and
   uapi derives the package set and reload-service union from `RESOURCE_SOURCES`
@@ -340,12 +341,12 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   and client strings out of the shell. Authz requires `uapi:confirm:rw` **and**
   `:rw` on every curated resource backed by the *derived* package set, not just
   the resources named: apply-confirm reverts whole uci packages while scopes
-  are per-resource and one package backs many (`network` backs 7 scopes,
-  `firewall` 5, `dhcp` 6), so package-granularity authz is the only way the
+  are per-resource and one package backs many (`network` backs 6 scopes,
+  `firewall` 6, `dhcp` 6), so package-granularity authz is the only way the
   deadline auto-revert cannot restore a resource the caller could not write.
   Corollary for operators: the wrap token is necessarily broader than the
   apply it guards (wrapping a `network:routes`-only apply needs `:rw` on all
-  7 `network`-backed resources, since the revert can restore any of them), so
+  6 `network`-backed resources, since the revert can restore any of them), so
   the guide must say "mint the wrap token at package granularity" or a narrow
   token gets a confusing 403 on arm. New endpoint, so a minor bump (2.4.0+),
   not a 2.3.x patch. Defer the merge
@@ -376,7 +377,7 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **Content-Type negotiation (YAML, msgpack).** Single-content-type
   (`application/json`) is correct for IaC. Defer indefinitely.
 - **CORS.** Admin UI is LuCI; no browser-direct use case for uapi.
-- **More resources.** Curation completeness rule in `CLAUDE.md`: add when a
+- **More resources.** Curation completeness rule in `docs/adding-a-resource.md`: add when a
   typical real configuration sets options the curated layer doesn't
   surface. Current gap candidates worth opportunistic curation:
   `mwan3/*`, `usteer/*` (passive band-steering daemon for OpenWrt 22+
@@ -477,8 +478,8 @@ stale enough to be misleading:
 
 - **Localization of error `message` strings.** English-only; codes are
   stable and translatable client-side.
-- **Async/parallel ubus.** `conn.call()` only, by design (see Concurrency
-  in CLAUDE.md).
+- **Async/parallel ubus.** `conn.call()` only, by design (see
+  `docs/concurrency.md`).
 - **In-memory caches across requests.** Forked children only; the design
   precludes them. State that must span requests lives in a file or in uci.
 - **Multi-tenant scoping.** Single admin namespace. Adding multi-tenancy

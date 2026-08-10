@@ -95,7 +95,7 @@ Up to three segments (`<domain>:<subresource>:<verb>` for curated,
 segment for wildcards:
 
 - `*:rw` / `*:ro` - top-level wildcard, matches everything.
-- `firewall:*:ro` - mid-tree wildcard, matches every firewall subresource (rules, zones, redirects, forwardings, defaults) but NOT the bare domain.
+- `firewall:*:ro` - mid-tree wildcard, matches every firewall subresource (rules, zones, redirects, nat, forwardings, defaults) but NOT the bare domain.
 - `*:rules:ro` - also valid; matches the `rules` subresource of every domain that has one.
 
 At equal depth, an exact segment beats a wildcard segment
@@ -115,12 +115,15 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `system` | (singleton), `timeservers`, `password`, `authorized_keys` |
 | `dropbear` | `instances` |
 | `uhttpd` | `instances`, `certs` |
-| `unbound` | `server` |
+| `unbound` | `server`, `srv`, `ext` |
 | `sqm` | `queues` |
 | `snmpd` | `agents`, `com2secs`, `groups`, `accesses`, `system` |
 | `lldpd` | `config` |
 | `prometheus_node_exporter_lua` | `config` |
-| `vnstat` | `config`, `interfaces` |
+| `vnstat` | `config` |
+| `mwan3` | `globals`, `interfaces`, `members`, `policies`, `rules` |
+| `usteer` | `config` |
+| `openvpn` | `instances` |
 | `packages` | `installed`, `feeds` |
 | `uapi` | `tokens`, `metrics`, `diagnostics` |
 | `raw` | `<any-package>` (composes with the curated domain tree) |

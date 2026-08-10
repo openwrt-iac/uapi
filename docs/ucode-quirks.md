@@ -48,9 +48,9 @@ When caught, `e.message` is a string. Rich exception objects do not survive. Use
 
 `{ "200": "OK" }` is fine; `{ 200: "OK" }` is not. Status codes and similar numeric keys are stringly-typed in this codebase.
 
-### Numeric-looking lookups need string coercion
+### Numeric-looking lookups coerce, but `in` does not
 
-`obj[200]` does NOT find the value stored at `"200"`. Coerce: `obj["" + status]`.
+`obj[200]` does find the value stored at `"200"`: bracket access, `exists()` and `delete` all stringify the key first. The `in` operator does not, so `200 in obj` is false where `"200" in obj` is true.
 
 ### `for (let v in arr)` iterates values, not indices
 
@@ -64,9 +64,9 @@ This is the opposite of JS's `for...in`. If you need an index, use a C-style `fo
 
 `uhttpd-mod-ucode` runs the handler in template mode (`{%`). Loading a raw-script `.uc` module from inside it needs explicit `loadfile(path, { raw_mode: true })`. The `load_resource` helper in `src/main.uc` does this for you.
 
-### `type(null)` returns the string `"(null)"`
+### `type(null)` returns null, not a string
 
-Not `"null"`. Don't rely on the return value being JSON-shaped.
+There is no type name for it: `type(null)` is the null value itself, so `type(x) == "null"` never matches. Test `x == null` directly.
 
 ### `const` is real
 

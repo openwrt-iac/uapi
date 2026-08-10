@@ -21,8 +21,8 @@ below releases correctly on every in-request exit path, and that claim is good. 
 is not good is the coverage: this said "17 sites audited" without qualification until
 2.5.0, while its own reproduction command returned 36. Nine modules appear nowhere in
 the table (`error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`, `token_store`,
-`dhcp.leases`, `dhcp.leases6`, `dhcp.servers`), and roughly seven of the line ranges
-below have drifted from the code they name. `mgmt.uc` is the illustration: it landed
+`dhcp.leases`, `dhcp.leases6`, `dhcp.servers`), and neither does
+`transaction.uc::multi_transaction()`. `mgmt.uc` is the illustration: it landed
 in 2.5.0 with an `fs.popen` and this document went on asserting it had audited
 everything.
 
@@ -33,23 +33,23 @@ as an audit of the transaction and token paths, not of the tree.
 
 | File | Lines | Resource | Why it's correct |
 |------|-------|----------|------------------|
-| `src/main.uc` | 65-70 | fd (read VERSION) | early-return on open fail; close on success |
-| `src/main.uc` | 243-251 | fd (read openapi.json) | same shape |
-| `src/main.uc` | 259-270 | ubus conn | `bus.connect()` failure caught; nothing held on error |
-| `src/main.uc` | 289-293 | ubus conn | same |
-| `src/lib/transaction.uc` | 60-66 | flock acquire | success returns fd for explicit release; failure closes fd before returning sentinel |
-| `src/lib/transaction.uc` | 69-71 | flock release | null-safe; unlocks before close |
-| `src/lib/transaction.uc` | 86-96 | per-package 2-level acquire | releases global on per-package acquire failure |
-| `src/lib/transaction.uc` | 146-176 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
-| `src/lib/transaction.uc` | 178-196 | lock + `with_lock` | same try/release/die shape |
-| `src/lib/non_uci.uc` | 22-48 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
-| `src/lib/system_access.uc` | 136-151 | fd (`read_keys`) | early-return on open fail; close on success |
-| `src/lib/system_access.uc` | 162-175 | fd (`write_keys`) | atomic-rename pattern (see below) |
-| `src/lib/ids.uc` | 22-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
+| `src/main.uc` | 101-107 | fd (read VERSION) | early-return on open fail; close on success |
+| `src/main.uc` | 787-791 | fd (read openapi.json) | same shape |
+| `src/main.uc` | 250-257 | ubus conn | `bus.connect()` failure caught; nothing held on error |
+| `src/main.uc` | 835-840 | ubus conn | same |
+| `src/lib/transaction.uc` | 59-65 | flock acquire | success returns fd for explicit release; failure closes fd before returning sentinel |
+| `src/lib/transaction.uc` | 67-69 | flock release | null-safe; unlocks before close |
+| `src/lib/transaction.uc` | 88-98 | per-package 2-level acquire | releases global on per-package acquire failure |
+| `src/lib/transaction.uc` | 183-234 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
+| `src/lib/transaction.uc` | 335-353 | lock + `with_lock` | same try/release/die shape |
+| `src/lib/non_uci.uc` | 22-47 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
+| `src/lib/system_access.uc` | 128-143 | fd (`read_keys`) | early-return on open fail; close on success |
+| `src/lib/system_access.uc` | 145-168 | fd (`write_keys`) | atomic-rename pattern (see below) |
+| `src/lib/ids.uc` | 21-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
 | `src/lib/packages.uc` | 9-17 | pipe (`apk_exec`) | `p.close()` returns exit code; early-return on popen fail |
 | `src/lib/packages.uc` | 29-32 | pipe (`list_installed`) | same |
 | `src/lib/packages.uc` | feed write | fd + `wx` O_EXCL | TOCTOU re-check on `wx` miss (fixed in `876e483`); unconditional close on success |
-| `cli/uapi-token` | 16-24 | fd (`/dev/urandom`) | dies on open failure (no fd held); close on success |
+| `cli/uapi-token` | 20-29 | fd (`/dev/urandom`) | dies on open failure (no fd held); close on success |
 
 ## Tricky case: `system_access.uc::write_keys()`
 

@@ -103,18 +103,29 @@ The CLI prints the cleartext bearer to stdout exactly once. Save it.
 
 The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live installs (not chroots/INSTROOT builds) and then deletes the script. That single run:
 
-1. Checks if `uhttpd.main.ucode_prefix` already lists `/api/v3=/usr/share/uapi/main.uc`. If so, exits cleanly.
-2. Otherwise adds the entry, commits the uhttpd config, and reloads uhttpd.
+1. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
+2. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
+3. Commits the uhttpd config and reloads uhttpd, but only if either step changed something.
+
+`postinst` then restarts uhttpd unconditionally, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
 
 After that, `https://<router>/api/v3/healthz` is reachable.
 
-The post-install message printed to the operator:
+The post-install message, printed only when the token store holds no token yet (so upgrades and reinstalls stay quiet):
 
 ```
-uapi installed. To start using it:
+uapi installed. Bootstrap:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
-  2. Verify it works:   curl -H "Authorization: Bearer <token>" https://<router>/api/v3/system
-  3. See docs at:       /usr/share/uapi/openapi.json
+  2. Verify reachable:  uclient-fetch -qO - --no-check-certificate \
+                          --header="Authorization: Bearer <token>" \
+                          https://127.0.0.1/api/v3/system
+  3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v3/openapi.json)
+
+Future upgrades from the project feed:
+  uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
+    https://openwrt-iac.github.io/feed/uapi-feed.pub.pem
+  echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' > /etc/apk/repositories.d/uapi.list
+  apk update && apk upgrade uapi
 ```
 
 ## Removal

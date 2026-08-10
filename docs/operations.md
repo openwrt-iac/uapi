@@ -17,7 +17,7 @@ Two signals worth wiring into your automation:
 - **`X-Reload-Status`** response header on curated-resource writes: `ok` means the init
   script ran and exited 0; `no_reload` means the resource has no reload
   services. The header is intentionally not a "converged" promise.
-  In practice you will only ever see `ok`: all 43 writable resources declare
+  In practice you will only ever see `ok`: all 42 writable resources declare
   at least one reload service, so `no_reload` describes a resource shape that
   does not currently exist. `system` used to be cited here as the example and
   is not one, since it reloads `system` and `log`.
@@ -81,7 +81,7 @@ The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on t
 
 | Category | syslog severity | Default | Triggers |
 |----------|-----------------|---------|----------|
-| AUDIT    | NOTICE          | on      | Successful writes (POST/PUT/DELETE 2xx) |
+| AUDIT    | NOTICE          | on      | Successful writes (POST/PUT/PATCH/DELETE 2xx) |
 | ERROR    | WARN / ERR      | on      | Auth failures (401/403), all 5xx |
 | ACCESS   | INFO            | off     | Every request (non-`/healthz`) |
 | DEBUG    | DEBUG           | off     | Per-ubus-call tracing |
@@ -108,6 +108,7 @@ uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<d
 - `token_name`: never the token value. `-` for unauthenticated failures (e.g. missing `Authorization`).
 - `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN` (401/403 auth failures), `ERROR` (5xx).
 - `code`: error code on failures, `-` on successful writes.
+- `path`: uhttpd's `PATH_INFO`, so the `/api/v3` mount prefix is already stripped. A client's `POST /api/v3/firewall/rules` logs as `/firewall/rules`.
 
 `/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
 
@@ -115,16 +116,16 @@ uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<d
 
 ```
 # AUDIT: a successful POST that created a firewall rule
-uapi[1234]: 01HX1234567890ABCDEFGHJKMN tf-prod AUDIT - POST /api/v3/firewall/rules 200 [42ms]
+uapi[1234]: 01HX1234567890ABCDEFGHJKMN tf-prod AUDIT - POST /firewall/rules 200 [42ms]
 
 # ERROR (5xx)
-uapi[1234]: 01HX234567890ABCDEFGHJKMNN tf-prod ERROR reload_failed_restored PUT /api/v3/network/interfaces/wan 500 [3120ms]
+uapi[1234]: 01HX234567890ABCDEFGHJKMNN tf-prod ERROR reload_failed_restored PUT /network/interfaces/wan 500 [3120ms]
 
 # WARN (auth failure)
-uapi[1234]: 01HX34567890ABCDEFGHJKMNNN - WARN unauthorized GET /api/v3/system 401 [1ms]
+uapi[1234]: 01HX34567890ABCDEFGHJKMNNN - WARN unauthorized GET /system 401 [1ms]
 
 # ACCESS (only when option access '1' is set)
-uapi[1234]: 01HX4567890ABCDEFGHJKMNNNN tf-readonly ACCESS - GET /api/v3/firewall/rules 200 [8ms]
+uapi[1234]: 01HX4567890ABCDEFGHJKMNNNN tf-readonly ACCESS - GET /firewall/rules 200 [8ms]
 
 # DEBUG (only when option debug '1' is set; per ubus.call)
 uapi[1234]: uapi-bus call system.info args={}
@@ -133,7 +134,7 @@ uapi[1234]: uapi-bus call system.info args={}
 uapi[1234]: uapi-internal 01HX567890ABCDEFGHJKMNNNNN: Type error: ...
 
 # Insecure-bypass marker triggered
-uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /api/v3/system status=200 remote=10.0.2.2
+uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /system status=200 remote=10.0.2.2
 ```
 
 By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged. Optional knobs in `/etc/config/uapi`:
@@ -217,8 +218,8 @@ source-IP enforcement.
 ## Diagnostics
 
 `GET /api/v3/diagnostics` returns version, uptime, loaded resources,
-current lock holders, and the last 20 error envelopes emitted by the
-parent uhttpd VM. Scope: `uapi:diagnostics:ro`.
+the uapi lock files present under `/var/lock`, and the last 20 error
+envelopes. Scope: `uapi:diagnostics:ro`.
 
 ```json
 {
@@ -231,7 +232,7 @@ parent uhttpd VM. Scope: `uapi:diagnostics:ro`.
   },
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
-      "status": 422, "method": "POST", "path": "/api/v3/firewall/rules",
+      "status": 422, "method": "POST", "path": "/firewall/rules",
       "message": "Request body failed validation" }
   ],
   "request_id": "01HX..."
@@ -266,7 +267,7 @@ Three things worth knowing:
 - **Opt-in on purpose.** Each resource walks its own uci package, so a package is
   traversed once per resource that lives in it, six times for `firewall` and
   `network`. The cost therefore scales with the number of sections in the
-  configuration, not with a fixed overhead: 45 resources over a stock-sized
+  configuration, not with a fixed overhead: 44 resources over a stock-sized
   configuration measured about 90 ms, and a router with a large firewall will be
   slower. `/diagnostics` is what a monitoring system polls on an interval, so
   without `?validate=1` the response is unchanged and costs nothing extra.
@@ -299,9 +300,11 @@ must never disrupt the actual response, so a disk-full or permission
 failure simply produces an empty ring rather than a 5xx on the original
 request. The ring caps at 20 entries (oldest dropped first).
 
-Useful for "is anything stuck holding the global lock?" - a non-empty
-`per_package` map under steady state would point at a wedged write
-transaction.
+`lock_state` reports which uapi lock files exist under `/var/lock`, not
+which locks are held right now: `flock` is released when the fd closes
+and the file itself is never unlinked, so an entry means that package
+has been written at least once since the lock directory was last
+cleared.
 
 ## Management-path warning
 
@@ -324,7 +327,10 @@ you know which interface not to touch. `interface` is `null` when the request ar
 device no uci interface claims, which is honest rather than a guess.
 
 A write to `network/interfaces` gets `X-Mgmt-Path-Warning` when it moves that interface's
-`disabled`, `proto`, `ipaddr`, `ipaddrs` or `netmask`, or deletes it. That is the after-the-fact
+`disabled`, `proto`, `ipaddrs` or `netmask`, or deletes it. `network/devices` and
+`network/bridge_vlans` are matched by device instead of by interface name, and report
+`device=<name>` when a create or a delete names the caller's own device, or a bridge that
+device is a port of. That is the after-the-fact
 answer, and it is worth having because most such writes do not actually break the path:
 the header tells an operator they are in a risky state while the connection still works.
 
@@ -357,8 +363,8 @@ curl -k https://<router>/api/v3/healthz
 No auth required; TLS-for-non-localhost still applies. Monitors should
 poll healthz (not a real endpoint) to avoid burning audit-log noise.
 `time_sync` returns `unknown` for the first 60 seconds after boot
-(uptime too short to tell), `degraded` if the wall clock is below 2023,
-otherwise `ok`.
+(uptime too short to tell), `degraded` if the wall clock is below the
+sanity floor of epoch 1700000000 (14 November 2023), otherwise `ok`.
 
 ### `version` is a stable contract field
 

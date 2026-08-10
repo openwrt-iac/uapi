@@ -115,7 +115,7 @@ Contributor-facing:
 - `docs/release-process.md`: signed tags, reproducible builds, SBOM, multi-arch verification.
 - `docs/roadmap.md`: what shipped, what's next, what's intentionally out of scope.
 - `docs/lock-state-audit.md`: every fd-open / lock site, release proven on every exit.
-- `CLAUDE.md`: the project's design contract (architectural principles, schema, lock layout, error envelope).
+- `CLAUDE.md`: the project's design contract (architectural principles, code style, branch/PR workflow) plus the index to the `docs/` topics.
 - `CHANGELOG.md`: per-release notes.
 
 ## Versioning
@@ -126,7 +126,7 @@ uapi follows [semver](https://semver.org/), with the major version aligned to th
 - **MINOR**: backwards-compatible additions. New endpoints, new optional request/response fields, new error codes, new scopes.
 - **PATCH**: bug fixes only. No surface change.
 
-Concretely: a client tested against `2.0.0` keeps working against any future `2.y.z`. Pin a minimum minor if you depend on something introduced in it (`apk add 'uapi>=2.0.0'`). See `CLAUDE.md` "API versioning policy" for the precise list of what counts as a breaking vs additive change, and `docs/migration-v1-to-v2.md` for the v1 -> v2 migration table.
+Concretely: a client tested against `2.0.0` keeps working against any future `2.y.z`. Pin a minimum minor if you depend on something introduced in it (`apk add 'uapi>=2.0.0'`). See `docs/versioning.md` ("API versioning policy") for the precise list of what counts as a breaking vs additive change, and `docs/migration-v1-to-v2.md` for the v1 -> v2 migration table.
 
 ## License
 

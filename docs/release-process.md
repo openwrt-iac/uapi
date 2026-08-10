@@ -56,7 +56,8 @@ arch's QEMU VM or live router.
 - `build/openwrt/uapi/Makefile` reads it via `$(shell sed 's/-/_/g' files/VERSION)`.
 - `build/gen_openapi.uc` reads it and stamps `info.version`.
 - `src/main.uc` reads it at parent VM startup; `/healthz` returns it.
-- CI tag-verification compares the pushed tag against the file.
+- CI verifies the tag's signature, not its name: nothing compares the pushed
+  tag against the file, so that stays a manual checklist item below.
 
 Bump `VERSION`, regenerate `build/openapi.json` via `make openapi`, commit.
 
