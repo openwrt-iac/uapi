@@ -2,13 +2,17 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0-rc1] - 2026-08-10
 
 ### Added
 
 - **`POST /batch` reports its transaction outcome.** The 207 now carries `X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status` and `X-Kernel-Applied`, aggregated over the sub-writes. A batch commits and reloads once for the whole set, so there is one outcome to report, and the 207 is the only place it can be reported: the results array carries `{status, body}` and drops sub-response headers. A pure-read batch takes no lock and runs no transaction, so it emits nothing, matching a read anywhere else.
 
   This corrects a documented measurement rather than adding a new capability: the generator recorded that `/batch 207` returns none of these headers, which was true when measured and is now the thing being changed.
+
+- `docs/migration-v2-to-v3.md`, and `make lint-wire-names` now fails on a waiver whose property no longer exists rather than only on one whose file does not.
+
+- **`network/interfaces` models the IPv6 and broadcast fields a static interface needs**: `ip6addrs` (uci `list ip6addr`), `ip6gw`, `ip6prefix` and `broadcast`. An interface addressed only over IPv6 previously read back with no addresses and nothing to say a value had been seen and dropped, and echoing that body back was refused. The static-proto rule now asks for at least one address family rather than for IPv4, matching LuCI, whose static form marks neither `ipaddr` nor `ip6addr` required. Each field was observed taking effect on a real daemon: `broadcast` as `brd` on the netdev, `ip6gw` as the IPv6 default route, and `ip6prefix` in netifd's `ipv6-prefix`, delegating a /60 to `lan` from the /56 given.
 
 ### Changed
 
@@ -26,6 +30,11 @@ All notable changes to this project will be documented in this file. Format foll
 
   The payoff is that a list field can now carry `x-uapi-clear-on-omit`, which was impossible before: the flag requires a shape that reads absent as null, and `as_list` returned `[]`. `make lint-defaults` accepts the new `as_list_or_null(...)` shape alongside `section.X ?? null`, and still rejects plain `as_list`, verified in both directions.
 
+
+- **`firewall/redirects` match fields are scalars**, where they were arrays capped at one entry: `src_ip`, `src_dip`, `src_dport`, `dest_ip`, `dest_port` and `src_port`. `proto` is genuinely a list and does not change. firewall4 refuses a list on these and discards the whole section, so the cap existed to stop uapi writing one; narrowing the type needed a major. What changes is when a mistake is caught, since a second value was accepted by the schema and refused at apply, after a declarative client had committed to a plan. Validation errors on them lose their index: `match.src_dport` rather than `match.src_dport[0]`.
+
+- **A `<Name>Request` schema is emitted only where a write is possible.** The read-only lease endpoints carried one that nothing referenced, which blunts a signal a generated client reads: a missing request half means not writable, or removed. Two guarantees of the split are now asserted by `lint-openapi-shape` and written down in `docs/versioning.md`, the second being that a curated resource's response half contains every field of its request half, at any depth, which is what lets a client derive writability by membership.
+
 ### Removed
 
 - **The `resolve_for_replace` seam in the handler.** Both implementors went with the mirrored names, and an extension point with no implementor is a permanent tax on every future change to the code around it. Its contract is gone from `docs/adding-a-resource.md` with it, along with the `Mirrored field pairs` section, which documented a hazard that no longer exists: a uci option now gets exactly one writable name, and a field that reads differently from how it writes is expressible as `readOnly` in the response half.
@@ -41,9 +50,13 @@ All notable changes to this project will be documented in this file. Format foll
 
 - **The compatibility machinery the above unlocks**: `merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and `network/interfaces`, `equal_list`, and the mirrored-pair conflict rules in both `validate`s. Each existed only to decide which of two names for one uci option the caller meant.
 
-### Added
+### Fixed
 
-- `docs/migration-v2-to-v3.md`, and `make lint-wire-names` now fails on a waiver whose property no longer exists rather than only on one whose file is gone. Four entries had already outlived the fields they described, which is exactly the drift a waiver list is supposed to prevent.
+- **A static interface could be created with no address at all, and reported `200`.** The static-proto rule counted the read-only `ipaddr` as an address, but only `ipaddrs` writes, so `POST {"proto": "static", "ipaddr": "192.0.2.99"}` passed validation, wrote nothing, and answered success; the error message for the empty case even recommended the field that does nothing. The rule now names `ipaddrs`, which is the only spelling a write can act on, so that body returns `422 ipaddrs required` instead of silently producing an interface the daemon cannot bring up. Verified on hardware, and the tightening was checked against a real `/etc/config`: 44 stock sections still round-trip, the four static interfaces among them included.
+
+- **The management-path warning was blind to a `PUT` that strips the caller's own addresses.** It compared only the keys the body named, so a deletion, which a replace expresses by leaving a field out, produced no warning at all. A client still sending the retired `ipaddr` and no `ipaddrs` is exactly that shape: measured on a test box, the interface went from `192.0.2.88` to no address with a silent `200`. The comparison now treats an omitted field as a deletion on `PUT` and continues to treat it as "leave alone" on `PATCH`, and the retired `ipaddr` scalar left the watched set, since a read-only field can only describe a write that never happens. Verified against the interface carrying the request: the same `PUT` now answers `X-Mgmt-Path-Warning: interface=loopback changed=disabled,ipaddrs,netmask`, and the equivalent `PATCH` stays silent.
+
+- Address formats are validated whatever the proto says. The checks sat inside the `static` branch while the write path was unconditional, so a body naming another proto skipped them entirely: a dhcp interface accepted `broadcast: "999.999.999.999"` and `ip6gw: "not-an-address"` with a `200` and committed both. Whether an address is required depends on the proto; whether a value is an address does not. `gateway` gains the format check it never had.
 
 ## [2.5.0] - 2026-08-09
 
@@ -56,10 +69,6 @@ All notable changes to this project will be documented in this file. Format foll
 - `scripts/audit-dead-fields.sh` makes the dead-field audit re-runnable instead of a one-off claim: it checks all 426 uci options across every curated resource against the reader that consumes them, self-checks that it can see each package's option table before reporting anything, and fails on any option that is neither announced nor a recorded decision. The corpus is the part that goes wrong, and it fails in the direction of looking productive, so three wrong corpora on the first pass reported 63 live firewall4 options as dead. The audit now covers every curated resource. Five packages ship only a Makefile in the SDK feed, which left `firewall/*`, most of `network/*`, `dhcp/odhcpd`, `usteer/config` and `sqm/queues` unverified rather than verified-clean, and 2.5.0 is the last release that can announce a removal for v3. All 174 uci options those modules write were checked against the reader that actually consumes them, using the readers installed on a running device rather than extracted sources. One field was dead: `usteer/config.max_assoc_sta` is now flagged deprecated and announced for removal, because usteer's init forwards a fixed list of uci options to the daemon and this is not on it.
 
 ### Fixed
-
-- **A static interface could be created with no address at all, and reported `200`.** The static-proto rule counted the read-only `ipaddr` as an address, but only `ipaddrs` writes, so `POST {"proto": "static", "ipaddr": "192.0.2.99"}` passed validation, wrote nothing, and answered success; the error message for the empty case even recommended the field that does nothing. The rule now names `ipaddrs`, which is the only spelling a write can act on, so that body returns `422 ipaddrs required` instead of silently producing an interface the daemon cannot bring up. Verified on hardware, and the tightening was checked against a real `/etc/config`: 44 stock sections still round-trip, the four static interfaces among them included.
-
-- **The management-path warning was blind to a `PUT` that strips the caller's own addresses.** It compared only the keys the body named, so a deletion, which a replace expresses by leaving a field out, produced no warning at all. A client still sending the retired `ipaddr` and no `ipaddrs` is exactly that shape: measured on a test box, the interface went from `192.0.2.88` to no address with a silent `200`. The comparison now treats an omitted field as a deletion on `PUT` and continues to treat it as "leave alone" on `PATCH`, and the retired `ipaddr` scalar left the watched set, since a read-only field can only describe a write that never happens. Verified against the interface carrying the request: the same `PUT` now answers `X-Mgmt-Path-Warning: interface=loopback changed=disabled,ipaddrs,netmask`, and the equivalent `PATCH` stays silent.
 
 - `usteer/config.enabled` read the word spellings of true as enabled while usteer did not. The init reads the option with `uci -q get` and then compares `[ "$ENABLED" -gt 0 ]`, which is numeric rather than a bool parse, so `enabled 'true'` makes the shell bail with "out of range", and `start_service` returns without registering a procd instance, while uapi reported the daemon enabled. The read now mirrors that comparison exactly, including `enabled '2'` counting as enabled and an absent option defaulting to enabled.
 
