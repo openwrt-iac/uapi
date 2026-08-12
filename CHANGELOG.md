@@ -88,6 +88,16 @@ All notable changes to this project will be documented in this file. Format foll
   that gap: an unsatisfiable `allOf` composition is valid JSON Schema per node and only fails
   against a real body. It found the wireless defect on its first run.
 
+### Changed
+
+- **BREAKING: a request naming a field the resource does not declare is now refused.** It used to
+  be dropped in silence, so a body that named the wrong thing answered 200 and wrote nothing.
+  `PATCH {"dest_port": ["9999"]}` on a firewall rule is the live example: the field lives under
+  `match`, and at the top level it reported success and changed nothing. Such a request now
+  answers 422 with field code `unknown_field`, naming the path (`match.nope` for a nested one).
+  `id`, `managed` and `runtime` stay tolerated at the top level, because they appear in every
+  response and in no request schema, and every IaC apply is a read-modify-write.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added
