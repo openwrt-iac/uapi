@@ -36,6 +36,7 @@ const FIELD_CODES = {
 	not_in_enum: true,
 	conflict: true,
 	read_only: true,
+	unknown_field: true,
 };
 
 // All codes the server may emit, including body-only codes that don't have a

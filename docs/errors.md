@@ -93,6 +93,7 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `not_in_enum`    | Value not in the allowed set                                  |
 | `conflict`       | References a missing or incompatible resource, or two fields naming one option disagree |
 | `read_only`      | Field is computed/runtime and can't be set                    |
+| `unknown_field`  | No such field on this resource. `id`, `managed` and `runtime` are tolerated at the top level so a read-modify-write cycle can send the response back unchanged |
 
 Two more appear only inside `invalid_sections` in `GET /diagnostics?validate=1`, never in a
 request rejection, because they describe a section the sweep could not judge rather than a

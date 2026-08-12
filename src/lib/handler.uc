@@ -243,9 +243,26 @@ _check_value = function(spec, val, field_path, errs) {
 	}
 };
 
+// A field the resource does not declare used to be dropped in silence, so a request that named
+// the wrong thing answered 200 and wrote nothing: `{"dest_port": ...}` on a firewall rule, where
+// the field lives under `match`, reported success and changed nothing.
+//
+// The three exceptions are what a read-modify-write cycle unavoidably sends back. They are in
+// every response and in no request schema, and every IaC apply is a read-modify-write, so
+// rejecting them would break the round trip `47_read_honesty_test.sh` exists to hold. They are
+// tolerated at the top level and ignored on write, exactly as before.
+const ROUND_TRIP_ONLY = { id: true, managed: true, runtime: true };
+
 check_schema_types = function(schema_properties, body, prefix) {
 	let errs = [];
 	if (type(body) != "object" || schema_properties == null) return errs;
+	let nested = (prefix != null && prefix != "");
+	for (let key in body) {
+		if (exists(schema_properties, key)) continue;
+		if (!nested && ROUND_TRIP_ONLY[key]) continue;
+		push(errs, { field: nested ? prefix + "." + key : key, code: "unknown_field",
+		             message: sprintf("no such field %J on this resource", key) });
+	}
 	for (let key in schema_properties) {
 		let spec = schema_properties[key];
 		if (type(spec) != "object") continue;

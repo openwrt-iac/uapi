@@ -420,6 +420,34 @@ t.describe('handler.patch', () => {
 		t.assert_equal(r.status, 404);
 	});
 
+	// Dropping an undeclared field in silence made a request that named the wrong thing answer
+	// 200 and write nothing. `dest_port` is the live example: it belongs under `match`, and at
+	// the top level it looked like a successful write.
+	t.it('refuses a field the resource does not declare', () => {
+		let c = with_existing();
+		let r = rules.patch(c, ctx(), 'r_existing', { dest_port: ['9999'] });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'dest_port');
+		t.assert_equal(r.body.errors[0].code, 'unknown_field');
+		t.assert_deep_equal(c._state.uci.firewall.r_existing.dest_port, ['22']);
+	});
+
+	t.it('names the path of an undeclared field inside a nested object', () => {
+		let c = with_existing();
+		let r = rules.patch(c, ctx(), 'r_existing', { match: { nope: 1 } });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'match.nope');
+	});
+
+	// Every IaC apply is a read-modify-write, and the response carries three fields no request
+	// schema declares. Rejecting them would turn the round trip into a 422.
+	t.it('tolerates the response-only fields a round trip sends back', () => {
+		let c = with_existing();
+		let read = rules.get_one(c, ctx(), 'r_existing');
+		let r = rules.replace(c, ctx(), 'r_existing', read.body);
+		t.assert_equal(r.status, 200);
+	});
+
 	// Every spelling config_get_bool accepts has to survive a PATCH of some other field.
 	// diff_apply_patch used to set every key toUci emitted, so `enabled 'on'` came back as
 	// '1': uapi correcting bytes it was not asked to touch. Asserted on the raw uci value,
