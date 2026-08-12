@@ -94,6 +94,25 @@ t.describe('packages.create_feed validation', () => {
 		t.assert_equal(r.body.errors[0].code, "invalid_format");
 	});
 
+	// A start-anchored pattern let a newline append a second repository line, which apk
+	// trusts on the next install and which no read path showed, since both parse one line.
+	// Confirmed on a box running 3.0.0-rc1: the file held 2 lines while GET reported 1.
+	t.it('rejects a url carrying an embedded newline', () => {
+		let r = pkg.create_feed(ctx(), { name: "inj",
+		                                 url: "http://legit.invalid/f\nhttp://evil.invalid/x" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, "url");
+		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+
+	t.it('rejects other control characters and trailing whitespace in a url', () => {
+		for (let bad in [ "http://a.invalid/x\ty", "http://a.invalid/x\r", "http://a.invalid/x z" ]) {
+			let r = pkg.create_feed(ctx(), { name: "inj", url: bad });
+			t.assert_equal(r.status, 422);
+			t.assert_equal(r.body.errors[0].field, "url");
+		}
+	});
+
 	t.it('rejects unsafe feed name with invalid_format', () => {
 		let r = pkg.create_feed(ctx(), { name: "../etc/foo", url: "https://example.com/x" });
 		t.assert_equal(r.status, 422);

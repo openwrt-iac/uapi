@@ -1,6 +1,7 @@
 let fs = require('fs');
 let errors = require('errors');
 let non_uci = require('non_uci');
+let values = require('values');
 
 const PKG_NAME_RE  = /^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$/;
 const FEED_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
@@ -182,9 +183,12 @@ function create_feed_handler(ctx, body) {
 		                              "must match ^[A-Za-z0-9_][A-Za-z0-9_.-]*$"));
 	if (type(url) != "string" || url == "")
 		push(errs, errors.field_error("url", "required", "is required"));
-	else if (!match(url, /^https?:\/\//))
+	else if (values.has_control_chars(url))
 		push(errs, errors.field_error("url", "invalid_format",
-		                              "must start with http:// or https://"));
+		                              "must not contain control characters (newline, NUL, etc.)"));
+	else if (!match(url, /^https?:\/\/[^[:space:]]+$/))
+		push(errs, errors.field_error("url", "invalid_format",
+		                              "must start with http:// or https:// and contain no whitespace"));
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
 
