@@ -102,6 +102,54 @@ function response_name(endpoint) { return schema_name(endpoint) + "Response"; }
 // create, the universal input that replaced `network/interfaces.name`.
 const RESPONSE_ONLY = { "runtime": true, "managed": true };
 
+const READ_NULLABLE = "x-uapi-read-nullable";
+
+function strip_marker(v) {
+	if (type(v) != "object" || !exists(v, READ_NULLABLE)) return v;
+	let out = { ...v };
+	delete out[READ_NULLABLE];
+	return out;
+}
+
+// The two halves disagree about null on purpose, because reading and writing a uci option are
+// not symmetric: fromUci answers null for an option the operator never set, while the write
+// contract still wants the value. A property marked READ_NULLABLE is one a read can answer
+// null for, so only the response type admits it.
+//
+// The marker is deliberately not just `type: [..., "null"]` in schema_properties. That
+// declaration feeds both halves, and 21 of the properties needing this are `required` on
+// write while 26 carry an enum; widening there would make `{"target": null}` schema-valid on
+// a create and leave resource.validate() as the only thing between that and a rule with no
+// target. Response-only keeps the write surface exactly as it shipped.
+function response_properties(properties) {
+	let out = {};
+	for (let k in properties) {
+		let v = properties[k];
+		if (type(v) != "object" || v[READ_NULLABLE] !== true) { out[k] = v; continue; }
+		let w = strip_marker(v);
+		if (type(w.type) == "string") {
+			w.type = [ w.type, "null" ];
+		} else if (type(w.type) == "array") {
+			let t = [ ...w.type ];
+			let has = false;
+			for (let x in t) if (x == "null") has = true;
+			if (!has) push(t, "null");
+			w.type = t;
+		}
+		// A null value does not satisfy an enum that does not list it, so an enumerated
+		// property needs both widened or the response schema still rejects its own body.
+		if (type(w.enum) == "array") {
+			let e = [ ...w.enum ];
+			let has = false;
+			for (let x in e) if (x == null) has = true;
+			if (!has) push(e, null);
+			w.enum = e;
+		}
+		out[k] = w;
+	}
+	return out;
+}
+
 function request_properties(properties) {
 	let out = {};
 	for (let k in properties) {
@@ -109,7 +157,7 @@ function request_properties(properties) {
 		let v = properties[k];
 		// readOnly loses its job here: the property is simply absent from this half.
 		if (type(v) == "object" && v.readOnly === true) continue;
-		out[k] = v;
+		out[k] = strip_marker(v);
 	}
 	return out;
 }
@@ -1292,7 +1340,7 @@ function build_schemas() {
 		let s = {
 			"type": "object",
 			"description": sprintf("uapi resource backed by uci %s.%s", mod.package, mod.type),
-			"properties": properties,
+			"properties": response_properties(properties),
 		};
 
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)

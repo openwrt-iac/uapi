@@ -65,8 +65,8 @@ return {
 	openapi_singular: "firewall forwarding",
 	openapi_required: ["src", "dest"],
 	schema_properties: {
-		src:     { type: "string", description: "Source zone name" },
-		dest:    { type: "string", description: "Destination zone name" },
+		src:     { "x-uapi-read-nullable": true, type: "string", description: "Source zone name" },
+		dest:    { "x-uapi-read-nullable": true, type: "string", description: "Destination zone name" },
 		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 		enabled: { type: "boolean", default: true },
 	},

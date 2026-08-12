@@ -90,7 +90,7 @@ return {
 		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 86400 },
 		ipset:      { type: ["string", "null"],
 		              description: "Match destination against an ipset; bypasses src/dest_ip." },
-		use_policy: { type: "string",
+		use_policy: { "x-uapi-read-nullable": true, type: "string",
 		              description: "Name of an mwan3:policies section." },
 		logging:    { type: "boolean", default: false },
 	},

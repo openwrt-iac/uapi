@@ -31,9 +31,9 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		listen_interface: { type: "string",
+		listen_interface: { "x-uapi-read-nullable": true, type: "string",
 		                    description: "Bind to a specific network interface (uci interface name)" },
-		listen_port:      { type: "integer", minimum: 1, maximum: 65535,
+		listen_port:      { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535,
 		                    description: "TCP port for the /metrics endpoint" },
 	},
 };

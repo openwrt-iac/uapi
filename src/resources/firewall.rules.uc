@@ -239,7 +239,7 @@ return {
 	schema_properties: {
 		name:    { type: ["string", "null"],
 		           description: "Human-readable label for this rule" },
-		target:  { type: "string", enum: keys(VALID_TARGETS) },
+		target:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TARGETS) },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },

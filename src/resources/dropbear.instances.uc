@@ -49,7 +49,7 @@ return {
 	id_prefix: "d",
 	schema_properties: {
 		enable:             { type: "boolean", default: true },
-		port:               { type: "integer", minimum: 1, maximum: 65535 },
+		port:               { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
 		password_auth:      { type: "boolean", default: true },
 		root_password_auth: { type: "boolean", default: true },
 		root_login:         { type: "boolean", default: true },

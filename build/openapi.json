@@ -21264,14 +21264,18 @@
 						"description": "Human-readable label for this rule"
 					},
 					"target": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
 							"DROP",
 							"NOTRACK",
 							"MARK",
-							"DSCP"
+							"DSCP",
+							null
 						]
 					},
 					"enabled": {
@@ -21984,14 +21988,21 @@
 						}
 					},
 					"reflection": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Enable NAT loopback / hairpinning for this redirect (fw4 default true)"
 					},
 					"reflection_src": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"internal",
-							"external"
+							"external",
+							null
 						],
 						"description": "Source address used for hairpinned packets: internal LAN or external WAN"
 					},
@@ -22587,11 +22598,17 @@
 						"readOnly": true
 					},
 					"src": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Source zone name"
 					},
 					"dest": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Destination zone name"
 					},
 					"family": {
@@ -22668,28 +22685,40 @@
 						"readOnly": true
 					},
 					"input": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						]
 					},
 					"output_policy": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
 						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
 					},
 					"forward": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						]
 					},
 					"syn_flood": {
@@ -22703,12 +22732,18 @@
 						"description": "Drop packets with invalid conntrack state"
 					},
 					"synflood_burst": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 1000000
 					},
 					"synflood_rate": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 1000000
 					},
@@ -23046,50 +23081,81 @@
 						"description": "Routing table to install WireGuard IPv6 routes into"
 					},
 					"peerdns": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)"
 					},
 					"defaultroute": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Install the default route from DHCP (dhcp)"
 					},
 					"metric": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"description": "Default-route metric (dhcp)"
 					},
 					"hostname": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Client hostname sent in DHCPDISCOVER (dhcp)"
 					},
 					"clientid": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "DHCP client identifier (dhcp)"
 					},
 					"reqprefix": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"pattern": "^(auto|no|[0-9]+)$",
 						"description": "DHCPv6 prefix-delegation request: auto, no, or numeric size"
 					},
 					"reqaddress": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"try",
 							"force",
-							"none"
+							"none",
+							null
 						],
 						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
 					},
 					"ip6hint": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Preferred IPv6 prefix hint for PD (dhcpv6)"
 					},
 					"ip6ifaceid": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Static IPv6 interface id for IA_NA (dhcpv6)"
 					},
 					"delegate": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Accept prefix delegation downstream (dhcpv6)"
 					}
 				},
@@ -23422,11 +23488,17 @@
 						"readOnly": true
 					},
 					"name": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Device name as seen by netifd / the kernel"
 					},
 					"type": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"bridge",
 							"8021q",
@@ -23434,7 +23506,8 @@
 							"macvlan",
 							"veth",
 							"tun",
-							"tap"
+							"tap",
+							null
 						]
 					},
 					"ports": {
@@ -23447,7 +23520,10 @@
 						}
 					},
 					"vid": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 4094,
 						"description": "VLAN id for 8021q / 8021ad devices"
@@ -23460,7 +23536,10 @@
 						"description": "Underlying parent interface (e.g. for macvlan/8021q)"
 					},
 					"mtu": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 65535
 					},
@@ -23615,7 +23694,10 @@
 						"description": "Parent network interface name"
 					},
 					"target": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Destination IPv4 address or CIDR"
 					},
 					"netmask": {
@@ -23641,11 +23723,17 @@
 						"description": "Routing table id"
 					},
 					"metric": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"mtu": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"source": {
@@ -23808,7 +23896,10 @@
 						"description": "Match destination IPv4 address or CIDR"
 					},
 					"priority": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 32766
 					},
@@ -24086,11 +24177,17 @@
 						"readOnly": true
 					},
 					"device": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Parent bridge device name (must exist in network/devices type=bridge)"
 					},
 					"vlan": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 4094
 					},
@@ -24175,7 +24272,10 @@
 						"description": "Human-readable label for this peer"
 					},
 					"public_key": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"pattern": "^[A-Za-z0-9+/]{43}=$"
 					},
 					"has_preshared_key": {
@@ -24200,12 +24300,18 @@
 						"description": "Remote endpoint hostname or IP"
 					},
 					"endpoint_port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 65535
 					},
 					"persistent_keepalive": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 65535
 					},
@@ -24324,25 +24430,34 @@
 						"readOnly": true
 					},
 					"type": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"mac80211",
-							"broadcom"
+							"broadcom",
+							null
 						]
 					},
 					"band": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"2g",
 							"5g",
 							"6g",
-							"60g"
+							"60g",
+							null
 						]
 					},
 					"channel": {
 						"type": [
 							"integer",
-							"string"
+							"string",
+							"null"
 						],
 						"minimum": 0,
 						"maximum": 196,
@@ -24470,7 +24585,10 @@
 						"readOnly": true
 					},
 					"device": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Parent radio (wireless/devices id)"
 					},
 					"network": {
@@ -24782,7 +24900,10 @@
 						"description": "Static IPv6 host id hint (suffix)"
 					},
 					"ip": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "IPv4 or IPv6 address"
 					},
 					"leasetime": {
@@ -24808,7 +24929,10 @@
 						"description": "Answer DNS queries for this reservation's hostname"
 					},
 					"broadcast": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Force broadcast replies for clients that need it"
 					},
 					"instance": {
@@ -25030,15 +25154,24 @@
 						"readOnly": true
 					},
 					"interface": {
-						"type": "string"
+						"type": [
+							"string",
+							"null"
+						]
 					},
 					"start": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 254
 					},
 					"limit": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 254
 					},
@@ -25062,21 +25195,29 @@
 						"default": true
 					},
 					"ra": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"disabled",
 							"server",
 							"relay",
-							"hybrid"
+							"hybrid",
+							null
 						]
 					},
 					"dhcpv6": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"disabled",
 							"server",
 							"relay",
-							"hybrid"
+							"hybrid",
+							null
 						]
 					},
 					"ra_default": {
@@ -25253,12 +25394,18 @@
 						"default": false
 					},
 					"cachesize": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 1000000
 					},
 					"port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 65535
 					},
@@ -25457,7 +25604,10 @@
 						"description": "Script invoked on lease add/update/del"
 					},
 					"loglevel": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 7,
 						"description": "syslog priority (0=emerg .. 7=debug)"
@@ -25556,7 +25706,10 @@
 						"description": "IANA zone name (e.g. Europe/Paris)"
 					},
 					"log_size": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"log_ip": {
@@ -25815,7 +25968,10 @@
 						"default": true
 					},
 					"port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 65535
 					},
@@ -25985,27 +26141,45 @@
 						}
 					},
 					"max_requests": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"max_connections": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"script_timeout": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"network_timeout": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"http_keepalive": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"tcp_keepalive": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"index_page": {
@@ -26191,34 +26365,55 @@
 						"readOnly": true
 					},
 					"days": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 36500,
 						"description": "Certificate validity in days"
 					},
 					"bits": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1024,
 						"description": "RSA key size in bits"
 					},
 					"commonname": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "X.509 CN (required)"
 					},
 					"organization": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "X.509 O"
 					},
 					"location": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "X.509 L"
 					},
 					"state": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "X.509 ST"
 					},
 					"country": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"pattern": "^[A-Za-z]{2}$",
 						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
 					},
@@ -26292,16 +26487,23 @@
 						"readOnly": true
 					},
 					"listen_port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 65535
 					},
 					"dhcp_link": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"none",
 							"odhcpd",
-							"dnsmasq"
+							"dnsmasq",
+							null
 						]
 					},
 					"add_local_fqdn": {
@@ -26327,15 +26529,22 @@
 						"default": false
 					},
 					"recursion": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"default",
 							"passive",
-							"aggressive"
+							"aggressive",
+							null
 						]
 					},
 					"resource_limits": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"default",
 							"tiny",
@@ -26343,19 +26552,24 @@
 							"medium",
 							"large",
 							"big",
-							"huge"
+							"huge",
+							null
 						],
 						"description": "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)."
 					},
 					"protocol": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"default",
 							"mixed",
 							"ip4_only",
 							"ip6_only",
 							"ip6_local",
-							"ip6_prefer"
+							"ip6_prefer",
+							null
 						]
 					},
 					"query_minimize": {
@@ -26363,39 +26577,64 @@
 						"default": false
 					},
 					"manual_conf": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Skip uci and use /etc/unbound/unbound.conf hand-written"
 					},
 					"extended_stats": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Emit extended statistics (stats-extended: yes)"
 					},
 					"interface_auto": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"description": "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf."
 					},
 					"localservice": {
-						"type": "boolean"
+						"type": [
+							"boolean",
+							"null"
+						]
 					},
 					"hide_binddata": {
-						"type": "boolean"
+						"type": [
+							"boolean",
+							"null"
+						]
 					},
 					"rebind_protection": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"0",
 							"1",
-							"2"
+							"2",
+							null
 						],
 						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked"
 					},
 					"num_threads": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 64
 					},
 					"ttl_min": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 86400
 					},
@@ -26406,7 +26645,10 @@
 						]
 					},
 					"domain_type": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"deny",
 							"refuse",
@@ -26416,7 +26658,8 @@
 							"nodefault",
 							"typetransparent",
 							"inform",
-							"inform_deny"
+							"inform_deny",
+							null
 						],
 						"description": "Local-zone type for the configured domain"
 					},
@@ -26768,45 +27011,69 @@
 						"description": "Whether SQM is active on this interface"
 					},
 					"interface": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Network interface name SQM applies to"
 					},
 					"download": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"upload": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0
 					},
 					"qdisc": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"cake",
 							"fq_codel",
 							"pie",
-							"htb"
+							"htb",
+							null
 						]
 					},
 					"script": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"piece_of_cake.qos",
 							"simple.qos",
 							"simplest.qos",
-							"layer_cake.qos"
+							"layer_cake.qos",
+							null
 						]
 					},
 					"linklayer": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"none",
 							"ethernet",
-							"atm"
+							"atm",
+							null
 						]
 					},
 					"overhead": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"description": "Per-packet overhead bytes for link-layer accounting"
 					},
 					"runtime": {
@@ -26941,15 +27208,24 @@
 						"readOnly": true
 					},
 					"secname": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "security name this community maps to"
 					},
 					"source": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "source network/range or 'default'"
 					},
 					"community": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMP community string"
 					},
 					"runtime": {
@@ -27005,15 +27281,22 @@
 						"readOnly": true
 					},
 					"group": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"v1",
 							"v2c",
-							"usm"
+							"usm",
+							null
 						]
 					},
 					"secname": {
@@ -27079,7 +27362,10 @@
 						"readOnly": true
 					},
 					"group": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
@@ -27090,27 +27376,39 @@
 						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"any",
 							"v1",
 							"v2c",
-							"usm"
+							"usm",
+							null
 						]
 					},
 					"level": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"noauth",
 							"auth",
-							"priv"
+							"priv",
+							null
 						]
 					},
 					"prefix": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"exact",
-							"prefix"
+							"prefix",
+							null
 						]
 					},
 					"read": {
@@ -27228,29 +27526,47 @@
 						"readOnly": true
 					},
 					"sys_location": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMPv2-MIB::sysLocation"
 					},
 					"sys_contact": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMPv2-MIB::sysContact"
 					},
 					"sys_name": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMPv2-MIB::sysName"
 					},
 					"sys_services": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 127,
 						"description": "SNMPv2-MIB::sysServices bitfield"
 					},
 					"sys_descr": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMPv2-MIB::sysDescr"
 					},
 					"sys_object_id": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "SNMPv2-MIB::sysObjectID OID"
 					},
 					"runtime": {
@@ -27332,7 +27648,10 @@
 						"description": "Emit Extreme Discovery Protocol frames"
 					},
 					"lldp_class": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 4
 					},
@@ -27450,11 +27769,17 @@
 						"readOnly": true
 					},
 					"listen_interface": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Bind to a specific network interface (uci interface name)"
 					},
 					"listen_port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 1,
 						"maximum": 65535,
 						"description": "TCP port for the /metrics endpoint"
@@ -27579,7 +27904,8 @@
 							"warn",
 							"notice",
 							"info",
-							"debug"
+							"debug",
+							null
 						],
 						"description": "syslog facility level (notice/info/debug/etc.)."
 					},
@@ -27649,10 +27975,14 @@
 						"default": false
 					},
 					"family": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ipv4",
-							"ipv6"
+							"ipv6",
+							null
 						],
 						"description": "Address family this interface tracks."
 					},
@@ -28029,7 +28359,10 @@
 						"readOnly": true
 					},
 					"interface": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Name of an mwan3:interfaces section."
 					},
 					"metric": {
@@ -28263,7 +28596,10 @@
 						"description": "Match destination against an ipset; bypasses src/dest_ip."
 					},
 					"use_policy": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"description": "Name of an mwan3:policies section."
 					},
 					"logging": {

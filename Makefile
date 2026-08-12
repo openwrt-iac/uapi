@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs gate-selftest
+.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs gate-selftest
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -115,7 +115,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs
+lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability
 
 # Tracked files only, via git rather than a hand-kept directory list. The list had
 # gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
@@ -168,6 +168,11 @@ lint-refs:
 # Complements openapi-validate rather than duplicating it.
 lint-openapi-shape:
 	@$(UCODE) tests/lint_openapi_shape.uc
+
+# Needs UNIT_PATHS: it loads the resource modules to call their real fromUci, and they
+# require() out of src/lib.
+lint-response-nullability:
+	@$(UCODE) $(UNIT_PATHS) tests/lint_response_nullability.uc
 
 # Breaks each gate on purpose and asserts it says so. Not part of `lint`: it runs the
 # gates repeatedly in a throwaway worktree, which is CI-shaped work rather than

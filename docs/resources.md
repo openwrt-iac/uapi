@@ -8,9 +8,17 @@ router) or open it in Swagger UI. Per-resource sample curls live in
 
 `GET /schema/<package>/<resource>` serves a module's declared properties as one set, without the
 request and response split the OpenAPI document makes. It is the module's own view: a property
-marked `readOnly` there is absent from that resource's `*Request` schema, and `id`, `managed`
-and `runtime` are stamped by the framework rather than declared by the module. For the two
-halves, read `build/openapi.json`.
+marked `readOnly` there is absent from that resource's `*Request` schema, a property marked
+`x-uapi-read-nullable` has `null` added to its type (and to its `enum`) in the `*Response`
+schema and not in the `*Request` one, and `id`, `managed` and `runtime` are stamped by the
+framework rather than declared by the module. For the two halves, read `build/openapi.json`.
+
+`x-uapi-read-nullable` is how the two halves are allowed to disagree about null. A read answers
+null for a uci option the operator never set, while the write contract still wants a value, so
+the type cannot be shared: 21 of the properties carrying the marker are `required` on write and
+26 carry an enum, and widening the declaration itself would make `{"target": null}` schema-valid
+on a create. `tests/lint_response_nullability.uc` calls each resource's real `fromUci` on a bare
+section and fails if anything it returns null for is not null-permitted in the response schema.
 
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.

@@ -59,7 +59,7 @@ return {
 		                description: "POSIX TZ string (e.g. CET-1CEST,M3.5.0,M10.5.0/3)" },
 		zonename:     { type: ["string", "null"],
 		                description: "IANA zone name (e.g. Europe/Paris)" },
-		log_size:     { type: "integer", minimum: 0 },
+		log_size:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		log_ip:       { type: ["string", "null"],
 		                description: "Remote syslog collector IP address" },
 		log_proto:    { type: ["string", "null"],
