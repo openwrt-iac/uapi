@@ -109,6 +109,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             qemu-system-x86 qemu-utils openssh-client curl jq
 
+      # 50_response_conformance_test.sh validates live response bodies against the published
+      # schemas, which wants a real JSON Schema implementation rather than a hand-rolled one.
+      - name: Install jsonschema
+        # --upgrade is load-bearing: the runner ships an older jsonschema, so a plain install
+        # reports "already satisfied" and never pulls `referencing`, which 4.18+ needs.
+        run: pip install --break-system-packages --quiet --upgrade jsonschema
+
       - name: Cache OpenWrt image
         uses: actions/cache@v6
         with:

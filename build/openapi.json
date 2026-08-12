@@ -27890,35 +27890,6 @@
 				},
 				"required": [
 					"device"
-				],
-				"allOf": [
-					{
-						"if": {
-							"properties": {
-								"encryption": {
-									"enum": [
-										"psk",
-										"psk2",
-										"psk-mixed",
-										"sae",
-										"sae-mixed",
-										"wpa",
-										"wpa2",
-										"wpa3",
-										"wpa3-mixed"
-									]
-								}
-							},
-							"required": [
-								"encryption"
-							]
-						},
-						"then": {
-							"required": [
-								"key"
-							]
-						}
-					}
 				]
 			},
 			"WirelessInterfacesRequest": {
