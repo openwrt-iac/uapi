@@ -11,7 +11,11 @@ on:
     # GitHub trigger filter-patterns are NOT regex: `+` is literal, `[0-9]` is a
     # character class without quantifier. Use a broad pattern; the real release
     # gate is the job-level `if:` on release-apk (refs/tags/v* startsWith).
-    branches: [main]
+    # `release/*.x` is the maintenance-line shape (release/2.5.x), not the throwaway
+    # release/vX.Y.Z-rcN topic branches, which a pull_request run already covers. Without
+    # this a patch on an old major reached its tag having never been built: the tag run is
+    # the first CI it sees, and by then the tag exists.
+    branches: [main, 'release/*.x']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
