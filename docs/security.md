@@ -254,5 +254,7 @@ Specifically NOT logged:
 
 ## Reporting issues
 
-Security issues should not be filed as public GitHub issues. See the project
-README for the disclosure path.
+Do not file a security issue as a public GitHub issue. Use GitHub's private vulnerability
+reporting, linked from [`SECURITY.md`](../SECURITY.md), which also sets out what counts as a
+vulnerability in a daemon that is root-privileged by design, and which of the decisions above
+are recorded choices rather than defects.
