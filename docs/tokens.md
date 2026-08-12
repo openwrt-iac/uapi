@@ -46,6 +46,11 @@ curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
 # response: { "bearer": "<cleartext-once>", "name": "ci_bot" }
 ```
 
+`allowed_cidrs` takes IPv4 prefixes only. A v6 CIDR is refused with `422
+allowed_cidrs[N] invalid_format`, because there is no IPv6 prefix comparison and storing one
+would mint a token that authenticates nobody. An IPv6 caller cannot be allowlisted at all, and
+has to be restricted by firewall rules instead.
+
 The requested scopes must be a strict subset of the caller's. Escalation
 returns `403 scope_escalation_blocked`. The same request with a name
 that's already in use returns `409 conflict`.

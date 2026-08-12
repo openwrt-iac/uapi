@@ -198,7 +198,7 @@ that intractable.
 - The rate limit is **not a security control on its own** - it's an
   abuse-mitigation guardrail. A patient attacker can stay under the
   threshold and grind through the API at the steady-state rate. Use
-  `allowed_cidrs` (deny by IP) for actual access control.
+  `allowed_cidrs` (deny by IP, IPv4 prefixes only) for actual access control.
 
 ## Audit shape
 
@@ -232,7 +232,12 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
    1700000000 (a sanity floor), `unknown` for the first 60 seconds after
    boot, and `degraded` once past that with the epoch still below the floor.
 4. **Pin tokens to source CIDRs.** `allowed_cidrs` defends against token
-   theft from outside the management network.
+   theft from outside the management network. **IPv4 only:** there is no IPv6
+   prefix comparison, so a token cannot be pinned to an IPv6 range. Both write
+   paths refuse a v6 CIDR rather than storing one that could never match, so the
+   failure is a `422` at mint time and not a token that silently authenticates
+   nobody. On a dual-stack router this control therefore covers half the address
+   space, and an IPv6 caller has to be restricted by firewall rules instead.
 5. **Set token expiry.** `--expires-in 90d` on every minted token forces
    rotation. The HTTP rotation endpoint (`POST /tokens`, which takes
    `expires_in_seconds`) makes this ergonomic from automation.
