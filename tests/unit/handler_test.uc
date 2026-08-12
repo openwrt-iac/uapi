@@ -420,6 +420,30 @@ t.describe('handler.patch', () => {
 		t.assert_equal(r.status, 404);
 	});
 
+	// Every spelling config_get_bool accepts has to survive a PATCH of some other field.
+	// diff_apply_patch used to set every key toUci emitted, so `enabled 'on'` came back as
+	// '1': uapi correcting bytes it was not asked to touch. Asserted on the raw uci value,
+	// because the read view normalizes and would agree either way.
+	t.it('leaves an untouched boolean at the spelling the operator wrote', () => {
+		for (let spelling in [ 'on', 'yes', 'true', 'enabled', '1' ]) {
+			let c = with_existing();
+			c._state.uci.firewall.r_existing.enabled = spelling;
+			let r = rules.patch(c, ctx(), 'r_existing', { name: 'renamed' });
+			t.assert_equal(r.status, 200);
+			t.assert_equal(c._state.uci.firewall.r_existing.enabled, spelling);
+			t.assert_true(r.body.enabled);
+		}
+	});
+
+	t.it('still writes a boolean the patch actually moves', () => {
+		let c = with_existing();
+		c._state.uci.firewall.r_existing.enabled = 'on';
+		let r = rules.patch(c, ctx(), 'r_existing', { enabled: false });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.enabled, '0');
+		t.assert_false(r.body.enabled);
+	});
+
 	t.it('accepts body.id that echoes the URL path id (idempotent GET-modify-PATCH cycle)', () => {
 		// A client that does GET, mutates, PATCH back to the same URL will
 		// often forward the `id` field verbatim. Framework treats it as a

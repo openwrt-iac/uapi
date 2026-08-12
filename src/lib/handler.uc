@@ -490,13 +490,32 @@ function diff_apply(c, p, id, existing, new_opts) {
 // the patch cleared); raw uci options outside it (toUci cannot emit them) are
 // left untouched. Without this, a PATCH that touches one field would delete
 // every stock/operator option the resource happens not to model.
-function diff_apply_patch(c, p, id, old_opts, new_opts) {
+function diff_apply_patch(c, p, id, existing, old_opts, new_opts) {
 	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (exists(new_opts, k)) continue;
 		c.uci_delete(p, id, k);
 	}
-	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+	for (let k in new_opts) {
+		// Skip a key the patch did not move, so uapi stops rewriting bytes it was not given:
+		// a stored `enabled 'on'` came back as '1' after a PATCH of some unrelated field.
+		// Both conditions are load-bearing. old_opts is toUci(fromUci(existing)), a
+		// projection rather than the raw section, so an unchanged normalized value does not
+		// mean raw already expresses it: unbound reads `dnssec_enabled` and writes
+		// `validator`, and on a box carrying only the legacy key the projection already says
+		// validator='1' while uci has no such option. Skipping on the projection alone left
+		// the real key unwritten, the read falling back to legacy, and the daemon
+		// unconfigured. Requiring the key in raw too keeps that write. Null and the empty list
+		// are how toUci says "this key should not be there", so neither is ever a skip:
+		// unbound clears the legacy name with `[]`, and comparing two sentinels equal would
+		// have left the operator's stale key in place.
+		let nv = new_opts[k];
+		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
+		if (!clearing && exists(existing, k) && exists(old_opts, k)
+		    && sprintf("%J", old_opts[k]) == sprintf("%J", nv))
+			continue;
+		c.uci_set(p, id, k, new_opts[k]);
+	}
 }
 
 // A write-only field is masked on read, so a client that reads a section and
@@ -811,7 +830,7 @@ function make(resource, opts) {
 				mgmt_device = mgmt_device_of(resource, r.merged, existing_view);
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
+				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -1025,7 +1044,7 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "validation", errors: errs };
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, resource.toUci(existing_view), new_opts);
+				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts);
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];
