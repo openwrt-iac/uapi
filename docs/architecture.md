@@ -427,7 +427,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | uci configuration            | `/etc/config/<package>`                     | Indefinite        |
 | Authorized SSH keys          | `/etc/dropbear/authorized_keys`             | Indefinite        |
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
-| Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Until reboot      |
+| Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Reaped on revoke, else until reboot |
 | Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, until reboot |
 | Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot      |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until reboot      |

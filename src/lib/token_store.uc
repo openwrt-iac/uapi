@@ -1,4 +1,5 @@
 let fs = require('fs');
+let ratelimit = require('ratelimit');
 let transaction = require('transaction');
 let errors = require('errors');
 let values = require('values');
@@ -206,6 +207,9 @@ function remove(conn, name, tx_overrides) {
 				return { ok: false, kind: "not_found",
 				         message: sprintf("Token %J not found", name) };
 			c.uci_delete(pkg, name);
+			// Inside the transaction so a rolled-back revoke does not lose the bucket,
+			// and best-effort because a revoke must not fail on a tmpfs hiccup.
+			try { ratelimit.forget(name); } catch (_) {}
 			return { ok: true, body: { deleted: name } };
 		},
 	};
