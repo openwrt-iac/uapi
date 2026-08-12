@@ -127,7 +127,10 @@ All notable changes to this project will be documented in this file. Format foll
   the schema they were published under while the server answered 200 to every one of them. The
   read-nullable widening now applies to both halves. The type was never what guarded a required
   field: `resource.validate()` is, and it still answers 422 naming the field for a null `target`
-  on a create.
+  on a create. A conditional that required a masked field went with it, for the same reason:
+  `wireless/interfaces` demanded `key` when `encryption` was a PSK variant, and `key` is
+  `writeOnly`, so no read-modify-write body could ever satisfy it. `validate()` still refuses a
+  keyless PSK create with field `key`, code `required`.
 
 ## [3.0.0-rc1] - 2026-08-10
 

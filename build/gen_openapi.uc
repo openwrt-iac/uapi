@@ -1416,6 +1416,17 @@ function build_schemas() {
 		schemas[response_name(ep)] = s;
 
 		let req_props = request_properties(properties);
+		// A conditional may not require a masked field. `key` is writeOnly, so a read never
+		// returns it and a read-modify-write body cannot carry it, yet wireless/interfaces
+		// requires it when encryption is a PSK variant: every round-trip body was invalid
+		// against the schema it was published under, while the server accepts it by carrying
+		// the stored secret forward. Nothing is lost by dropping the arm, because the runtime
+		// never reads openapi_conditional: resource.validate() enforces the rule and answers
+		// 422 with field `key`, code `required`, on a keyless PSK create.
+		let req_satisfiable = {};
+		for (let k in req_props)
+			if (type(req_props[k]) != "object" || req_props[k].writeOnly !== true)
+				req_satisfiable[k] = req_props[k];
 		let req = {
 			"type": "object",
 			"description": sprintf("Request body for the uapi resource backed by uci %s.%s.",
@@ -1425,7 +1436,7 @@ function build_schemas() {
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			req.required = mod.openapi_required;
 		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
-			let cond = project_conditional(mod.openapi_conditional, req_props, ep.path);
+			let cond = project_conditional(mod.openapi_conditional, req_satisfiable, ep.path);
 			if (length(cond) > 0) req.allOf = cond;
 		}
 		// Only for an endpoint that can actually be written. A generated client reads a

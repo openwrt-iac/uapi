@@ -28001,7 +28001,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
 					}
 				},
 				"required": [
@@ -28086,40 +28086,11 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
 					}
 				},
 				"required": [
 					"device"
-				],
-				"allOf": [
-					{
-						"if": {
-							"properties": {
-								"encryption": {
-									"enum": [
-										"psk",
-										"psk2",
-										"psk-mixed",
-										"sae",
-										"sae-mixed",
-										"wpa",
-										"wpa2",
-										"wpa3",
-										"wpa3-mixed"
-									]
-								}
-							},
-							"required": [
-								"encryption"
-							]
-						},
-						"then": {
-							"required": [
-								"key"
-							]
-						}
-					}
 				]
 			},
 			"DhcpHostsResponse": {
