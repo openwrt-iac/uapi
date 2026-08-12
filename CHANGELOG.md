@@ -64,6 +64,14 @@ All notable changes to this project will be documented in this file. Format foll
   `make lint-response-nullability`, which derives the requirement from each resource's real
   `fromUci` rather than from a list, with a gate-selftest probe.
 
+### Fixed
+
+- **`mwan3/globals.loglevel` declared a type admitting a null its own enum refused.** JSON Schema
+  requires both to pass, so the property described a null nothing could satisfy while the runtime
+  answers 200 to `{"loglevel": null}` and clears the option. The enum now lists null alongside the
+  type. `lint-openapi-shape` gained a rule for the disagreement in either direction, with a
+  gate-selftest probe.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

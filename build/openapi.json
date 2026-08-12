@@ -31128,7 +31128,8 @@
 							"warn",
 							"notice",
 							"info",
-							"debug"
+							"debug",
+							null
 						],
 						"description": "syslog facility level (notice/info/debug/etc.)."
 					}

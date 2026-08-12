@@ -33,6 +33,25 @@ function note(path, msg) {
 function check_schema(node, path) {
 	schemas_seen++;
 
+	// A type admitting null while the enum beside it omits null describes a value nothing can
+	// satisfy: JSON Schema requires both to pass, so the null the type invites is refused by
+	// the enum. `mwan3/globals.loglevel` shipped that way, declaring ["string","null"] with a
+	// four-name enum, so the document rejected a null the runtime answers 200 to. Read
+	// nullability belongs in x-uapi-read-nullable, which widens type and enum together on the
+	// response half only.
+	if (type(node.enum) == "array") {
+		let t = node.type;
+		let type_null = (t == "null");
+		if (type(t) == "array")
+			for (let x in t) if (x == "null") type_null = true;
+		let enum_null = false;
+		for (let x in node.enum) if (x == null) enum_null = true;
+		if (type_null && !enum_null)
+			note(path, "type admits null but the enum beside it omits null, so no null can validate");
+		if (enum_null && !type_null && t != null)
+			note(path, "enum lists null but the type beside it forbids null");
+	}
+
 	// `required` is a list of property names on a Schema Object but a plain
 	// boolean on a Parameter or Request Body Object, and both spellings are
 	// correct in their own place, so the type picks the meaning.
