@@ -241,6 +241,52 @@ function ipv4_in_cidr(addr, cidr) {
 	return (ipv4_to_int(addr) & mask) == (net & mask);
 }
 
+// Expand to eight 16-bit words so a prefix comparison has something fixed-width to work on.
+// Returns null for anything is_valid_ipv6 rejects, so callers get one failure mode.
+function ipv6_words(s) {
+	if (!is_valid_ipv6(s)) return null;
+	let halves = split(s, "::");
+	let sides = [];
+	for (let h in halves) {
+		let out = [];
+		if (h != "") {
+			for (let g in split(h, ":")) {
+				// The embedded IPv4 tail occupies the last two words.
+				if (index(g, ".") != -1) {
+					let o = split(g, ".");
+					push(out, (int(o[0]) * 256) + int(o[1]));
+					push(out, (int(o[2]) * 256) + int(o[3]));
+					continue;
+				}
+				push(out, hex(g));
+			}
+		}
+		push(sides, out);
+	}
+	let head = sides[0];
+	let tail = (length(sides) > 1) ? sides[1] : [];
+	let words = [ ...head ];
+	if (length(sides) > 1)
+		for (let i = length(head) + length(tail); i < 8; i++) push(words, 0);
+	for (let w in tail) push(words, w);
+	return (length(words) == 8) ? words : null;
+}
+
+function ipv6_in_cidr(addr, cidr) {
+	if (!is_valid_ipv6_cidr(cidr)) return false;
+	let parts = split(cidr, "/");
+	let a = ipv6_words(addr), n = ipv6_words(parts[0]);
+	if (a == null || n == null) return false;
+	let prefix = int(parts[1]);
+	for (let i = 0; i < 8; i++) {
+		let bits = prefix - (i * 16);
+		if (bits <= 0) break;
+		let mask = (bits >= 16) ? 0xFFFF : ((0xFFFF << (16 - bits)) & 0xFFFF);
+		if ((a[i] & mask) != (n[i] & mask)) return false;
+	}
+	return true;
+}
+
 // Strips IPv4-mapped-in-IPv6 prefix when a sockaddr_in6 produced ::ffff:1.2.3.4.
 function normalize_addr(addr) {
 	if (type(addr) != "string") return null;
@@ -248,12 +294,20 @@ function normalize_addr(addr) {
 	return addr;
 }
 
-function ipv4_in_any_cidr(addr, cidr_list) {
+// Matches a caller against an allowlist of either family. Both matchers are tried rather than
+// dispatching on the caller's family, because each rejects an address of the other family
+// outright, so a v6 caller cannot be admitted by `0.0.0.0/0` and a v4 caller cannot be admitted
+// by `::/0`. A mixed list therefore allows both families instead of rejecting either.
+//
+// The address is normalized first, so a v4-mapped v6 peer is tested against the v4 entries:
+// uhttpd binds 0.0.0.0 and [::] separately and a v4 peer arrives as a plain dotted quad, but a
+// proxy or a differently built server can still hand over ::ffff:a.b.c.d.
+function addr_in_any_cidr(addr, cidr_list) {
 	let a = normalize_addr(addr);
 	if (a == null) return false;
 	if (type(cidr_list) != "array") return false;
 	for (let c in cidr_list) {
-		if (ipv4_in_cidr(a, c)) return true;
+		if (ipv4_in_cidr(a, c) || ipv6_in_cidr(a, c)) return true;
 	}
 	return false;
 }
@@ -523,7 +577,7 @@ return {
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
-	ipv4_in_cidr, ipv4_in_any_cidr, normalize_addr,
+	ipv4_in_cidr, ipv6_in_cidr, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,
 };

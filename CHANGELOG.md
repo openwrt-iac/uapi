@@ -98,6 +98,15 @@ All notable changes to this project will be documented in this file. Format foll
   `id`, `managed` and `runtime` stay tolerated at the top level, because they appear in every
   response and in no request schema, and every IaC apply is a read-modify-write.
 
+### Added
+
+- **`allowed_cidrs` accepts IPv6 prefixes.** The allowlist compared IPv4 only, so a token
+  carrying one rejected every IPv6 caller and no v6 prefix could be expressed at all; both write
+  paths refused one rather than store a prefix that could never match. A caller is matched
+  against entries of its own family only, so `0.0.0.0/0` still denies an IPv6 caller and `::/0`
+  denies an IPv4 one: on a dual-stack router, "any address" means listing both. An IPv4-mapped
+  IPv6 caller is matched against the IPv4 entries, as before.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

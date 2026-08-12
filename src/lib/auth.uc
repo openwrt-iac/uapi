@@ -37,7 +37,7 @@ function authorize(tokens, authorization_header, hash_fn, req) {
 
 	let cidrs = match.allowed_cidrs ?? [];
 	if (type(cidrs) == "array" && length(cidrs) > 0) {
-		if (!values.ipv4_in_any_cidr(remote, cidrs))
+		if (!values.addr_in_any_cidr(remote, cidrs))
 			return { ok: false, kind: "invalid_token", reason: "ip_not_permitted", token_name: match.name };
 	}
 
