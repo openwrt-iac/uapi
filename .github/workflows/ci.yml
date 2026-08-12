@@ -247,7 +247,10 @@ jobs:
       - name: Build APK
         run: |
           cd build/sdk
-          ./scripts/feeds update -a || true
+          # Only the base feed. Every uapi dependency (uhttpd, uhttpd-mod-ucode, ucode and its
+          # uci/ubus/fs/digest modules) lives there, so cloning packages, luci, routing,
+          # telephony and video pulled feeds the build never reads.
+          ./scripts/feeds update base || true
           ./scripts/feeds install -a || true
           ln -sfn ../../openwrt/uapi package/uapi
           make defconfig
@@ -421,7 +424,10 @@ jobs:
       - name: Build APK against ${{ matrix.arch }} SDK
         run: |
           cd build/sdk-${{ matrix.arch }}
-          ./scripts/feeds update -a || true
+          # Only the base feed. Every uapi dependency (uhttpd, uhttpd-mod-ucode, ucode and its
+          # uci/ubus/fs/digest modules) lives there, so cloning packages, luci, routing,
+          # telephony and video pulled feeds the build never reads.
+          ./scripts/feeds update base || true
           ./scripts/feeds install -a || true
           ln -sfn ../../openwrt/uapi package/uapi
           make defconfig
