@@ -38,6 +38,13 @@ All notable changes to this project will be documented in this file. Format foll
   Both verbs now answer 400 `bad_request`. `POST` is unaffected, because
   `/<resource>/{id}/adopt` legitimately takes no body.
 
+- **A `PATCH` rewrote modeled keys it was not asked to change.** `diff_apply_patch` set every
+  key in `toUci(merged)`, unchanged ones included, so a section storing `enabled 'on'` came back
+  as `enabled '1'` after a `PATCH` of some unrelated field. uci and fw4 accept both spellings, so
+  nothing behaved differently, but rewriting an operator's bytes is uapi correcting state rather
+  than reporting it. A key is now written only when the patch actually moved it. `PUT` still
+  normalizes the section, which is its documented contract.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added
