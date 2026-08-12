@@ -29,7 +29,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 
 | HTTP | `code`                          | When                                                         |
 |------|----------------------------------|--------------------------------------------------------------|
-| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected        |
+| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, or no body on a PUT/PATCH |
 | 400  | `invalid_cursor`                | Malformed `?cursor=` or one referencing no current item      |
 | 401  | `unauthorized`                  | No `Authorization` header                                    |
 | 401  | `invalid_token`                 | Token not in store, expired, or source IP not in `allowed_cidrs` |

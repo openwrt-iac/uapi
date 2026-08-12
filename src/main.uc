@@ -821,6 +821,17 @@ function dispatch(env) {
 				                                 "Request body is not valid JSON") };
 			}
 		}
+		// A replace or a patch with no body is not a no-op. It fell through with body null,
+		// answered 200, and still wrote: the merge folded the read view back in, so a PATCH
+		// carrying no instruction materialised defaults into uci. Measured on a box, an empty
+		// PATCH added `enabled '1'` to a firewall rule that had no such option.
+		//
+		// POST is deliberately excluded: `/<resource>/{id}/adopt` is a POST that takes no body
+		// at all. Every one of the 74 PUT and PATCH operations declares requestBody.required,
+		// so refusing an absent one contradicts nothing in the published contract.
+		else if (method == "PUT" || method == "PATCH")
+			return { ctx, resp: errors.error(ctx, "bad_request",
+			                                 "Request body is required") };
 	}
 	ctx.body_text = body_text;
 	ctx.idempotency_key = env.HTTP_IDEMPOTENCY_KEY ?? qs.idempotency_key ?? null;

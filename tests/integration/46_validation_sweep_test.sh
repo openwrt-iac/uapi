@@ -75,4 +75,35 @@ assert all(k.startswith("firewall:") for k in swept), f"swept beyond its scope: 
 assert "network:interfaces" in skipped, "network:interfaces should have been skipped"
 PY
 
+echo "--- a PUT or PATCH with no body is refused, and writes nothing ---"
+# An empty PATCH used to answer 200 and still write: it fell through with a null body and
+# the merge folded the read view back in, materialising defaults. The assertion is on the
+# uci text before and after, because the status code alone did not catch that.
+$SSH 'uci -q delete firewall.emptybody; uci set firewall.emptybody=rule
+uci set firewall.emptybody.target=ACCEPT; uci set firewall.emptybody.src=lan
+uci set firewall.emptybody.dest_port=9403; uci set firewall.emptybody.proto=tcp
+uci commit firewall' >/dev/null
+$SSH 'uci show firewall.emptybody' > /tmp/uapi_emptybody_before.txt
+for verb in PUT PATCH; do
+	status=$(curl -sS -o /tmp/uapi_emptybody.json -w '%{http_code}' -X "$verb" -H "$ADMIN" \
+		-H 'Content-Type: application/json' -d '' "$URL/firewall/rules/emptybody")
+	[ "$status" = "400" ] || fail "empty $verb body expected 400, got $status"
+	grep -q '"bad_request"' /tmp/uapi_emptybody.json \
+		|| fail "empty $verb body did not answer bad_request"
+done
+$SSH 'uci show firewall.emptybody' > /tmp/uapi_emptybody_after.txt
+diff /tmp/uapi_emptybody_before.txt /tmp/uapi_emptybody_after.txt \
+	|| fail "a refused empty body still changed uci"
+$SSH 'uci -q delete firewall.emptybody; uci commit firewall' >/dev/null
+
+echo "--- POST keeps accepting no body, because adopt takes none ---"
+$SSH 'uci -q delete firewall.adoptme; uci set firewall.adoptme=rule
+uci set firewall.adoptme.target=ACCEPT; uci set firewall.adoptme.src=lan
+uci set firewall.adoptme.dest_port=9404; uci set firewall.adoptme.proto=tcp
+uci commit firewall' >/dev/null
+status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" \
+	"$URL/firewall/rules/adoptme/adopt")
+[ "$status" = "200" ] || fail "bodyless adopt POST expected 200, got $status"
+$SSH 'uci -q delete firewall.adoptme; uci commit firewall' >/dev/null
+
 echo "PASS 46_validation_sweep_test"
