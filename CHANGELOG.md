@@ -118,6 +118,17 @@ All notable changes to this project will be documented in this file. Format foll
   default from a value the resource derived from another uci key (unbound reads `dnssec_enabled`
   and writes `validator`, and that write still happens).
 
+### Fixed
+
+- **Request schemas rejected the read-modify-write bodies the server accepts.** A read answers
+  null for any uci option the operator never set, and an IaC apply sends that view back, so a
+  live `firewall/rules` body carries ten null-valued keys. rc2's request half declared 248
+  properties non-nullable, and 8 of 94 real bodies measured against a device therefore violated
+  the schema they were published under while the server answered 200 to every one of them. The
+  read-nullable widening now applies to both halves. The type was never what guarded a required
+  field: `resource.validate()` is, and it still answers 422 naming the field for a null `target`
+  on a create.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

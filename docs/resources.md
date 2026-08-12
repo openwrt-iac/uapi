@@ -13,12 +13,14 @@ marked `readOnly` there is absent from that resource's `*Request` schema, a prop
 schema and not in the `*Request` one, and `id`, `managed` and `runtime` are stamped by the
 framework rather than declared by the module. For the two halves, read `build/openapi.json`.
 
-`x-uapi-read-nullable` is how the two halves are allowed to disagree about null. A read answers
-null for a uci option the operator never set, while the write contract still wants a value, so
-the type cannot be shared: 21 of the properties carrying the marker are `required` on write and
-26 carry an enum, and widening the declaration itself would make `{"target": null}` schema-valid
-on a create. `tests/lint_response_nullability.uc` calls each resource's real `fromUci` on a bare
-section and fails if anything it returns null for is not null-permitted in the response schema.
+`x-uapi-read-nullable` marks a property a read can answer null for, and widens its type (and
+`enum`) with null in **both** halves. Both, because every IaC apply is a read-modify-write: the
+response view goes back out as the next request body, so a request schema that refused those
+nulls would describe the round trip as invalid while the server accepts it. Widening does not
+weaken a required field, since the type is not what guards one; `resource.validate()` is, and it
+answers 422 naming the field for a null `target` on a create.
+`tests/lint_response_nullability.uc` calls each resource's real `fromUci` on a bare section and
+fails if anything it returns null for is not null-permitted in the response schema.
 
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.
