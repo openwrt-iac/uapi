@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "3.0.0-rc2",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nNothing is announced yet. Removals only happen in a major and only after a window announced in an earlier minor, so this section is where the next one will appear.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}` (computed; clients ignore for drift detection).\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.wireguard_peers.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: snapshot, validate, commit, reload, restore-on-failure. `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means the init script's reload action **exited 0**. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - the resource has no reload services\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/raspbeguy/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nNothing is announced yet. Removals only happen in a major and only after a window announced in an earlier minor, so this section is where the next one will appear.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/raspbeguy/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/raspbeguy/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/raspbeguy/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/raspbeguy/uapi"
@@ -445,6 +445,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -533,6 +544,17 @@
 			"get": {
 				"summary": "Get one rules",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -592,6 +614,26 @@
 			"put": {
 				"summary": "Replace a rules",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -673,6 +715,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -765,6 +827,26 @@
 			},
 			"delete": {
 				"summary": "Delete a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -910,6 +992,17 @@
 				},
 				"tags": [
 					"Firewall / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -994,6 +1087,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -1082,6 +1186,17 @@
 			"get": {
 				"summary": "Get one zones",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -1141,6 +1256,26 @@
 			"put": {
 				"summary": "Replace a zones",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -1222,6 +1357,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a zones",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -1314,6 +1469,26 @@
 			},
 			"delete": {
 				"summary": "Delete a zones",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -1459,6 +1634,17 @@
 				},
 				"tags": [
 					"Firewall / Zones"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -1543,6 +1729,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -1631,6 +1828,17 @@
 			"get": {
 				"summary": "Get one redirects",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -1690,6 +1898,26 @@
 			"put": {
 				"summary": "Replace a redirects",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -1771,6 +1999,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a redirects",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -1863,6 +2111,26 @@
 			},
 			"delete": {
 				"summary": "Delete a redirects",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -2008,6 +2276,17 @@
 				},
 				"tags": [
 					"Firewall / Redirects"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -2092,6 +2371,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -2180,6 +2470,17 @@
 			"get": {
 				"summary": "Get one nat",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -2239,6 +2540,26 @@
 			"put": {
 				"summary": "Replace a nat",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -2320,6 +2641,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a nat",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -2412,6 +2753,26 @@
 			},
 			"delete": {
 				"summary": "Delete a nat",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -2557,6 +2918,17 @@
 				},
 				"tags": [
 					"Firewall / Nat"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -2641,6 +3013,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -2729,6 +3112,17 @@
 			"get": {
 				"summary": "Get one forwardings",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -2788,6 +3182,26 @@
 			"put": {
 				"summary": "Replace a forwardings",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -2869,6 +3283,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a forwardings",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -2961,6 +3395,26 @@
 			},
 			"delete": {
 				"summary": "Delete a forwardings",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -3106,12 +3560,34 @@
 				},
 				"tags": [
 					"Firewall / Forwardings"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
 		"/firewall/defaults": {
 			"get": {
 				"summary": "Get the firewall singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -3172,6 +3648,26 @@
 			"patch": {
 				"summary": "Update the firewall singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -3343,6 +3839,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -3434,6 +3941,17 @@
 			"get": {
 				"summary": "Get one interfaces",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -3493,6 +4011,26 @@
 			"put": {
 				"summary": "Replace a interfaces",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -3577,6 +4115,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -3672,6 +4230,26 @@
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -3820,6 +4398,17 @@
 				},
 				"tags": [
 					"Network / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -3904,6 +4493,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -3995,6 +4595,17 @@
 			"get": {
 				"summary": "Get one devices",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -4054,6 +4665,26 @@
 			"put": {
 				"summary": "Replace a devices",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -4138,6 +4769,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a devices",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -4233,6 +4884,26 @@
 			},
 			"delete": {
 				"summary": "Delete a devices",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -4381,6 +5052,17 @@
 				},
 				"tags": [
 					"Network / Devices"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -4465,6 +5147,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -4553,6 +5246,17 @@
 			"get": {
 				"summary": "Get one routes",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -4612,6 +5316,26 @@
 			"put": {
 				"summary": "Replace a routes",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -4693,6 +5417,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a routes",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -4785,6 +5529,26 @@
 			},
 			"delete": {
 				"summary": "Delete a routes",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -4930,6 +5694,17 @@
 				},
 				"tags": [
 					"Network / Routes"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -5014,6 +5789,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -5102,6 +5888,17 @@
 			"get": {
 				"summary": "Get one rules",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -5161,6 +5958,26 @@
 			"put": {
 				"summary": "Replace a rules",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -5242,6 +6059,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -5334,6 +6171,26 @@
 			},
 			"delete": {
 				"summary": "Delete a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -5479,6 +6336,17 @@
 				},
 				"tags": [
 					"Network / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -5563,6 +6431,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -5654,6 +6533,17 @@
 			"get": {
 				"summary": "Get one bridge_vlans",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -5713,6 +6603,26 @@
 			"put": {
 				"summary": "Replace a bridge_vlans",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -5797,6 +6707,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a bridge_vlans",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -5892,6 +6822,26 @@
 			},
 			"delete": {
 				"summary": "Delete a bridge_vlans",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -6040,6 +6990,17 @@
 				},
 				"tags": [
 					"Network / Bridge Vlans"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -6124,6 +7085,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -6212,6 +7184,17 @@
 			"get": {
 				"summary": "Get one wireguard_peers",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -6271,6 +7254,26 @@
 			"put": {
 				"summary": "Replace a wireguard_peers",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -6352,6 +7355,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a wireguard_peers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -6444,6 +7467,26 @@
 			},
 			"delete": {
 				"summary": "Delete a wireguard_peers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -6589,6 +7632,17 @@
 				},
 				"tags": [
 					"Network / Wireguard Peers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -6673,6 +7727,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -6761,6 +7826,17 @@
 			"get": {
 				"summary": "Get one devices",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -6820,6 +7896,26 @@
 			"put": {
 				"summary": "Replace a devices",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -6901,6 +7997,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a devices",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -6993,6 +8109,26 @@
 			},
 			"delete": {
 				"summary": "Delete a devices",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -7138,6 +8274,17 @@
 				},
 				"tags": [
 					"Wireless / Devices"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -7222,6 +8369,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -7310,6 +8468,17 @@
 			"get": {
 				"summary": "Get one interfaces",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -7369,6 +8538,26 @@
 			"put": {
 				"summary": "Replace a interfaces",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -7450,6 +8639,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -7542,6 +8751,26 @@
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -7687,6 +8916,17 @@
 				},
 				"tags": [
 					"Wireless / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -7771,6 +9011,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -7859,6 +9110,17 @@
 			"get": {
 				"summary": "Get one hosts",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -7918,6 +9180,26 @@
 			"put": {
 				"summary": "Replace a hosts",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -7999,6 +9281,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a hosts",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -8091,6 +9393,26 @@
 			},
 			"delete": {
 				"summary": "Delete a hosts",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -8236,6 +9558,17 @@
 				},
 				"tags": [
 					"Dhcp / Hosts"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -8530,6 +9863,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -8618,6 +9962,17 @@
 			"get": {
 				"summary": "Get one servers",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -8677,6 +10032,26 @@
 			"put": {
 				"summary": "Replace a servers",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -8758,6 +10133,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a servers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -8850,6 +10245,26 @@
 			},
 			"delete": {
 				"summary": "Delete a servers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -8995,12 +10410,34 @@
 				},
 				"tags": [
 					"Dhcp / Servers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
 		"/dhcp/dnsmasq": {
 			"get": {
 				"summary": "Get the dhcp singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -9061,6 +10498,26 @@
 			"patch": {
 				"summary": "Update the dhcp singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -9154,6 +10611,17 @@
 		"/dhcp/odhcpd": {
 			"get": {
 				"summary": "Get the dhcp singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -9214,6 +10682,26 @@
 			"patch": {
 				"summary": "Update the dhcp singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -9307,6 +10795,17 @@
 		"/system": {
 			"get": {
 				"summary": "Get the system singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -9367,6 +10866,26 @@
 			"patch": {
 				"summary": "Update the system singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -9538,6 +11057,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -9626,6 +11156,17 @@
 			"get": {
 				"summary": "Get one timeservers",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -9685,6 +11226,26 @@
 			"put": {
 				"summary": "Replace a timeservers",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -9766,6 +11327,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a timeservers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -9858,6 +11439,26 @@
 			},
 			"delete": {
 				"summary": "Delete a timeservers",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -10003,6 +11604,17 @@
 				},
 				"tags": [
 					"System / Timeservers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -10087,6 +11699,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -10175,6 +11798,17 @@
 			"get": {
 				"summary": "Get one instances",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -10234,6 +11868,26 @@
 			"put": {
 				"summary": "Replace a instances",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -10315,6 +11969,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -10407,6 +12081,26 @@
 			},
 			"delete": {
 				"summary": "Delete a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -10552,6 +12246,17 @@
 				},
 				"tags": [
 					"Dropbear / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -10636,6 +12341,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -10724,6 +12440,17 @@
 			"get": {
 				"summary": "Get one instances",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -10783,6 +12510,26 @@
 			"put": {
 				"summary": "Replace a instances",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -10864,6 +12611,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -10956,6 +12723,26 @@
 			},
 			"delete": {
 				"summary": "Delete a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -11101,6 +12888,17 @@
 				},
 				"tags": [
 					"Uhttpd / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -11185,6 +12983,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -11273,6 +13082,17 @@
 			"get": {
 				"summary": "Get one certs",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -11332,6 +13152,26 @@
 			"put": {
 				"summary": "Replace a certs",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -11413,6 +13253,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a certs",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -11505,6 +13365,26 @@
 			},
 			"delete": {
 				"summary": "Delete a certs",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -11650,12 +13530,34 @@
 				},
 				"tags": [
 					"Uhttpd / Certs"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
 		"/unbound/server": {
 			"get": {
 				"summary": "Get the unbound singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -11716,6 +13618,26 @@
 			"patch": {
 				"summary": "Update the unbound singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -11809,6 +13731,17 @@
 		"/unbound/srv": {
 			"get": {
 				"summary": "Get the unbound singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -11869,6 +13802,26 @@
 			"patch": {
 				"summary": "Update the unbound singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -11962,6 +13915,17 @@
 		"/unbound/ext": {
 			"get": {
 				"summary": "Get the unbound singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -12022,6 +13986,26 @@
 			"patch": {
 				"summary": "Update the unbound singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -12193,6 +14177,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -12281,6 +14276,17 @@
 			"get": {
 				"summary": "Get one queues",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -12340,6 +14346,26 @@
 			"put": {
 				"summary": "Replace a queues",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -12421,6 +14447,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a queues",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -12513,6 +14559,26 @@
 			},
 			"delete": {
 				"summary": "Delete a queues",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -12658,6 +14724,17 @@
 				},
 				"tags": [
 					"Sqm / Queues"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -12742,6 +14819,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -12830,6 +14918,17 @@
 			"get": {
 				"summary": "Get one agents",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -12889,6 +14988,26 @@
 			"put": {
 				"summary": "Replace a agents",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -12970,6 +15089,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a agents",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -13062,6 +15201,26 @@
 			},
 			"delete": {
 				"summary": "Delete a agents",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -13207,6 +15366,17 @@
 				},
 				"tags": [
 					"Snmpd / Agents"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -13291,6 +15461,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -13379,6 +15560,17 @@
 			"get": {
 				"summary": "Get one com2secs",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -13438,6 +15630,26 @@
 			"put": {
 				"summary": "Replace a com2secs",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -13519,6 +15731,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a com2secs",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -13611,6 +15843,26 @@
 			},
 			"delete": {
 				"summary": "Delete a com2secs",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -13756,6 +16008,17 @@
 				},
 				"tags": [
 					"Snmpd / Com2secs"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -13840,6 +16103,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -13928,6 +16202,17 @@
 			"get": {
 				"summary": "Get one groups",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -13987,6 +16272,26 @@
 			"put": {
 				"summary": "Replace a groups",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -14068,6 +16373,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a groups",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -14160,6 +16485,26 @@
 			},
 			"delete": {
 				"summary": "Delete a groups",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -14305,6 +16650,17 @@
 				},
 				"tags": [
 					"Snmpd / Groups"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -14389,6 +16745,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -14477,6 +16844,17 @@
 			"get": {
 				"summary": "Get one accesses",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -14536,6 +16914,26 @@
 			"put": {
 				"summary": "Replace a accesses",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -14617,6 +17015,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a accesses",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -14709,6 +17127,26 @@
 			},
 			"delete": {
 				"summary": "Delete a accesses",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -14854,12 +17292,34 @@
 				},
 				"tags": [
 					"Snmpd / Accesses"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
 		"/snmpd/system": {
 			"get": {
 				"summary": "Get the snmpd singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -14920,6 +17380,26 @@
 			"patch": {
 				"summary": "Update the snmpd singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15013,6 +17493,17 @@
 		"/lldpd/config": {
 			"get": {
 				"summary": "Get the lldpd singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -15073,6 +17564,26 @@
 			"patch": {
 				"summary": "Update the lldpd singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15166,6 +17677,17 @@
 		"/prometheus_node_exporter_lua/config": {
 			"get": {
 				"summary": "Get the prometheus_node_exporter_lua singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -15226,6 +17748,26 @@
 			"patch": {
 				"summary": "Update the prometheus_node_exporter_lua singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15319,6 +17861,17 @@
 		"/vnstat/config": {
 			"get": {
 				"summary": "Get the vnstat singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -15379,6 +17932,26 @@
 			"patch": {
 				"summary": "Update the vnstat singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15472,6 +18045,17 @@
 		"/mwan3/globals": {
 			"get": {
 				"summary": "Get the mwan3 singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -15532,6 +18116,26 @@
 			"patch": {
 				"summary": "Update the mwan3 singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15703,6 +18307,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -15791,6 +18406,17 @@
 			"get": {
 				"summary": "Get one interfaces",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -15850,6 +18476,26 @@
 			"put": {
 				"summary": "Replace a interfaces",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -15931,6 +18577,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -16023,6 +18689,26 @@
 			},
 			"delete": {
 				"summary": "Delete a interfaces",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -16168,6 +18854,17 @@
 				},
 				"tags": [
 					"Mwan3 / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -16252,6 +18949,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -16340,6 +19048,17 @@
 			"get": {
 				"summary": "Get one members",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -16399,6 +19118,26 @@
 			"put": {
 				"summary": "Replace a members",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -16480,6 +19219,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a members",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -16572,6 +19331,26 @@
 			},
 			"delete": {
 				"summary": "Delete a members",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -16717,6 +19496,17 @@
 				},
 				"tags": [
 					"Mwan3 / Members"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -16801,6 +19591,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -16889,6 +19690,17 @@
 			"get": {
 				"summary": "Get one policies",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -16948,6 +19760,26 @@
 			"put": {
 				"summary": "Replace a policies",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -17029,6 +19861,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a policies",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -17121,6 +19973,26 @@
 			},
 			"delete": {
 				"summary": "Delete a policies",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -17266,6 +20138,17 @@
 				},
 				"tags": [
 					"Mwan3 / Policies"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -17350,6 +20233,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -17438,6 +20332,17 @@
 			"get": {
 				"summary": "Get one rules",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -17497,6 +20402,26 @@
 			"put": {
 				"summary": "Replace a rules",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -17578,6 +20503,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -17670,6 +20615,26 @@
 			},
 			"delete": {
 				"summary": "Delete a rules",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -17815,12 +20780,34 @@
 				},
 				"tags": [
 					"Mwan3 / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
 		"/usteer/config": {
 			"get": {
 				"summary": "Get the usteer singleton",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Conditional GET via If-None-Match (or ?if_none_match=).",
 				"responses": {
 					"200": {
@@ -17881,6 +20868,26 @@
 			"patch": {
 				"summary": "Update the usteer singleton",
 				"description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -18052,6 +21059,17 @@
 						}
 					}
 				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Created",
@@ -18140,6 +21158,17 @@
 			"get": {
 				"summary": "Get one instances",
 				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=` query param for clients behind uhttpd's strict CGI env). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
@@ -18199,6 +21228,26 @@
 			"put": {
 				"summary": "Replace a instances",
 				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=` for clients behind uhttpd's strict CGI env). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -18280,6 +21329,26 @@
 			},
 			"patch": {
 				"summary": "Partially update a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 				"requestBody": {
 					"required": true,
@@ -18372,6 +21441,26 @@
 			},
 			"delete": {
 				"summary": "Delete a instances",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header. Required instead of the header when uapi is reached directly through uhttpd, whose CGI env strips it."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource."
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "Deleted",
@@ -18517,6 +21606,17 @@
 				},
 				"tags": [
 					"Openvpn / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -18642,6 +21742,17 @@
 				},
 				"tags": [
 					"Raw / Generic uci passthrough"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -19005,6 +22116,17 @@
 				},
 				"tags": [
 					"Packages / Installed"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -19228,6 +22350,17 @@
 				},
 				"tags": [
 					"Packages / Feeds"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -19397,6 +22530,17 @@
 				},
 				"tags": [
 					"System / Password"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -19515,6 +22659,17 @@
 				},
 				"tags": [
 					"System / SSH authorized keys"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			},
 			"put": {
@@ -20024,6 +23179,17 @@
 				},
 				"tags": [
 					"Auth / Tokens"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -20322,6 +23488,17 @@
 				},
 				"tags": [
 					"Operational / Batch"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		}
