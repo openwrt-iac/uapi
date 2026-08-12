@@ -195,6 +195,11 @@ function cmd_revoke(opts) {
 		die(sprintf("uapi-token revoke: %J not found", name));
 	cursor.delete(PACKAGE, name);
 	cursor.commit(PACKAGE);
+	// The same reap the HTTP revoke does. This command keeps its own uci cursor rather than
+	// going through token_store.remove, deliberately, so it still works with ubus down, which
+	// means every side effect of revocation has to be repeated here. Measured: without this the
+	// bucket survived `uapi-token revoke` while the API path cleaned it up.
+	try { require('ratelimit').forget(name); } catch (_) {}
 	fs.stderr.write(sprintf("Revoked token %J\n", name));
 }
 

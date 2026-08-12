@@ -105,4 +105,14 @@ function effective_limits(global, token_record) {
 	return { rate: r, burst: b };
 }
 
-return { check, load_config, effective_limits };
+// The bucket outlives its token otherwise. Nothing swept /tmp/uapi-ratelimit, so a file
+// accumulated for every token that ever authenticated and stayed until reboot: measured 106
+// files against 4 live tokens after one session of testing. The provider's ephemeral
+// uapi_token mints one per Terraform run, so on a router with months of uptime that is
+// unbounded tmpfs, which is RAM.
+function forget(token_id) {
+	if (token_id == null || !match(token_id, SAFE_NAME_RE)) return false;
+	try { return fs.unlink(DIR + "/" + token_id + ".txt"); } catch (_) { return false; }
+}
+
+return { check, load_config, effective_limits, forget };
