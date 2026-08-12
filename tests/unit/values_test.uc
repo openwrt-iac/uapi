@@ -233,22 +233,76 @@ t.describe('values.ipv4_in_cidr', () => {
 	});
 });
 
-t.describe('values.ipv4_in_any_cidr', () => {
+t.describe('values.ipv6_in_cidr', () => {
+	t.it('matches inside the prefix and not outside it', () => {
+		t.assert_true(v.ipv6_in_cidr("2001:db8::1", "2001:db8::/32"));
+		t.assert_true(v.ipv6_in_cidr("2001:db8:ffff:ffff::1", "2001:db8::/32"));
+		t.assert_false(v.ipv6_in_cidr("2001:db9::1", "2001:db8::/32"));
+	});
+
+	// A prefix that ends mid-word is where a word-at-a-time comparison goes wrong.
+	t.it('masks a prefix that does not land on a 16-bit boundary', () => {
+		t.assert_true(v.ipv6_in_cidr("2001:db8:0:7f::1", "2001:db8:0:0::/49"));
+		t.assert_false(v.ipv6_in_cidr("2001:db8:0:8000::1", "2001:db8:0:0::/49"));
+		t.assert_true(v.ipv6_in_cidr("fd00::1", "fd00::/8"));
+		t.assert_false(v.ipv6_in_cidr("fe00::1", "fd00::/8"));
+	});
+
+	t.it('handles the boundary prefixes', () => {
+		t.assert_true(v.ipv6_in_cidr("2001:db8::1", "::/0"));
+		t.assert_true(v.ipv6_in_cidr("2001:db8::1", "2001:db8::1/128"));
+		t.assert_false(v.ipv6_in_cidr("2001:db8::2", "2001:db8::1/128"));
+	});
+
+	// `::` expands to a different number of zero words on each side, and an embedded IPv4
+	// tail occupies the last two, so both forms have to reach the same eight words.
+	t.it('expands the compressed and IPv4-tailed spellings alike', () => {
+		t.assert_true(v.ipv6_in_cidr("::1", "::1/128"));
+		t.assert_true(v.ipv6_in_cidr("2001:db8:0:0:0:0:0:1", "2001:db8::1/128"));
+		t.assert_true(v.ipv6_in_cidr("::ffff:192.168.1.1", "::ffff:192.168.0.0/112"));
+	});
+
+	t.it('refuses a malformed address or prefix rather than matching it', () => {
+		t.assert_false(v.ipv6_in_cidr("not-an-address", "2001:db8::/32"));
+		t.assert_false(v.ipv6_in_cidr("2001:db8::1", "2001:db8::/129"));
+		t.assert_false(v.ipv6_in_cidr("2001:db8::1", "10.0.0.0/8"));
+		t.assert_false(v.ipv6_in_cidr("2001:db8::1", null));
+	});
+});
+
+// The allowlist takes either family, and an entry of the other family must not match. Before
+// this the matcher was IPv4-only, so a token carrying an allowlist rejected every IPv6 caller.
+t.describe('values.addr_in_any_cidr across families', () => {
+	t.it('matches a v6 caller against a v6 entry in a mixed list', () => {
+		let list = [ "10.0.0.0/8", "2001:db8::/32" ];
+		t.assert_true(v.addr_in_any_cidr("2001:db8::5", list));
+		t.assert_true(v.addr_in_any_cidr("10.1.2.3", list));
+		t.assert_false(v.addr_in_any_cidr("2001:dead::5", list));
+		t.assert_false(v.addr_in_any_cidr("192.168.1.1", list));
+	});
+
+	t.it('does not let one family satisfy the other', () => {
+		t.assert_false(v.addr_in_any_cidr("2001:db8::1", [ "0.0.0.0/0" ]));
+		t.assert_false(v.addr_in_any_cidr("10.0.0.1", [ "::/0" ]));
+	});
+});
+
+t.describe('values.addr_in_any_cidr', () => {
 	t.it('matches when any one CIDR contains the address', () => {
-		t.assert_true(v.ipv4_in_any_cidr("10.0.0.1",
+		t.assert_true(v.addr_in_any_cidr("10.0.0.1",
 			["192.168.1.0/24", "10.0.0.0/8"]));
-		t.assert_false(v.ipv4_in_any_cidr("172.16.0.1",
+		t.assert_false(v.addr_in_any_cidr("172.16.0.1",
 			["192.168.1.0/24", "10.0.0.0/8"]));
 	});
 
 	t.it('strips IPv4-mapped IPv6 prefix before matching', () => {
-		t.assert_true(v.ipv4_in_any_cidr("::ffff:192.168.1.10",
+		t.assert_true(v.addr_in_any_cidr("::ffff:192.168.1.10",
 			["192.168.1.0/24"]));
 	});
 
 	t.it('returns false for non-array cidr list', () => {
-		t.assert_false(v.ipv4_in_any_cidr("1.2.3.4", null));
-		t.assert_false(v.ipv4_in_any_cidr("1.2.3.4", "1.2.3.4/32"));
+		t.assert_false(v.addr_in_any_cidr("1.2.3.4", null));
+		t.assert_false(v.addr_in_any_cidr("1.2.3.4", "1.2.3.4/32"));
 	});
 });
 

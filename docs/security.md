@@ -198,7 +198,7 @@ that intractable.
 - The rate limit is **not a security control on its own** - it's an
   abuse-mitigation guardrail. A patient attacker can stay under the
   threshold and grind through the API at the steady-state rate. Use
-  `allowed_cidrs` (deny by IP, IPv4 prefixes only) for actual access control.
+  `allowed_cidrs` (deny by IP, either address family) for actual access control.
 
 ## Audit shape
 
@@ -232,12 +232,12 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
    1700000000 (a sanity floor), `unknown` for the first 60 seconds after
    boot, and `degraded` once past that with the epoch still below the floor.
 4. **Pin tokens to source CIDRs.** `allowed_cidrs` defends against token
-   theft from outside the management network. **IPv4 only:** there is no IPv6
-   prefix comparison, so a token cannot be pinned to an IPv6 range. Both write
-   paths refuse a v6 CIDR rather than storing one that could never match, so the
-   failure is a `422` at mint time and not a token that silently authenticates
-   nobody. On a dual-stack router this control therefore covers half the address
-   space, and an IPv6 caller has to be restricted by firewall rules instead.
+   theft from outside the management network. Prefixes of either family are
+   accepted and a list may mix them. A caller is matched only against entries of
+   its own family, so on a dual-stack router `0.0.0.0/0` alone still denies every
+   IPv6 caller; "any address" means listing both `0.0.0.0/0` and `::/0`. That
+   asymmetry is deliberate: an allowlist that silently widened to a second address
+   family would be a worse failure than one that denies.
 5. **Set token expiry.** `--expires-in 90d` on every minted token forces
    rotation. The HTTP rotation endpoint (`POST /tokens`, which takes
    `expires_in_seconds`) makes this ergonomic from automation.

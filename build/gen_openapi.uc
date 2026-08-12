@@ -1147,7 +1147,7 @@ function build_schemas() {
 				"scopes": { "type": "array", "items": { "type": "string" }, "minItems": 1,
 				            "description": "MUST be a strict subset of the caller's own scopes; escalation returns 403 scope_escalation_blocked" },
 				"expires_in_seconds": { "type": ["integer", "null"], "minimum": 1 },
-				"allowed_cidrs":      { "type": "array", "items": { "type": "string", "description": "IPv4 CIDR" } },
+				"allowed_cidrs":      { "type": "array", "items": { "type": "string", "description": "IPv4 or IPv6 CIDR; a caller matches entries of its own family only" } },
 				"rate":  { "type": ["integer", "null"], "minimum": 1,
 				           "description": "Per-token rate limit: requests per second. Overrides the global rate (default 100). Absent or null inherits the global." },
 				"burst": { "type": ["integer", "null"], "minimum": 1,

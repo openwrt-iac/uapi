@@ -24078,7 +24078,7 @@
 						"type": "array",
 						"items": {
 							"type": "string",
-							"description": "IPv4 CIDR"
+							"description": "IPv4 or IPv6 CIDR; a caller matches entries of its own family only"
 						}
 					},
 					"rate": {

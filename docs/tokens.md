@@ -16,7 +16,7 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
 - `--name`: human-readable label. Must be unique. Must match `[A-Za-z0-9_]+` (uci section-name charset; use underscores instead of hyphens). Surfaces in the audit log on every authed request.
 - `--scope`: at least one. May repeat. Validated against the known scope tree (see below); `--force` bypasses.
 - `--expires-in`: optional duration. Suffix is one of `s`/`m`/`h`/`d`. The token returns `401 invalid_token` with `message: "Token expired"` after the deadline passes.
-- `--allowed-cidr`: optional source-IP allowlist (IPv4 CIDRs only; may repeat). When set, the token returns `401 invalid_token` with `message: "Source IP not permitted for this token"` from any other source. Bad CIDR shape rejected at mint time.
+- `--allowed-cidr`: optional source-IP allowlist (IPv4 or IPv6 CIDRs; may repeat). When set, the token returns `401 invalid_token` with `message: "Source IP not permitted for this token"` from any other source. Bad CIDR shape rejected at mint time.
 - Output (stdout): the cleartext bearer string, exactly once. Stderr explains it's the only chance to capture it.
 
 The router stores only the salt + `sha256(salt + ":" + bearer)`. The cleartext cannot be recovered.
@@ -46,10 +46,10 @@ curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
 # response: { "bearer": "<cleartext-once>", "name": "ci_bot" }
 ```
 
-`allowed_cidrs` takes IPv4 prefixes only. A v6 CIDR is refused with `422
-allowed_cidrs[N] invalid_format`, because there is no IPv6 prefix comparison and storing one
-would mint a token that authenticates nobody. An IPv6 caller cannot be allowlisted at all, and
-has to be restricted by firewall rules instead.
+`allowed_cidrs` takes prefixes of either family, and a list may mix them. A caller is matched
+against entries of its own family only, so `0.0.0.0/0` does not admit an IPv6 caller and `::/0`
+does not admit an IPv4 one: a dual-stack router that means "any" has to say both. A caller
+arriving as an IPv4-mapped IPv6 address is matched against the IPv4 entries.
 
 The requested scopes must be a strict subset of the caller's. Escalation
 returns `403 scope_escalation_blocked`. The same request with a name
