@@ -107,6 +107,17 @@ All notable changes to this project will be documented in this file. Format foll
   denies an IPv4 one: on a dual-stack router, "any address" means listing both. An IPv4-mapped
   IPv6 caller is matched against the IPv4 entries, as before.
 
+### Fixed
+
+- **A `PATCH` wrote server-side defaults for fields it was not asked to touch.** Patching one
+  field on a firewall rule added `enabled '1'`, and on a dhcp host added `dns '0'`, options the
+  operator never set. Materialising a default pins it: the section stops following any later
+  change to that default while an untouched section still follows it, so two sections that read
+  alike diverge after an OpenWrt upgrade. A key absent from uci is now written only when its
+  value differs from what an empty section of that type would read, which is what separates a
+  default from a value the resource derived from another uci key (unbound reads `dnssec_enabled`
+  and writes `validator`, and that write still happens).
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

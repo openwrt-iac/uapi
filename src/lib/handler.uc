@@ -507,29 +507,47 @@ function diff_apply(c, p, id, existing, new_opts) {
 // the patch cleared); raw uci options outside it (toUci cannot emit them) are
 // left untouched. Without this, a PATCH that touches one field would delete
 // every stock/operator option the resource happens not to model.
-function diff_apply_patch(c, p, id, existing, old_opts, new_opts) {
+// The modeled keys a section would carry if it were empty: fromUci's server-side defaults, and
+// nothing else. Projected with a null connection because only the uci-derived half is wanted and
+// `runtime` never reaches toUci anyway. Every resource tolerates a bare section, which
+// tests/lint_response_nullability.uc asserts for all of them on every run.
+function default_footprint(resource, existing) {
+	return resource.toUci(resource.fromUci({
+		'.name': existing['.name'], '.type': existing['.type'], '.anonymous': false,
+	}, null));
+}
+
+function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (exists(new_opts, k)) continue;
 		c.uci_delete(p, id, k);
 	}
 	for (let k in new_opts) {
-		// Skip a key the patch did not move, so uapi stops rewriting bytes it was not given:
-		// a stored `enabled 'on'` came back as '1' after a PATCH of some unrelated field.
-		// Both conditions are load-bearing. old_opts is toUci(fromUci(existing)), a
-		// projection rather than the raw section, so an unchanged normalized value does not
-		// mean raw already expresses it: unbound reads `dnssec_enabled` and writes
-		// `validator`, and on a box carrying only the legacy key the projection already says
-		// validator='1' while uci has no such option. Skipping on the projection alone left
-		// the real key unwritten, the read falling back to legacy, and the daemon
-		// unconfigured. Requiring the key in raw too keeps that write. Null and the empty list
-		// are how toUci says "this key should not be there", so neither is ever a skip:
-		// unbound clears the legacy name with `[]`, and comparing two sentinels equal would
-		// have left the operator's stale key in place.
+		// Write only what the patch moved. old_opts is toUci(fromUci(existing)), so a key
+		// whose normalized value is unchanged is one the request never named, and writing it
+		// anyway is uapi editing a section it was not asked to edit: a stored `enabled 'on'`
+		// came back as '1', and a key that was absent, and therefore reading as its default,
+		// got pinned to today's default and stopped following any later change to it.
+		//
+		// A key missing from raw uci but present in the projection got its value from
+		// somewhere other than the section, and the two somewheres need telling apart.
+		// unbound reads `dnssec_enabled` and writes `validator`, so on a box carrying only
+		// the legacy key the projection says validator='1' while uci has no such option, and
+		// skipping there leaves the real key unwritten and the daemon unconfigured. Comparing
+		// against the empty-section projection separates the cases: that legacy-derived '1'
+		// differs from validator's own default of '0', while a firewall rule's `enabled '1'`
+		// is exactly its default.
+		//
+		// Null and the empty list are how toUci says "this key should not be there", so
+		// neither is ever a skip: unbound clears the legacy name with `[]`, and comparing two
+		// sentinels equal would have left the operator's stale key in place.
 		let nv = new_opts[k];
 		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
-		if (!clearing && exists(existing, k) && exists(old_opts, k)
-		    && sprintf("%J", old_opts[k]) == sprintf("%J", nv))
+		let unchanged = exists(old_opts, k) && sprintf("%J", old_opts[k]) == sprintf("%J", nv);
+		let is_default = (defaults != null) && exists(defaults, k)
+		                 && sprintf("%J", defaults[k]) == sprintf("%J", nv);
+		if (!clearing && unchanged && (exists(existing, k) || is_default))
 			continue;
 		c.uci_set(p, id, k, new_opts[k]);
 	}
@@ -847,7 +865,8 @@ function make(resource, opts) {
 				mgmt_device = mgmt_device_of(resource, r.merged, existing_view);
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts);
+				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts,
+				                 default_footprint(resource, existing));
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -1061,7 +1080,8 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "validation", errors: errs };
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts);
+				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts,
+				                 default_footprint(resource, existing));
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];

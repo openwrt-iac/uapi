@@ -463,6 +463,28 @@ t.describe('handler.patch', () => {
 		}
 	});
 
+	// A PATCH used to write every modeled key toUci emitted, defaults included, so touching one
+	// field added `enabled '1'` to a section that never had it. Materialising a default pins it:
+	// the section stops following any later change to that default, while an untouched one still
+	// does. Asserted on raw uci, since the read view reports the default either way.
+	t.it('does not materialise a default for a field the patch never named', () => {
+		let c = with_existing();
+		t.assert_equal(c._state.uci.firewall.r_existing.enabled, null);
+		let r = rules.patch(c, ctx(), 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.target, 'REJECT');
+		t.assert_equal(c._state.uci.firewall.r_existing.enabled, null);
+		t.assert_true(r.body.enabled);
+	});
+
+	t.it('still writes a defaulted field the patch does name', () => {
+		let c = with_existing();
+		let r = rules.patch(c, ctx(), 'r_existing', { enabled: false });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.enabled, '0');
+		t.assert_false(r.body.enabled);
+	});
+
 	t.it('still writes a boolean the patch actually moves', () => {
 		let c = with_existing();
 		c._state.uci.firewall.r_existing.enabled = 'on';
