@@ -197,6 +197,16 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_type_enum_null_disagree() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+prop = d['components']['schemas']['Mwan3GlobalsRequest']['properties']['loglevel']
+prop['enum'] = [v for v in prop['enum'] if v is not None]
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_required_undeclared() {
 	python3 - <<'EOF'
 import json
@@ -430,6 +440,7 @@ EOF
 }
 
 probe lint-response-nullability "a response type that forbids a null it returns" "reads null but" mut_read_nullable_missing
+probe lint-openapi-shape "a type admitting a null its enum refuses" "no null can validate" mut_type_enum_null_disagree
 probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
 probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
