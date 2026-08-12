@@ -45,6 +45,13 @@ All notable changes to this project will be documented in this file. Format foll
   than reporting it. A key is now written only when the patch actually moved it. `PUT` still
   normalizes the section, which is its documented contract.
 
+- **Every entry of `GET /tokens` violated its own published schema.** `TokenMetadata` was
+  composed as `allOf` over `WhoamiResponse`, which inherited that schema's `required` and so
+  demanded `token_id` and `source_ip` from each entry. The token endpoints return neither: the
+  listing names the token `name`, and `source_ip` is the caller's address, meaningful only for
+  whoami. A strict generated client rejected the whole response. `TokenMetadata` now stands
+  alone and declares the eight fields both `/tokens` and `/tokens/{id}` actually return.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

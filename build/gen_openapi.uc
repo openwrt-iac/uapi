@@ -1027,12 +1027,27 @@ function build_schemas() {
 				"burst": { "type": ["integer", "null"], "description": "Per-token burst override; null means use global" },
 			},
 		},
+		// Deliberately standalone rather than composed from WhoamiResponse. It used to be
+		// `allOf` over it, which inherited that schema's `required` and so demanded
+		// `token_id` and `source_ip` from every entry of `GET /tokens`, neither of which the
+		// token endpoints return: the listing names the token `name`, and `source_ip` is the
+		// caller's address, meaningful only for whoami. Every entry the live endpoint
+		// returned therefore violated its own published schema, so a strict generated client
+		// rejected the whole response.
 		"TokenMetadata": {
-			"allOf": [
-				{ "$ref": "#/components/schemas/WhoamiResponse" },
-				{ "type": "object", "required": ["name"], "properties": {
-				  "name": { "type": "string", "description": "Same as token_id; field name varies by endpoint" } } },
-			],
+			"type": "object",
+			"required": ["name", "scopes", "expires_at", "allowed_cidrs", "last_used_at",
+			             "last_used_ip", "rate", "burst"],
+			"properties": {
+				"name":   { "type": "string", "description": "The token's identifier, as passed to `uapi-token`" },
+				"scopes": { "type": "array", "items": { "type": "string" } },
+				"expires_at":    { "type": ["integer", "null"], "description": "Unix epoch seconds; null if never expires" },
+				"allowed_cidrs": { "type": "array", "items": { "type": "string" } },
+				"last_used_at":  { "type": ["integer", "null"], "description": "Unix epoch seconds of last authed request; throttled to ~1/minute" },
+				"last_used_ip":  { "type": ["string", "null"] },
+				"rate":  { "type": ["integer", "null"], "description": "Per-token rate-limit override (req/s); null means use global" },
+				"burst": { "type": ["integer", "null"], "description": "Per-token burst override; null means use global" },
+			},
 		},
 		"TokenCreateRequest": {
 			"type": "object",
