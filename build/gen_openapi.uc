@@ -121,11 +121,7 @@ function strip_marker(v) {
 // write while 26 carry an enum; widening there would make `{"target": null}` schema-valid on
 // a create and leave resource.validate() as the only thing between that and a rule with no
 // target. Response-only keeps the write surface exactly as it shipped.
-function response_properties(properties) {
-	let out = {};
-	for (let k in properties) {
-		let v = properties[k];
-		if (type(v) != "object" || v[READ_NULLABLE] !== true) { out[k] = v; continue; }
+function widen_null(v) {
 		let w = strip_marker(v);
 		if (type(w.type) == "string") {
 			w.type = [ w.type, "null" ];
@@ -145,7 +141,14 @@ function response_properties(properties) {
 			if (!has) push(e, null);
 			w.enum = e;
 		}
-		out[k] = w;
+		return w;
+}
+
+function response_properties(properties) {
+	let out = {};
+	for (let k in properties) {
+		let v = properties[k];
+		out[k] = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(v) : v;
 	}
 	return out;
 }
@@ -157,7 +160,13 @@ function request_properties(properties) {
 		let v = properties[k];
 		// readOnly loses its job here: the property is simply absent from this half.
 		if (type(v) == "object" && v.readOnly === true) continue;
-		out[k] = strip_marker(v);
+		// Both halves widen, because a read-modify-write sends the read view back: a live
+		// firewall rule answers with ten null-valued keys, and a request schema that forbade
+		// them described that round trip as invalid while the server answered 200 to it.
+		// The type is not what guards a required field anyway; resource.validate() is, and it
+		// answers 422 naming the field for a null `target` on a create.
+		out[k] = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(v)
+		                                                            : strip_marker(v);
 	}
 	return out;
 }
