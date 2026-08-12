@@ -42,7 +42,7 @@ return {
 		                  pattern: "^0x[0-9A-Fa-f]+$",
 		                  description: "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)." },
 		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
-		loglevel:       { type: ["string", "null"], enum: keys(VALID_LOGLEVEL),
+		loglevel:       { "x-uapi-read-nullable": true, type: ["string", "null"], enum: keys(VALID_LOGLEVEL),
 		                  description: "syslog facility level (notice/info/debug/etc.)." },
 	},
 };

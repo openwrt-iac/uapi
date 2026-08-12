@@ -52,6 +52,18 @@ All notable changes to this project will be documented in this file. Format foll
   whoami. A strict generated client rejected the whole response. `TokenMetadata` now stands
   alone and declares the eight fields both `/tokens` and `/tokens/{id}` actually return.
 
+- **105 response properties declared a type that forbade the null they return.** A read answers
+  null for a uci option the operator never set, but `firewall/defaults.synflood_rate` was
+  declared `integer`, `snmpd/system.sys_descr` `string`, `mwan3/globals.loglevel` an enum without
+  null, and so on across 32 modules. A client generated from the document could not parse the
+  response it was handed. rc1 widened 47 list-valued properties to `["array", "null"]`; these are
+  the scalar equivalents, which were never swept. The widening applies to the response half only,
+  via a new `x-uapi-read-nullable` marker: 21 of these properties are `required` on write and 26
+  carry an enum, so widening the shared declaration would have made `{"target": null}`
+  schema-valid on a create. Request schemas are byte-identical to rc2. Added
+  `make lint-response-nullability`, which derives the requirement from each resource's real
+  `fromUci` rather than from a list, with a gate-selftest probe.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

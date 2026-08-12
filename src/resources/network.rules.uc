@@ -114,7 +114,7 @@ return {
 		            description: "Match destination IPv4 address or CIDR" },
 		disabled: { type: "boolean", default: false,
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
-		priority: { type: "integer", minimum: 0, maximum: 32766 },
+		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766 },
 		lookup:   { type: ["integer", "null"], minimum: 0,
 		            description: "Routing table id to look up when action is lookup" },
 		goto:     { type: ["integer", "null"], minimum: 0,

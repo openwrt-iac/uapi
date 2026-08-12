@@ -43,7 +43,7 @@ return {
 		                description: "Path where odhcpd persists active leases" },
 		leasetrigger: { type: ["string", "null"],
 		                description: "Script invoked on lease add/update/del" },
-		loglevel:     { type: "integer", minimum: 0, maximum: 7,
+		loglevel:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 7,
 		                description: "syslog priority (0=emerg .. 7=debug)" },
 	},
 };

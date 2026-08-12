@@ -61,9 +61,9 @@ return {
 	openapi_singular: "wireless device",
 	openapi_required: ["type"],
 	schema_properties: {
-		type:     { type: "string", enum: keys(VALID_TYPES) },
-		band:     { type: "string", enum: keys(VALID_BANDS) },
-		channel:  { type: ["integer", "string"], minimum: 0, maximum: 196,
+		type:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TYPES) },
+		band:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_BANDS) },
+		channel:  { "x-uapi-read-nullable": true, type: ["integer", "string"], minimum: 0, maximum: 196,
 		            pattern: "^auto$",
 		            description: "Channel number (0-196) or the string \"auto\"" },
 		htmode:   { type: ["string", "null"],

@@ -143,7 +143,7 @@ return {
 		},
 	},
 	schema_properties: {
-		device:     { type: "string",
+		device:     { "x-uapi-read-nullable": true, type: "string",
 		              description: "Parent radio (wireless/devices id)" },
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },

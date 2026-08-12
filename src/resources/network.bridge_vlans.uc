@@ -61,9 +61,9 @@ return {
 	openapi_singular: "bridge VLAN",
 	openapi_required: ["device", "vlan"],
 	schema_properties: {
-		device: { type: "string",
+		device: { "x-uapi-read-nullable": true, type: "string",
 		          description: "Parent bridge device name (must exist in network/devices type=bridge)" },
-		vlan:   { type: "integer", minimum: 1, maximum: 4094 },
+		vlan:   { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 4094 },
 		ports:  { type: ["array", "null"], items: { type: "string", pattern: "^[A-Za-z0-9._-]+(:[tu*]+)?$" },
 		          description: "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix" },
 	},

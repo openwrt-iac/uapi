@@ -45,7 +45,7 @@ return {
 	id_prefix: "m",
 	openapi_required: ["interface"],
 	schema_properties: {
-		interface: { type: "string",
+		interface: { "x-uapi-read-nullable": true, type: "string",
 		             description: "Name of an mwan3:interfaces section." },
 		metric:    { type: ["integer", "null"], minimum: 1, maximum: 1000,
 		             description: "Lower wins. Members in the same policy with equal metric share load." },

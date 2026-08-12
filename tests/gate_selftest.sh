@@ -185,6 +185,18 @@ EOF
 
 # docs/testing.md claims four shapes for lint-openapi-shape and two rules for
 # lint-defaults; one of each was probed, so the rest were documented but unverified.
+mut_read_nullable_missing() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+# Narrow the response type back to what it was before the marker existed. The gate has to
+# notice from the code's own read behaviour, not from a list of properties in the test.
+prop = d['components']['schemas']['SnmpdSystemResponse']['properties']['sys_descr']
+prop['type'] = 'string'
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_required_undeclared() {
 	python3 - <<'EOF'
 import json
@@ -417,6 +429,7 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+probe lint-response-nullability "a response type that forbids a null it returns" "reads null but" mut_read_nullable_missing
 probe lint-openapi-shape "an if with no then"                  "constrains nothing"                mut_if_without_then
 probe lint-openapi-shape "a then with no if"                   "then/else with no if"              mut_then_without_if
 probe lint-openapi-shape "required names an undeclared prop"   "which the schema does not declare" mut_required_undeclared
