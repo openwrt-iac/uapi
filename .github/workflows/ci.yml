@@ -166,6 +166,68 @@ jobs:
   # apply: needs:[unit,lint,integration], job-level v* tag check, and a
   # step-level if on the release-upload step. Smoke test in QEMU runs
   # before the upload; a failing smoke keeps the apk off the GitHub Release.
+  # The SDK cache is what keeps a release build from compiling mbedtls, openssl and wolfssl
+  # from source, which is 20 of release-apk's 26 minutes. It never helped, because a cache
+  # saved on a tag ref is not readable from another tag ref: `gh cache list` showed two
+  # 2.05 GiB entries under the same key, minutes apart, from two tag runs, neither of which
+  # could see the other's. Caches written on the default branch are readable everywhere, so
+  # warming it here is what makes the tag run's restore hit.
+  #
+  # Costs nothing while the cache is warm: on a hit the job is a checkout and an exit. It
+  # pays the full build only when the entry is missing, which is the first run and after
+  # GitHub's 7-day eviction.
+  warm-sdk-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore or claim the SDK cache
+        id: sdkcache
+        uses: actions/cache@v6
+        with:
+          path: build/sdk
+          key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
+
+      - name: Install tooling
+        if: steps.sdkcache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl zstd build-essential libncurses-dev libssl-dev python3 \
+            unzip gawk gettext xsltproc rsync wget
+
+      - name: Download SDK (verified by sha256)
+        if: steps.sdkcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build/sdk
+          SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
+          grep -q "  $SDK_TARBALL\$" build/sdk.sha256 || {
+            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
+            exit 1
+          }
+          curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
+          ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
+          tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" -C build/sdk --strip-components=1
+          rm -f "/tmp/$SDK_TARBALL"
+
+      # Builds the package for real, because the point is to leave build_dir and staging_dir
+      # populated with uapi's compiled dependency chain. Nothing is published from here.
+      - name: Stage package
+        if: steps.sdkcache.outputs.cache-hit != 'true'
+        run: make stage
+
+      - name: Warm the build tree
+        if: steps.sdkcache.outputs.cache-hit != 'true'
+        run: |
+          cd build/sdk
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          ln -sfn ../../openwrt/uapi package/uapi
+          make defconfig
+          make package/uapi/compile
+
   release-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 60
