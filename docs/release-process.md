@@ -230,7 +230,9 @@ Before tagging:
   without it. Grep the docs for the version being cut and for the one before
   it.
 - [ ] `make test coverage` green.
-- [ ] CI on `main` green for the commit that will be tagged.
+- [ ] CI green on the branch being tagged, for the exact commit that will be tagged.
+  `main` for a release off the current major, `release/<major>.<minor>.x` for a patch on an
+  older one. Both are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
   `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
@@ -242,9 +244,11 @@ After tagging, before announcing:
 - [ ] release-apk workflow completed.
 - [ ] verify-arch-build matrix completed (all three non-x86 arches green).
 - [ ] APK attached to the GitHub Release.
-- [ ] Trigger `gh workflow run publish.yml --repo openwrt-iac/openwrt-iac.github.io`
-      (or wait for the nightly schedule) and confirm `apk update` against
-      `openwrt-iac.github.io/feed/...` finds the new version.
+- [ ] **Stable releases only**: trigger `gh workflow run publish.yml --repo
+      openwrt-iac/openwrt-iac.github.io` (or wait for the nightly schedule) and confirm
+      `apk update` against `openwrt-iac.github.io/feed/...` finds the new version. For an RC,
+      confirm the opposite instead, that `apk policy uapi` still offers the previous stable:
+      the aggregator filters prereleases at source, so an RC reaching the feed is the bug.
 - [ ] Smoke install on a real router works.
 - [ ] SBOM attached.
 
