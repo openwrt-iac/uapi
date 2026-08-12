@@ -73,13 +73,22 @@ function require_raw_scope(ctx, scopes, pkg, sec_type, verb, action) {
 	                    sprintf("Token does not permit %s", action));
 }
 
+// The curated token endpoints gate `salt` and `hash` behind an include_secret flag that only
+// the internal auth path sets, so the passthrough must not hand back verbatim what they take
+// care to mask. Reaching a token section already needs both `raw:uapi` and `uapi:tokens`, so
+// this is not an escalation path; what it stops is credential material flowing into whatever a
+// raw read feeds, a config export or a backup being the obvious ones.
+const SECRET_BY_TYPE = { "token": { "salt": true, "hash": true } };
+
 function normalize_section(s) {
 	let out = {
 		id: s['.name'],
 		'.type': s['.type'],
 	};
+	let secret = SECRET_BY_TYPE[s['.type']] ?? {};
 	for (let k in s) {
 		if (substr(k, 0, 1) == ".") continue;
+		if (secret[k]) continue;
 		out[k] = s[k];
 	}
 	// After the copy, not before it. `managed` is derived from `.anonymous`, but a section
@@ -250,9 +259,15 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 			if (!existing)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
+			let secret = SECRET_BY_TYPE[existing['.type']] ?? {};
 			for (let k in existing) {
 				if (substr(k, 0, 1) == ".") continue;
 				if (exists(new_opts, k)) continue;
+				// A stripped secret is absent from every read, so no replace body can
+				// carry it back. Deleting it here would make an ordinary read-modify-write
+				// destroy the credential, which is the trap `carry_write_only` exists to
+				// avoid on the curated side.
+				if (secret[k]) continue;
 				c.uci_delete(p, id, k);
 			}
 			for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);

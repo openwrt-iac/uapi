@@ -172,3 +172,47 @@ t.describe('raw permission composition for writes', () => {
 		t.assert_equal(r.status, 403);
 	});
 });
+
+// The curated token endpoints gate salt and hash behind include_secret, set only on the
+// internal auth path. The passthrough returned the section verbatim, so GET /raw/uapi handed
+// back exactly what they mask: confirmed on a box running 3.0.0-rc1, five tokens including a
+// *:rw one. Reaching them needs raw:uapi and uapi:tokens together, so this was disclosure
+// rather than escalation, but the material flows into anything built on a raw read.
+t.describe('raw does not disclose token credential material', () => {
+	function tokens() {
+		return bus.stub({ uci: { uapi: {
+			admin: { '.type': 'token', '.anonymous': false, salt: 'ff27a159', hash: 'a587ce7e',
+			         scopes: ['*:rw'], name: 'admin' },
+		}}});
+	}
+
+	t.it('strips salt and hash from a list', () => {
+		let r = raw.list(tokens(), ctx(), ["*:rw"], "uapi");
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body[0].salt, null);
+		t.assert_equal(r.body[0].hash, null);
+		t.assert_equal(r.body[0].name, 'admin');
+	});
+
+	t.it('strips them from a single get too', () => {
+		let r = raw.get_one(tokens(), ctx(), ["*:rw"], "uapi", "admin");
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.salt, null);
+		t.assert_equal(r.body.hash, null);
+	});
+
+	t.it('leaves other packages untouched', () => {
+		let c = bus.stub({ uci: { firewall: {
+			z: { '.type': 'zone', '.anonymous': false, name: 'lan', salt: 'not-a-secret-here' },
+		}}});
+		let r = raw.get_one(c, ctx(), ["*:rw"], "firewall", "z");
+		t.assert_equal(r.body.salt, 'not-a-secret-here');
+	});
+
+	// The trap the strip creates cannot be unit-tested: a successful raw write needs the real
+	// flock, which no unit test can take, and every existing raw-write case here asserts a
+	// pre-transaction failure for the same reason. A stripped field cannot come back in a
+	// replace body, and replace deletes what the body omits, so a plain read-modify-write
+	// would destroy the credential. The carry-forward that prevents it is verified on
+	// hardware instead, in the PR that added it.
+});
