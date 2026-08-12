@@ -55,6 +55,18 @@ function strict_bool(v) {
 	return v === "1" || v === 1 || v === true;
 }
 
+// A value that reaches a line-oriented config file, a shell argument or a stdin prompt cannot
+// carry control characters: one embedded newline turns a single value into two lines. That is
+// how a feed URL appended a second, attacker-chosen apk repository which every later install
+// trusted and no read path showed, since both parsed one line.
+function has_control_chars(s) {
+	for (let i = 0; i < length(s); i++) {
+		let c = ord(substr(s, i, 1));
+		if (c < 32 || c == 127) return true;
+	}
+	return false;
+}
+
 function as_list(v) {
 	if (v == null) return [];
 	if (type(v) == "array") return v;
@@ -503,6 +515,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_int,
+	has_control_chars,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
