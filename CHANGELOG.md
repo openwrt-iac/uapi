@@ -72,6 +72,22 @@ All notable changes to this project will be documented in this file. Format foll
   type. `lint-openapi-shape` gained a rule for the disagreement in either direction, with a
   gate-selftest probe.
 
+- **A write-side rule demanded a masked secret of every read.** `wireless/interfaces` requires
+  `key` when `encryption` is a PSK variant, and that conditional was copied verbatim into the
+  response schema, where `key` is `writeOnly` and masked on read. Every read of an encrypted
+  wireless interface therefore violated its own published schema. Response conditionals are now
+  projected over what a response can actually supply, reusing the arm-keeping the request half
+  already had. The property itself stays in the response half, because a request schema that is
+  not a subset of its response makes a generated client treat a settable field as computed.
+
+### Added
+
+- **`50_response_conformance_test.sh`**: validates live response bodies against the schemas the
+  spec publishes for them, and checks the served document matches the one in the tree. Every
+  other schema gate compares the document to itself, and the two defects above lived in exactly
+  that gap: an unsatisfiable `allOf` composition is valid JSON Schema per node and only fails
+  against a real body. It found the wireless defect on its first run.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added

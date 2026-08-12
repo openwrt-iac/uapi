@@ -186,7 +186,7 @@ function keep_arms(arms, props, where) {
 // Nested requirements under a `properties` block are keyed inside that property, not on the
 // instance, so they are left alone. Unrecognised shapes stop the build rather than being copied
 // through unexamined.
-function request_conditional(conditional, props, where) {
+function project_conditional(conditional, props, where) {
 	let out = [];
 	for (let c in conditional) {
 		if (type(c.anyOf) == "array") {
@@ -1379,17 +1379,30 @@ function build_schemas() {
 			}
 		}
 
+		let resp_props = response_properties(properties);
 		let s = {
 			"type": "object",
 			"description": sprintf("uapi resource backed by uci %s.%s", mod.package, mod.type),
-			"properties": response_properties(properties),
+			"properties": resp_props,
 		};
 
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			s.required = mod.openapi_required;
 
-		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0)
-			s.allOf = mod.openapi_conditional;
+		// A response carries its writeOnly properties so the request half stays a subset of it,
+		// which is what keeps a generated client from treating a settable field as computed.
+		// They are masked on read, though, so a write-side rule that requires one demands
+		// something no response can supply: wireless/interfaces requires `key` when encryption
+		// is psk2, and every read of an encrypted interface violated its own schema. The
+		// conditional is therefore projected over what a response can actually satisfy.
+		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
+			let readable = {};
+			for (let k in resp_props)
+				if (type(resp_props[k]) != "object" || resp_props[k].writeOnly !== true)
+					readable[k] = resp_props[k];
+			let cond = project_conditional(mod.openapi_conditional, readable, ep.path);
+			if (length(cond) > 0) s.allOf = cond;
+		}
 
 		schemas[response_name(ep)] = s;
 
@@ -1403,7 +1416,7 @@ function build_schemas() {
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			req.required = mod.openapi_required;
 		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
-			let cond = request_conditional(mod.openapi_conditional, req_props, ep.path);
+			let cond = project_conditional(mod.openapi_conditional, req_props, ep.path);
 			if (length(cond) > 0) req.allOf = cond;
 		}
 		// Only for an endpoint that can actually be written. A generated client reads a
