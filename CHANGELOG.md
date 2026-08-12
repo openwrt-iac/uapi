@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-08-12
+
+Security-only patch on the v2 line. Both issues were found by adversarially reviewing the v3
+release candidate and are present in every earlier release, so they are fixed here too for
+operators pinned to the v2 wire contract.
+
+### Security
+
+- **A feed URL carrying a newline appended a second, hidden apk repository.** `create_feed`
+  anchored its pattern at the start only and wrote the value into
+  `/etc/apk/repositories.d/<name>.list` verbatim, so a URL containing a newline produced two
+  repository lines. apk trusts every line, making the injected one arbitrary package
+  installation as root on the next `apk add` an operator runs, and it was invisible through the
+  API: both read paths parse a single line, so `GET` reported only the first. A token scoped to
+  `packages:feeds` alone therefore reached code execution well outside that scope. Control
+  characters are now rejected and the pattern is anchored at both ends. A feed URL containing
+  control characters or whitespace is now `422` where it was `200`; the old behaviour wrote a
+  file no caller could describe through the API.
+
+- **`GET /raw/uapi` returned every token's `salt` and `hash`.** The curated token endpoints gate
+  both behind a flag only the internal auth path sets; the passthrough normalised the section
+  verbatim and returned exactly what they mask. Reaching it requires `raw:uapi` and
+  `uapi:tokens` together, so this is disclosure rather than escalation, and bearers are random
+  and stored salted, but the material flowed into anything built on a raw read. Stripped now,
+  and a replace carries the stored values forward rather than deleting them, since a stripped
+  field cannot come back in a request body and a plain read-modify-write would otherwise have
+  destroyed the credential.
+
 ## [2.5.0] - 2026-08-09
 
 ### Added

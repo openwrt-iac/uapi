@@ -1,5 +1,6 @@
 let fs = require('fs');
 let errors = require('errors');
+let values = require('values');
 let non_uci = require('non_uci');
 
 const KEYS_PATH = "/etc/dropbear/authorized_keys";
@@ -65,16 +66,11 @@ function set_password(ctx, body) {
 		push(errs, errors.field_error("password", "out_of_range",
 			sprintf("must be at least %d characters", MIN_PASSWORD_LEN)));
 	else {
-		// Reject control characters: passwd reads two lines via stdin, so an
-		// embedded \n splits the password and confuses the confirmation step.
-		for (let i = 0; i < length(pw); i++) {
-			let c = ord(substr(pw, i, 1));
-			if (c < 32 || c == 127) {
-				push(errs, errors.field_error("password", "invalid_format",
-					"must not contain control characters (newline, NUL, etc.)"));
-				break;
-			}
-		}
+		// passwd reads two lines via stdin, so an embedded newline splits the password and
+		// confuses the confirmation step.
+		if (values.has_control_chars(pw))
+			push(errs, errors.field_error("password", "invalid_format",
+				"must not contain control characters (newline, NUL, etc.)"));
 	}
 	if (length(errs) > 0)
 		return errors.validation_failed(ctx, errs);
