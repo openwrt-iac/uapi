@@ -28,6 +28,16 @@ All notable changes to this project will be documented in this file. Format foll
 
   Both were found by adversarially reviewing 3.0.0-rc1 and are fixed before 3.0.0 final.
 
+### Fixed
+
+- **A `PATCH` or `PUT` with no body is now refused instead of writing.** The parser skipped an
+  empty body and fell through with a null one. `PUT` was caught downstream by required-field
+  validation, but a `PATCH` answered 200 and still committed: the merge folded the read view
+  back in, so a request carrying no instruction at all materialised defaults into uci. Measured
+  on a device, an empty `PATCH` added `enabled '1'` to a firewall rule that had no such option.
+  Both verbs now answer 400 `bad_request`. `POST` is unaffected, because
+  `/<resource>/{id}/adopt` legitimately takes no body.
+
 ## [3.0.0-rc1] - 2026-08-10
 
 ### Added
