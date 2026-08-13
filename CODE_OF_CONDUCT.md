@@ -23,7 +23,7 @@ participating in this project.
 
 ## Reporting
 
-Report a concern to guy.godfroy@gugod.fr. Reports are read by the maintainer, kept
+Report a concern to openwrt-iac@gugod.fr. Reports are read by the maintainer, kept
 confidential, and answered. Security vulnerabilities go through `SECURITY.md` instead, which
 has its own private disclosure path.
 

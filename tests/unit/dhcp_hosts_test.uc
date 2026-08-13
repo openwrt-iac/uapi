@@ -278,3 +278,62 @@ t.describe('dhcp.hosts tag storage converges on write, invisibly', () => {
 		t.assert_deep_equal(scalar.tag, listed.tag);
 	});
 });
+
+// dnsmasq refuses to start when two dhcp-host entries share an IP, so the second reservation
+// used to answer 200 and take DNS down with it. Several NICs on one host is one reservation
+// with several `macs`, which dnsmasq accepts, so nothing legitimate needs two on one address.
+t.describe('dhcp/hosts refuses a reservation IP another host already holds', () => {
+	let ubus2 = require('bus');
+	let handler2 = require('handler');
+	let fx2 = require('resource_fixtures');
+	let hosts2 = loadfile('src/resources/dhcp.hosts.uc')();
+	function tx2() {
+		return { acquire: function() { return {}; }, release: function() {},
+		         reload: function() { return null; }, check_services: function() { return null; },
+		         wg_apply: function() { return null; }, wg_reconcile: function() { return null; } };
+	}
+	function c2() { return { request_id: "01hx0000000000000000000000" }; }
+	function box() {
+		let u = fx2.world();
+		u.dhcp = u.dhcp ?? {};
+		u.dhcp.taken = { '.anonymous': false, '.type': 'host', name: 'taken',
+		                 mac: 'aa:00:00:00:00:01', ip: '192.168.1.91' };
+		return ubus2.stub({ uci: u });
+	}
+	let h2 = handler2.make(hosts2, { tx: tx2() });
+
+	t.it('refuses a second reservation on the same address', () => {
+		let c = box();
+		let r = h2.create(c, c2(), { id: 'other', name: 'other',
+		                             macs: ['aa:00:00:00:00:09'], ip: '192.168.1.91' });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'ip');
+		t.assert_equal(r.body.errors[0].code, 'conflict');
+		t.assert_equal(c._state.uci.dhcp.other, null);
+	});
+
+	t.it('accepts a different address', () => {
+		let c = box();
+		let r = h2.create(c, c2(), { id: 'other', name: 'other',
+		                             macs: ['aa:00:00:00:00:09'], ip: '192.168.1.92' });
+		t.assert_equal(r.status, 200);
+	});
+
+	// The multi-NIC shape, which is one reservation rather than two on one address.
+	t.it('accepts several macs on one reservation', () => {
+		let c = box();
+		let r = h2.create(c, c2(), { id: 'multi', name: 'multi',
+		                             macs: ['aa:00:00:00:00:07', 'aa:00:00:00:00:08'],
+		                             ip: '192.168.1.93' });
+		t.assert_equal(r.status, 200);
+	});
+
+	// A reservation with no address cannot collide, and several are normal.
+	t.it('leaves address-less reservations alone', () => {
+		let c = box();
+		t.assert_equal(h2.create(c, c2(), { id: 'n1', name: 'n1',
+		                                    macs: ['aa:00:00:00:00:0a'] }).status, 200);
+		t.assert_equal(h2.create(c, c2(), { id: 'n2', name: 'n2',
+		                                    macs: ['aa:00:00:00:00:0b'] }).status, 200);
+	});
+});

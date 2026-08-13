@@ -114,6 +114,16 @@ function validate(json, conn) {
 return {
 	package: "dhcp",
 	type: "host",
+	// dnsmasq treats two dhcp-host entries sharing an IP as fatal, not as something to
+	// ignore: it logs "duplicate dhcp-host IP address" and refuses to start, so the box loses
+	// DNS and DHCP until one is removed. Measured on a device, where the second reservation
+	// answered 200 and the daemon was gone three seconds later.
+	//
+	// A host with several NICs is one reservation carrying several `macs`, which dnsmasq
+	// accepts and which keeps running, so nothing legitimate needs two reservations on one
+	// address. Reservations with no `ip` are untouched: check_unique_field skips a value that
+	// is not a non-empty string.
+	unique_field: "ip",
 	reload: ["dnsmasq"],
 	fromUci: fromUci,
 	toUci: toUci,
