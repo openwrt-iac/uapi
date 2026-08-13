@@ -87,7 +87,7 @@ The emitted `openapi.json` carries the same version as the API it describes (`in
 Property schemas under `components.schemas.*.properties` carry two non-standard annotations beyond the OpenAPI baseline shape:
 
 - **`default`**: the value `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.
-- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client can safely send explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. The flag is mutually exclusive with `default:` (a defaulted-and-clearable field produces perpetual non-converging diffs).
+- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and clearing it converges. The flag is mutually exclusive with `default:` (a defaulted-and-clearable field produces perpetual non-converging diffs). Note what the flag does *not* mean: the server accepts explicit JSON null for any modeled field and clears the underlying uci option, flagged or not, which is what makes a read-modify-write work at all when the read answered null. The flag marks where clearing is *safe*, not where it is *possible*, and its value is that a defaulted field is never marked, so a client that treats flagged fields as clearable cannot enter the diff loop above.
 
 Both annotations are enforced by `make lint-defaults`. See `docs/adding-a-resource.md` for the authoring rules.
 
