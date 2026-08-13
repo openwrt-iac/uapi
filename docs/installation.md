@@ -65,7 +65,16 @@ installs the version in that file whether or not an older one is present.
 
 The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`, `-beta`, `-pre`) are intentionally excluded so that `apk add uapi` and `apk upgrade uapi` never resolve to a not-yet-ready build. RC APKs land on the GitHub Release page (marked Pre-release); to install one, download it manually and `apk add --allow-untrusted /tmp/uapi-<rc>.apk`.
 
-Every stable release stays available indefinitely, so pinning works: `apk add 'uapi<3.0.0'` holds a client to the v2 wire contract, and `apk add uapi=<version>-r1` pins an exact build. `CHANGELOG.md` and the GitHub Releases page are the sources of truth for what the current line is; this page deliberately does not name it, because a version written here goes stale the moment the next one ships.
+**Installing from a file pins the package, and nothing tells you.** `apk add <file>.apk` writes a checksum-pinned entry into `/etc/apk/world`, of the form `uapi><Q1zxo621V...=`, which holds that exact build. `apk upgrade` then silently leaves uapi alone: no error, no mention in the output, the version simply never moves. Restore feed tracking with
+
+```sh
+apk add uapi        # replaces the pinned world entry with a plain `uapi`
+apk upgrade         # now resolves the feed's current release
+```
+
+`grep uapi /etc/apk/world` shows which state a box is in: a bare `uapi` tracks the feed, anything with a `><Q1...` suffix is pinned to one build. This is why a router that dogfooded an RC keeps reporting the RC long after a stable release exists.
+
+The feed carries the **current stable release only**: the index is rebuilt from the latest stable tag each publish, so the previous version's APK stops resolving the moment a new one ships. `apk add uapi=<version>-r1` therefore pins an exact build only while that build is the current one, and a constraint like `apk add 'uapi<3.0.0'` will not find an older release once it has rolled off. Older releases stay on the GitHub Releases page permanently, and installing one from there is the supported way back, subject to the pinning note above. `CHANGELOG.md` and the GitHub Releases page are the sources of truth for what the current line is; this page deliberately does not name it, because a version written here goes stale the moment the next one ships.
 
 ## TLS
 
