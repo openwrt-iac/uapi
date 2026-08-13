@@ -21,40 +21,42 @@ one, so no manual uci edit is needed.
    `<Name>Request` and `<Name>Response` schema
 4. Verify: `GET /api/v3/healthz` returns `{"status":"ok","version":"3.0.0",...}`
 
-## Removed request fields are ignored, not rejected
+## Removed request fields are rejected (Breaking)
 
-Read this before assuming a green test run means a client has migrated.
-
-uapi drops request keys it does not model, and a removed field is indistinguishable from a key
-that never existed. So a v2 client that still sends `mac`, `mac_aliases`, `managed` or
-any of the dead fields below gets `200`, and the value goes nowhere (`ipaddr` is the one
-exception, below):
+A request naming a field the resource does not declare answers `422` with field code
+`unknown_field`, naming the path. In v2 such a key was dropped in silence, so a stale write
+answered `200` and changed nothing:
 
 ```
-# against v3, on a host whose reservation lists two MACs
+# on a host whose reservation lists two MACs
 PATCH /api/v3/dhcp/hosts/printer {"mac": "aa:bb:cc:dd:ee:01"}
--> 200, and uci still holds both original entries
+-> 422 validation_failed, errors[0] = { field: "mac", code: "unknown_field" }
 ```
 
-That is the same rule every unknown key has always followed, and changing it for these four
-names alone would mean carrying the removed vocabulary into v3 just to refuse it. The cost is
-that a stale write fails silently, which is why regenerating the client matters more here than
-across a normal upgrade: codegen against the v3 spec turns each of these into a compile error
-instead of a no-op.
+This is the one breaking change in v3 that makes migration easier rather than harder. A client
+that still sends `mac`, `mac_aliases` or any removed field below now fails loudly on the first
+apply, instead of reporting success while the value went nowhere. Regenerating the client is
+still the right fix, and codegen against the v3 spec turns each of these into a compile error
+before a request is ever sent.
 
-**`network/interfaces.name` on create is the sharpest case.** It does not 422. A section name is
-required to create anything, so when `id` is absent uapi emits one, exactly as it does for a
-body that names no section at all:
+**`network/interfaces.name` on create fails now too.** In v2 it was the sharpest silent case:
+uapi generated a section name, so the interface came back under a name the caller never chose,
+which an IaC client keying on its requested name read as drift and duplicated on the next apply.
+That cannot happen in v3:
 
 ```
 POST /api/v3/network/interfaces {"name": "lan2", "proto": "static", "ipaddrs": ["192.0.2.77"]}
--> 200 {"id": "i_01kznhag1a6yg3qgmv85bgmhh7", ...}
+-> 422 validation_failed, errors[0] = { field: "name", code: "unknown_field" }
 ```
 
-The interface exists and carries the right addresses, under a name the caller never chose and
-will not find again by the name it sent. An IaC client that keys resources by the name it
-requested reads that back as drift and creates a second one on the next apply. Rename the field
-to `id` before upgrading, not after the first apply.
+Rename the field to `id` and the create succeeds.
+
+**Three names stay accepted and ignored, on purpose.** `id`, `managed` and `runtime` appear in
+every response and in no request schema, and every IaC apply is a read-modify-write, so refusing
+them would break sending a read straight back. The same holds for a field that is `readOnly`
+rather than removed: `network/interfaces.ipaddr` still exists in the model as a read, so a body
+carrying it answers `200` and the value is ignored. Only names the resource does not model at
+all are refused.
 
 ## Field removals (Breaking)
 
