@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-08-13
+
+First stable v3 release. Promotion of `v3.0.0-rc3` after the provider integration window closed
+with nothing filed. No code or spec changes since rc3; only the `VERSION` bump and this
+changelog promotion.
+
+The cumulative v3 changes vs. 2.5.1 are listed across the three RC entries below. As a contract
+summary:
+
+- `/api/v3/` mount; 48 curated resource endpoints plus `/raw/` passthrough, `/batch`, and the
+  ops endpoints (`/healthz`, `/openapi.json`, `/schema`, `/metrics`, `/tokens`, `/auth/whoami`,
+  `/diagnostics`).
+- Separate `<Name>Request` and `<Name>Response` schemas for every resource. A read answers null
+  for an unset uci option and both halves say so, which is what makes a read-modify-write
+  round trip valid against the published document.
+- A request naming a field the resource does not declare is refused with `422 unknown_field`
+  rather than dropped in silence. `id`, `managed` and `runtime` stay tolerated so an apply can
+  send a read straight back.
+- A `PUT` or `PATCH` carrying no body is refused; a `PATCH` writes only the keys it was given,
+  neither materialising defaults nor rewriting an operator's spelling.
+- `allowed_cidrs` matches IPv6 callers, against entries of its own family only.
+- 1230 unit tests, property-fuzz at 1000 iterations per resource per CI run, an integration
+  suite against a real OpenWrt 25.12 VM including live response-conformance in both directions,
+  soak with RSS/fd-leak watch, and eleven mutation-probed gates.
+
+Upgrading from 2.x moves the mount from `/api/v2` to `/api/v3`; one installation serves one API
+major. Read `docs/migration-v2-to-v3.md` before installing rather than after.
+
 ## [3.0.0-rc3] - 2026-08-13
 
 ### Added
