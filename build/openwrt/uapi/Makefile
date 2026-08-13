@@ -12,8 +12,8 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 include $(INCLUDE_DIR)/package.mk
 
 define Package/uapi
-  SECTION:=net
-  CATEGORY:=Network
+  SECTION:=admin
+  CATEGORY:=Administration
   TITLE:=Native HTTP REST API for OpenWrt
   URL:=https://github.com/openwrt-iac/uapi
   PKGARCH:=all
