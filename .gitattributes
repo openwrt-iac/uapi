@@ -1,0 +1,7 @@
+# Normalise to LF on checkin. The shipped tree lands on OpenWrt, where a CRLF in an init
+# script or a uci-defaults hook fails at a shell that gives no useful error.
+* text=auto eol=lf
+
+*.apk binary
+*.png binary
+*.zst binary

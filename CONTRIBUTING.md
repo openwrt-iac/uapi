@@ -17,7 +17,7 @@ uapi does NOT need `node`, `python`, or any JS toolchain. The OpenAPI spec is ge
 ## Dev loop
 
 ```sh
-make test                # lint + 600+ unit tests + coverage gate (~5 sec)
+make test                # lint + the unit suite + coverage gate (a few seconds)
 make openapi             # regenerate build/openapi.json from src/resources/*.uc
 make stage               # stage files into build/openwrt/uapi/files/ for APK packaging
 make help                # full target list
