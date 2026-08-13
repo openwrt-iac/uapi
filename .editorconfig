@@ -1,0 +1,22 @@
+# ucode sources are tab-indented, which matters because a mixed file is hard to read in a
+# language whose blocks are brace-delimited but whose comments carry the load.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.uc]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
+
+[*.{sh,py}]
+indent_style = tab
+
+[*.{md,json,yml,yaml,html,css}]
+indent_style = space
+indent_size = 2

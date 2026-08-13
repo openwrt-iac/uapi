@@ -82,7 +82,7 @@ curl -H "Authorization: Bearer $TOKEN" \
      -X POST https://<router>/api/v3/firewall/rules \
      -d '{
        "target": "ACCEPT",
-       "match": { "src_zone": "wan", "dest_port": [22], "proto": ["tcp"] }
+       "match": { "src_zone": "wan", "dest_port": ["22"], "proto": ["tcp"] }
      }'
 ```
 
