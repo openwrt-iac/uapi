@@ -137,6 +137,14 @@
 			"description": "Recursive DNS server singleton (`config unbound`)."
 		},
 		{
+			"name": "Unbound / Srv",
+			"description": "Directives rendered into unbound's `server:` clause (`config unbound_srv`). Requires the separate `unbound-uci-ext` package, which owns the uci-to-conf renderer and the init script this resource reloads; without it the first write returns `503 init_script_missing`."
+		},
+		{
+			"name": "Unbound / Ext",
+			"description": "Clauses rendered outside `server:`, such as `forward-zone:` or `view:` (`config unbound_ext`). Same install dependency as Unbound / Srv: `unbound-uci-ext` provides the renderer and the init script, and without it the first write returns `503 init_script_missing`."
+		},
+		{
 			"name": "Sqm / Queues",
 			"description": "Per-interface SQM shaping (`config queue`)."
 		},
@@ -306,6 +314,8 @@
 				"Uhttpd / Instances",
 				"Uhttpd / Certs",
 				"Unbound / Server",
+				"Unbound / Srv",
+				"Unbound / Ext",
 				"Sqm / Queues",
 				"Snmpd / Agents",
 				"Snmpd / Com2secs",
