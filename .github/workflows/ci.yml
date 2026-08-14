@@ -393,6 +393,10 @@ jobs:
           # SBOM (the APK is the gate, the SBOM is supplementary metadata).
           [ -r build/sbom.spdx.json ] && \
             gh release upload "$TAG" build/sbom.spdx.json --clobber || true
+          # Deleting a tag in order to move it reverts its release to a draft, and
+          # `gh release view` succeeds on a draft, so the create branch above is skipped
+          # and the rebuilt artifacts land in a release nobody can see or download.
+          gh release edit "$TAG" --draft=false
 
       # The signed APK feed lives at openwrt-iac.github.io/feed/ and is
       # rebuilt by openwrt-iac/openwrt-iac.github.io's publish.yml workflow,
