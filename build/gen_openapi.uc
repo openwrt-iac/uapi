@@ -568,6 +568,8 @@ const TAGS = [
 	{ name: "Uhttpd / Instances",          group: "Other daemons", description: "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`." },
 	{ name: "Uhttpd / Certs",              group: "Other daemons", description: "px5g certificate generation params (`config cert`)." },
 	{ name: "Unbound / Server",            group: "Other daemons", description: "Recursive DNS server singleton (`config unbound`)." },
+	{ name: "Unbound / Srv",               group: "Other daemons", description: "Directives rendered into unbound's `server:` clause (`config unbound_srv`). Requires the separate `unbound-uci-ext` package, which owns the uci-to-conf renderer and the init script this resource reloads; without it the first write returns `503 init_script_missing`." },
+	{ name: "Unbound / Ext",               group: "Other daemons", description: "Clauses rendered outside `server:`, such as `forward-zone:` or `view:` (`config unbound_ext`). Same install dependency as Unbound / Srv: `unbound-uci-ext` provides the renderer and the init script, and without it the first write returns `503 init_script_missing`." },
 	{ name: "Sqm / Queues",                group: "Other daemons", description: "Per-interface SQM shaping (`config queue`)." },
 	{ name: "Snmpd / Agents",              group: "Other daemons", description: "SNMP listen addresses (`config agent`)." },
 	{ name: "Snmpd / Com2secs",            group: "Other daemons", description: "community-to-security mapping (`config com2sec`)." },
