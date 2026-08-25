@@ -41,7 +41,7 @@ TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 ( cd "$STAGING" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$TMP"
 
-DOC_NAMESPACE="https://github.com/raspbeguy/uapi/sbom/${VERSION}"
+DOC_NAMESPACE="https://github.com/openwrt-iac/uapi/sbom/${VERSION}"
 
 # Extract dependencies from the package Makefile DEPENDS line.
 # Strip leading + and the line-continuation backslashes; produce one dep per line.
@@ -118,12 +118,12 @@ cat <<EOF
       "SPDXID": "SPDXRef-Package-uapi",
       "name": "uapi",
       "versionInfo": "${VERSION}",
-      "downloadLocation": "https://github.com/raspbeguy/uapi/releases/tag/v${VERSION}",
+      "downloadLocation": "https://github.com/openwrt-iac/uapi/releases/tag/v${VERSION}",
       "filesAnalyzed": true,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "supplier": "Person: Guy Godfroy <guy.godfroy@gugod.fr>",
-      "homepage": "https://github.com/raspbeguy/uapi"$(
+      "homepage": "https://github.com/openwrt-iac/uapi"$(
         [ -n "$PKG_VERIFICATION" ] && printf ',\n      "checksums": [{ "algorithm": "SHA256", "checksumValue": "%s" }]' "$PKG_VERIFICATION"
         [ -n "$PKG_SIZE" ] && printf ',\n      "comment": "Built APK size: %s bytes"' "$PKG_SIZE"
       )

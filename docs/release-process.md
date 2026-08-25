@@ -109,7 +109,7 @@ install one download the APK from the release page and
 path the maintainer uses to dogfood the RC on the live router.
 
 Announce the RC explicitly to known downstream consumers - the
-`raspbeguy/uapi` Terraform provider author, anyone with a published
+`openwrt-iac/uapi` Terraform provider author, anyone with a published
 client - and give them a ~1-2 week window to file wire-surface
 feedback. Promote `rc<N>` to the final `vX.0.0` only after the window
 closes with no fundamental issues outstanding. v2.0.0 went straight to
