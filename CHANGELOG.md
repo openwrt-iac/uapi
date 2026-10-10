@@ -25,9 +25,9 @@ All notable changes to this project will be documented in this file. Format foll
   state no caller can rely on, and it fails loudly, with a 422, for every client. (#186)
 
 - **An `authorized_keys` file that exists but cannot be read no longer loses keys.** uapi read
-  such a file as empty, so the next add, replace or remove rewrote it with only its own keys and
-  could lock root out of SSH. The request now fails with `500`, and syslog records the cause.
-  (#194)
+  such a file as empty, so the next add or remove rewrote it with only its own keys and could
+  lock root out of SSH. A read, add or remove of such a file now fails with `500`, and syslog
+  records the cause. A `PUT` replaces the file without reading it, as before. (#194)
 
 - **A full filesystem no longer empties `authorized_keys` or the crontab.** uapi writes the new
   file under a temporary name and renames it into place, but it did not notice when the write
