@@ -122,10 +122,7 @@ function parse_public_key(line) {
 }
 
 function read_keys() {
-	let f = fs.open(KEYS_PATH, "r");
-	if (!f) return [];
-	let content = f.read("all") ?? "";
-	f.close();
+	let content = non_uci.read_file_if_present(KEYS_PATH) ?? "";
 	let out = [];
 	let seen = {};
 	for (let line in split(content, "\n")) {

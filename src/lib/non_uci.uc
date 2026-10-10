@@ -1,3 +1,4 @@
+let fs = require('fs');
 let errors = require('errors');
 let transaction = require('transaction');
 let log = require('log');
@@ -63,4 +64,15 @@ function audit_warning(ctx, action, fields) {
 	_audit(ctx, log.LOG_WARNING, action, fields);
 }
 
-return { with_lock_translated, audit_notice, audit_warning };
+// A file that exists but cannot be read is not an empty one: treating it as empty lets the
+// next write replace every line in it with only its own, which for authorized_keys locks
+// root out of SSH.
+function read_file_if_present(path) {
+	let content = fs.readfile(path);
+	if (content != null) return content;
+	let err = fs.error();
+	if (fs.stat(path) == null) return null;
+	die(sprintf("could not read %s: %s", path, err));
+}
+
+return { with_lock_translated, audit_notice, audit_warning, read_file_if_present };

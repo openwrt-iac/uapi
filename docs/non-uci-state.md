@@ -67,7 +67,7 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 
 - **Source of truth.** `/etc/dropbear/authorized_keys` (mode 0600).
 - **Lock.** `transaction.with_lock` for writes; reads are lock-free.
-- **Mechanism.** Direct file I/O. dropbear re-reads the file on every connection so no reload is needed.
+- **Mechanism.** Direct file I/O. dropbear re-reads the file on every connection so no reload is needed. A file that exists but cannot be read fails the request with `500`: reading it as empty would let an add or a remove rewrite it with only its own keys, and lock root out of SSH.
 - **Validation.** Server-side parse of each key line as `<type> <base64-blob> [comment]`. Allowed types: `ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-nistp{256,384,521}`, `sk-ssh-ed25519@openssh.com`, `sk-ecdsa-sha2-nistp256@openssh.com`. Options blocks (`command="..."`, `no-pty`, etc.) before the key type are stripped from the canonical form.
 - **Stable id.** The first 12 hex characters of the blob's sha256, matching `^[a-f0-9]{12}$`. Same key always gets the same id, idempotent across re-adds.
 - **HTTP shape.** `GET` lists; `POST` adds one; `PUT` replaces wholesale (dedup); `DELETE /<id>` removes one.
