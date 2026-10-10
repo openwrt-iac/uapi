@@ -44,24 +44,24 @@ function list_installed() {
 	return names;
 }
 
+// `apk info` prints "<name>-<version>", and a name can itself end in a dash and digits, so
+// no split of that line is right for every package: `uapi-3.0.0-r1` came out as version
+// `r1`. `apk query` reports the version as a field of its own. apk_exec merges stderr into
+// the output, and a warning there would break the JSON, so that case reads as no version
+// rather than as a package that is not installed.
+function version_of(name, query_output) {
+	let found = null;
+	try { found = filter(json(query_output), p => p.name == name)[0]; } catch (e) {}
+	return found?.version ?? null;
+}
+
 function info_one(name) {
 	if (!match(name, PKG_NAME_RE)) return null;
 	let exists = apk_exec(sprintf("info -e -- %s", name));
 	if (!exists.ok || exists.output == "") return null;
-	let info = apk_exec(sprintf("info -- %s", name));
-	let version = null;
-	if (info.ok) {
-		let first_line = "";
-		for (let line in split(info.output, "\n")) {
-			let t = trim(line);
-			if (t != "") { first_line = t; break; }
-		}
-		let m = match(first_line, /^[A-Za-z0-9_+.-]+-([^[:space:]-][^[:space:]]*)\s/);
-		if (!m) m = match(first_line, /^[A-Za-z0-9_+.-]+-([0-9][^[:space:]]*)/);
-		if (m) version = m[1];
-	}
-	return { id: name, managed: true, name: name,
-	         installed: true, version: version, runtime: {} };
+	let query = apk_exec(sprintf("query --from installed --fields name,version --format json -- %s", name));
+	return { id: name, managed: true, name: name, installed: true,
+	         version: query.ok ? version_of(name, query.output) : null, runtime: {} };
 }
 
 function list_handler(ctx) {
@@ -271,4 +271,5 @@ return {
 	create_feed: create_feed_handler,
 	remove_feed: remove_feed_handler,
 	add_with_refresh: add_with_refresh,
+	version_of: version_of,
 };
