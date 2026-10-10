@@ -102,11 +102,6 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 
 The following items are real configuration concerns that uapi deliberately does NOT cover. For each, the recommended out-of-band path is listed. An IaC orchestrator typically wires these once at image-bake time (cloud-init / `/etc/uci-defaults/`) rather than reaching for them on every reconcile.
 
-### Unbound listen-address binding
-
-- **Why excluded.** OpenWrt's `unbound` uci has no clean option for binding the recursive server to a specific address (e.g. loopback-only). The upstream init script emits `interface-automatic: yes` unconditionally when `interface_auto=1`; there is no uci path that produces an `interface: 127.0.0.1` line. uapi's `unbound/server` resource curates every uci option the upstream init script actually consumes, but it deliberately does not invent an option that uci doesn't expose.
-- **Recommended path.** Drop your overrides into `/etc/unbound/unbound_srv.conf` (auto-included inside the `server:` clause), or set `manual_conf=1` via `PATCH /api/v3/unbound/server` and write the full `/etc/unbound/unbound.conf` yourself. The `unbound_srv.conf` file ships as a stub from the upstream package precisely for this use.
-
 ### Serial console / inittab
 
 - **Why excluded.** `/etc/inittab` is not uci.
