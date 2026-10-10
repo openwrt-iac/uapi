@@ -67,6 +67,20 @@ function has_control_chars(s) {
 	return false;
 }
 
+// A value bound for dnsmasq's config lands in a one-line directive such as
+// `dhcp-host=tag:a,aa:bb:..,10.0.0.5,name`, where each of these is syntax. Measured on dnsmasq
+// 2.93: a comma ends the field, and dnsmasq refuses to start when the rest is not a field;
+// a double quote opens a string that never closes, and it refuses to start; `#` after
+// whitespace turns the rest of the line into a comment; a newline begins a directive of its
+// own, so a value can inject any dnsmasq option.
+function dnsmasq_value_problem(v) {
+	if (trim(v) == "")
+		return "must not be blank";
+	if (has_control_chars(v) || match(v, /[,"#]/))
+		return "must not contain a comma, a double quote, a '#' or a control character: dnsmasq reads each as config syntax, and a newline would add a directive of its own";
+	return null;
+}
+
 function as_list(v) {
 	if (v == null) return [];
 	if (type(v) == "array") return v;
@@ -569,7 +583,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_int,
-	has_control_chars,
+	has_control_chars, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,

@@ -28433,7 +28433,7 @@
 							"string",
 							"null"
 						],
-						"description": "Hostname dnsmasq answers for this reservation"
+						"description": "Hostname dnsmasq answers for this reservation. A comma, a double quote, a `#` or a control character is refused, because the name goes into dnsmasq's config line."
 					},
 					"macs": {
 						"type": [
@@ -28481,7 +28481,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused."
 					},
 					"match_tag": {
 						"type": [
@@ -28491,7 +28491,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it."
+						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the uci `list match_tag`; `!` negates. Only a tag dnsmasq sets from the request before it looks up hosts can match, such as one from a `config vendorclass`, `config userclass` or `config mac` rule. `known` and the DHCP range's own tag are set later, so `known` never matches and `!known` always does (measured on dnsmasq 2.93). A scalar `option match_tag` reads as null, because dnsmasq ignores it. A comma, a double quote, a `#`, a control character or a blank value is refused."
 					},
 					"dns": {
 						"type": "boolean",
@@ -28548,7 +28548,7 @@
 							"string",
 							"null"
 						],
-						"description": "Hostname dnsmasq answers for this reservation"
+						"description": "Hostname dnsmasq answers for this reservation. A comma, a double quote, a `#` or a control character is refused, because the name goes into dnsmasq's config line."
 					},
 					"macs": {
 						"type": [
@@ -28596,7 +28596,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused."
 					},
 					"match_tag": {
 						"type": [
@@ -28606,7 +28606,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it."
+						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the uci `list match_tag`; `!` negates. Only a tag dnsmasq sets from the request before it looks up hosts can match, such as one from a `config vendorclass`, `config userclass` or `config mac` rule. `known` and the DHCP range's own tag are set later, so `known` never matches and `!known` always does (measured on dnsmasq 2.93). A scalar `option match_tag` reads as null, because dnsmasq ignores it. A comma, a double quote, a `#`, a control character or a blank value is refused."
 					},
 					"dns": {
 						"type": "boolean",

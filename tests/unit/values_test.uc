@@ -597,3 +597,15 @@ t.describe('values.section_index', () => {
 		t.assert_deep_equal(v.section_index(null, 'firewall', 'zone', 'name'), {});
 	});
 });
+
+t.describe('values.dnsmasq_value_problem', () => {
+	t.it('passes values dnsmasq reads as plain text', () => {
+		for (let s in ['ipxe', '!known', 'x y', 'my_tag.1', 'x:y'])
+			t.assert_equal(v.dnsmasq_value_problem(s), null, s);
+	});
+
+	t.it('flags every character dnsmasq reads as syntax, and blank values', () => {
+		for (let s in ['a,b', 'x"y', 'x #y', 'tag#x', 'a\nb', 'a\tb', '', '  '])
+			t.assert_true(v.dnsmasq_value_problem(s) != null, s);
+	});
+});

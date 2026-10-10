@@ -137,7 +137,10 @@ const CASES = [
 	},
 	{
 		file: "dhcp.hosts.uc", id: "h1", pkg: "dhcp",
-		section: { dns: '1', '.type': 'host', mac: '00:11:22:33:44:55', ip: '192.168.1.50', tag: 'guest iot' },
+		// A scalar match_tag, which dnsmasq's config_list_foreach skips: it reads as null and
+		// a write-back must leave it as it is.
+		section: { dns: '1', '.type': 'host', mac: '00:11:22:33:44:55', ip: '192.168.1.50', tag: 'guest iot',
+		           match_tag: 'ipxe' },
 	},
 	{
 		file: "dhcp.hosts.uc", id: "h2", pkg: "dhcp",
@@ -153,6 +156,13 @@ const CASES = [
 		// Two entries, so the modified list stays a list: a one-entry `macs` writes a
 		// scalar uci option, which would exercise a different toUci branch than intended.
 		modify: { key: "macs", value: ['00:11:22:33:44:78', 'aa:bb:cc:dd:ee:78'] },
+	},
+	{
+		// A `list match_tag`, modified down to one tag, which still has to stay a list: a
+		// scalar would stop dnsmasq applying it.
+		file: "dhcp.hosts.uc", id: "h4", pkg: "dhcp",
+		section: { dns: '1', '.type': 'host', mac: '00:11:22:33:44:88', ip: '192.168.1.53', match_tag: ['ipxe', '!guest'] },
+		modify: { key: "match_tag", value: ['ipxe'] },
 	},
 	{
 		file: "dhcp.servers.uc", id: "s1", pkg: "dhcp",
