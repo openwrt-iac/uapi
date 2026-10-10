@@ -29,6 +29,12 @@ All notable changes to this project will be documented in this file. Format foll
   could lock root out of SSH. The request now fails with `500`, and syslog records the cause.
   (#194)
 
+- **A full filesystem no longer empties `authorized_keys` or the crontab.** uapi writes the new
+  file under a temporary name and renames it into place, but it did not notice when the write
+  ran out of space, because ucode's `close()` drops the error. The empty file then replaced the
+  old one, and the request answered 200: every SSH key, or every cron job including package
+  lines, was gone. Such a write now fails with `500` and leaves the old file in place. (#198)
+
 - **A package install no longer fails on a cached index that is less than 4 hours old.** `apk
   add` refreshes an index only when its cached copy is older than 4 hours. Inside that window, a
   package that a feed rebuilt in place gave a 404, and a package that a feed added gave "no such

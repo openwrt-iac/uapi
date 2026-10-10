@@ -43,7 +43,7 @@ as an audit of the transaction and token paths, not of the tree.
 | `src/lib/transaction.uc` | 183-234 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
 | `src/lib/transaction.uc` | 335-353 | lock + `with_lock` | same try/release/die shape |
 | `src/lib/non_uci.uc` | 23-48 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
-| `src/lib/non_uci.uc` | 71-86 | fd (`replace_private_file`) | atomic-rename pattern (see below) |
+| `src/lib/non_uci.uc` | 71-94 | fd (`replace_private_file`) | atomic-rename pattern (see below) |
 | `src/lib/ids.uc` | 21-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
 | `src/lib/packages.uc` | 9-17 | pipe (`apk_exec`) | `p.close()` returns exit code; early-return on popen fail |
 | `src/lib/packages.uc` | 29-32 | pipe (`list_installed`) | same |
@@ -58,15 +58,21 @@ try { fs.unlink(tmp); } catch (e) {}
 let f = fs.open(tmp, "w");
 if (!f) return false;
 try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
-f.write(content);
+let written = f.write(content);
+let flushed = f.flush();
 f.close();
+if (written != length(content) || !flushed) {
+	try { fs.unlink(tmp); } catch (e) {}
+	return false;
+}
 ```
 
-Three exit paths to verify, in order:
+Four exit paths to verify, in order:
 
 1. `fs.open` returns null: early return; no fd held.
 2. `fs.chmod` throws: caught and discarded; `f.write` then `f.close` still run in order on the next two lines; fd released. The chmod tolerance is deliberate (some filesystems return EPERM); content correctness is the priority and the file gets the default umask permissions in that case.
-3. Normal path: `f.write` + `f.close` run unconditionally on the line after the chmod try-catch.
+3. Normal path: `f.write`, `f.flush` and `f.close` run unconditionally after the chmod try-catch, so the fd is released before the result is judged.
+4. Short or failed write: ucode's `close()` drops `fclose`'s result, so a filesystem that runs out of space shows up only as a short count or a failed `flush`. Either one unlinks the temp file and returns false. Until 3.1.0 nothing checked, and an empty temp file was renamed over the original.
 
 Subsequent `fs.rename(tmp, path)` is also wrapped in try/catch; failure cleans up `tmp` and returns false. Atomic-rename property is preserved.
 
