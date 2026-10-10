@@ -140,3 +140,40 @@ t.describe('packages.remove_feed validation', () => {
 		t.assert_equal(r.status, 400);
 	});
 });
+
+t.describe('packages.add_with_refresh', () => {
+	function fake(results) {
+		let calls = [];
+		return { calls: calls, exec: function(args) {
+			push(calls, args);
+			return { ok: shift(results), exit_code: 1, output: sprintf("%d:%s", length(calls), args) };
+		} };
+	}
+
+	t.it('does not refresh when the first attempt works', () => {
+		let f = fake([true]);
+		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
+		t.assert_deep_equal(f.calls, ["add -- ethtool"]);
+	});
+
+	t.it('refreshes and tries once more when the cached index is stale', () => {
+		let f = fake([false, true, true]);
+		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
+		t.assert_deep_equal(f.calls, ["add -- ethtool", "update", "add -- ethtool"]);
+	});
+
+	t.it('reports the second failure when the refresh did not help', () => {
+		let f = fake([false, true, false]);
+		let r = pkg.add_with_refresh("ethtool", f.exec);
+		t.assert_false(r.ok);
+		t.assert_equal(r.output, "3:add -- ethtool");
+	});
+
+	t.it('keeps the first error and does not retry when the refresh fails', () => {
+		let f = fake([false, false]);
+		let r = pkg.add_with_refresh("ethtool", f.exec);
+		t.assert_false(r.ok);
+		t.assert_equal(r.output, "1:add -- ethtool");
+		t.assert_deep_equal(f.calls, ["add -- ethtool", "update"]);
+	});
+});

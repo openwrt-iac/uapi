@@ -82,6 +82,18 @@ function get_one_handler(ctx, name) {
 	return errors.ok(ctx, info);
 }
 
+// apk add refreshes an index only once its cached copy is 4 hours old. A feed that rebuilt
+// a package in place inside that window is still listed at the old revision, whose download
+// now 404s, and a package added to the feed in that window is not listed at all. A refresh
+// and one more attempt cover both, at no cost when the first attempt works. When the refresh
+// fails too, the first error is the one that explains the failure.
+function add_with_refresh(name, exec) {
+	let r = exec(sprintf("add -- %s", name));
+	if (!r.ok && exec("update").ok)
+		r = exec(sprintf("add -- %s", name));
+	return r;
+}
+
 function install_handler(ctx, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
@@ -95,7 +107,7 @@ function install_handler(ctx, body) {
 			                    "must match ^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$")]);
 
 	let lr = non_uci.with_lock_translated(ctx, function() {
-		let exec = apk_exec(sprintf("add -- %s", name));
+		let exec = add_with_refresh(name, apk_exec);
 		return { ok: exec.ok, exec: exec };
 	});
 	if (lr.envelope) return lr.envelope;
@@ -258,4 +270,5 @@ return {
 	get_feed: get_feed_handler,
 	create_feed: create_feed_handler,
 	remove_feed: remove_feed_handler,
+	add_with_refresh: add_with_refresh,
 };
