@@ -12,7 +12,9 @@ post() { call -X POST -H 'Content-Type: application/json' "$URL/system/cron_jobs
 
 $SSH "rm -f /tmp/uapi-test-crontab.bak; if [ -e /etc/crontabs/root ]; then cp -a /etc/crontabs/root /tmp/uapi-test-crontab.bak; fi"
 cleanup() {
-	$SSH "uci revert system.@system[0].cronloglevel; rm -f /etc/crontabs/root;
+	$SSH "if mount | grep -q ' /etc/crontabs '; then /etc/init.d/cron stop; umount /etc/crontabs; fi;
+		rm -f /tmp/uapi-test-crontab.full;
+		uci revert system.@system[0].cronloglevel; rm -f /etc/crontabs/root;
 		if [ -e /tmp/uapi-test-crontab.bak ]; then mv /tmp/uapi-test-crontab.bak /etc/crontabs/root; fi;
 		/etc/init.d/cron reload" 2>/dev/null || true
 }
@@ -93,5 +95,22 @@ $SSH "uci set system.@system[0].cronloglevel=abc"
 stopped=$(post '{"schedule": "0 4 * * *", "command": "/bin/true"}')
 echo "$stopped" | tail -1 | grep -q '^200$' || fail "add expected 200: $stopped"
 echo "$stopped" | head -1 | grep -q '"crond_running": false' || fail "expected crond_running false: $stopped"
+
+echo "--- system/cron_jobs: a write the filesystem cannot hold fails and keeps the old file ---"
+# A full overlay used to replace the crontab with an empty file and answer 200: ucode's
+# close() drops fclose's error. The filler's name has a dot, so crond ignores it. crond keeps
+# its working directory in /etc/crontabs, so it has to stop before the tmpfs can go.
+$SSH "uci revert system.@system[0].cronloglevel; /etc/init.d/cron reload;
+	cp /etc/crontabs/root /tmp/uapi-test-crontab.full;
+	mount -t tmpfs -o size=8k tmpfs /etc/crontabs;
+	cp /tmp/uapi-test-crontab.full /etc/crontabs/root;
+	dd if=/dev/zero of=/etc/crontabs/fill.x bs=1k count=64 2>/dev/null; true"
+before=$($SSH "md5sum < /etc/crontabs/root")
+full=$(post '{"schedule": "0 5 * * *", "command": "/usr/bin/a-command-long-enough-to-need-a-new-block --with --several --arguments"}')
+after=$($SSH "md5sum < /etc/crontabs/root; ls /etc/crontabs | grep -c uapi.tmp;
+	/etc/init.d/cron stop; umount /etc/crontabs; /etc/init.d/cron start")
+echo "$full" | tail -1 | grep -q '^500$' || fail "expected 500 on a full filesystem: $full"
+[ "$(echo "$after" | head -1)" = "$before" ] || fail "the crontab changed although the write failed"
+[ "$(echo "$after" | sed -n 2p)" = "0" ] || fail "the temp file was left behind"
 
 echo "system/cron_jobs ok."
