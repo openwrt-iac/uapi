@@ -129,7 +129,9 @@ echo "=== the modified address list reached the kernel, not just uci ==="
 $SSH 'ifup uapiwg' >/dev/null 2>&1 || true
 n=0
 while [ $n -lt 10 ]; do
-	v6=$($SSH 'ip -6 addr show uapiwg 2>/dev/null | grep -c "inet6 fd00:"' 2>/dev/null || echo 0)
+	# grep -c prints 0 and exits 1 when nothing matches, so without the inner `|| true` the
+	# outer fallback appended a second 0 and the comparison below choked on two lines.
+	v6=$($SSH 'ip -6 addr show uapiwg 2>/dev/null | grep -c "inet6 fd00:" || true' 2>/dev/null || echo 0)
 	[ "$v6" -ge 2 ] && break
 	n=$((n + 1)); sleep 1
 done
