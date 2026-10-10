@@ -125,8 +125,13 @@ Per-release steps (operator does these in order):
    (`v2.0.0-rc1`). For patch releases, just work on a topic branch.
 2. **Update `VERSION`** to the target value. **Regenerate** the OpenAPI:
    `make openapi`. Commit.
-3. **Update `CHANGELOG.md`** with the section for the new version. Even
-   for `rc` releases. Commit.
+3. **Close the changelog section.** Run `scripts/changelog-missing.sh
+   <previous-tag>` and fix whatever it lists. Then rename `## [Unreleased]`
+   to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it.
+   Do this for `rc` releases too. A final release after RCs gets a short
+   section of its own that points at the RC sections, as 3.0.0 does. The
+   release PR takes the `changelog-not-needed` label, because it moves
+   entries rather than adds one. Commit.
 4. **Run the full test suite locally**: `make test coverage`. The CI runs
    `make lint test-unit coverage` plus the integration / soak / bench
    suite, so a green local `make test coverage` is necessary but not
@@ -202,16 +207,42 @@ The SBOM lists every shipped file's sha256, every package dependency
 built APK's verification sha256. Operators using SBOM-aware deployment
 tooling (cosign, syft, etc.) can consume it directly.
 
-## Auto-CHANGELOG
+## Changelog
 
-`CHANGELOG.md` is hand-curated, not auto-generated. The generator-driven
-approach (`tools/gen_changelog.sh` against `git log --format='%s'
-<prev-tag>..HEAD`) was considered for v2 and rejected: hand-written
-changelog entries are more useful to operators (they explain *why*, not
-just *what*) and the project's commit-subject convention is consistent
-enough that an auto-generator would mostly produce
-a list of `feat:` / `fix:` lines that any reader could compose from
-`git log` directly.
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): an
+`## [Unreleased]` section at the top, and one section per release below it. The process is the
+one Grafana Mimir uses: each PR writes its own entry, and CI checks that it did.
+
+**Every PR records its change in the same PR.** It adds an entry under `## [Unreleased]`, in the
+heading that fits: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, or
+`Internal` for release and build machinery. The entry ends with the PR number in parentheses,
+for example `(#193)`. `.github/workflows/changelog.yml` runs `scripts/changelog-has-entry.sh`
+and fails the PR when no entry under `## [Unreleased]` carries its number.
+
+**An entry is needed for every change that someone outside the repo can see:** the wire
+surface, the behavior on the router, the package, or the release artifacts (APK, SBOM, GitHub
+Release). A PR that changes none of these takes the `changelog-not-needed` label instead, and
+the check skips it. That covers docs, tests, CI that changes no artifact, refactors, and release
+PRs.
+
+**The entry says why, not only what.** It names the defect or the need, what changed on the
+wire, and what a client must do, if anything. A breaking change opens with `BREAKING:`. A
+tightening under a carve-out in `docs/versioning.md` names the carve-out and says how loudly it
+fails. This is why entries are not generated from PR titles, as release-please does in Grafana
+Loki and Alloy: a title cannot carry that.
+
+**The PR number exists only once the PR does.** Either open the PR and then push the entry, or
+predict the number with `scripts/next-pr-number.sh` before you open it. Issues and PRs share one
+counter, so the guess is wrong if an issue opens in between, and the check then fails until the
+entry carries the real number.
+
+**At release time,** `scripts/changelog-missing.sh <previous-tag>` lists every PR merged into
+`main` since that tag that has neither an entry nor the label. It must print nothing. Step 3
+above then turns `## [Unreleased]` into the release section, and `scripts/release-notes.sh`
+makes that section the GitHub Release body.
+
+Before this process, entries were written at release time from memory. Between 3.0.0 and the
+first PR the check covered, nine PRs merged and none of them added an entry.
 
 ## Pre-release verification checklist
 
@@ -221,7 +252,8 @@ Before tagging:
   outcome noted even if nothing was eligible.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
-- [ ] `CHANGELOG.md` has the entry for this version.
+- [ ] `scripts/changelog-missing.sh <previous-tag>` prints nothing, and
+  `## [Unreleased]` is renamed to this version.
 - [ ] Any version number a doc announced ahead of time now matches reality.
   `docs/deprecations.md` carries a target release in its "Deprecated since"
   column before that release exists, and the roadmap names target versions

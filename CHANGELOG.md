@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`system/cron_jobs` manages the root crontab one line at a time.** `GET` lists the jobs in
+  `/etc/crontabs/root` as busybox crond reads them, `POST` adds one, and `DELETE` removes one.
+  Every other line stays byte for byte, so the lines that packages such as `acme` add survive. A
+  write reloads cron and reports `runtime.crond_running` from procd, because the init script exits
+  0 even when crond does not start. `runtime.runs_as_written: false` flags a line from another
+  writer that crond reads differently from how it looks. Writes refuse what OpenWrt's crond
+  misreads without a word: values out of range, weekday `7`, `*/N` in the day field, `@daily`,
+  and `#` or a trailing backslash in the command. The new scope is `system:cron_jobs`. Its `rw`
+  form runs commands as root, and its `ro` form reads every command in full. (#193)
+
+### Fixed
+
+- **A `dhcp/hosts` reservation on an IP that another reservation holds is refused.** dnsmasq
+  treats two reservations on one address as fatal and stops, so the router lost DNS and DHCP
+  after a write that answered 200. Such a write now answers `422` with field code `conflict` on
+  `ip`. This tightening uses the carve-out in `docs/versioning.md` for a payload that produced a
+  state no caller can rely on, and it fails loudly, with a 422, for every client. (#186)
+
+- **An `authorized_keys` file that exists but cannot be read no longer loses keys.** uapi read
+  such a file as empty, so the next add, replace or remove rewrote it with only its own keys and
+  could lock root out of SSH. The request now fails with `500`, and syslog records the cause.
+  (#194)
+
+- **A package install no longer fails on a cached index that is less than 4 hours old.** `apk
+  add` refreshes an index only when its cached copy is older than 4 hours. Inside that window, a
+  package that a feed rebuilt in place gave a 404, and a package that a feed added gave "no such
+  package". When `apk add` fails, uapi now runs `apk update` and tries once more. A successful
+  install costs nothing extra. (#195)
+
+- **A package's `version` is complete.** `GET /packages/installed/{name}` and the install
+  response cut most versions down to the release suffix, so `uapi` 3.0.0-r1 read as `r1`. The
+  version now comes from `apk query`. The list response still returns `version: null`. (#196)
+
+- **Links named the project's old location.** The spec's contact link and the SBOM's namespace,
+  download location and homepage named `github.com/raspbeguy/uapi`. The provider link in the
+  README and in the spec pointed at a Terraform Registry namespace that does not exist. All of
+  them now name `openwrt-iac/uapi`. (#190)
+
+### Internal
+
+- **A moved tag left its GitHub Release as an unpublished draft.** Deleting a tag to move it
+  turns its release back into a draft, and the release job then uploaded the rebuilt artifacts
+  to a release nobody could see. The job now publishes the release again. (#189)
+
 ## [3.0.0] - 2026-08-13
 
 First stable v3 release. Promotion of `v3.0.0-rc3` after the provider integration window closed

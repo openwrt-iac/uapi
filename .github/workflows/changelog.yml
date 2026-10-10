@@ -1,0 +1,24 @@
+name: changelog
+
+# Its own workflow rather than a job in ci.yml: adding or removing the label has to re-run
+# this check, and in ci.yml it would re-run the whole integration suite as well.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  entry:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'changelog-not-needed') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: CHANGELOG.md names this PR under [Unreleased]
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/changelog-has-entry.sh "$PR_NUMBER"

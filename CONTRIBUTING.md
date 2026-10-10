@@ -53,6 +53,7 @@ For larger changes (new wire features, new endpoints, anything touching the auth
 - **No AI-narrator comments.** See [`CLAUDE.md` "Avoid AI slop"](CLAUDE.md#avoid-ai-slop-high-importance) for the bar. A good test: "would a senior engineer reading this ask 'why is this here?' and get a non-obvious answer?" If no, delete the comment.
 - **Tests stay green.** PRs that break `make test` will not be merged. If the coverage gate trips on new helpers, add tests rather than adjusting the threshold.
 - **Resource changes regenerate `build/openapi.json`**. Commit the regenerated file alongside the resource module.
+- **A changelog entry in the same PR.** Add it under `## [Unreleased]` in `CHANGELOG.md`, in the Keep a Changelog heading that fits, and end it with the PR number, for example `(#123)`. Say why the change was needed, not only what it does. A PR that changes nothing outside the repo (docs, tests, CI that builds no artifact) takes the `changelog-not-needed` label instead. CI checks this. The full rules are in [`docs/release-process.md`](docs/release-process.md#changelog).
 
 PRs don't need to be GPG-signed; only release tags do (and only the maintainer cuts those).
 

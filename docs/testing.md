@@ -133,6 +133,7 @@ Six resource families remain uncovered because their packages stay outside the i
 ## CI shape
 
 - Every commit/PR: unit suite + lint.
+- Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's number and the PR has no `changelog-not-needed` label.
 - Every PR + push to main: unit + integration suite (QEMU).
 - Release tag: + multi-arch verify-build (cross-compile sanity) + release-apk job (publishes the GitHub Release with CHANGELOG-extracted notes).
 
