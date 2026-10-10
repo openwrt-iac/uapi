@@ -7,12 +7,15 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 
 - **`dhcp/hosts.match_tag` limits a reservation to requests that carry the given dnsmasq
-  tags**, as LuCI's Match Tag does. `known` is set for any host with a reservation, and `!`
-  negates, so `["!known"]` matches only hosts without one. dnsmasq reads each value as one tag,
-  so unlike `tag`, `x y` is a single tag. A value with a comma is refused, because dnsmasq
-  refuses to start on it. The spec described `tag` as tags a request must match, which is what
-  `match_tag` does: `tag` sets tags on a request that matches. The description now says so.
-  (#199)
+  tags**, as LuCI's Match Tag does, and `!` negates. Only a tag that dnsmasq sets from the
+  request itself before it looks up hosts can match, such as one from a `config vendorclass`
+  rule: measured with a real DHCP client, a reservation with `match_tag: ["vc"]` applied to a
+  client that sent the matching vendor class and not to one that did not. `known` and the DHCP
+  range's own tag are set later, so `known` never matches and `!known` always does, whatever
+  LuCI's help text suggests. dnsmasq reads only the list form, so a scalar `option match_tag`
+  reads as null, and a write keeps even a single tag as a list. The spec described `tag` as
+  tags a request must match, which is what `match_tag` does: `tag` sets tags on a request that
+  matches. The description now says so. (#199)
 
 - **`system/cron_jobs` manages the root crontab one line at a time.** `GET` lists the jobs in
   `/etc/crontabs/root` as busybox crond reads them, `POST` adds one, and `DELETE` removes one.
@@ -58,6 +61,19 @@ All notable changes to this project will be documented in this file. Format foll
   download location and homepage named `github.com/raspbeguy/uapi`. The provider link in the
   README and in the spec pointed at a Terraform Registry namespace that does not exist. All of
   them now name `openwrt-iac/uapi`. (#190)
+
+### Security
+
+- **`dhcp/hosts` refused nothing that dnsmasq reads as config syntax in `name` and `tag`.**
+  Both go into the `dhcp-host` line that dnsmasq's init script writes. A newline in `name`
+  started a dnsmasq directive of its own, so a token with `dhcp:hosts:rw` could add any dnsmasq
+  option. Measured: `"name": "host1\nlog-queries"` put `log-queries` into the compiled config.
+  A comma in `name` made dnsmasq refuse to start, and `tag: ["a,ignore"]` rendered
+  `set:a,ignore`, which dnsmasq reads as the host's ignore flag. `name`, `tag` and `match_tag`
+  now refuse a comma, a double quote, a `#`, a control character and a blank value, with `422`
+  and field code `invalid_format`. This tightening uses the carve-out in `docs/versioning.md`
+  for payloads that produced a state no caller can rely on, and it fails loudly for every
+  client. (#199)
 
 ### Internal
 

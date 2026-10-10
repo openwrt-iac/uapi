@@ -36,7 +36,11 @@ function fromUci(section) {
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
 		tag: split_tags(section.tag),
-		match_tag: as_list_or_null(section.match_tag),
+		// dnsmasq's init script reads match_tag with config_list_foreach, which skips a scalar
+		// option, so only the list form filters anything (measured: `option match_tag 'x'`
+		// compiles to a host line with no tag). Reporting a scalar as a filter would claim a
+		// restriction dnsmasq does not apply, and writing that read back would turn it on.
+		match_tag: (type(section.match_tag) == "array") ? section.match_tag : null,
 		dns: shell_bool(section.dns, false),
 		broadcast: (section.broadcast != null) ? shell_bool(section.broadcast, false) : null,
 		instance: section.instance ?? null,
@@ -96,15 +100,19 @@ function validate(json, conn) {
 		push(errs, { field: "ip", code: "invalid_format",
 		             message: "must be a valid IPv4 or IPv6 address" });
 
-	// The init script puts each value in front of the dhcp-host line as `tag:<value>,`. A comma
-	// there ends the field early, and dnsmasq refuses to start (measured on a device); a newline
-	// would begin a config line of its own. A space is harmless, and LuCI does not refuse one.
-	let match_tags = (type(json.match_tag) == "array") ? json.match_tag : [];
-	for (let i = 0; i < length(match_tags); i++) {
-		let v = match_tags[i];
-		if (type(v) == "string" && (v == "" || index(v, ",") >= 0 || values.has_control_chars(v)))
-			push(errs, { field: sprintf("match_tag[%d]", i), code: "invalid_format",
-			             message: "must be a non-empty tag with no comma or control character: dnsmasq refuses to start on a comma" });
+	// name, tag and match_tag all land in the one dhcp-host line the init script writes.
+	for (let field in ["tag", "match_tag"]) {
+		let items = (field == "tag") ? split_tags(json.tag) : json.match_tag;
+		if (type(items) != "array") continue;
+		for (let i = 0; i < length(items); i++) {
+			let p = (type(items[i]) == "string") ? values.dnsmasq_value_problem(items[i]) : null;
+			if (p != null)
+				push(errs, { field: sprintf("%s[%d]", field, i), code: "invalid_format", message: p });
+		}
+	}
+	if (type(json.name) == "string" && json.name != "") {
+		let p = values.dnsmasq_value_problem(json.name);
+		if (p != null) push(errs, { field: "name", code: "invalid_format", message: p });
 	}
 
 	if (json.leasetime != null && !match(json.leasetime, LEASETIME_RE))
@@ -163,11 +171,11 @@ return {
 		instance:    { type: ["string", "null"],
 		               description: "Pin this reservation to a specific dhcp/dnsmasq instance (section name)" },
 		name:          { type: ["string", "null"],
-		               description: "Hostname dnsmasq answers for this reservation" },
+		               description: "Hostname dnsmasq answers for this reservation. A comma, a double quote, a `#` or a control character is refused, because the name goes into dnsmasq's config line." },
 		tag:           { type: ["array", "null"], items: { type: "string" },
-		                 description: "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way." },
+		                 description: "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused." },
 		match_tag:     { type: ["array", "null"], items: { type: "string" },
-		                 description: "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it." },
+		                 description: "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the uci `list match_tag`; `!` negates. Only a tag dnsmasq sets from the request before it looks up hosts can match, such as one from a `config vendorclass`, `config userclass` or `config mac` rule. `known` and the DHCP range's own tag are set later, so `known` never matches and `!known` always does (measured on dnsmasq 2.93). A scalar `option match_tag` reads as null, because dnsmasq ignores it. A comma, a double quote, a `#`, a control character or a blank value is refused." },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.

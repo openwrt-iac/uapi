@@ -279,50 +279,77 @@ t.describe('dhcp.hosts tag storage converges on write, invisibly', () => {
 	});
 });
 
-// dnsmasq reads match_tag with config_list_foreach, so each stored value is one tag: unlike
-// `tag`, a stored scalar 'x y' is the single tag "x y", not two.
+// dnsmasq's init script reads match_tag with config_list_foreach, which skips a scalar
+// option, so only the list form filters anything; ucode returns the two as array and string.
 t.describe('dhcp.hosts match_tag', () => {
 	function view(v) {
 		let sec = { '.name': 'ht', '.type': 'host', mac: '00:11:22:33:44:55' };
 		if (v != null) sec.match_tag = v;
 		return hosts.fromUci(sec, null);
 	}
-	function codes(match_tag) {
+	function codes(body) {
 		let out = {};
-		for (let e in hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], match_tag: match_tag }, null))
+		for (let e in hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ...body }, null))
 			out[e.field] = e.code;
 		return out;
 	}
 
-	t.it('reads each stored value as one tag, as config_list_foreach does', () => {
-		t.assert_deep_equal(view(['known', '!guest']).match_tag, ['known', '!guest']);
-		t.assert_deep_equal(view('x y').match_tag, ['x y']);
+	t.it('reads the list form, each value as one tag', () => {
+		t.assert_deep_equal(view(['ipxe', '!guest']).match_tag, ['ipxe', '!guest']);
+		t.assert_deep_equal(view(['x y']).match_tag, ['x y']);
 		t.assert_equal(view(null).match_tag, null);
 	});
 
-	t.it('writes a list, and leaves an empty one out so the handler deletes the option', () => {
-		t.assert_deep_equal(hosts.toUci({ match_tag: ['known', '!guest'] }).match_tag, ['known', '!guest']);
+	t.it('reads a scalar as null, since dnsmasq applies no filter for it', () => {
+		t.assert_equal(view('ipxe').match_tag, null);
+	});
+
+	t.it('writes a list, even of one tag, and leaves an empty one out', () => {
+		t.assert_deep_equal(hosts.toUci({ match_tag: ['ipxe'] }).match_tag, ['ipxe']);
 		t.assert_equal(exists(hosts.toUci({ match_tag: [] }), 'match_tag'), false);
 		t.assert_equal(exists(hosts.toUci({ match_tag: null }), 'match_tag'), false);
 	});
 
-	t.it('accepts the values dnsmasq starts with, a space included', () => {
-		t.assert_deep_equal(codes(['known', '!known', 'known-othernet', 'my_tag.1', 'x y']), {});
+	t.it('accepts what dnsmasq reads as a plain tag, a space included', () => {
+		t.assert_deep_equal(codes({ match_tag: ['ipxe', '!guest', 'known-othernet', 'my_tag.1', 'x y'] }), {});
 	});
 
-	t.it('refuses a comma, which makes dnsmasq refuse to start', () => {
-		t.assert_deep_equal(codes(['known', 'a,b']), { 'match_tag[1]': 'invalid_format' });
+	t.it('refuses what dnsmasq reads as syntax', () => {
+		for (let v in ['a,b', 'x"y', 'x #y', 'a\nb', '', ' '])
+			t.assert_deep_equal(codes({ match_tag: ['ipxe', v] }), { 'match_tag[1]': 'invalid_format' }, v);
+	});
+});
+
+// name and tag land in the same dhcp-host line as match_tag. Before the shared check, a
+// newline in name added a dnsmasq directive of its own, and `tag: ["a,ignore"]` rendered
+// `set:a,ignore`, which dnsmasq reads as the host's ignore flag.
+t.describe('dhcp.hosts name and tag refuse dnsmasq syntax', () => {
+	function codes(body) {
+		let out = {};
+		for (let e in hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], ...body }, null))
+			out[e.field] = e.code;
+		return out;
+	}
+
+	t.it('refuses a name that would inject or break a directive', () => {
+		for (let v in ['host1\nlog-queries', 'h1,h2', 'h"1', 'h #1', ' '])
+			t.assert_deep_equal(codes({ name: v }), { name: 'invalid_format' }, v);
 	});
 
-	t.it('refuses an empty value and a newline', () => {
-		t.assert_deep_equal(codes(['']), { 'match_tag[0]': 'invalid_format' });
-		t.assert_deep_equal(codes(['a\nb']), { 'match_tag[0]': 'invalid_format' });
+	t.it('accepts an ordinary name and leaves an empty one alone', () => {
+		t.assert_deep_equal(codes({ name: 'printer-1' }), {});
+		t.assert_deep_equal(codes({ name: '' }), {});
 	});
 
-	t.it('round-trips a stored scalar at the view level', () => {
-		let first = view('x y');
-		let second = hosts.fromUci({ '.name': 'ht', '.type': 'host', ...hosts.toUci(first) }, null);
-		t.assert_deep_equal(second.match_tag, first.match_tag);
+	t.it('refuses a tag that would set a flag or break the line, in either shape', () => {
+		t.assert_deep_equal(codes({ tag: ['guest', 'a,ignore'] }), { 'tag[1]': 'invalid_format' });
+		t.assert_deep_equal(codes({ tag: 'guest a,ignore' }), { 'tag[1]': 'invalid_format' });
+		t.assert_deep_equal(codes({ tag: ['g"x'] }), { 'tag[0]': 'invalid_format' });
+	});
+
+	t.it('accepts ordinary tags in either shape', () => {
+		t.assert_deep_equal(codes({ tag: ['guest', 'iot'] }), {});
+		t.assert_deep_equal(codes({ tag: 'guest iot' }), {});
 	});
 });
 
