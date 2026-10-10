@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Added
 
+- **`dhcp/hosts.match_tag` limits a reservation to requests that carry the given dnsmasq
+  tags**, as LuCI's Match Tag does. `known` is set for any host with a reservation, and `!`
+  negates, so `["!known"]` matches only hosts without one. dnsmasq reads each value as one tag,
+  so unlike `tag`, `x y` is a single tag. A value with a comma is refused, because dnsmasq
+  refuses to start on it. The spec described `tag` as tags a request must match, which is what
+  `match_tag` does: `tag` sets tags on a request that matches. The description now says so.
+  (#199)
+
 - **`system/cron_jobs` manages the root crontab one line at a time.** `GET` lists the jobs in
   `/etc/crontabs/root` as busybox crond reads them, `POST` adds one, and `DELETE` removes one.
   Every other line stays byte for byte, so the lines that packages such as `acme` add survive. A

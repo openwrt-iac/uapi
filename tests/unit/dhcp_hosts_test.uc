@@ -279,6 +279,53 @@ t.describe('dhcp.hosts tag storage converges on write, invisibly', () => {
 	});
 });
 
+// dnsmasq reads match_tag with config_list_foreach, so each stored value is one tag: unlike
+// `tag`, a stored scalar 'x y' is the single tag "x y", not two.
+t.describe('dhcp.hosts match_tag', () => {
+	function view(v) {
+		let sec = { '.name': 'ht', '.type': 'host', mac: '00:11:22:33:44:55' };
+		if (v != null) sec.match_tag = v;
+		return hosts.fromUci(sec, null);
+	}
+	function codes(match_tag) {
+		let out = {};
+		for (let e in hosts.validate({ macs: ['aa:bb:cc:dd:ee:ff'], match_tag: match_tag }, null))
+			out[e.field] = e.code;
+		return out;
+	}
+
+	t.it('reads each stored value as one tag, as config_list_foreach does', () => {
+		t.assert_deep_equal(view(['known', '!guest']).match_tag, ['known', '!guest']);
+		t.assert_deep_equal(view('x y').match_tag, ['x y']);
+		t.assert_equal(view(null).match_tag, null);
+	});
+
+	t.it('writes a list, and leaves an empty one out so the handler deletes the option', () => {
+		t.assert_deep_equal(hosts.toUci({ match_tag: ['known', '!guest'] }).match_tag, ['known', '!guest']);
+		t.assert_equal(exists(hosts.toUci({ match_tag: [] }), 'match_tag'), false);
+		t.assert_equal(exists(hosts.toUci({ match_tag: null }), 'match_tag'), false);
+	});
+
+	t.it('accepts the values dnsmasq starts with, a space included', () => {
+		t.assert_deep_equal(codes(['known', '!known', 'known-othernet', 'my_tag.1', 'x y']), {});
+	});
+
+	t.it('refuses a comma, which makes dnsmasq refuse to start', () => {
+		t.assert_deep_equal(codes(['known', 'a,b']), { 'match_tag[1]': 'invalid_format' });
+	});
+
+	t.it('refuses an empty value and a newline', () => {
+		t.assert_deep_equal(codes(['']), { 'match_tag[0]': 'invalid_format' });
+		t.assert_deep_equal(codes(['a\nb']), { 'match_tag[0]': 'invalid_format' });
+	});
+
+	t.it('round-trips a stored scalar at the view level', () => {
+		let first = view('x y');
+		let second = hosts.fromUci({ '.name': 'ht', '.type': 'host', ...hosts.toUci(first) }, null);
+		t.assert_deep_equal(second.match_tag, first.match_tag);
+	});
+});
+
 // dnsmasq refuses to start when two dhcp-host entries share an IP, so the second reservation
 // used to answer 200 and take DNS down with it. Several NICs on one host is one reservation
 // with several `macs`, which dnsmasq accepts, so nothing legitimate needs two on one address.
