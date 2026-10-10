@@ -38,7 +38,8 @@ All notable changes to this project will be documented in this file. Format foll
 - **A package install no longer fails on a cached index that is less than 4 hours old.** `apk
   add` refreshes an index only when its cached copy is older than 4 hours. Inside that window, a
   package that a feed rebuilt in place gave a 404, and a package that a feed added gave "no such
-  package". When `apk add` fails, uapi now runs `apk update` and tries once more. A successful
+  package". When `apk add` fails, uapi now runs `apk update` and tries once more, even when
+  `apk update` reports a failure, as it does whenever one feed is unreachable. A successful
   install costs nothing extra. (#195)
 
 - **A package's `version` is complete.** `GET /packages/installed/{name}` and the install

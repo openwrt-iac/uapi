@@ -85,12 +85,15 @@ function get_one_handler(ctx, name) {
 // apk add refreshes an index only once its cached copy is 4 hours old. A feed that rebuilt
 // a package in place inside that window is still listed at the old revision, whose download
 // now 404s, and a package added to the feed in that window is not listed at all. A refresh
-// and one more attempt cover both, at no cost when the first attempt works. When the refresh
-// fails too, the first error is the one that explains the failure.
+// and one more attempt cover both, at no cost when the first attempt works. The retry runs
+// whatever `apk update` returns: it exits with the count of feeds it could not refresh, so
+// one unreachable feed makes it fail after it has refreshed all the others.
 function add_with_refresh(name, exec) {
 	let r = exec(sprintf("add -- %s", name));
-	if (!r.ok && exec("update").ok)
+	if (!r.ok) {
+		exec("update");
 		r = exec(sprintf("add -- %s", name));
+	}
 	return r;
 }
 
