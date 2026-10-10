@@ -49,7 +49,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 #   - wireless/* : needs hwsim radio bring-up; covered by dedicated tests
 #   - dhcp/leases, dhcp/leases6 : read-only collections, no PUT route
 #   - packages/* : non-uci semantics (apk shell-out)
-#   - system/password, system/authorized_keys : non-uci write-only
+#   - system/password, system/authorized_keys, system/cron_jobs : non-uci, no per-entry PUT
 RESOURCES="
 firewall/zones
 firewall/rules

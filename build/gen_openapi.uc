@@ -564,6 +564,7 @@ const TAGS = [
 	{ name: "System / Timeservers",        group: "System",   description: "NTP server list (`config timeserver`)." },
 	{ name: "System / Password",           group: "System",   description: "Local Unix password (write-only; shells out to passwd).", path_prefix: "/system/password" },
 	{ name: "System / SSH authorized keys", group: "System",  description: "Manage `/etc/dropbear/authorized_keys` entries by stable id.", path_prefix: "/system/authorized_keys" },
+	{ name: "System / Cron jobs",           group: "System",   description: "Manage `/etc/crontabs/root` entries by stable id, one per line. Lines from packages, comments and environment lines stay as they are.", path_prefix: "/system/cron_jobs" },
 	{ name: "Dropbear / Instances",        group: "Other daemons", description: "Per-instance SSH config (`config dropbear`)." },
 	{ name: "Uhttpd / Instances",          group: "Other daemons", description: "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`." },
 	{ name: "Uhttpd / Certs",              group: "Other daemons", description: "px5g certificate generation params (`config cert`)." },
@@ -777,6 +778,33 @@ function build_paths() {
 		            "responses": responses("get", { "200": make_response(200, "OK", "SSHAuthorizedKey") }) },
 		"delete": { "summary": "Remove a single SSH key by stable id",
 		            "responses": responses("delete", { "204": { "description": "Removed" } }) },
+	};
+
+	paths["/system/cron_jobs"] = {
+		"get": {
+			"summary": "List the entries crond runs from /etc/crontabs/root",
+			"responses": responses("get", { "200": {
+				"description": "OK",
+				"content": { "application/json": { "schema": {
+					"type": "array",
+					"items": { "$ref": "#/components/schemas/CronJob" } } } },
+			} })
+		},
+		"post": {
+			"summary": "Add one cron job and reload cron",
+			"requestBody": { "required": true,
+			                 "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CronJobCreateRequest" } } } },
+			"responses": responses("post", { "200": make_response(200, "Added", "CronJob") })
+		},
+	};
+	paths["/system/cron_jobs/{id}"] = {
+		"parameters": [
+			{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{12}$" } },
+		],
+		"get":    { "summary": "Get one cron job by stable id",
+		            "responses": responses("get", { "200": make_response(200, "OK", "CronJob") }) },
+		"delete": { "summary": "Remove every line holding this cron job and reload cron",
+		            "responses": responses("delete", { "200": make_response(200, "Removed; the body is the removed job, with crond's state after the reload", "CronJob") }) },
 	};
 
 	paths["/healthz"] = {
@@ -1059,6 +1087,39 @@ function build_schemas() {
 				             "description": "SSH key type (e.g. ssh-ed25519, ssh-rsa, ecdsa-sha2-nistp256)" },
 				"comment": { "type": "string",
 				             "description": "Optional comment (trailing text on the key line)" },
+			},
+		},
+		"CronJob": {
+			"type": "object",
+			"required": ["id", "schedule", "command", "runtime"],
+			"properties": {
+				"id":       { "type": "string", "pattern": "^[a-f0-9]{12}$",
+				              "description": "Stable id: sha256 prefix of `<schedule> <command>`. A change to either gives a new id." },
+				"schedule": { "type": "string",
+				              "description": "The five time fields as crond reads them, joined by single spaces." },
+				"command":  { "type": "string",
+				              "description": "The command as crond runs it: lines ending in `\\` joined to the next, cut at the first `#`, surrounding whitespace stripped." },
+				"runtime":  {
+					"type": "object",
+					"readOnly": true,
+					"required": ["crond_running", "runs_as_written"],
+					"properties": {
+						"crond_running": { "type": ["boolean", "null"],
+						                   "description": "Whether procd reports a running crond. False means no entry runs, whatever the file says: the init script does not start crond while `/etc/crontabs` is empty, and stops it when `system.cronloglevel` is invalid. Null when procd could not be asked." },
+						"runs_as_written": { "type": "boolean",
+						                     "description": "False when crond runs this schedule differently from how it reads, such as minute 75 (every minute), weekday 7 (every day) or `@daily` (never). uapi refuses such a schedule on write, so only another writer can leave one." },
+					},
+				},
+			},
+		},
+		"CronJobCreateRequest": {
+			"type": "object",
+			"required": ["schedule", "command"],
+			"properties": {
+				"schedule": { "type": "string", "minLength": 1,
+				              "description": "Five fields separated by single spaces: minute 0-59, hour 0-23, day 1-31, month 1-12 or jan-dec, weekday 0-6 or sun-sat. Each takes lists, ranges and `*`, and a `/step` after `*` or a range. Refused because OpenWrt's busybox crond does not run them as written: weekday 7, `@daily`-style schedules, and `*/N` in the day field (write `1-31/N`)." },
+				"command":  { "type": "string", "minLength": 1,
+				              "description": "Shell command run as root. Must not contain `#` or control characters, start or end with whitespace, or end with `\\`: crond would cut, strip or join them, and the entry would read back different." },
 			},
 		},
 		"SSHKeyAddRequest": {

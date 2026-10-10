@@ -74,7 +74,7 @@ CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-s
 | Resource catalog (curated endpoints by domain), anonymous-section adoption | `docs/resources.md` | Understanding what's exposed, or how unmanaged uci sections become managed. |
 | Adding a new curated resource (module shape, annotations, tests, OpenAPI emission, naming conventions) | `docs/adding-a-resource.md` | Adding a resource or extending one. THE go-to file for curation work. |
 | Raw passthrough stability + semantics | `docs/raw.md` | Working on `/raw/` or considering using it. |
-| Non-uci resources (apk, leases, password, authorized_keys) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
+| Non-uci resources (apk, leases, password, authorized_keys, cron_jobs) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
 | Token CLI, HTTP token mint, scope syntax, raw-access composition, per-token rate limit overrides | `docs/tokens.md` | Anything auth-shaped from the operator angle. |
 | Commit-confirmed apply: deferral decision + standalone-arm design (built in rc1, removed before 2.3.0 stable) | `docs/commit-confirm.md` | Picking the feature back up, or understanding why the confirm surface has not shipped. |
 | Threat model, TLS posture, public endpoints, design exclusions | `docs/security.md` | Security review, threat-model questions, "why not rpcd sessions?" |

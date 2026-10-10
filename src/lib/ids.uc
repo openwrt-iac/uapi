@@ -71,8 +71,35 @@ function is_valid_id(s) {
 	return type(s) == "string" && !!match(s, /^[a-z]{1,3}_[0-9a-z]{11,26}$/);
 }
 
+// digest is optional at module-load time so unit tests in the build env (no
+// ucode-mod-digest installed) can still exercise the validation paths. On a
+// real OpenWrt install it is a hard dependency and always present.
+let _digest = null;
+try { _digest = require('digest'); } catch (e) {}
+
+// Stable 48-bit content-derived id, for entries of files uapi does not own the
+// format of (authorized_keys, the crontab), where the content is the only identity
+// there is. Uses sha256 when available (production); falls back to two independent
+// djb-style 32-bit hashes mixed into 48 bits when not (unit-test environments).
+function content_id(s) {
+	if (_digest != null) return substr(_digest.sha256(s), 0, 12);
+	let h1 = 5381, h2 = 7919;
+	for (let i = 0; i < length(s); i++) {
+		let c = ord(substr(s, i, 1));
+		h1 = ((h1 * 33) + c) % 4294967296;
+		h2 = ((h2 * 65599) + c) % 4294967296;
+	}
+	return sprintf("%08x%04x", h1, h2 % 65536);
+}
+
+function is_content_id(s) {
+	return type(s) == "string" && !!match(s, /^[a-f0-9]{12}$/);
+}
+
 return {
 	new_id,
 	new_ulid,
 	is_valid_id,
+	content_id,
+	is_content_id,
 };

@@ -121,6 +121,7 @@ Reload: `dnsmasq`, except `dhcp/odhcpd`, which declares `odhcpd`.
 | `system/timeservers` | `config timeserver` | NTP server list; reloads sysntpd. |
 | `system/password` | `/bin/busybox passwd` (non-uci, write-only) | `POST {user, password}` -> 204. Audit-logged without password. |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (non-uci) | `GET`/`POST`/`PUT`/`DELETE` for SSH key entries. Server-side key-type validation. |
+| `system/cron_jobs` | `/etc/crontabs/root` (non-uci) | `GET`/`POST`/`DELETE` for one crontab line each. Lines from packages stay as they are. `runtime.crond_running` reports whether crond runs, and `runtime.runs_as_written` flags a line crond misreads. |
 
 ## Other daemons
 

@@ -64,7 +64,7 @@ Two flock files, used in three patterns:
 ```
 /var/lock/uapi.lock                   shared by uci transactions,
                                        exclusive by non-uci writes
-                                       (apk, system/access)
+                                       (apk, system/access, cron_jobs)
 /var/lock/uapi.pkg.<package>.lock     exclusive per-package; serializes
                                        writes to the same uci package only
 ```
@@ -75,7 +75,7 @@ Two flock files, used in three patterns:
 | Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
 | uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
-| Non-uci write (apk, system/access) | EX | none                              |
+| Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
 
 The interactions:
 
@@ -426,6 +426,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Tokens (salted hash + meta)  | `/etc/config/uapi`                          | Indefinite        |
 | uci configuration            | `/etc/config/<package>`                     | Indefinite        |
 | Authorized SSH keys          | `/etc/dropbear/authorized_keys`             | Indefinite        |
+| Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
 | Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Reaped on revoke, else until reboot |
 | Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, until reboot |

@@ -14,6 +14,7 @@ let transaction = require("transaction");
 let bus = require("bus");
 let packages = require("packages");
 let system_access = require("system_access");
+let crontab = require("crontab");
 let token_store = require("token_store");
 let ratelimit = require("ratelimit");
 let metrics = require("metrics");
@@ -1077,7 +1078,7 @@ function dispatch(env) {
 	}
 
 	if (parts[0] == "system" && length(parts) >= 2
-	    && (parts[1] == "password" || parts[1] == "authorized_keys")) {
+	    && (parts[1] == "password" || parts[1] == "authorized_keys" || parts[1] == "cron_jobs")) {
 		let sub = parts[1];
 		if (length(parts) > 3) {
 			return { ctx, token,
@@ -1095,7 +1096,7 @@ function dispatch(env) {
 			else resp = errors.error(ctx, "method_not_allowed",
 			                         sprintf("Method %J not allowed on system/password%s",
 			                                 method, id != null ? "/<id>" : ""));
-		} else {
+		} else if (sub == "authorized_keys") {
 			if (method == "GET" && id == null)        resp = system_access.list_keys(ctx);
 			else if (method == "GET")                  resp = system_access.get_key(ctx, id);
 			else if (method == "POST" && id == null)   resp = system_access.add_key(ctx, body);
@@ -1103,6 +1104,14 @@ function dispatch(env) {
 			else if (method == "DELETE" && id != null) resp = system_access.remove_key(ctx, id);
 			else resp = errors.error(ctx, "method_not_allowed",
 			                         sprintf("Method %J not allowed on system/authorized_keys%s",
+			                                 method, id != null ? "/<id>" : ""));
+		} else {
+			if (method == "GET" && id == null)        resp = crontab.list_entries(ctx, conn);
+			else if (method == "GET")                  resp = crontab.get_entry(ctx, conn, id);
+			else if (method == "POST" && id == null)   resp = crontab.add_entry(ctx, conn, body);
+			else if (method == "DELETE" && id != null) resp = crontab.remove_entry(ctx, conn, id);
+			else resp = errors.error(ctx, "method_not_allowed",
+			                         sprintf("Method %J not allowed on system/cron_jobs%s",
 			                                 method, id != null ? "/<id>" : ""));
 		}
 		return { ctx, token, resp };

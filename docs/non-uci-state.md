@@ -17,6 +17,7 @@ The bar for adding to category 1 is high. New non-uci resources should justify t
 | `dhcp/leases6` | `/tmp/hosts/odhcpd` (parse), fallback `/tmp/odhcpd.leases` | none (read-only) | n/a | odhcpd IPv6 leases |
 | `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` on global | none | write-only; audit logs token+user, never the password |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` on global for writes; reads lock-free | none | dropbear re-reads the file per connection |
+| `system/cron_jobs` | `/etc/crontabs/root` (mode 0600) | `with_lock` on global for writes; reads lock-free | `cron` | one entry per line; other lines stay byte for byte |
 
 Each entry below expands on its lock semantics, audit shape, the file/process it touches, and why the standard uci-transaction recipe doesn't apply.
 
@@ -72,6 +73,29 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 - **Stable id.** The first 12 hex characters of the blob's sha256, matching `^[a-f0-9]{12}$`. Same key always gets the same id, idempotent across re-adds.
 - **HTTP shape.** `GET` lists; `POST` adds one; `PUT` replaces wholesale (dedup); `DELETE /<id>` removes one.
 - **Why not uci.** OpenWrt has no uci wrapper for SSH authorized keys. LuCI also writes the file directly via its rpcd `fs` plugin.
+
+### `system/cron_jobs`
+
+- **Source of truth.** `/etc/crontabs/root`, read by busybox crond. Other users' crontabs are out of scope.
+- **Lock.** `transaction.with_lock` for writes. Reads are lock-free.
+- **Mechanism.** The write reads the file, adds or removes its own line, and puts the result in place with the same 0600 temp-file-and-rename as `authorized_keys`. Every other line stays byte for byte: entries from packages, comments, and `MAILTO=`, `SHELL=` and `PATH=` lines. An appended entry goes at the end, so an environment line earlier in the file applies to it. A crontab that exists but cannot be read fails the request with `500`, because treating it as empty would let the write replace every line in it.
+- **Line continuation.** crond joins a line that ends in `\` with the next one, and drops the backslash, before it looks for `#`. Measured on the device: `touch /tmp/c1 \` followed by `/tmp/c2` ran `touch /tmp/c1 /tmp/c2`, and a comment that ends in `\` hid the entry below it. uapi reads the file in the same groups. A delete removes every physical line of its entry, and an append after a trailing backslash first adds a blank line, which ends the continuation without changing what crond reads for the line before.
+- **Reload.** `/etc/init.d/cron reload`. The init script registers each crontab with procd as a watched file, so the reload restarts crond only when the content changed. It is also what starts crond on a stock image: there is no crontab there, and the init script does not start crond while `/etc/crontabs/` is empty. A failed reload puts the old file back and reloads again, and the request answers `reload_failed_restored` or `reload_failed_unrecovered`, as a curated write does. Removing the last entry leaves an empty file, so crond keeps running with nothing to do.
+- **Effect.** `runtime.crond_running` asks procd whether crond runs, on every read and after every write, delete included. The reload exit status cannot tell: with an invalid `system.cronloglevel` the init script prints "validation failed", exits 0, and procd stops crond. A write in that state answers 200 with `crond_running: false`. uapi does not know whether a job ran, and does not claim to.
+- **Reads list what crond runs.** A line is parsed the way busybox crond reads it on OpenWrt: continuations are joined, `#` ends the line wherever it appears, environment lines and lines short of five fields plus a command are skipped, and field spacing collapses. A line from another writer therefore shows up as crond sees it, which is not always how it looks. Where its schedule is one crond misreads, such as minute `75` or weekday `7`, the entry says so with `runtime.runs_as_written: false`.
+- **Validation.** Writes accept only what crond runs as written, and refuse an undeclared body field with `unknown_field`. busybox crond does not refuse a bad field: it logs a parse error and keeps the line with a half-filled schedule, so minute `75` runs every minute and weekday `7` runs every day. The schedule is five fields separated by single spaces, each a list of values, ranges (wrapping ones such as `22-2` included) and `*`, with a `/step` after `*` or a range. Ranges: minute 0-59, hour 0-23, day 1-31, month 1-12 or `jan`-`dec`, weekday 0-6 or `sun`-`sat`. Refused, each for a reason crond gives:
+  - `@daily`, `@reboot` and the other special schedules. OpenWrt builds busybox without `FEATURE_CROND_SPECIAL_TIMES`: crond skips a short `@daily` line and misreads a long one.
+  - A step on a single value. busybox reads `5/10` as 5 alone, and other crons read it as `5-59/10` or refuse it.
+  - `*/N` in the day field. busybox fills `*` for days from day 0, so `*/2` runs on days 2 to 30 where other crons run on days 1 to 31, and it ORs such a day with a restricted weekday where other crons AND them. `1-31/N` means the same everywhere.
+  - `#` in the command. crond cuts the line there: `touch /tmp/a#b` runs `touch /tmp/a`.
+  - A command that ends in `\`, which joins the next line into it.
+  - Control characters in the command, and whitespace at either end, which crond strips.
+- **`%`.** busybox crond gives it no special meaning, so it passes through to the shell unchanged.
+- **Stable id.** The first 12 hex characters of `sha256("<schedule> <command>")`. A change to either field gives a new id, so an update is a delete plus a create. Identical lines share an id: a read lists them once, and a delete removes them all.
+- **HTTP shape.** `GET` lists, `POST` adds one, and `DELETE /<id>` removes one and answers `200` with the removed entry and crond's state after the reload. There is no `PUT` for the whole file, although that is how LuCI edits it (one textarea, saved whole). Packages write to the same file: `acme` adds `0 0 * * * /etc/init.d/acme renew` each time it starts, and `safe-search` and `wg-installer` add their own lines. A client that owned the whole file would delete those lines, and the packages would add them back on their next start.
+- **Read exposure.** A read returns every command in full, to any token with `system:cron_jobs:ro` or a scope above it, `*:ro` included. A command can carry a credential, so keep secrets in a 0600 file that the command reads. The command stays readable because a client cannot adopt or compare an entry it cannot see.
+- **Audit.** A create emits `uapi-cron-job-add <request_id> id=<id>`, which ties the generic write line to the entry it made. The command is not logged, since commands can carry credentials.
+- **Why not uci.** OpenWrt has no uci surface for cron entries. The only cron option in uci is `system.cronloglevel`, and busybox crond reads only crontab files. LuCI writes the file directly too.
 
 ## Out-of-scope state
 

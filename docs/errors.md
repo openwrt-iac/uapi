@@ -139,8 +139,10 @@ Every response carries:
 The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than "writes" because that is
 measured, not assumed: raw passthrough (`/raw/...`) and the non-uci writes
-(`/packages/...`, `/tokens`, `/system/password`, `/system/authorized_keys`) never reach
-`attach_reload_headers` and return none of them. Until 2.5.0 the OpenAPI document declared
+(`/packages/...`, `/tokens`, `/system/password`, `/system/authorized_keys`,
+`/system/cron_jobs`) never reach `attach_reload_headers` and return none of them.
+`/system/cron_jobs` does reload cron, but reports the outcome in its body as
+`runtime.crond_running`, because the init script exits 0 even when crond stops. Until 2.5.0 the OpenAPI document declared
 the reload pair on those responses anyway, which is why the wording here matters: a client
 generated from the spec was told to expect a header that was never going to arrive.
 `POST /batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
