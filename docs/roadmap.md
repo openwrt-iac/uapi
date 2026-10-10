@@ -270,6 +270,27 @@ precondition is reading libvalidate's accepted set out of ubox rather than guess
 that has not happened. It could change which strings are accepted on the wire, so acting on a
 guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 
+## Shipped in 3.1.0
+
+- **`system/cron_jobs`**, the first resource over `/etc/crontabs/root`. It was not on this
+  roadmap: it came from asking whether LuCI's Scheduled Tasks page could be an API surface
+  ([#192](https://github.com/openwrt-iac/uapi/issues/192)). Reads follow busybox crond's own
+  parser, including line continuation, and writes refuse what OpenWrt's crond misreads.
+- **`dhcp/hosts.match_tag`**, the roadmap's one ready additive feature. Measured with a real
+  DHCP client before it shipped: it works with tags dnsmasq sets from the request, such as a
+  vendor class, while `known` and the range's own tag never match, whatever LuCI's help says.
+- **`dhcp/hosts` stopped passing dnsmasq syntax through `name` and `tag`**, which allowed a
+  newline in `name` to add any dnsmasq directive. One check in `values.uc` now covers every
+  field that lands in the `dhcp-host` line.
+- **A full filesystem no longer empties `authorized_keys` or the crontab.** ucode's `close()`
+  drops `fclose`'s error, so a write that ran out of space renamed an empty file over the old
+  one and answered 200. The shared writer now checks the flush.
+- **Package installs survive a feed rebuild.** `apk add` refreshes a stale index on its own
+  only after 4 hours, so an install now refreshes and retries once when it fails
+  ([#191](https://github.com/openwrt-iac/uapi/issues/191)).
+- **The changelog is written in each PR and checked by CI**, on the Grafana Mimir model, and a
+  ruleset on `main` requires that check and the CI jobs.
+
 ## Features (additive, future minor bumps in v3.x)
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**

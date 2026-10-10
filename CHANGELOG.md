@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-11
+
 ### Added
 
 - **`dhcp/hosts.match_tag` limits a reservation to requests that carry the given dnsmasq
