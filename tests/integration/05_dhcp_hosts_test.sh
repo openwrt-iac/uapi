@@ -61,4 +61,27 @@ echo "$dns_only" | tail -1 | grep -q '^200$' || fail "DNS-only host expected 200
 dns_id=$(echo "$dns_only" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$dns_id"
 
+echo "--- match_tag: dnsmasq compiles each value as a tag: prefix, and still loads ---"
+mt=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
+	"name": "mtagged", "macs": ["aa:bb:cc:dd:ee:02"], "ip": "192.168.1.52",
+	"match_tag": ["known", "!guest"]
+}')
+echo "$mt" | tail -1 | grep -q '^200$' || fail "POST with match_tag expected 200: $mt"
+echo "$mt" | head -1 | grep -q '"match_tag": \[ "known", "!guest" \]' || fail "match_tag did not read back: $mt"
+mt_id=$(echo "$mt" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+assert_dnsmasq_emits "dhcp-host=tag:known,tag:!guest,aa:bb:cc:dd:ee:02,192.168.1.52,mtagged"
+assert_dnsmasq_loads
+
+echo "--- match_tag: PATCH null clears it ---"
+cleared=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/hosts/$mt_id" -d '{"match_tag": null}')
+echo "$cleared" | tail -1 | grep -q '^200$' || fail "PATCH match_tag null expected 200: $cleared"
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:02,192.168.1.52,mtagged"
+assert_dnsmasq_omits "tag:known"
+
+echo "--- match_tag: a comma, which dnsmasq refuses to start on, is refused ---"
+comma=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/hosts/$mt_id" -d '{"match_tag": ["a,b"]}')
+echo "$comma" | tail -1 | grep -q '^422$' || fail "match_tag with a comma expected 422: $comma"
+assert_dnsmasq_loads
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$mt_id"
+
 echo "dhcp hosts CRUD ok"

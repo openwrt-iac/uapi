@@ -36,6 +36,7 @@ function fromUci(section) {
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
 		tag: split_tags(section.tag),
+		match_tag: as_list_or_null(section.match_tag),
 		dns: shell_bool(section.dns, false),
 		broadcast: (section.broadcast != null) ? shell_bool(section.broadcast, false) : null,
 		instance: section.instance ?? null,
@@ -58,6 +59,7 @@ function toUci(json) {
 	if (json.leasetime != null) out.leasetime = json.leasetime;
 	if (type(json.tag) == "array" && length(json.tag) > 0) out.tag = json.tag;
 	else if (json.tag != null && type(json.tag) != "array") out.tag = json.tag;
+	if (type(json.match_tag) == "array" && length(json.match_tag) > 0) out.match_tag = json.match_tag;
 	if (json.dns != null)       out.dns = json.dns ? "1" : "0";
 	if (json.broadcast != null) out.broadcast = json.broadcast ? "1" : "0";
 	if (json.instance != null)  out.instance = json.instance;
@@ -93,6 +95,17 @@ function validate(json, conn) {
 	if (json.ip != null && json.ip != "" && !is_valid_ip(json.ip))
 		push(errs, { field: "ip", code: "invalid_format",
 		             message: "must be a valid IPv4 or IPv6 address" });
+
+	// The init script puts each value in front of the dhcp-host line as `tag:<value>,`. A comma
+	// there ends the field early, and dnsmasq refuses to start (measured on a device); a newline
+	// would begin a config line of its own. A space is harmless, and LuCI does not refuse one.
+	let match_tags = (type(json.match_tag) == "array") ? json.match_tag : [];
+	for (let i = 0; i < length(match_tags); i++) {
+		let v = match_tags[i];
+		if (type(v) == "string" && (v == "" || index(v, ",") >= 0 || values.has_control_chars(v)))
+			push(errs, { field: sprintf("match_tag[%d]", i), code: "invalid_format",
+			             message: "must be a non-empty tag with no comma or control character: dnsmasq refuses to start on a comma" });
+	}
 
 	if (json.leasetime != null && !match(json.leasetime, LEASETIME_RE))
 		push(errs, { field: "leasetime", code: "invalid_format",
@@ -152,7 +165,9 @@ return {
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation" },
 		tag:           { type: ["array", "null"], items: { type: "string" },
-		                 description: "dnsmasq tags for this reservation; a request must match all of them. A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way." },
+		                 description: "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way." },
+		match_tag:     { type: ["array", "null"], items: { type: "string" },
+		                 description: "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it." },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,
 		// the inverse of the request. dnsmasq reads this with the shell config_get_bool,
 		// which accepts the wide spelling set, so normalize_bool stays the reader.

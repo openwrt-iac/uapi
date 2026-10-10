@@ -28481,7 +28481,17 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags for this reservation; a request must match all of them. A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+					},
+					"match_tag": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it."
 					},
 					"dns": {
 						"type": "boolean",
@@ -28586,7 +28596,17 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags for this reservation; a request must match all of them. A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way."
+					},
+					"match_tag": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the whole uci `list match_tag`. `known` is set for any host with a reservation, and `!` negates, as in `!known`. dnsmasq reads each value as one tag, so unlike `tag`, `x y` is a single tag. A comma is refused, because dnsmasq refuses to start on it."
 					},
 					"dns": {
 						"type": "boolean",

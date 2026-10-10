@@ -232,12 +232,6 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 
 ## Features (additive, future minor bumps in v3.x)
 
-- **`dhcp/hosts.match_tag`.** Not modelled, though LuCI exposes it on the same
-  form as `tag` and dnsmasq's host handler reads it with `config_list_foreach`,
-  so it is a list on both sides with none of the scalar ambiguity `tag` carries.
-  Found while settling the `tag` shape. Additive, and it should be declared an
-  array from the start per that decision.
-
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
   `wg syncconf` is all or nothing and the proto handler escalates any failure to
