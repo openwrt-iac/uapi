@@ -169,12 +169,10 @@ t.describe('packages.add_with_refresh', () => {
 		t.assert_equal(r.output, "3:add -- ethtool");
 	});
 
-	t.it('keeps the first error and does not retry when the refresh fails', () => {
-		let f = fake([false, false]);
-		let r = pkg.add_with_refresh("ethtool", f.exec);
-		t.assert_false(r.ok);
-		t.assert_equal(r.output, "1:add -- ethtool");
-		t.assert_deep_equal(f.calls, ["add -- ethtool", "update"]);
+	t.it('retries even when apk update reports a failure, as one unreachable feed makes it do', () => {
+		let f = fake([false, false, true]);
+		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
+		t.assert_deep_equal(f.calls, ["add -- ethtool", "update", "add -- ethtool"]);
 	});
 });
 
