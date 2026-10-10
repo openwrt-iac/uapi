@@ -132,8 +132,48 @@ Committed, in rough dependency order:
    ([#64](https://github.com/openwrt-iac/uapi/issues/64)). Done. Deferred for a
    while on the grounds that netifd parses the flag differently per section type,
    which is real but does not need an upstream fix: each resource reads it with the
-   helper matching its own parser rather than all three sharing one. See the
-   Features entry.
+   helper matching its own parser rather than all three sharing one.
+
+   **The asymmetry was handled rather than waited out.** netifd parses the interface flag with
+   a literal compare against `"1"` while route and rule go through the boolean
+   blob converter, which also takes `true` (and only `true`; `on` and `yes` are
+   accepted by neither, and uci drops the option instead). So on 25.12.5
+   `option disabled 'true'` disables a route or a rule and leaves an interface
+   running, and reading it with one truthy parse would report an interface as
+   disabled while it is up. That is the same lie as the bug being fixed, inverted.
+
+   Upstream closed the asymmetry in netifd `e97e36f`, 2026-07-16, "config: accept
+   'true' for the interface disabled option", but as of 2026-08-04 no OpenWrt branch
+   pinned it, master included. Waiting turned out to be the wrong call: the parser
+   difference is a fact about the device, so the read follows it per section type.
+   `network/interfaces` uses `strict_bool`, the other two use `platform_bool`, and a
+   unit test pins the difference in both directions, because unifying them puts the lie
+   back whichever way it is unified. When a branch carries `e97e36f` the interface
+   helper can widen, and that test is what will say so.
+
+   The first cut shared one helper across all three and shipped the inverted lie for a
+   day: an interface carrying `disabled 'true'` read back as disabled while netifd had
+   it registered and running. Caught by re-reading this entry, and measured three times
+   against a reset baseline before and after.
+
+   Two alternatives were weighed and turned down, recorded so they are not
+   re-argued from scratch:
+
+   - **Ship routes and rules now, defer interfaces.** They need nothing from
+     upstream, since `values.platform_bool` is exactly right for both netifd
+     versions there. Rejected because it delivers the harmless two thirds and
+     defers the dangerous one, the interface being where disabling takes the
+     addresses, routes and peers with it; because `disabled` on two of three
+     sibling resources is an asymmetry no operator can explain from outside; and
+     because the provider would add attributes twice for one issue.
+   - **Ship all three and let `runtime` carry the disagreement**, the way
+     `effective_proto` already exposes netifd running something other than what
+     uci asked for. Closer to the house pattern, and tempting. Rejected because
+     the signal is weaker than `effective_proto`'s: `disabled: true` with
+     `runtime.up: true` does prove the disagreement, but `disabled: true` with
+     `runtime.up: false` cannot separate disabled-and-honoured from
+     enabled-but-failed, which is the case an operator most needs told apart. If
+     the wait runs long enough to hurt, this is the option to revisit first.
 
 4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
    sections a write would now reject, before a write finds them one at a time.
@@ -261,63 +301,12 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
 
-- **`disabled` on `network/interfaces`, `network/routes` and `network/rules`.**
-  Filed as [openwrt-iac/uapi#64](https://github.com/openwrt-iac/uapi/issues/64).
-  uci carries `option disabled` on all three section types and netifd honours it
-  (`config.c` skips a disabled interface, `interface-ip.c` and `iprule.c` declare
-  the attribute), but none of the three models it, so an inert section reads back
-  as ordinary active config and a declarative client sees a converged resource
-  set with nothing to apply. It also cannot be cleared through the API, because a
-  `PUT` cannot unset a field the model does not have. `network/wireguard_peers`
-  already models it and is the shape to copy. Add it next to `auto` on
-  `network/interfaces` rather than in place of it: `auto '0'` leaves the
-  interface configured but not started at boot, `disabled '1'` makes netifd
-  ignore the section outright.
-
-  **Shipped in 2.5.0, with the asymmetry handled rather than waited out.** netifd parses the interface flag with
-  a literal compare against `"1"` while route and rule go through the boolean
-  blob converter, which also takes `true` (and only `true`; `on` and `yes` are
-  accepted by neither, and uci drops the option instead). So on 25.12.5
-  `option disabled 'true'` disables a route or a rule and leaves an interface
-  running, and reading it with one truthy parse would report an interface as
-  disabled while it is up. That is the same lie as the bug being fixed, inverted.
-
-  Upstream closed the asymmetry in netifd `e97e36f`, 2026-07-16, "config: accept
-  'true' for the interface disabled option", but as of 2026-08-04 no OpenWrt branch
-  pinned it, master included. Waiting turned out to be the wrong call: the parser
-  difference is a fact about the device, so the read follows it per section type.
-  `network/interfaces` uses `strict_bool`, the other two use `platform_bool`, and a
-  unit test pins the difference in both directions, because unifying them puts the lie
-  back whichever way it is unified. When a branch carries `e97e36f` the interface
-  helper can widen, and that test is what will say so.
-
-  The first cut shared one helper across all three and shipped the inverted lie for a
-  day: an interface carrying `disabled 'true'` read back as disabled while netifd had
-  it registered and running. Caught by re-reading this entry, and measured three times
-  against a reset baseline before and after.
-
-  Two alternatives were weighed and turned down, recorded so they are not
-  re-argued from scratch:
-
-  - **Ship routes and rules now, defer interfaces.** They need nothing from
-    upstream, since `values.platform_bool` is exactly right for both netifd
-    versions there. Rejected because it delivers the harmless two thirds and
-    defers the dangerous one, the interface being where disabling takes the
-    addresses, routes and peers with it; because `disabled` on two of three
-    sibling resources is an asymmetry no operator can explain from outside; and
-    because the provider would add attributes twice for one issue.
-  - **Ship all three and let `runtime` carry the disagreement**, the way
-    `effective_proto` already exposes netifd running something other than what
-    uci asked for. Closer to the house pattern, and tempting. Rejected because
-    the signal is weaker than `effective_proto`'s: `disabled: true` with
-    `runtime.up: true` does prove the disagreement, but `disabled: true` with
-    `runtime.up: false` cannot separate disabled-and-honoured from
-    enabled-but-failed, which is the case an operator most needs told apart. If
-    the wait runs long enough to hurt, this is the option to revisit first.
-
-  Additive, so a minor bump. `terraform-provider-uapi` needs matching attributes
-  on `uapi_network_interface`, `uapi_network_route` and `uapi_network_rule` once
-  the fields exist.
+- **Upstream: widen the interface `disabled` reader once 25.12 carries netifd `e97e36f`.**
+  netifd accepts `disabled 'true'` on an interface since that commit, 2026-07-16, so
+  `network/interfaces` can then read the flag with `platform_bool` like routes and rules.
+  As of 2026-10-10, OpenWrt `main` pins a netifd from 2026-09-11, which carries it, but
+  `openwrt-25.12` still pins 2026-02-26, and so does 25.12.5. The unit test that pins the
+  per-type difference is what will say when the widening is right.
 
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` never shipped (built in 2.3.0-rc1, removed before stable) and
@@ -376,22 +365,6 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   surface. Current gap candidates worth opportunistic curation:
   `mwan3/*`, `usteer/*` (passive band-steering daemon for OpenWrt 22+
   multi-AP setups), `openvpn/*` (the daemon is supported by uci natively).
-- **`unbound/server` listen-address / interface binding.** Field
-  feedback (v2.0.0 migration) flagged the inability to bind unbound to
-  a specific address (loopback-only recursive backend behind dnsmasq,
-  `127.0.0.1@5353`). Blocked upstream: OpenWrt's
-  `/usr/lib/unbound/unbound.sh:386` carries an explicit `# TODO: add
-  UCI list for interfaces to bind`. The only knobs the init script
-  reads today are `listen_port`, `interface_auto`, and the per-trigger
-  `interface` (used for reload gating, not bind), so there is no uci
-  surface to curate. Path forward: open a PR against the OpenWrt
-  unbound package adding `list interface_bind '...'` (and likely
-  `list interface_outgoing '...'`), then curate the new options here
-  once a release ships them. Floor option if upstream rejects or
-  takes too long: a non-uci `unbound/extra_server_conf` resource
-  writing `/etc/unbound/unbound_srv.conf` (high bar per
-  `docs/non-uci-state.md`; only if option (a) genuinely stalls).
-
 ## Install the deferred packages in CI
 
 Partly done in 2.5.0. lldpd and vnstat2 are installed by `install_uapi`'s bootstrap, about
