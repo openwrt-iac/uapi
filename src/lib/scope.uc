@@ -28,6 +28,7 @@ const KNOWN_PATHS = {
 	"system:timeservers": true,
 	"system:password": true,
 	"system:authorized_keys": true,
+	"system:cron_jobs": true,
 	"dropbear": true,
 	"dropbear:instances": true,
 	"uhttpd": true,

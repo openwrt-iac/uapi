@@ -117,7 +117,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `wireless` | `devices`, `interfaces` |
 | `firewall` | `zones`, `rules`, `redirects`, `nat`, `forwardings`, `defaults` |
 | `dhcp` | `hosts`, `leases`, `leases6`, `servers`, `dnsmasq`, `odhcpd` |
-| `system` | (singleton), `timeservers`, `password`, `authorized_keys` |
+| `system` | (singleton), `timeservers`, `password`, `authorized_keys`, `cron_jobs` |
 | `dropbear` | `instances` |
 | `uhttpd` | `instances`, `certs` |
 | `unbound` | `server`, `srv`, `ext` |

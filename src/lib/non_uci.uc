@@ -64,6 +64,27 @@ function audit_warning(ctx, action, fields) {
 	_audit(ctx, log.LOG_WARNING, action, fields);
 }
 
+// Same-directory temp file with mode 0600 set BEFORE the content is written, then a
+// rename into place. This closes the window where the file would briefly hold the
+// content under default umask perms, and the rename is symlink-safe: swapping the target
+// for a symlink between write and chmod cannot make us truncate whatever it points at.
+function replace_private_file(path, content) {
+	let tmp = path + ".uapi.tmp";
+	try { fs.unlink(tmp); } catch (e) {}
+	let f = fs.open(tmp, "w");
+	if (!f) return false;
+	try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
+	f.write(content);
+	f.close();
+	let renamed = false;
+	try { renamed = fs.rename(tmp, path); } catch (e) {}
+	if (!renamed) {
+		try { fs.unlink(tmp); } catch (e) {}
+		return false;
+	}
+	return true;
+}
+
 // A file that exists but cannot be read is not an empty one: treating it as empty lets the
 // next write replace every line in it with only its own, which for authorized_keys locks
 // root out of SSH.
@@ -75,4 +96,5 @@ function read_file_if_present(path) {
 	die(sprintf("could not read %s: %s", path, err));
 }
 
-return { with_lock_translated, audit_notice, audit_warning, read_file_if_present };
+return { with_lock_translated, audit_notice, audit_warning, replace_private_file,
+         read_file_if_present };

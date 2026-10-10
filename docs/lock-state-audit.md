@@ -43,17 +43,17 @@ as an audit of the transaction and token paths, not of the tree.
 | `src/lib/transaction.uc` | 183-234 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
 | `src/lib/transaction.uc` | 335-353 | lock + `with_lock` | same try/release/die shape |
 | `src/lib/non_uci.uc` | 23-48 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
-| `src/lib/system_access.uc` | 138-161 | fd (`write_keys`) | atomic-rename pattern (see below) |
+| `src/lib/non_uci.uc` | 71-86 | fd (`replace_private_file`) | atomic-rename pattern (see below) |
 | `src/lib/ids.uc` | 21-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
 | `src/lib/packages.uc` | 9-17 | pipe (`apk_exec`) | `p.close()` returns exit code; early-return on popen fail |
 | `src/lib/packages.uc` | 29-32 | pipe (`list_installed`) | same |
 | `src/lib/packages.uc` | feed write | fd + `wx` O_EXCL | TOCTOU re-check on `wx` miss (fixed in `876e483`); unconditional close on success |
 | `cli/uapi-token` | 20-29 | fd (`/dev/urandom`) | dies on open failure (no fd held); close on success |
 
-## Tricky case: `system_access.uc::write_keys()`
+## Tricky case: `non_uci.uc::replace_private_file()`
 
 ```ucode
-let tmp = KEYS_PATH + ".uapi.tmp";
+let tmp = path + ".uapi.tmp";
 try { fs.unlink(tmp); } catch (e) {}
 let f = fs.open(tmp, "w");
 if (!f) return false;
@@ -68,7 +68,7 @@ Three exit paths to verify, in order:
 2. `fs.chmod` throws: caught and discarded; `f.write` then `f.close` still run in order on the next two lines; fd released. The chmod tolerance is deliberate (some filesystems return EPERM); content correctness is the priority and the file gets the default umask permissions in that case.
 3. Normal path: `f.write` + `f.close` run unconditionally on the line after the chmod try-catch.
 
-Subsequent `fs.rename(tmp, KEYS_PATH)` is also wrapped in try/catch; failure cleans up `tmp` and returns false. Atomic-rename property is preserved.
+Subsequent `fs.rename(tmp, path)` is also wrapped in try/catch; failure cleans up `tmp` and returns false. Atomic-rename property is preserved.
 
 ## Patterns confirmed
 
@@ -81,7 +81,7 @@ Subsequent `fs.rename(tmp, KEYS_PATH)` is also wrapped in try/catch; failure cle
 
 `wg.uc` shells out to `wg set` after the commit, inside the locked region, to push peer changes to the kernel (see `docs/architecture.md` § Transaction recipe step 7). Two things about it are load-bearing here.
 
-The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than a unique one. That is safe only because every uci transaction holds the per-package exclusive lock for `network`, so two peer applies can never be in flight at once. If that lock discipline ever changes, this needs a unique path. Mode `0600` is set before the content is written, following the same order as the authorized-keys writer above, and the file is unlinked immediately after the command returns.
+The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than a unique one. That is safe only because every uci transaction holds the per-package exclusive lock for `network`, so two peer applies can never be in flight at once. If that lock discipline ever changes, this needs a unique path. Mode `0600` is set before the content is written, following the same order as `replace_private_file` above, and the file is unlinked immediately after the command returns.
 
 `wg show <iface> dump` is read on the reconcile path only. Its second field is the peer's preshared key, so that output must never be logged or surfaced in an error message.
 

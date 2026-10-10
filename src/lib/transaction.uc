@@ -5,7 +5,8 @@ let wg = require('wg');
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
 //
 //   /var/lock/uapi.lock              shared by uci transactions, exclusive
-//                                     by non-uci writes (apk, system/access)
+//                                     by non-uci writes (apk, system/access,
+//                                     cron_jobs)
 //   /var/lock/uapi.pkg.<package>.lock exclusive per-package; serializes
 //                                     writes to the same uci package only
 //
@@ -355,4 +356,4 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg,
-         default_check_services };
+         default_check_services, default_reload };

@@ -119,6 +119,24 @@ Hierarchical, deepest-match wins. Syntax: `<segment>[:<segment>...]:(rw|ro)`.
 | `raw:firewall:rw` + `firewall:ro` | none of `/raw/firewall/...` writes (raw needs BOTH) | nothing escalated                            |
 | `uapi:tokens:rw`             | mint new tokens whose scopes ⊆ caller's           | mint tokens that escalate                    |
 
+### Scopes that grant root
+
+Some write scopes let the holder run code as root directly. Grant each one as if it were
+`*:rw`:
+
+- `system:cron_jobs:rw` adds a crontab line, and crond runs its command as root.
+- `system:authorized_keys:rw` adds an SSH key that logs in as root.
+- `system:password:rw` sets the root password.
+- `packages:installed:rw` installs a package, and its install script runs as root.
+
+The list is not complete: several uci options name a script that a daemon runs as root.
+A parent scope includes them, so `system:rw` grants the first three. Deepest match wins,
+so `system:rw` with `system:cron_jobs:ro` keeps the system writes and denies cron writes.
+
+One read scope deserves the same care. `system:cron_jobs:ro`, and every scope above it up
+to `*:ro`, returns each root crontab command in full, and a command can carry a credential.
+Keep secrets in a 0600 file that the command reads, rather than on the crontab line.
+
 ### Audit consequence
 
 The token *name* is logged on every audit line. Tokens should be named for

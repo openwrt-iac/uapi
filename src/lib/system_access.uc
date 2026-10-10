@@ -2,34 +2,12 @@ let fs = require('fs');
 let errors = require('errors');
 let values = require('values');
 let non_uci = require('non_uci');
+let ids = require('ids');
 
 const KEYS_PATH = "/etc/dropbear/authorized_keys";
 const USER_RE = /^(root|[a-z][a-z0-9_-]*)$/;
 const MIN_PASSWORD_LEN = 8;
-const KEY_ID_RE = /^[a-f0-9]{12}$/;
 const BLOB_RE = /^[A-Za-z0-9+\/]+=*$/;
-
-// digest is optional at module-load time so unit tests in the build env (no
-// ucode-mod-digest installed) can still exercise the validation paths. On a
-// real OpenWrt install it is a hard dependency and always present.
-let _digest = null;
-try { _digest = require('digest'); } catch (e) {}
-
-// Stable 48-bit content-derived id. Uses sha256 when available (production);
-// falls back to two independent djb-style 32-bit hashes mixed into 48 bits
-// when not (unit-test environments). The fallback's collision space (2^48) is
-// vastly larger than the prior "last-12-chars-of-blob-with-remap" scheme and
-// no longer exploitable by an attacker picking a blob with a colliding tail.
-function blob_id(blob) {
-	if (_digest != null) return substr(_digest.sha256(blob), 0, 12);
-	let h1 = 5381, h2 = 7919;
-	for (let i = 0; i < length(blob); i++) {
-		let c = ord(substr(blob, i, 1));
-		h1 = ((h1 * 33) + c) % 4294967296;
-		h2 = ((h2 * 65599) + c) % 4294967296;
-	}
-	return sprintf("%08x%04x", h1, h2 % 65536);
-}
 
 const VALID_KEY_TYPES = {
 	"ssh-rsa": true,
@@ -117,7 +95,7 @@ function parse_public_key(line) {
 	}
 	let canonical = key_type + " " + blob;
 	if (comment != "") canonical = canonical + " " + comment;
-	return { id: blob_id(blob), type: key_type, blob: blob,
+	return { id: ids.content_id(blob), type: key_type, blob: blob,
 	         comment: comment, canonical: canonical };
 }
 
@@ -139,25 +117,7 @@ function write_keys(parsed_keys) {
 	let lines = [];
 	for (let k in parsed_keys) push(lines, k.canonical);
 	let content = length(lines) > 0 ? (join("\n", lines) + "\n") : "";
-	// Atomic-replace pattern: write to a same-directory tmp file with mode 0600
-	// set BEFORE writing the content, then rename into place. This closes the
-	// chmod-after-open window where the file briefly exists with default umask
-	// perms, and the rename is symlink-safe (an attacker swapping the target
-	// for a symlink between write and chmod can't trick us into truncating it).
-	let tmp = KEYS_PATH + ".uapi.tmp";
-	try { fs.unlink(tmp); } catch (e) {}
-	let f = fs.open(tmp, "w");
-	if (!f) return false;
-	try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
-	f.write(content);
-	f.close();
-	let renamed = false;
-	try { renamed = fs.rename(tmp, KEYS_PATH); } catch (e) {}
-	if (!renamed) {
-		try { fs.unlink(tmp); } catch (e) {}
-		return false;
-	}
-	return true;
+	return non_uci.replace_private_file(KEYS_PATH, content);
 }
 
 function key_view(k) {
@@ -172,7 +132,7 @@ function list_keys(ctx) {
 }
 
 function get_key(ctx, id) {
-	if (!match(id, KEY_ID_RE))
+	if (!ids.is_content_id(id))
 		return errors.error(ctx, "not_found", sprintf("invalid key id %J", id));
 	let keys_arr = read_keys();
 	for (let k in keys_arr)
@@ -239,7 +199,7 @@ function replace_keys(ctx, body) {
 }
 
 function remove_key(ctx, id) {
-	if (!match(id, KEY_ID_RE))
+	if (!ids.is_content_id(id))
 		return errors.error(ctx, "not_found", sprintf("invalid key id %J", id));
 	let lr = non_uci.with_lock_translated(ctx, function() {
 		let existing = read_keys();
