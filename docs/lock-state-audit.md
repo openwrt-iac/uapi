@@ -16,7 +16,7 @@ Reproducing the audit: `grep -rn 'fs\.open\|fs\.popen\|\.lock(' src/ cli/` yield
 
 ## Summary
 
-**Partial: 17 of the 36 sites the command above finds.** Every site in the table
+**Partial: 16 of the 36 sites the command above finds.** Every site in the table
 below releases correctly on every in-request exit path, and that claim is good. What
 is not good is the coverage: this said "17 sites audited" without qualification until
 2.5.0, while its own reproduction command returned 36. Nine modules appear nowhere in
@@ -42,9 +42,8 @@ as an audit of the transaction and token paths, not of the tree.
 | `src/lib/transaction.uc` | 88-98 | per-package 2-level acquire | releases global on per-package acquire failure |
 | `src/lib/transaction.uc` | 183-234 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
 | `src/lib/transaction.uc` | 335-353 | lock + `with_lock` | same try/release/die shape |
-| `src/lib/non_uci.uc` | 22-47 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
-| `src/lib/system_access.uc` | 128-143 | fd (`read_keys`) | early-return on open fail; close on success |
-| `src/lib/system_access.uc` | 145-168 | fd (`write_keys`) | atomic-rename pattern (see below) |
+| `src/lib/non_uci.uc` | 23-48 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
+| `src/lib/system_access.uc` | 138-161 | fd (`write_keys`) | atomic-rename pattern (see below) |
 | `src/lib/ids.uc` | 21-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
 | `src/lib/packages.uc` | 9-17 | pipe (`apk_exec`) | `p.close()` returns exit code; early-return on popen fail |
 | `src/lib/packages.uc` | 29-32 | pipe (`list_installed`) | same |

@@ -434,7 +434,7 @@ is unresolvable.
   release time. Deciding needs a few runs' worth of variance data across runners,
   which nobody has gathered. Until then the tree says measurement, not gate.
 
-- **Finish the lock-state audit.** `docs/lock-state-audit.md` covers 17 of the 36
+- **Finish the lock-state audit.** `docs/lock-state-audit.md` covers 16 of the 36
   sites its own reproduction command finds, and roughly seven of its line ranges have
   drifted. Nine modules are absent entirely: `error_ring`, `idempotency`, `metrics`,
   `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6`, `dhcp.servers`. The

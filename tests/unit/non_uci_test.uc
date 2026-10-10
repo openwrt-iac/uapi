@@ -85,3 +85,17 @@ t.describe('non_uci.with_lock_translated', () => {
 		t.assert_equal(lr.result.count, 7);
 	});
 });
+
+t.describe('non_uci.read_file_if_present', () => {
+	t.it('reads a file', () => {
+		t.assert_match(non_uci.read_file_if_present("VERSION"), /^[0-9]+\.[0-9]+\.[0-9]+/);
+	});
+
+	t.it('answers null for a file that is not there', () => {
+		t.assert_equal(non_uci.read_file_if_present("tests/no-such-file"), null);
+	});
+
+	t.it('fails on a path that exists but cannot be read, rather than reading it as empty', () => {
+		t.assert_throws(() => non_uci.read_file_if_present("tests/unit"));
+	});
+});
