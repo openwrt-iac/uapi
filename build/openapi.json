@@ -23932,7 +23932,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "The installed apk version, such as `3.0.0-r1`. Null in the list response, which does not query versions."
 					},
 					"installed": {
 						"type": "boolean"

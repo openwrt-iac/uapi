@@ -177,3 +177,26 @@ t.describe('packages.add_with_refresh', () => {
 		t.assert_deep_equal(f.calls, ["add -- ethtool", "update"]);
 	});
 });
+
+t.describe('packages.version_of', () => {
+	const QUERY = '[ { "name": "luci-app-uapi", "version": "1.1.1-r1" }, { "name": "uapi", "version": "3.0.0-r1" } ]';
+
+	t.it('reads the full version, where splitting the apk info line kept only r1', () => {
+		t.assert_equal(pkg.version_of("uapi", QUERY), "3.0.0-r1");
+		t.assert_equal(pkg.version_of("luci-app-uapi", QUERY), "1.1.1-r1");
+	});
+
+	t.it('keeps a version with a tilde whole', () => {
+		t.assert_equal(pkg.version_of("kernel",
+			'[ { "name": "kernel", "version": "6.12.94~a7bc15f4-r1" } ]'), "6.12.94~a7bc15f4-r1");
+	});
+
+	t.it('answers null for a name the query did not return', () => {
+		t.assert_equal(pkg.version_of("ethtool", QUERY), null);
+		t.assert_equal(pkg.version_of("uapi", "[ ]"), null);
+	});
+
+	t.it('answers null when a warning on stderr broke the JSON', () => {
+		t.assert_equal(pkg.version_of("uapi", "WARNING: opening from cache x: No such file or directory\n" + QUERY), null);
+	});
+});
