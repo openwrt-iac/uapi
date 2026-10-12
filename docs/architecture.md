@@ -112,7 +112,7 @@ without uci state change.
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
 2. **Snapshot.** `uci_export(<package>)` captures the current cursor state
    into an in-memory string.
-3. **Validate.** Resource's `check_schema_types` + `validate(json, conn)`
+3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta)`
    run inside the lock. Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
@@ -254,7 +254,10 @@ post-image inherits fromUci's string-form view of integer-typed fields, so
 type-checking the merge would falsely 422 on integer-untouched patches). A
 JSON Patch body synthesises the full post-image, so that is what gets
 schema-checked. The full merged body still goes through
-`resource.validate()` for cross-field logic.
+`resource.validate()` for cross-field logic, next to the fields that the
+request names (a JSON Patch without its `test` operations), so a rule can
+blame only what the request sent. `docs/adding-a-resource.md` says when to
+use which.
 
 ### Unmodeled uci options: PUT replaces, PATCH preserves
 

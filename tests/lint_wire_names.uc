@@ -13,6 +13,11 @@
 // of these is already announced for v3, and this exists so a new one cannot arrive quietly
 // after the announcement window closes.
 //
+// A proto-disjoint pair is two API names for one uci key that never appear on the same
+// section, because the key means different things under different values of another field:
+// network/interfaces' `broadcast` is an address on proto static and a flag on proto dhcp. Each
+// section reads and writes exactly one of the two names, so the round trip stays unambiguous.
+//
 // Local and deterministic on purpose. The dead-field audit needs a device because it greps
 // the daemons; this needs only the source, so it runs on every commit instead.
 
@@ -31,6 +36,7 @@ const EXPECTED = {
 	"dhcp.hosts.uc:macs":                 "rename: the uci option is the singular `mac` list",
 	"network.interfaces.uc:ipaddrs":      "rename: the uci option is the singular `ipaddr` list",
 	"network.interfaces.uc:ip6addrs":     "rename: the uci option is the singular `ip6addr` list",
+	"network.interfaces.uc:broadcast_flag": "proto-disjoint: uci `broadcast` is this flag on proto dhcp and an address on static",
 
 	"dropbear.instances.uc:port":         "rename: uci spells it Port",
 	"dropbear.instances.uc:banner_file":  "rename: uci spells it BannerFile",

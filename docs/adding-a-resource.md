@@ -21,14 +21,14 @@ return {
     reload: ["<service>"],             // ubus services to reload on write
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
-    validate: function(json, conn, id) { ... return []; }, // {field, code, message}[]
+    validate: function(json, conn, id, delta) { ... return []; }, // {field, code, message}[]
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
 
     // OpenAPI hints (consumed by build/gen_openapi.uc, not by the runtime):
     openapi_required:    ["field1", "field2"],    // emitted as `required: [...]` on the JSON Schema
     openapi_conditional: [                        // emitted as `allOf: [...]`; if/then/required
-        { if:   { properties: { proto: { const: "static" } } },
-          then: { required: ["ipaddr"] } },
+        { if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
+          then: { required: ["addresses"] } },
     ],
     openapi_runtime: {                            // replaces the opaque `runtime: {type: object}`
         type: "object",
@@ -157,6 +157,20 @@ problem; the caller translates to a `422` response. Codes come from a
 fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
 `not_in_enum`, `conflict`, `read_only`.
 
+`json` is the post-image: the stored section with the request merged in.
+`delta` holds only what the request names: the body of a create or a PUT,
+a merge-patch body, or the paths of a JSON Patch without its `test`
+operations. Check a rule against `json` when it describes the section as
+stored, for example a required field or a reference to another section.
+Check it against `delta` when only the request can be at fault.
+
+`network.interfaces` refuses a field that the proto does not take only when
+`delta` names it. A PATCH that switches the proto still carries the old
+proto's fields in `json`, and `toUci` drops them. `firewall.rules` checks
+`json` instead, so a target switch has to send `null` for the old target's
+fields. The sweep behind `GET /diagnostics?validate=1` passes the `fromUci`
+read as `delta`, so an option that the read hides never flags.
+
 `schema_properties` is the source of truth for type/enum/min/max/pattern/items
 shape checks - the central `handler.check_schema_types` walks this on every
 write and 422s shape mismatches. It does not gate `validate()`: both run and
@@ -170,8 +184,10 @@ up by `build/gen_openapi.uc` and produce a richer machine-readable
 contract for code generators (Terraform provider, OpenAPI client libs).
 The runtime never reads them. Mirror what `validate()` enforces:
 unconditional `if (json.X == null) push(errs, {required})` goes in
-`openapi_required`; `if (json.proto == "static" && json.ipaddr == null)`
-becomes an `openapi_conditional` `if/then/required` block. For resources
+`openapi_required`; `if (json.proto == "wireguard" && json.addresses == null)`
+becomes an `openapi_conditional` `if/then/required` block, and a field that
+applies only to some protos becomes an `if/then` that types it `null` on the
+others, which `network.interfaces` generates from its applicability table. For resources
 that populate a non-empty `runtime: {...}`, define its sub-shape in
 `openapi_runtime` so clients can see the keys without reading source.
 

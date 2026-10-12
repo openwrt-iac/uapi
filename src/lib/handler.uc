@@ -282,7 +282,11 @@ check_schema_types = function(schema_properties, body, prefix) {
 // which uci returns as strings even for integer-typed schema fields, so type-
 // checking the merge would falsely 422 on any patch that didn't touch the
 // integer field. Schema-check the delta only.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
+//
+// `delta` is what the request itself named, for checks that must not fire on a field the caller
+// never sent: a PATCH that switches network/interfaces away from static still carries the old
+// addresses in its merged view, and refusing them there would make the switch impossible.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -295,7 +299,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id) {
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id);
+	let val_errs = resource.validate(validate_body, conn, id, delta);
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -576,8 +580,9 @@ function carry_write_only(resource, body, existing) {
 // Reduce a PATCH body against existing state to a post-image plus a schema-
 // validation target. JSON Patch (RFC 6902) synthesises the full post-image,
 // so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
-// check only the delta. Returns either { ok: true, merged, schema_body } or
-// an error result that the caller short-circuits with.
+// check only the delta. Returns either { ok: true, merged, schema_body, delta } or
+// an error result that the caller short-circuits with. `delta` holds only the fields the
+// request named, with their requested values.
 // The top-level fields a JSON Patch names, taken from the first segment of each op path. A
 // `merge_for_patch` hook needs to know which fields the caller actually named, and under
 // merge-patch that is simply the body's keys; JSON Patch has to be told. The mirrored-name
@@ -588,6 +593,8 @@ function patch_touched_fields(ops, patched) {
 	if (type(ops) != "array" || type(patched) != "object") return null;
 	let out = {};
 	for (let op in ops) {
+		// A test op asserts a value without writing it, so it names nothing, even on the root.
+		if (type(op) == "object" && op.op == "test") continue;
 		if (type(op) != "object" || type(op.path) != "string" || op.path == "") return null;
 		let seg = split(op.path, "/")[1];
 		if (seg == null || seg == "") return null;
@@ -616,7 +623,9 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		if (touched != null)
 			post = carry_write_only(resource,
 			                        resource.merge_for_patch(post, touched), existing);
-		return { ok: true, merged: post, schema_body: post };
+		// From jp.value, not post: post carries the write-only secret back in from uci.
+		return { ok: true, merged: post, schema_body: post,
+		         delta: patch_touched_fields(body, jp.value) ?? jp.value };
 	}
 	// A merge patch is a partial object. Anything else used to be folded into the read
 	// view and answered 200 without writing anything, so a malformed body was
@@ -633,7 +642,7 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		         errors: [ { field: "", code: "invalid_type",
 		                     message: "body must be a JSON object" } ] };
 	return { ok: true, merged: carry_write_only(resource, merge_fn(existing_view, body), existing),
-	         schema_body: body };
+	         schema_body: body, delta: body ?? {} };
 }
 
 function default_merge_for_patch(existing_json, body) {
@@ -748,7 +757,7 @@ function make(resource, opts) {
 						return { ok: false, kind: "validation", errors: id_errs };
 				}
 
-				let errs = _validate_with_schema(resource, body, body, c, null);
+				let errs = _validate_with_schema(resource, body, body, c, null, body);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -788,7 +797,7 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				let write_body = carry_write_only(resource, body, existing);
-				let errs = _validate_with_schema(resource, write_body, write_body, c, id);
+				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				if (!existing || !type_predicate(existing['.type']))
@@ -850,7 +859,7 @@ function make(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -980,7 +989,7 @@ function make(resource, opts) {
 			try {
 				view = resource.fromUci(s, conn);
 				let body = carry_write_only(resource, view, s);
-				errs = _validate_with_schema(resource, body, body, conn, id);
+				errs = _validate_with_schema(resource, body, body, conn, id, view);
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1075,7 +1084,7 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1106,7 +1115,7 @@ function make_singleton(resource, opts) {
 		try {
 			view = resource.fromUci(s, conn);
 			let body = carry_write_only(resource, view, s);
-			errs = _validate_with_schema(resource, body, body, conn, id);
+			errs = _validate_with_schema(resource, body, body, conn, id, view);
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}

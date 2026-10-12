@@ -99,6 +99,13 @@ t.describe('property: fromUci -> toUci -> fromUci is stable', () => {
 			{ '.name': 'wan', '.anonymous': false, '.type': 'interface',
 			  proto: 'dhcp', device: 'eth1',
 			  peerdns: '0', defaultroute: '1', metric: '50', hostname: 'router' },
+			{ '.name': 'wan_bcast', '.anonymous': false, '.type': 'interface',
+			  proto: 'dhcp', device: 'eth1', broadcast: '1', clientid: '01aabbccddeeff' },
+			{ '.name': 'wan_ppp', '.anonymous': false, '.type': 'interface',
+			  proto: 'pppoe', device: 'eth8', peerdns: '0', reqprefix: '56', sourcefilter: '0' },
+			{ '.name': 'lan_core', '.anonymous': false, '.type': 'interface',
+			  proto: 'static', device: 'br-core', ipaddr: ['10.0.7.1/24'], metric: '7',
+			  defaultroute: '0', delegate: '0', ip4table: '4207' },
 		] },
 		{ name: "unbound.server", file: "unbound.server.uc", fixtures: [
 			{ '.name': 'ub_main', '.type': 'unbound',

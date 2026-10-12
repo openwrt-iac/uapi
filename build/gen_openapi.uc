@@ -195,7 +195,7 @@ function keep_arms(arms, props, where) {
 // Nested requirements under a `properties` block are keyed inside that property, not on the
 // instance, so they are left alone. Unrecognised shapes stop the build rather than being copied
 // through unexamined.
-function project_conditional(conditional, props, where) {
+function project_conditional(conditional, props, where, declared) {
 	let out = [];
 	for (let c in conditional) {
 		if (type(c.anyOf) == "array") {
@@ -218,9 +218,17 @@ function project_conditional(conditional, props, where) {
 			if (!all_declared(t.required, props)) continue;
 			kept = t;
 		}
-		// Constrains a sub-object only. Those requirements are keyed inside that
-		// property rather than on the instance, so this projection has no say over them.
-		else if (type(t.properties) == "object") kept = t;
+		// Either constrains a sub-object (firewall rules' `match`) or pins top-level fields to
+		// null outside the protos they apply to (network interfaces). The keys must exist on
+		// this half: a read-only field has no business in a request schema, while a
+		// write-only one stays there, since a request can carry it.
+		else if (type(t.properties) == "object") {
+			let p = {};
+			for (let k in t.properties)
+				if (exists(declared, k)) p[k] = t.properties[k];
+			if (length(p) == 0) continue;
+			kept = { ...t, properties: p };
+		}
 		else die(sprintf("%s openapi_conditional: unsupported `then` shape %J", where, t));
 		push(out, { ...c, then: kept });
 	}
@@ -1473,7 +1481,7 @@ function build_schemas() {
 			for (let k in resp_props)
 				if (type(resp_props[k]) != "object" || resp_props[k].writeOnly !== true)
 					readable[k] = resp_props[k];
-			let cond = project_conditional(mod.openapi_conditional, readable, ep.path);
+			let cond = project_conditional(mod.openapi_conditional, readable, ep.path, resp_props);
 			if (length(cond) > 0) s.allOf = cond;
 		}
 
@@ -1500,7 +1508,7 @@ function build_schemas() {
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			req.required = mod.openapi_required;
 		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
-			let cond = project_conditional(mod.openapi_conditional, req_satisfiable, ep.path);
+			let cond = project_conditional(mod.openapi_conditional, req_satisfiable, ep.path, req_props);
 			if (length(cond) > 0) req.allOf = cond;
 		}
 		// Only for an endpoint that can actually be written. A generated client reads a

@@ -26410,74 +26410,6 @@
 						"default": "none",
 						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it"
 					},
-					"ipaddr": {
-						"type": [
-							"string",
-							"null"
-						],
-						"readOnly": true,
-						"description": "First entry of the uci `list ipaddr`. Read-only: send `ipaddrs` to write, which names the same uci option."
-					},
-					"ipaddrs": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
-					},
-					"ip6addrs": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
-					},
-					"netmask": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 netmask (static proto)"
-					},
-					"gateway": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 default gateway (static proto)"
-					},
-					"broadcast": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 broadcast address (static proto)"
-					},
-					"ip6gw": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
-					},
-					"ip6prefix": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv6 prefix routed to this device for delegation to clients (static proto)"
-					},
 					"dns": {
 						"type": [
 							"array",
@@ -26546,6 +26478,42 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed."
+					},
+					"ip4table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table for the IPv4 routes this interface installs: a number or a name from /etc/iproute2/rt_tables"
+					},
+					"ip6table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table for the IPv6 routes this interface installs: a number or a name from /etc/iproute2/rt_tables"
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Metric of the routes this interface installs without one of their own"
+					},
+					"defaultroute": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Install the default route the protocol provides. Unset means true."
+					},
+					"delegate": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Hand this interface's IPv6 prefixes on to downstream interfaces. Unset means true."
 					},
 					"runtime": {
 						"type": "object",
@@ -26607,6 +26575,74 @@
 						},
 						"readOnly": true
 					},
+					"ipaddr": {
+						"type": [
+							"string",
+							"null"
+						],
+						"readOnly": true,
+						"description": "First entry of the uci `list ipaddr`. Read-only: send `ipaddrs` to write, which names the same uci option."
+					},
+					"ipaddrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
+					},
+					"ip6addrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
+					},
+					"netmask": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 netmask (static proto)"
+					},
+					"broadcast": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 broadcast address (static proto). On proto dhcp the same uci option is a flag, `broadcast_flag`."
+					},
+					"ip6gw": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
+					},
+					"ip6prefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 prefix routed to this device for delegation to clients (static, dhcpv6, wireguard)"
+					},
+					"gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 default gateway (static proto)"
+					},
 					"addresses": {
 						"type": [
 							"array",
@@ -26626,7 +26662,10 @@
 						"readOnly": true
 					},
 					"listen_port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 65535
 					},
@@ -26634,41 +26673,19 @@
 						"type": "boolean",
 						"description": "Suppress the implicit host-route for wireguard endpoint"
 					},
-					"ip4table": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Routing table to install WireGuard IPv4 routes into"
-					},
-					"ip6table": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Routing table to install WireGuard IPv6 routes into"
-					},
 					"peerdns": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)"
+						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true."
 					},
-					"defaultroute": {
+					"broadcast_flag": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Install the default route from DHCP (dhcp)"
-					},
-					"metric": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"description": "Default-route metric (dhcp)"
+						"description": "Ask the DHCP server to broadcast its replies, as LuCI's \"Use broadcast flag\" (dhcp). Stored in uci as `broadcast`, which is an address on proto static. Unset means false."
 					},
 					"hostname": {
 						"type": [
@@ -26682,15 +26699,15 @@
 							"string",
 							"null"
 						],
-						"description": "DHCP client identifier (dhcp)"
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6"
 					},
 					"reqprefix": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|[0-9]+)$",
-						"description": "DHCPv6 prefix-delegation request: auto, no, or numeric size"
+						"pattern": "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$",
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56"
 					},
 					"reqaddress": {
 						"type": [
@@ -26704,13 +26721,6 @@
 							null
 						],
 						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
-					},
-					"delegate": {
-						"type": [
-							"boolean",
-							"null"
-						],
-						"description": "Accept prefix delegation downstream (dhcpv6)"
 					},
 					"sourcefilter": {
 						"type": [
@@ -26771,6 +26781,249 @@
 								"addresses"
 							]
 						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"ipaddr": {
+									"type": "null"
+								},
+								"ipaddrs": {
+									"type": "null"
+								},
+								"ip6addrs": {
+									"type": "null"
+								},
+								"netmask": {
+									"type": "null"
+								},
+								"broadcast": {
+									"type": "null"
+								},
+								"gateway": {
+									"type": "null"
+								},
+								"ip6gw": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"dhcp",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"ip6prefix": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"broadcast_flag": {
+									"type": "null"
+								},
+								"hostname": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"clientid": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"reqaddress": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"none",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"reqprefix": {
+									"type": "null"
+								},
+								"sourcefilter": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"none",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"peerdns": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"private_key": {
+									"type": "null"
+								},
+								"has_private_key": {
+									"type": "null"
+								},
+								"listen_port": {
+									"type": "null"
+								},
+								"addresses": {
+									"type": "null"
+								},
+								"nohostroute": {
+									"type": "null"
+								}
+							}
+						}
 					}
 				]
 			},
@@ -26804,66 +27057,6 @@
 						],
 						"default": "none",
 						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it"
-					},
-					"ipaddrs": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
-					},
-					"ip6addrs": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
-					},
-					"netmask": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 netmask (static proto)"
-					},
-					"gateway": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 default gateway (static proto)"
-					},
-					"broadcast": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv4 broadcast address (static proto)"
-					},
-					"ip6gw": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
-					},
-					"ip6prefix": {
-						"type": [
-							"string",
-							"null"
-						],
-						"x-uapi-clear-on-omit": true,
-						"description": "IPv6 prefix routed to this device for delegation to clients (static proto)"
 					},
 					"dns": {
 						"type": [
@@ -26934,6 +27127,102 @@
 						"default": false,
 						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed."
 					},
+					"ip4table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table for the IPv4 routes this interface installs: a number or a name from /etc/iproute2/rt_tables"
+					},
+					"ip6table": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Routing table for the IPv6 routes this interface installs: a number or a name from /etc/iproute2/rt_tables"
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Metric of the routes this interface installs without one of their own"
+					},
+					"defaultroute": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Install the default route the protocol provides. Unset means true."
+					},
+					"delegate": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Hand this interface's IPv6 prefixes on to downstream interfaces. Unset means true."
+					},
+					"ipaddrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
+					},
+					"ip6addrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
+					},
+					"netmask": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 netmask (static proto)"
+					},
+					"broadcast": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 broadcast address (static proto). On proto dhcp the same uci option is a flag, `broadcast_flag`."
+					},
+					"ip6gw": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 default gateway, a bare address with no prefix length (static proto)"
+					},
+					"ip6prefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv6 prefix routed to this device for delegation to clients (static, dhcpv6, wireguard)"
+					},
+					"gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "IPv4 default gateway (static proto)"
+					},
 					"addresses": {
 						"type": [
 							"array",
@@ -26949,7 +27238,10 @@
 						"description": "WireGuard private key; accepted on write, masked on read"
 					},
 					"listen_port": {
-						"type": "integer",
+						"type": [
+							"integer",
+							"null"
+						],
 						"minimum": 0,
 						"maximum": 65535
 					},
@@ -26957,41 +27249,19 @@
 						"type": "boolean",
 						"description": "Suppress the implicit host-route for wireguard endpoint"
 					},
-					"ip4table": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Routing table to install WireGuard IPv4 routes into"
-					},
-					"ip6table": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Routing table to install WireGuard IPv6 routes into"
-					},
 					"peerdns": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)"
+						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true."
 					},
-					"defaultroute": {
+					"broadcast_flag": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Install the default route from DHCP (dhcp)"
-					},
-					"metric": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"description": "Default-route metric (dhcp)"
+						"description": "Ask the DHCP server to broadcast its replies, as LuCI's \"Use broadcast flag\" (dhcp). Stored in uci as `broadcast`, which is an address on proto static. Unset means false."
 					},
 					"hostname": {
 						"type": [
@@ -27005,15 +27275,15 @@
 							"string",
 							"null"
 						],
-						"description": "DHCP client identifier (dhcp)"
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6"
 					},
 					"reqprefix": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|[0-9]+)$",
-						"description": "DHCPv6 prefix-delegation request: auto, no, or numeric size"
+						"pattern": "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$",
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56"
 					},
 					"reqaddress": {
 						"type": [
@@ -27027,13 +27297,6 @@
 							null
 						],
 						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
-					},
-					"delegate": {
-						"type": [
-							"boolean",
-							"null"
-						],
-						"description": "Accept prefix delegation downstream (dhcpv6)"
 					},
 					"sourcefilter": {
 						"type": [
@@ -27088,6 +27351,243 @@
 							"required": [
 								"addresses"
 							]
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"ipaddrs": {
+									"type": "null"
+								},
+								"ip6addrs": {
+									"type": "null"
+								},
+								"netmask": {
+									"type": "null"
+								},
+								"broadcast": {
+									"type": "null"
+								},
+								"gateway": {
+									"type": "null"
+								},
+								"ip6gw": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"dhcp",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"ip6prefix": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"broadcast_flag": {
+									"type": "null"
+								},
+								"hostname": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"clientid": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"reqaddress": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"none",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"reqprefix": {
+									"type": "null"
+								},
+								"sourcefilter": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"none",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"peerdns": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"private_key": {
+									"type": "null"
+								},
+								"listen_port": {
+									"type": "null"
+								},
+								"addresses": {
+									"type": "null"
+								},
+								"nohostroute": {
+									"type": "null"
+								}
+							}
 						}
 					}
 				]

@@ -17,6 +17,38 @@ All notable changes to this project will be documented in this file. Format foll
   (`local` for the ULA prefix, or the name of the interface that received the prefix), and
   `ip6weight` orders the interfaces when they share a prefix. A stored scalar `ip6class` reads as
   its whitespace-separated words, which is how netifd reads it. (#206)
+- **`network/interfaces.broadcast_flag` is uci's `broadcast` flag on proto `dhcp`**, which makes
+  udhcpc ask the server for broadcast replies. LuCI writes it as `broadcast '1'`. uapi read that
+  value as the static broadcast address, so a PUT of a dhcp interface that LuCI configured answered
+  422. The wire name differs from the uci option because `broadcast` stays the address on proto
+  `static`. Measured on OpenWrt 25.12.5: `true` starts udhcpc with `-B`, and `false` without it.
+  (#208)
+- **`network/interfaces.reqprefix` accepts a prefix with its length**, for example
+  `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
+  `no`. (#208)
+
+### Changed
+
+- **`network/interfaces` refuses a field that the proto of the interface does not take, with 422
+  `conflict` naming the field.** The spec publishes which protos take each field, as `allOf`
+  entries on `proto`. Before, such a write answered 200 with no effect. A static address field
+  such as `ipaddrs` or `netmask` was stored on any proto and read back, but netifd ignores it
+  outside proto static. Any other field, such as `hostname` on a static interface, was dropped.
+  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. A `null`, an empty string or an empty list for such a
+  field is still accepted and stores nothing. A request is checked only for the fields that it
+  names, so a PATCH that changes only `proto` succeeds. That PATCH now removes the options of the
+  old proto and keeps the options that apply to every proto. Before, it kept the static address
+  fields when it left proto static. With
+  terraform-provider-uapi before 3.2.0, a switch away from static fails, because its update sends
+  the static addresses from its state. Upgrade the provider together with uapi. (#208)
+- **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
+  carried the static address fields on every proto, with any value that uci stored there. A stored
+  option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
+  LuCI removes it on save. On a proto that uapi does not model, such as `6in4`, uapi cannot know
+  which options the handler reads. A read there shows every option that uci stores, and a write
+  refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so
+  a write with an `If-Match` from before the upgrade answers 412. (#208)
 
 ### Fixed
 
@@ -33,6 +65,18 @@ All notable changes to this project will be documented in this file. Format foll
   422 to every write, naming the field, until the value is corrected or cleared, for example with
   `"ip6hint": ""`. An empty string still clears either option, and `ip6ifaceid` now also accepts
   `eui64` and `random`, which it refused. (#206)
+- **`network/interfaces` reads and writes the options that netifd takes on every proto, on every
+  proto.** `metric`, `defaultroute`, `delegate`, `ip4table` and `ip6table` each applied to some
+  protos only: `metric` not to static, and `ip4table` not to dhcp. On the other protos, a write
+  answered 200 and stored nothing, and a PUT erased a value that LuCI wrote. The same was true of
+  `peerdns` and `reqprefix` on `pppoe`, and of `clientid` on `dhcpv6`, where it is a DUID. Measured
+  on OpenWrt 25.12.5: `metric` and `ip4table` on a static interface put its routes into that
+  table with that metric. (#208)
+- **`network/interfaces.listen_port` is declared nullable.** A wireguard interface without
+  `option listen_port` reads it as null, because the kernel then picks the port, and the spec
+  declared an integer. That uses branch (b) of the type carve-out in `docs/versioning.md`: the
+  server broke its declared type for every such interface. No read changes, because the value was
+  already null. (#208)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

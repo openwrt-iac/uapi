@@ -60,8 +60,10 @@ echo "$warn" | grep -q "interface=$iface" || fail "warning names the wrong inter
 echo "$warn" | grep -q "changed=disabled" || fail "warning names the wrong field: $warn"
 
 echo "--- an unwatched field on the same interface does not warn ---"
+# Not metric: on a metric change netifd removes and adds back the addresses and routes of the
+# interface that carries this connection. An ip6weight change only refreshes prefix assignments.
 curl -sS -D /tmp/uapi_mgmt_h2 -o /dev/null -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X PATCH "$URL/network/interfaces/$iface" -d '{"metric":7}'
+	-X PATCH "$URL/network/interfaces/$iface" -d '{"ip6weight":7}'
 tr -d '\r' < /tmp/uapi_mgmt_h2 | grep -qi '^X-Mgmt-Path-Warning:' \
 	&& fail "warned on a field outside the watched set"
 echo "  ok"
@@ -84,7 +86,7 @@ tr -d '\r' < /tmp/uapi_mgmt_h4 | grep -qi '^X-Mgmt-Path-Warning:' \
 echo "  ok (the inbound-interface delete is not exercised here: it would strand the test)"
 
 $SSH "uci -q delete network.$iface.disabled
-      uci -q delete network.$iface.metric
+      uci -q delete network.$iface.ip6weight
       uci -q delete network.mgmtprobe
       uci commit network" >/dev/null 2>&1 || true
 
