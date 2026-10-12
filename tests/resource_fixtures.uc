@@ -110,6 +110,28 @@ const CASES = [
 		           addresses: ['10.9.0.1/24', 'fd00:9::1/64'], listen_port: '51820' },
 	},
 	{
+		// The core options netifd reads for every proto, which uapi once read only on dhcp,
+		// dhcpv6 or wireguard.
+		file: "network.interfaces.uc", id: "lan_core", pkg: "network",
+		modify: { key: "metric", value: 9 },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-core',
+		           ipaddr: ['10.0.7.1/24'], metric: '7', defaultroute: '0', delegate: '0',
+		           ip4table: '4207', dns: ['192.0.2.53', '192.0.2.54'] },
+	},
+	{
+		// LuCI writes uci `broadcast` as a flag on proto dhcp.
+		file: "network.interfaces.uc", id: "wan_bcast", pkg: "network",
+		modify: { key: "broadcast_flag", value: false },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'dhcp', device: 'eth8',
+		           broadcast: '1', clientid: '01aabbccddeeff' },
+	},
+	{
+		file: "network.interfaces.uc", id: "wan_ppp", pkg: "network",
+		modify: { key: "reqprefix", value: "auto" },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'pppoe', device: 'eth8',
+		           peerdns: '0', reqprefix: '56', sourcefilter: '0', mtu: '1492' },
+	},
+	{
 		file: "network.devices.uc", id: "dev1", pkg: "network",
 		section: { ipv6: '0', '.type': 'device', name: 'eth9', type: '8021q', ifname: 'eth0', vid: '9' },
 	},

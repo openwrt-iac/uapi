@@ -26,7 +26,49 @@ const VALID_PROTOS = {
 };
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
-const SOURCEFILTER_PROTOS = { "dhcpv6": true, "ppp": true, "pppoe": true };
+// Fields that apply only to some protos, after the proto scripts that read them and LuCI's
+// forms. Every other field applies to every proto, because netifd reads it as a core interface
+// attribute. A field outside its protos is hidden on read and dropped on write, and a request
+// that names it is refused: netifd would ignore it, or toUci would drop it.
+const FIELD_PROTOS = {
+	ipaddr: [ "static" ], ipaddrs: [ "static" ], ip6addrs: [ "static" ],
+	netmask: [ "static" ], broadcast: [ "static" ], gateway: [ "static" ], ip6gw: [ "static" ],
+	ip6prefix: [ "static", "dhcpv6", "wireguard" ],
+	broadcast_flag: [ "dhcp" ], hostname: [ "dhcp" ],
+	clientid: [ "dhcp", "dhcpv6" ],
+	reqaddress: [ "dhcpv6" ],
+	reqprefix: [ "dhcpv6", "pppoe", "ppp" ],
+	sourcefilter: [ "dhcpv6", "pppoe", "ppp" ],
+	peerdns: [ "dhcp", "dhcpv6", "pppoe", "ppp", "wwan" ],
+	private_key: [ "wireguard" ], has_private_key: [ "wireguard" ], listen_port: [ "wireguard" ],
+	addresses: [ "wireguard" ], nohostroute: [ "wireguard" ],
+};
+
+// The table judges only the protos uapi models. A handler such as 6in4 reads ipaddr and
+// ip6prefix, and uapi cannot know what else, so on such a proto every field applies except the
+// two that are another reading of an option: uci `broadcast` there is no dhcp flag.
+function applies(field, proto) {
+	let protos = FIELD_PROTOS[field];
+	return protos == null || index(protos, proto) != -1
+		|| (!VALID_PROTOS[proto] && field != "broadcast_flag" && field != "has_private_key");
+}
+
+// One entry per group of fields that share their protos: on the other modelled protos, each
+// field must be null. Generated from FIELD_PROTOS so the document and validate() cannot drift.
+function proto_scope_conditionals() {
+	let groups = {};
+	for (let field, protos in FIELD_PROTOS) {
+		let key = join(",", protos);
+		if (groups[key] == null)
+			groups[key] = { others: filter(keys(VALID_PROTOS), (p) => index(protos, p) == -1), fields: {} };
+		groups[key].fields[field] = { type: "null" };
+	}
+	let out = [];
+	for (let key, g in groups)
+		push(out, { if: { properties: { proto: { enum: g.others } }, required: [ "proto" ] },
+		            then: { properties: g.fields } });
+	return out;
+}
 
 function fetch_runtime(conn, name) {
 	if (conn == null || type(name) != "string" || name == "")
@@ -111,39 +153,40 @@ function fromUci(section, conn) {
 		// ubus every time. Reading it with the wider helper would report an interface as
 		// disabled while it is up, which is the same lie this field exists to end.
 		disabled: strict_bool(section.disabled),
+		ip4table: section.ip4table ?? null,
+		ip6table: section.ip6table ?? null,
+		metric: as_int(section.metric),
+		// The booleans below read null when uci has nothing explicitly set. Surfacing the daemon's
+		// effective default would have the patch merge write it into uci on the next PATCH,
+		// silently changing the section's surface area for the client.
+		defaultroute: (section.defaultroute != null) ? platform_bool(section.defaultroute, true) : null,
+		delegate: (section.delegate != null) ? platform_bool(section.delegate, true) : null,
+		peerdns: (section.peerdns != null) ? platform_bool(section.peerdns, true) : null,
+		// On proto dhcp, uci's `broadcast` is the flag dhcp.sh passes to udhcpc as -B, not an
+		// address, so the static reader turned LuCI's `broadcast '1'` into an address that a PUT
+		// of the read then refused.
+		broadcast_flag: (section.broadcast != null) ? platform_bool(section.broadcast, false) : null,
+		hostname: section.hostname ?? null,
+		clientid: section.clientid ?? null,
+		reqprefix: section.reqprefix ?? null,
+		reqaddress: section.reqaddress ?? null,
+		sourcefilter: (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null,
+		listen_port: as_int(section.listen_port),
+		addresses: as_list_or_null(section.addresses),
+		nohostroute: strict_bool(section.nohostroute),
+		has_private_key: (section.private_key != null && section.private_key != ""),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
-	if (proto == "wireguard") {
-		view.listen_port = as_int(section.listen_port);
-		view.addresses = as_list_or_null(section.addresses);
-		view.nohostroute = strict_bool(section.nohostroute);
-		view.ip4table = section.ip4table ?? null;
-		view.ip6table = section.ip6table ?? null;
-		view.has_private_key = (section.private_key != null && section.private_key != "");
-	}
-	// For the v1.2 dhcp / dhcpv6 fields, surface null when uci has nothing
-	// explicitly set. Surfacing the daemon's effective default would have the
-	// patch merge write those defaults into uci on the next PATCH, silently
-	// changing the section's surface area for the client.
-	if (proto == "dhcp") {
-		view.peerdns = (section.peerdns != null) ? platform_bool(section.peerdns, true) : null;
-		view.defaultroute = (section.defaultroute != null) ? platform_bool(section.defaultroute, true) : null;
-		view.metric = as_int(section.metric);
-		view.hostname = section.hostname ?? null;
-		view.clientid = section.clientid ?? null;
-	}
-	if (proto == "dhcpv6") {
-		view.peerdns = (section.peerdns != null) ? platform_bool(section.peerdns, true) : null;
-		view.reqprefix = section.reqprefix ?? null;
-		view.reqaddress = section.reqaddress ?? null;
-		view.delegate = (section.delegate != null) ? platform_bool(section.delegate, true) : null;
-	}
-	if (SOURCEFILTER_PROTOS[proto])
-		view.sourcefilter = (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null;
+	for (let field in FIELD_PROTOS)
+		if (!applies(field, proto) || (!VALID_PROTOS[proto] && view[field] == null))
+			delete view[field];
 	return view;
 }
 
-function toUci(json) {
+function toUci(body) {
+	let json = {};
+	for (let k, v in body)
+		if (applies(k, body.proto)) json[k] = v;
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.proto != null) out.proto = json.proto;
@@ -168,37 +211,45 @@ function toUci(json) {
 	if (json.mtu != null) out.mtu = "" + json.mtu;
 	if (json.auto != null) out.auto = json.auto ? "1" : "0";
 	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
-	if (json.proto == "wireguard") {
-		if (json.private_key != null) out.private_key = json.private_key;
-		if (json.listen_port != null) out.listen_port = "" + json.listen_port;
-		if (type(json.addresses) == "array" && length(json.addresses) > 0)
-			out.addresses = json.addresses;
-		if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
-		if (json.ip4table != null) out.ip4table = "" + json.ip4table;
-		if (json.ip6table != null) out.ip6table = "" + json.ip6table;
-	}
-	if (json.proto == "dhcp") {
-		if (json.peerdns != null)      out.peerdns = json.peerdns ? "1" : "0";
-		if (json.defaultroute != null) out.defaultroute = json.defaultroute ? "1" : "0";
-		if (json.metric != null)       out.metric = "" + json.metric;
-		if (json.hostname != null)     out.hostname = json.hostname;
-		if (json.clientid != null)     out.clientid = json.clientid;
-	}
-	if (json.proto == "dhcpv6") {
-		if (json.peerdns != null)    out.peerdns = json.peerdns ? "1" : "0";
-		if (json.reqprefix != null)  out.reqprefix = "" + json.reqprefix;
-		if (json.reqaddress != null) out.reqaddress = json.reqaddress;
-		if (json.delegate != null)   out.delegate = json.delegate ? "1" : "0";
-	}
-	if (SOURCEFILTER_PROTOS[json.proto] && json.sourcefilter != null)
-		out.sourcefilter = json.sourcefilter ? "1" : "0";
+	if (json.ip4table != null) out.ip4table = "" + json.ip4table;
+	if (json.ip6table != null) out.ip6table = "" + json.ip6table;
+	if (json.metric != null) out.metric = "" + json.metric;
+	if (json.defaultroute != null) out.defaultroute = json.defaultroute ? "1" : "0";
+	if (json.delegate != null) out.delegate = json.delegate ? "1" : "0";
+	if (json.peerdns != null) out.peerdns = json.peerdns ? "1" : "0";
+	if (json.broadcast_flag != null) out.broadcast = json.broadcast_flag ? "1" : "0";
+	if (json.hostname != null) out.hostname = json.hostname;
+	if (json.clientid != null) out.clientid = json.clientid;
+	if (json.reqprefix != null) out.reqprefix = "" + json.reqprefix;
+	if (json.reqaddress != null) out.reqaddress = json.reqaddress;
+	if (json.sourcefilter != null) out.sourcefilter = json.sourcefilter ? "1" : "0";
+	if (json.private_key != null) out.private_key = json.private_key;
+	if (json.listen_port != null) out.listen_port = "" + json.listen_port;
+	if (type(json.addresses) == "array" && length(json.addresses) > 0)
+		out.addresses = json.addresses;
+	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
 	return out;
 }
 
-function validate(json, conn, id) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	values.require_present(errs, json, "proto");
+
+	// Only what the request named: a PATCH that switches proto still carries the old proto's
+	// fields in its merged view, and toUci drops them. The read-only twins never write, and an
+	// empty value asks for nothing, as a module that writes `cond ? [...] : []` sends.
+	let named = delta ?? json;
+	if (type(json.proto) == "string")
+		for (let field, v in named) {
+			if (v == null || v === "" || (type(v) == "array" && length(v) == 0)
+			    || field == "ipaddr" || field == "has_private_key" || applies(field, json.proto))
+				continue;
+			let protos = FIELD_PROTOS[field];
+			push(errs, { field, code: "conflict",
+			             message: sprintf("applies only when proto is %s; send null or leave it out",
+			                              length(protos) == 1 ? protos[0] : "one of " + join(", ", protos)) });
+		}
 
 	// `id` is the universal section-name input and goes through the framework's
 	// validate_section_id for the broader uci section-name rules; the tighter IFNAMSIZ
@@ -216,35 +267,34 @@ function validate(json, conn, id) {
 		push(errs, { field: "id", code: "invalid_format",
 		             message: "must match [A-Za-z][A-Za-z0-9_]{0,14} (proto=wireguard binds the uci section name to the kernel netdev name; IFNAMSIZ caps it at 15 chars)" });
 
-	// Whether an address is REQUIRED depends on the proto; whether a value IS an address
-	// does not. Keeping the format checks inside the static branch meant a body naming
-	// another proto skipped them while toUci wrote the option anyway, so uapi accepted
-	// `broadcast: "999.999.999.999"` and `ip6gw: "not-an-address"` on a dhcp interface and
-	// committed both. Measured on a box before this was split apart.
-	if (json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
+	// Each format check runs only where its field applies. Elsewhere toUci drops the field and
+	// the check above refuses a request that names it, so a stale value stored under another
+	// proto must not block the PATCH that switches away from it.
+	let ok = (field) => applies(field, json.proto);
+	if (ok("netmask") && json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
 		push(errs, { field: "netmask", code: "invalid_format",
 		             message: "must be a valid IPv4 netmask" });
-	if (json.gateway != null && json.gateway != "" && !is_valid_ipv4(json.gateway))
+	if (ok("gateway") && json.gateway != null && json.gateway != "" && !is_valid_ipv4(json.gateway))
 		push(errs, { field: "gateway", code: "invalid_format",
 		             message: "must be a valid IPv4 address" });
-	if (json.broadcast != null && json.broadcast != "" && !is_valid_ipv4(json.broadcast))
+	if (ok("broadcast") && json.broadcast != null && json.broadcast != "" && !is_valid_ipv4(json.broadcast))
 		push(errs, { field: "broadcast", code: "invalid_format",
 		             message: "must be a valid IPv4 address" });
 	// netifd wants a bare address for the gateway and accepts a prefix length on the routed
 	// prefix, which is the same split LuCI encodes as ip6addr("nomask") against ip6addr.
-	if (json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
+	if (ok("ip6gw") && json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
 		push(errs, { field: "ip6gw", code: "invalid_format",
 		             message: "must be a valid IPv6 address without a prefix length" });
-	if (json.ip6prefix != null && json.ip6prefix != ""
+	if (ok("ip6prefix") && json.ip6prefix != null && json.ip6prefix != ""
 	    && !is_valid_ipv6_cidr(json.ip6prefix) && !is_valid_ipv6(json.ip6prefix))
 		push(errs, { field: "ip6prefix", code: "invalid_format",
 		             message: "must be a valid IPv6 address or prefix" });
-	for (let i = 0; i < length(json.ipaddrs); i++) {
+	for (let i = 0; ok("ipaddrs") && i < length(json.ipaddrs); i++) {
 		if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
 			push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv4 address or CIDR" });
 	}
-	for (let i = 0; i < length(json.ip6addrs); i++) {
+	for (let i = 0; ok("ip6addrs") && i < length(json.ip6addrs); i++) {
 		if (!is_valid_ipv6(json.ip6addrs[i]) && !is_valid_ipv6_cidr(json.ip6addrs[i]))
 			push(errs, { field: sprintf("ip6addrs[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv6 address or CIDR" });
@@ -301,6 +351,11 @@ function validate(json, conn, id) {
 			push(errs, { field: "ip6ifaceid", code: "invalid_format",
 			             message: "must be eui64, random, or an interface id whose network half is zero, such as ::1" });
 	}
+	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
+	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
+	    && !is_valid_ipv6_cidr(json.reqprefix))
+		push(errs, { field: "reqprefix", code: "invalid_format",
+		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
 	if (type(json.ip6class) == "array")
 		for (let i = 0; i < length(json.ip6class); i++)
 			if (type(json.ip6class[i]) != "string" || !match(json.ip6class[i], /^[A-Za-z0-9_]+$/))
@@ -343,6 +398,7 @@ return {
 		// validate() enforces presence on create.
 		{ if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
 		  then: { required: ["addresses"] } },
+		...proto_scope_conditionals(),
 	],
 	openapi_runtime: {
 		type: "object",
@@ -377,11 +433,11 @@ return {
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		broadcast: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
-		             description: "IPv4 broadcast address (static proto)" },
+		             description: "IPv4 broadcast address (static proto). On proto dhcp the same uci option is a flag, `broadcast_flag`." },
 		ip6gw:     { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv6 default gateway, a bare address with no prefix length (static proto)" },
 		ip6prefix: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
-		             description: "IPv6 prefix routed to this device for delegation to clients (static proto)" },
+		             description: "IPv6 prefix routed to this device for delegation to clients (static, dhcpv6, wireguard)" },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
 		dns:       { type: ["array", "null"], items: { type: "string" } },
@@ -404,29 +460,31 @@ return {
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },
-		listen_port:  { type: "integer", minimum: 0, maximum: 65535 },
+		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the implicit host-route for wireguard endpoint" },
 		ip4table:     { type: ["string", "null"],
-		                description: "Routing table to install WireGuard IPv4 routes into" },
+		                description: "Routing table for the IPv4 routes this interface installs: a number or a name from /etc/iproute2/rt_tables" },
 		ip6table:     { type: ["string", "null"],
-		                description: "Routing table to install WireGuard IPv6 routes into" },
+		                description: "Routing table for the IPv6 routes this interface installs: a number or a name from /etc/iproute2/rt_tables" },
 		peerdns:      { "x-uapi-read-nullable": true, type: "boolean",
-		                description: "Accept DNS servers advertised by the upstream (dhcp/dhcpv6)" },
+		                description: "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true." },
 		defaultroute: { "x-uapi-read-nullable": true, type: "boolean",
-		                description: "Install the default route from DHCP (dhcp)" },
+		                description: "Install the default route the protocol provides. Unset means true." },
 		metric:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0,
-		                description: "Default-route metric (dhcp)" },
+		                description: "Metric of the routes this interface installs without one of their own" },
+		broadcast_flag: { "x-uapi-read-nullable": true, type: "boolean",
+		                description: "Ask the DHCP server to broadcast its replies, as LuCI's \"Use broadcast flag\" (dhcp). Stored in uci as `broadcast`, which is an address on proto static. Unset means false." },
 		hostname:     { "x-uapi-read-nullable": true, type: "string",
 		                description: "Client hostname sent in DHCPDISCOVER (dhcp)" },
 		clientid:     { "x-uapi-read-nullable": true, type: "string",
-		                description: "DHCP client identifier (dhcp)" },
-		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|[0-9]+)$",
-		                description: "DHCPv6 prefix-delegation request: auto, no, or numeric size" },
+		                description: "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6" },
+		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$",
+		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56" },
 		reqaddress:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REQADDRESS),
 		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
 		delegate:     { "x-uapi-read-nullable": true, type: "boolean",
-		                description: "Accept prefix delegation downstream (dhcpv6)" },
+		                description: "Hand this interface's IPv6 prefixes on to downstream interfaces. Unset means true." },
 		sourcefilter: { "x-uapi-read-nullable": true, type: "boolean",
 		                description: "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route." },
 	},

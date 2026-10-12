@@ -1408,6 +1408,81 @@ t.describe('handler kernel-apply headers', () => {
 	});
 });
 
+// network/interfaces refuses a field its proto does not take, but only when the request names
+// it: the merged view of a proto switch still carries the old proto's fields.
+t.describe('handler passes the request delta to validate()', () => {
+	let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function mctx() { return { request_id: "01hx000000000000000000delt" }; }
+	function jctx() { return { request_id: "01hx000000000000000000delj", json_patch: true }; }
+	function seeded() {
+		return ubus.stub({ uci: { network: {
+			lan2: { '.type': 'interface', '.anonymous': false, proto: 'static',
+			        ipaddr: [ '10.1.0.1/24' ], netmask: '255.255.255.0', metric: '5' },
+			wan2: { '.type': 'interface', '.anonymous': false, proto: 'dhcp',
+			        private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=' },
+		} } });
+	}
+	function codes(r, field) {
+		return map(filter(r.body.errors ?? [], (e) => e.field == field), (e) => e.code);
+	}
+
+	t.it('a merge PATCH that switches proto passes, drops the old proto options and keeps the core ones', () => {
+		let c = seeded();
+		let r = ifaces.patch(c, mctx(), 'lan2', { proto: 'dhcp' });
+		t.assert_equal(r.status, 200);
+		let s = c._state.uci.network.lan2;
+		t.assert_equal(s.proto, 'dhcp');
+		t.assert_equal(s.ipaddr, null);
+		t.assert_equal(s.netmask, null);
+		t.assert_equal(s.metric, '5');
+	});
+	t.it('a JSON Patch with a test op on an old-proto field still switches proto', () => {
+		let c = seeded();
+		let r = ifaces.patch(c, jctx(), 'lan2', [
+			{ op: 'test', path: '/ipaddrs', value: [ '10.1.0.1/24' ] },
+			{ op: 'replace', path: '/proto', value: 'dhcp' },
+		]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.network.lan2.proto, 'dhcp');
+	});
+	t.it('a JSON Patch that tests the whole document still switches proto', () => {
+		let c = seeded();
+		let r = ifaces.patch(c, jctx(), 'lan2', [
+			{ op: 'test', path: '', value: ifaces.get_one(c, mctx(), 'lan2').body },
+			{ op: 'replace', path: '/proto', value: 'dhcp' },
+		]);
+		t.assert_equal(r.status, 200, sprintf("%J", r.body));
+	});
+	t.it('a PATCH that names a field the proto does not take answers 422 conflict and writes nothing', () => {
+		let c = seeded();
+		let r = ifaces.patch(c, mctx(), 'wan2', { netmask: '255.255.255.0' });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(codes(r, 'netmask'), [ 'conflict' ]);
+		t.assert_equal(c._state.uci.network.wan2.netmask, null);
+	});
+	t.it('an empty PATCH passes even when the section keeps a private_key from another proto', () => {
+		t.assert_equal(ifaces.patch(seeded(), mctx(), 'wan2', null).status, 200);
+		t.assert_equal(ifaces.patch(seeded(), mctx(), 'wan2', {}).status, 200);
+	});
+	t.it('a PUT that switches to dhcp but still sends the static addresses answers 422', () => {
+		let r = ifaces.replace(seeded(), mctx(), 'lan2', { proto: 'dhcp', ipaddrs: [ '10.1.0.1/24' ] });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(codes(r, 'ipaddrs'), [ 'conflict' ]);
+	});
+	t.it('the sweep does not flag options a section stores for another proto', () => {
+		let c = ubus.stub({ uci: { network: {
+			wan3: { '.type': 'interface', '.anonymous': false, proto: 'dhcp',
+			        ipaddr: '10.2.0.1', netmask: 'not-a-mask', listen_port: '51820' },
+		} } });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+	});
+});
+
 // The sweep exists so an operator can find sections a write would reject before
 // a write finds them. It has to be the write path, not a simplified copy of it.
 t.describe('handler.sweep', () => {

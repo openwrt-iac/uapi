@@ -68,6 +68,10 @@ This is the opposite of JS's `for...in`. If you need an index, use a C-style `fo
 
 There is no type name for it: `type(null)` is the null value itself, so `type(x) == "null"` never matches. Test `x == null` directly.
 
+### `==` coerces, as in JavaScript
+
+`false == ""` and `0 == ""` are true, while `false == null` and `0 == null` are false. A test for an empty string written `v == ""` therefore also matches `false` and `0`: in `network.interfaces` it let `sourcefilter: false` pass as an empty value. Write `v === ""` when `v` can be a boolean or a number.
+
 ### `const` is real
 
 `const X = ...` is parsed and enforced. Top-level data tables in this repo are mostly `const`.

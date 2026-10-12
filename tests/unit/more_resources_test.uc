@@ -192,16 +192,15 @@ t.describe('network.interfaces', () => {
 		t.assert_equal(g[0].code, 'invalid_format');
 	});
 
-	// Whether an address is required depends on the proto; whether a value is an address
-	// does not. Gating the format checks on static let a dhcp body carry nonsense that
-	// toUci wrote anyway: `999.999.999.999` reached uci on a real box.
-	t.it('validates address formats whatever the proto says', () => {
+	// Static address fields on a dhcp body once reached uci, where toUci wrote them and
+	// `999.999.999.999` landed on a real box. They are refused as not applying, once each.
+	t.it('refuses static address fields on another proto, once each', () => {
 		let errs = interfaces.validate({ proto: 'dhcp', broadcast: '999.999.999.999',
 		                                 ip6gw: 'not-an-address', gateway: 'nope' }, null);
 		for (let f in ['broadcast', 'ip6gw', 'gateway']) {
 			let e = filter(errs, function(x) { return x.field == f; });
 			t.assert_equal(length(e), 1);
-			t.assert_equal(e[0].code, 'invalid_format');
+			t.assert_equal(e[0].code, 'conflict');
 		}
 	});
 
@@ -598,6 +597,127 @@ t.describe('network.interfaces sourcefilter (dhcpv6, ppp, pppoe)', () => {
 		t.assert_equal(interfaces.toUci({ proto: 'dhcpv6', sourcefilter: false }).sourcefilter, '0');
 		t.assert_equal(interfaces.toUci({ proto: 'pppoe', sourcefilter: true }).sourcefilter, '1');
 		t.assert_false(exists(interfaces.toUci({ proto: 'static', sourcefilter: false }), 'sourcefilter'));
+	});
+});
+
+t.describe('network.interfaces proto scope', () => {
+	let codes = (errs, field) => map(filter(errs, (e) => e.field == field), (e) => e.code);
+
+	t.it('fromUci hides what the proto does not take, and reads the core options on every proto', () => {
+		let st = interfaces.fromUci({ '.name': 'lan', proto: 'static', ipaddr: [ '10.0.0.1/24' ],
+			hostname: 'h', peerdns: '0', listen_port: '51820', metric: '7', defaultroute: '0',
+			delegate: '0', ip4table: '4207', ip6table: 'main' });
+		t.assert_false(exists(st, 'hostname'));
+		t.assert_false(exists(st, 'peerdns'));
+		t.assert_false(exists(st, 'listen_port'));
+		t.assert_equal(st.metric, 7);
+		t.assert_false(st.defaultroute);
+		t.assert_false(st.delegate);
+		t.assert_equal(st.ip4table, '4207');
+		t.assert_equal(st.ip6table, 'main');
+		let dh = interfaces.fromUci({ '.name': 'wan', proto: 'dhcp', ipaddr: '10.0.0.9', netmask: '255.0.0.0' });
+		t.assert_false(exists(dh, 'ipaddr'));
+		t.assert_false(exists(dh, 'ipaddrs'));
+		t.assert_false(exists(dh, 'netmask'));
+		t.assert_false(exists(dh, 'broadcast'));
+		t.assert_equal(dh.broadcast_flag, null);
+	});
+	t.it('reads uci broadcast as an address on static and as broadcast_flag on dhcp', () => {
+		let dh = interfaces.fromUci({ '.name': 'wan', proto: 'dhcp', broadcast: '1' });
+		t.assert_true(dh.broadcast_flag);
+		t.assert_false(exists(dh, 'broadcast'));
+		let st = interfaces.fromUci({ '.name': 'lan', proto: 'static', ipaddr: [ '10.0.0.1/24' ], broadcast: '10.0.0.255' });
+		t.assert_equal(st.broadcast, '10.0.0.255');
+		t.assert_false(exists(st, 'broadcast_flag'));
+		t.assert_equal(interfaces.toUci({ proto: 'dhcp', broadcast_flag: false }).broadcast, '0');
+		t.assert_equal(interfaces.toUci({ proto: 'dhcp', broadcast_flag: true }).broadcast, '1');
+	});
+	t.it('toUci writes the core options on every proto and drops what the proto does not take', () => {
+		let u = interfaces.toUci({ proto: 'static', ipaddrs: [ '10.0.0.1/24' ], metric: 7,
+			defaultroute: false, delegate: false, ip4table: '4207', hostname: 'h', listen_port: 51820 });
+		t.assert_equal(u.metric, '7');
+		t.assert_equal(u.defaultroute, '0');
+		t.assert_equal(u.delegate, '0');
+		t.assert_equal(u.ip4table, '4207');
+		t.assert_false(exists(u, 'hostname'));
+		t.assert_false(exists(u, 'listen_port'));
+	});
+	t.it('accepts each field on the protos whose scripts read it', () => {
+		for (let body in [
+			{ proto: 'pppoe', peerdns: false, reqprefix: '56', sourcefilter: false },
+			{ proto: 'ppp', peerdns: false, reqprefix: 'auto', sourcefilter: true },
+			{ proto: 'wwan', peerdns: false, mtu: 1400, metric: 3 },
+			{ proto: 'dhcpv6', clientid: '000100011234', peerdns: false, ip6prefix: '2001:db8::/56' },
+			{ proto: 'dhcp', clientid: '01aabbccddeeff', hostname: 'h', broadcast_flag: true },
+			{ proto: 'none', metric: 1, delegate: false, ip4table: 'main' },
+		])
+			t.assert_deep_equal(filter(interfaces.validate(body, null), (e) => e.code == 'conflict'), [], body.proto);
+	});
+	t.it('refuses a field the proto does not take with conflict, and lets null through', () => {
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'dhcp', netmask: '255.255.255.0' }, null), 'netmask'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'dhcp', listen_port: 51820 }, null), 'listen_port'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'static', ip6addrs: [ 'fd00::1/64' ], hostname: 'h' }, null), 'hostname'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'wwan', sourcefilter: false }, null), 'sourcefilter'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'dhcp', listen_port: 0 }, null), 'listen_port'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate({ proto: 'dhcp', netmask: null }, null), 'netmask'), []);
+		t.assert_equal(interfaces.validate({ proto: 'dhcp', netmask: '255.255.255.0' }, null)[0].message,
+		               'applies only when proto is static; send null or leave it out');
+	});
+	t.it('lets an empty string or list through, and stores nothing for it', () => {
+		let body = { proto: 'dhcp', ipaddrs: [], netmask: '', addresses: [], private_key: '' };
+		t.assert_deep_equal(filter(interfaces.validate(body, null), (e) => e.code == 'conflict'), []);
+		let u = interfaces.toUci(body);
+		for (let k in [ 'ipaddr', 'netmask', 'addresses', 'private_key' ])
+			t.assert_false(exists(u, k), k);
+	});
+	t.it('on a proto uapi does not model, reads what uci stores and refuses only broadcast_flag', () => {
+		let v = interfaces.fromUci({ '.name': 'henet', proto: '6in4', ipaddr: '192.0.2.1', ip6addr: '2001:db8::2/64',
+			ip6prefix: '2001:db8:1::/48', nohostroute: '1', metric: '3' });
+		t.assert_equal(v.ipaddr, '192.0.2.1');
+		t.assert_deep_equal(v.ip6addrs, [ '2001:db8::2/64' ]);
+		t.assert_equal(v.ip6prefix, '2001:db8:1::/48');
+		t.assert_true(v.nohostroute);
+		t.assert_equal(v.metric, 3);
+		for (let k in [ 'hostname', 'listen_port', 'netmask', 'has_private_key', 'broadcast_flag' ])
+			t.assert_false(exists(v, k), k);
+		let body = { proto: '6in4', ipaddrs: [ '192.0.2.1' ], ip6prefix: '2001:db8:1::/48', nohostroute: true };
+		t.assert_deep_equal(filter(interfaces.validate(body, null), (e) => e.code == 'conflict'), []);
+		let u = interfaces.toUci(body);
+		t.assert_deep_equal(u.ipaddr, [ '192.0.2.1' ]);
+		t.assert_equal(u.ip6prefix, '2001:db8:1::/48');
+		t.assert_equal(u.nohostroute, '1');
+		t.assert_deep_equal(codes(interfaces.validate({ proto: '6in4', broadcast_flag: true }, null), 'broadcast_flag'), [ 'conflict' ]);
+	});
+	t.it('checks only what the request named, and never the read-only twins', () => {
+		let merged = { proto: 'dhcp', ipaddr: '10.0.0.1', ipaddrs: [ '10.0.0.1/24' ], netmask: 'junk', has_private_key: true };
+		t.assert_deep_equal(interfaces.validate(merged, null, 'lan', { proto: 'dhcp' }), []);
+		t.assert_deep_equal(codes(interfaces.validate(merged, null, 'lan', { ipaddrs: [ '10.0.0.1/24' ] }), 'ipaddrs'), [ 'conflict' ]);
+		t.assert_deep_equal(interfaces.validate({ proto: 'dhcp', ipaddr: '10.0.0.1', has_private_key: false }, null), []);
+	});
+	t.it('accepts the prefix form of reqprefix, and checks it as a prefix', () => {
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'dhcpv6', reqprefix: '2001:db8::/56' }, null), 'reqprefix'), []);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'dhcpv6', reqprefix: 'abc::/999' }, null), 'reqprefix'), [ 'invalid_format' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'dhcpv6', reqprefix: 'foo/56' }, null), 'reqprefix'), [ 'invalid_format' ]);
+	});
+	t.it('agrees with the published conditionals: a read never carries a field they set to null', () => {
+		let full = { '.name': 'x', ipaddr: [ '10.0.0.1/24' ], ip6addr: [ 'fd00::1/64' ], netmask: '255.255.255.0',
+			broadcast: '1', gateway: '10.0.0.254', ip6gw: 'fd00::fe', ip6prefix: 'fd00:1::/48', hostname: 'h',
+			clientid: '01aa', reqprefix: 'auto', reqaddress: 'try', sourcefilter: '0', peerdns: '0',
+			private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', listen_port: '51820',
+			addresses: [ '10.9.0.1/24' ], nohostroute: '1' };
+		let checked = 0;
+		for (let proto in interfaces.schema_properties.proto.enum) {
+			let view = interfaces.fromUci({ ...full, proto }, null);
+			for (let c in interfaces.openapi_conditional) {
+				let others = c.if?.properties?.proto?.enum;
+				if (type(others) != "array" || index(others, proto) == -1) continue;
+				for (let field in c.then.properties) {
+					t.assert_false(exists(view, field), sprintf("%s read on proto %s", field, proto));
+					checked++;
+				}
+			}
+		}
+		t.assert_true(checked > 0);
 	});
 });
 

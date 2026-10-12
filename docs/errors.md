@@ -91,7 +91,7 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `invalid_format` | Failed format validator (CIDR, MAC, IP, etc.)                 |
 | `out_of_range`   | Numeric or length bound exceeded                              |
 | `not_in_enum`    | Value not in the allowed set                                  |
-| `conflict`       | References a missing or incompatible resource, or two fields naming one option disagree |
+| `conflict`       | References a missing or incompatible resource, two fields naming one option disagree, or the field does not apply given another field, for example `hostname` on a static interface |
 | `read_only`      | Field is computed/runtime and can't be set                    |
 | `unknown_field`  | No such field on this resource. `id`, `managed` and `runtime` are tolerated at the top level so a read-modify-write cycle can send the response back unchanged |
 

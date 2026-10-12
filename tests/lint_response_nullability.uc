@@ -8,10 +8,9 @@
 // were missed, which is the argument for deriving this from the code instead of a list.
 //
 // The check calls each resource's real fromUci on a bare section and demands that whatever comes
-// back null is null-permitted in that resource's Response schema. It cannot see a property that
-// is conditionally absent rather than null (network/interfaces omits its dhcp keys entirely for
-// a static interface, so a bare section never produces them); those carry the marker on the
-// evidence of live response bodies, and this gate only holds the line it can prove.
+// back null is null-permitted in that resource's Response schema. A resource whose Response
+// enumerates `proto` is probed once per value as well, because network/interfaces reads a
+// different set of fields for each proto and a bare section shows only the fields of none.
 
 import * as fs from 'fs';
 
@@ -66,27 +65,36 @@ for (let f in files) {
 	if (type(schema) != "object" || type(schema.properties) != "object") continue;
 	resources++;
 
-	let view;
-	try { view = mod.fromUci({ '.name': "probe", '.type': mod.type ?? "probe", '.anonymous': false }, null); }
-	catch (e) { push(problems, sprintf("%s: fromUci died on a bare section (%s)", f, e)); continue; }
-	if (type(view) != "object") continue;
+	let probes = [ null ];
+	let protos = schema.properties.proto?.enum;
+	if (type(protos) == "array")
+		for (let p in protos) if (p != null) push(probes, p);
 
-	for (let k in view) {
-		if (view[k] != null) continue;
-		let prop = schema.properties[k];
-		if (type(prop) != "object") continue;
-		checked++;
-		if (!permits_null(prop))
-			push(problems, sprintf("%s.%s reads null but %s declares type %J",
-			                       f, k, sname, prop.type));
-		// A null value does not satisfy an enum that omits null, so a widened type alone
-		// still leaves the schema rejecting its own response body.
-		if (type(prop.enum) == "array") {
-			let has = false;
-			for (let x in prop.enum) if (x == null) has = true;
-			if (!has)
-				push(problems, sprintf("%s.%s reads null but %s's enum omits null",
-				                       f, k, sname));
+	for (let proto in probes) {
+		let section = { '.name': "probe", '.type': mod.type ?? "probe", '.anonymous': false };
+		if (proto != null) section.proto = proto;
+		let view;
+		try { view = mod.fromUci(section, null); }
+		catch (e) { push(problems, sprintf("%s: fromUci died on a bare %s section (%s)", f, proto ?? "", e)); continue; }
+		if (type(view) != "object") continue;
+
+		for (let k in view) {
+			if (view[k] != null) continue;
+			let prop = schema.properties[k];
+			if (type(prop) != "object") continue;
+			checked++;
+			if (!permits_null(prop))
+				push(problems, sprintf("%s.%s reads null but %s declares type %J",
+				                       f, k, sname, prop.type));
+			// A null value does not satisfy an enum that omits null, so a widened type alone
+			// still leaves the schema rejecting its own response body.
+			if (type(prop.enum) == "array") {
+				let has = false;
+				for (let x in prop.enum) if (x == null) has = true;
+				if (!has)
+					push(problems, sprintf("%s.%s reads null but %s's enum omits null",
+					                       f, k, sname));
+			}
 		}
 	}
 }
