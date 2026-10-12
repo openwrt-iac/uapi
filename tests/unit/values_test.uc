@@ -213,6 +213,29 @@ t.describe('values.is_valid_cidr_any', () => {
 	});
 });
 
+t.describe('values.as_word_list_or_null', () => {
+	t.it('splits a scalar on spaces and tabs, and keeps a list as it is', () => {
+		t.assert_deep_equal(v.as_word_list_or_null('local \twan6'), [ 'local', 'wan6' ]);
+		t.assert_deep_equal(v.as_word_list_or_null([ 'a b' ]), [ 'a b' ]);
+	});
+	t.it('returns null for nothing to split', () => {
+		t.assert_equal(v.as_word_list_or_null(null), null);
+		t.assert_equal(v.as_word_list_or_null('  '), null);
+	});
+});
+
+t.describe('values.ipv6_words', () => {
+	t.it('expands to eight 16-bit words', () => {
+		t.assert_deep_equal(v.ipv6_words('::1'), [ 0, 0, 0, 0, 0, 0, 0, 1 ]);
+		t.assert_deep_equal(v.ipv6_words('2001:db8::1'), [ 0x2001, 0xdb8, 0, 0, 0, 0, 0, 1 ]);
+		t.assert_deep_equal(v.ipv6_words('0:0:0:0:1::'), [ 0, 0, 0, 0, 1, 0, 0, 0 ]);
+	});
+	t.it('returns null for anything that is not an IPv6 address', () => {
+		t.assert_equal(v.ipv6_words('eui64'), null);
+		t.assert_equal(v.ipv6_words('::1/64'), null);
+	});
+});
+
 t.describe('values.ipv4_in_cidr', () => {
 	t.it('returns true for addresses inside the range', () => {
 		t.assert_true(v.ipv4_in_cidr("192.168.1.42", "192.168.1.0/24"));

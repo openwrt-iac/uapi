@@ -26496,6 +26496,39 @@
 						"maximum": 128,
 						"description": "Prefix length to assign downstream from a delegated prefix"
 					},
+					"ip6hint": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Hexadecimal subnet id that picks which part of a delegated or ULA prefix this interface gets, such as `1` or `0x1f`, below `0xffffffff`. netifd uses it only when `ip6assign` is set, from 33 to 64."
+					},
+					"ip6ifaceid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Interface id of the address this interface takes from an assigned prefix: `eui64`, `random`, or a fixed id whose network half is zero, such as `::1`. On proto dhcpv6, odhcp6c also uses it for the upstream address."
+					},
+					"ip6class": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any."
+					},
+					"ip6weight": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first."
+					},
 					"mtu": {
 						"type": [
 							"integer",
@@ -26672,26 +26705,19 @@
 						],
 						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
 					},
-					"ip6hint": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Preferred IPv6 prefix hint for PD (dhcpv6)"
-					},
-					"ip6ifaceid": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Static IPv6 interface id for IA_NA (dhcpv6)"
-					},
 					"delegate": {
 						"type": [
 							"boolean",
 							"null"
 						],
 						"description": "Accept prefix delegation downstream (dhcpv6)"
+					},
+					"sourcefilter": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route."
 					}
 				},
 				"required": [
@@ -26857,6 +26883,39 @@
 						"maximum": 128,
 						"description": "Prefix length to assign downstream from a delegated prefix"
 					},
+					"ip6hint": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Hexadecimal subnet id that picks which part of a delegated or ULA prefix this interface gets, such as `1` or `0x1f`, below `0xffffffff`. netifd uses it only when `ip6assign` is set, from 33 to 64."
+					},
+					"ip6ifaceid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Interface id of the address this interface takes from an assigned prefix: `eui64`, `random`, or a fixed id whose network half is zero, such as `::1`. On proto dhcpv6, odhcp6c also uses it for the upstream address."
+					},
+					"ip6class": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any."
+					},
+					"ip6weight": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first."
+					},
 					"mtu": {
 						"type": [
 							"integer",
@@ -26969,26 +27028,19 @@
 						],
 						"description": "DHCPv6 IA_NA request mode (dhcpv6)"
 					},
-					"ip6hint": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Preferred IPv6 prefix hint for PD (dhcpv6)"
-					},
-					"ip6ifaceid": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Static IPv6 interface id for IA_NA (dhcpv6)"
-					},
 					"delegate": {
 						"type": [
 							"boolean",
 							"null"
 						],
 						"description": "Accept prefix delegation downstream (dhcpv6)"
+					},
+					"sourcefilter": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route."
 					}
 				},
 				"required": [

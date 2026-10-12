@@ -4,12 +4,14 @@ let ids = require('ids');
 let platform_bool = values.platform_bool;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
+let as_word_list_or_null = values.as_word_list_or_null;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ipv6 = values.is_valid_ipv6;
 let is_valid_ipv6_cidr = values.is_valid_ipv6_cidr;
 let as_int = values.as_int;
+let ipv6_words = values.ipv6_words;
 
 const PKG = "network";
 
@@ -24,8 +26,7 @@ const VALID_PROTOS = {
 };
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
-const IPV6_PREFIX_RE = /^[0-9A-Fa-f:]+\/[0-9]+$/;
-const IPV6_IFACEID_RE = /^[0-9A-Fa-f:]+$/;
+const SOURCEFILTER_PROTOS = { "dhcpv6": true, "ppp": true, "pppoe": true };
 
 function fetch_runtime(conn, name) {
 	if (conn == null || type(name) != "string" || name == "")
@@ -88,7 +89,13 @@ function fromUci(section, conn) {
 		ip6gw: section.ip6gw ?? null,
 		ip6prefix: section.ip6prefix ?? null,
 		dns: as_list_or_null(section.dns),
+		// netifd reads the ip6assign group for every proto. It once lived in the dhcpv6 block, whose
+		// script never reads ip6hint, so a static LAN wrote it into nothing and a PUT erased LuCI's.
 		ip6assign: as_int(section.ip6assign),
+		ip6hint: section.ip6hint ?? null,
+		ip6ifaceid: section.ip6ifaceid ?? null,
+		ip6class: as_word_list_or_null(section.ip6class),
+		ip6weight: as_int(section.ip6weight),
 		mtu: as_int(section.mtu),
 		auto: platform_bool(section.auto, true),
 		// `auto` controls bring-up at boot; `disabled` is stronger and separate: netifd
@@ -129,10 +136,10 @@ function fromUci(section, conn) {
 		view.peerdns = (section.peerdns != null) ? platform_bool(section.peerdns, true) : null;
 		view.reqprefix = section.reqprefix ?? null;
 		view.reqaddress = section.reqaddress ?? null;
-		view.ip6hint = section.ip6hint ?? null;
-		view.ip6ifaceid = section.ip6ifaceid ?? null;
 		view.delegate = (section.delegate != null) ? platform_bool(section.delegate, true) : null;
 	}
+	if (SOURCEFILTER_PROTOS[proto])
+		view.sourcefilter = (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null;
 	return view;
 }
 
@@ -154,6 +161,10 @@ function toUci(json) {
 	if (json.ip6prefix != null) out.ip6prefix = json.ip6prefix;
 	if (type(json.dns) == "array" && length(json.dns) > 0) out.dns = json.dns;
 	if (json.ip6assign != null) out.ip6assign = "" + json.ip6assign;
+	if (json.ip6hint != null) out.ip6hint = json.ip6hint;
+	if (json.ip6ifaceid != null) out.ip6ifaceid = json.ip6ifaceid;
+	if (type(json.ip6class) == "array" && length(json.ip6class) > 0) out.ip6class = json.ip6class;
+	if (json.ip6weight != null) out.ip6weight = "" + json.ip6weight;
 	if (json.mtu != null) out.mtu = "" + json.mtu;
 	if (json.auto != null) out.auto = json.auto ? "1" : "0";
 	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
@@ -177,10 +188,10 @@ function toUci(json) {
 		if (json.peerdns != null)    out.peerdns = json.peerdns ? "1" : "0";
 		if (json.reqprefix != null)  out.reqprefix = "" + json.reqprefix;
 		if (json.reqaddress != null) out.reqaddress = json.reqaddress;
-		if (json.ip6hint != null)    out.ip6hint = json.ip6hint;
-		if (json.ip6ifaceid != null) out.ip6ifaceid = json.ip6ifaceid;
 		if (json.delegate != null)   out.delegate = json.delegate ? "1" : "0";
 	}
+	if (SOURCEFILTER_PROTOS[json.proto] && json.sourcefilter != null)
+		out.sourcefilter = json.sourcefilter ? "1" : "0";
 	return out;
 }
 
@@ -275,16 +286,26 @@ function validate(json, conn, id) {
 		}
 	}
 
-	if (json.proto == "dhcpv6") {
-		if (json.ip6hint != null && json.ip6hint != ""
-		    && !match(json.ip6hint, IPV6_PREFIX_RE))
+	// These follow LuCI. netifd parses ip6hint with strtol(v, NULL, 16), so a prefix such as
+	// 2001:db8::/56 was not ignored: it became subnet 0x2001. An empty string clears the option.
+	if (json.ip6hint != null && json.ip6hint != "") {
+		let m = match(json.ip6hint, /^(0x)?([0-9A-Fa-f]+)$/);
+		let digits = (m != null) ? ltrim(m[2], "0") : null;
+		if (digits == null || length(digits) > 8 || hex(digits) >= 0xffffffff)
 			push(errs, { field: "ip6hint", code: "invalid_format",
-			             message: "must be an IPv6 prefix like 2001:db8::/56" });
-		if (json.ip6ifaceid != null && json.ip6ifaceid != ""
-		    && !match(json.ip6ifaceid, IPV6_IFACEID_RE))
-			push(errs, { field: "ip6ifaceid", code: "invalid_format",
-			             message: "must be an IPv6 host id like ::1 or eui64-form" });
+			             message: "must be a hexadecimal subnet id below 0xffffffff, such as 1 or 0x1f" });
 	}
+	if (json.ip6ifaceid != null && json.ip6ifaceid != "" && json.ip6ifaceid != "eui64" && json.ip6ifaceid != "random") {
+		let w = ipv6_words(json.ip6ifaceid);
+		if (w == null || w[0] || w[1] || w[2] || w[3])
+			push(errs, { field: "ip6ifaceid", code: "invalid_format",
+			             message: "must be eui64, random, or an interface id whose network half is zero, such as ::1" });
+	}
+	if (type(json.ip6class) == "array")
+		for (let i = 0; i < length(json.ip6class); i++)
+			if (type(json.ip6class[i]) != "string" || !match(json.ip6class[i], /^[A-Za-z0-9_]+$/))
+				push(errs, { field: sprintf("ip6class[%d]", i), code: "invalid_format",
+				             message: "must be local or an interface name" });
 
 	return errs;
 }
@@ -366,6 +387,14 @@ return {
 		dns:       { type: ["array", "null"], items: { type: "string" } },
 		ip6assign: { type: ["integer", "null"], minimum: 0, maximum: 128,
 		             description: "Prefix length to assign downstream from a delegated prefix" },
+		ip6hint:   { type: ["string", "null"],
+		             description: "Hexadecimal subnet id that picks which part of a delegated or ULA prefix this interface gets, such as `1` or `0x1f`, below `0xffffffff`. netifd uses it only when `ip6assign` is set, from 33 to 64." },
+		ip6ifaceid: { type: ["string", "null"],
+		             description: "Interface id of the address this interface takes from an assigned prefix: `eui64`, `random`, or a fixed id whose network half is zero, such as `::1`. On proto dhcpv6, odhcp6c also uses it for the upstream address." },
+		ip6class:  { type: ["array", "null"], items: { type: "string" },
+		             description: "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any." },
+		ip6weight: { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
+		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535 },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
@@ -396,11 +425,9 @@ return {
 		                description: "DHCPv6 prefix-delegation request: auto, no, or numeric size" },
 		reqaddress:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REQADDRESS),
 		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
-		ip6hint:      { "x-uapi-read-nullable": true, type: "string",
-		                description: "Preferred IPv6 prefix hint for PD (dhcpv6)" },
-		ip6ifaceid:   { "x-uapi-read-nullable": true, type: "string",
-		                description: "Static IPv6 interface id for IA_NA (dhcpv6)" },
 		delegate:     { "x-uapi-read-nullable": true, type: "boolean",
 		                description: "Accept prefix delegation downstream (dhcpv6)" },
+		sourcefilter: { "x-uapi-read-nullable": true, type: "boolean",
+		                description: "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route." },
 	},
 };
