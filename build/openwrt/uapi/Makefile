@@ -67,8 +67,9 @@ define Package/uapi/postinst
 # plain "reload" does not re-read the script, so upgrades that overwrite
 # /usr/share/uapi/*.uc would otherwise keep serving the previous version's
 # code until something else restarted uhttpd. Force a restart so new code is
-# in effect immediately after `apk add` / `apk upgrade uapi`.
-/etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+# in effect immediately after `apk add` / `apk upgrade uapi`, unless the
+# operator disabled uhttpd: a restart would start it.
+/etc/init.d/uhttpd enabled && /etc/init.d/uhttpd restart >/dev/null 2>&1 || true
 # Only show the bootstrap message when no token exists yet. The token store
 # survives upgrades and remove/reinstall (conffile), so on second-and-later
 # installs the operator already knows the drill.
@@ -102,7 +103,7 @@ uci -q del_list uhttpd.main.ucode_prefix='/api/v3=/usr/share/uapi/main.uc' || tr
 uci -q del_list uhttpd.main.ucode_prefix='/api/v2=/usr/share/uapi/main.uc' || true
 uci -q del_list uhttpd.main.ucode_prefix='/api/v1=/usr/share/uapi/main.uc' || true
 uci -q commit uhttpd || true
-/etc/init.d/uhttpd reload || true
+/etc/init.d/uhttpd enabled && /etc/init.d/uhttpd reload || true
 exit 0
 endef
 

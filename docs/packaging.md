@@ -105,11 +105,13 @@ The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live insta
 
 1. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
 2. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
-3. Commits the uhttpd config and reloads uhttpd, but only if either step changed something.
+3. Commits the uhttpd config if either step changed something, and then reloads uhttpd if it is enabled.
 
-`postinst` then restarts uhttpd unconditionally, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
+`postinst` then restarts uhttpd, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
 
-After that, `https://<router>/api/v3/healthz` is reachable.
+Both steps leave a disabled uhttpd stopped. On OpenWrt, `reload` and `restart` both start a stopped service, and an operator can disable uhttpd on purpose, for example because another web server uses its ports. That operator starts uhttpd when they want the API.
+
+After that, `https://<router>/api/v3/healthz` is reachable if uhttpd is enabled.
 
 The post-install message, printed only when the token store holds no token yet (so upgrades and reinstalls stay quiet):
 
@@ -134,7 +136,7 @@ Future upgrades from the project feed:
 
 1. Removes the `ucode_prefix` entry from `uhttpd.main`.
 2. Commits uhttpd.
-3. Reloads uhttpd.
+3. Reloads uhttpd, if it is enabled.
 
 These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v3/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
 
