@@ -4,7 +4,35 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Added
+
+- **`network/interfaces.sourcefilter` lets the downstream subnets of a routed `ip6prefix` reach
+  the internet.** An ISP that routes a static block instead of delegating one by DHCPv6-PD goes in
+  `ip6prefix` on the uplink, but the uplink's default route is source-specific and covers only its
+  own addresses, so traffic from the downstream /64s matched no route. `sourcefilter: false` makes
+  the upstream script add the default route without a source. It applies to protos `dhcpv6`,
+  `ppp` and `pppoe`, whose scripts read it, and reads as null when unset. (#206)
+- **`network/interfaces.ip6class` and `ip6weight`** complete the prefix-assignment options next to
+  `ip6assign`, for every proto: `ip6class` limits which prefixes an interface takes its subnet from
+  (`local` for the ULA prefix, or the name of the interface that received the prefix), and
+  `ip6weight` orders the interfaces when they share a prefix. A stored scalar `ip6class` reads as
+  its whitespace-separated words, which is how netifd reads it. (#206)
+
 ### Fixed
+
+- **`network/interfaces.ip6hint` and `ip6ifaceid` now apply to every proto, as netifd reads
+  them.** They were read and written only for proto `dhcpv6`. On a static interface, which is where
+  they matter, a write answered 200 and stored nothing, so no caller could choose which /64 an
+  interface gets, and a PUT erased a value that LuCI had written. They are now checked the way
+  netifd parses them, as LuCI does: `ip6hint` as a hexadecimal subnet id below `0xffffffff`, and
+  `ip6ifaceid` as `eui64`, `random` or an interface id whose network half is zero. This refuses with
+  422 a prefix-form `ip6hint` such as `2001:db8::/56`, which netifd read as subnet `0x2001`, and an
+  `ip6ifaceid` that has a network part or is not an address, which netifd replaced with `::1`. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly: an interface that already stores such a value answers
+  422 to every write, naming the field, until the value is corrected or cleared, for example with
+  `"ip6hint": ""`. An empty string still clears either option, and `ip6ifaceid` now also accepts
+  `eui64` and `random`, which it refused. (#206)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

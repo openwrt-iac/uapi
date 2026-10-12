@@ -82,7 +82,16 @@ const CASES = [
 	{
 		file: "network.interfaces.uc", id: "lan", pkg: "network",
 		modify: { key: "ipaddrs", value: ["192.168.78.1/24"] },
-		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'], broadcast: '192.168.1.255' },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'static', device: 'br-lan', ipaddr: ['192.168.1.1/24', '10.0.0.1/24'], broadcast: '192.168.1.255',
+		           ip6assign: '64', ip6hint: '5', ip6ifaceid: '::5', ip6class: ['local'], ip6weight: '10' },
+	},
+	{
+		// A routed ip6prefix on a dhcpv6 uplink needs sourcefilter '0', or its downstream /64s
+		// get no default route.
+		file: "network.interfaces.uc", id: "wan6", pkg: "network",
+		modify: { key: "sourcefilter", value: true },
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'dhcpv6', device: 'eth8',
+		           reqprefix: 'auto', ip6prefix: 'fd00:cafe::/61', sourcefilter: '0' },
 	},
 	{
 		// A static interface addressed only over IPv6, which uci and LuCI both accept and

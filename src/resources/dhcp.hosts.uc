@@ -8,21 +8,14 @@ const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
 const DUID_RE = /^[0-9A-Fa-f]{2}([:]?[0-9A-Fa-f]{2})+$/;
 const IPV6_HOSTID_RE = /^[0-9A-Fa-f:]+$/;
 
-// A stored scalar is one or more whitespace-separated tags, which is what dnsmasq makes
-// of it. Splitting on read is what settles the wire shape; a read never touches storage.
+// Splitting a stored scalar on read is what settles the wire shape; a read never touches storage.
 // A write does converge it, since toUci hands uci the array and uci stores a list, so the
 // first write-back turns `option tag 'a b'` into `list tag`. That is safe here only
 // because the view is stable across it: dnsmasq treats the two identically, and a body
 // read and written back unchanged reads back unchanged, which is what read honesty asks.
 // The earlier design refused to normalize on write for that reason and then kept the raw
 // shape on read too, which is the part that did not follow.
-function split_tags(v) {
-	if (v == null) return null;
-	if (type(v) == "array") return v;
-	let out = [];
-	for (let t in split(trim("" + v), /[ \t]+/)) if (t != "") push(out, t);
-	return length(out) > 0 ? out : null;
-}
+let split_tags = values.as_word_list_or_null;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];

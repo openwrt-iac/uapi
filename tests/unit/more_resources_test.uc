@@ -491,27 +491,31 @@ t.describe('network.interfaces effective_proto', () => {
 	});
 });
 
+// Deduplicated per code, as the handler merges schema and validate() errors for the response.
+function field_codes(errs, field) {
+	let codes = [];
+	for (let e in errs)
+		if (e.field == field && index(codes, e.code) == -1) push(codes, e.code);
+	return codes;
+}
+
 t.describe('network.interfaces proto=dhcpv6 client fields', () => {
-	t.it('fromUci surfaces reqprefix/reqaddress/ip6hint/ip6ifaceid/delegate/peerdns', () => {
+	t.it('fromUci surfaces reqprefix/reqaddress/delegate/peerdns', () => {
 		let r = interfaces.fromUci({
 			'.name': 'wan6', '.anonymous': false,
 			proto: 'dhcpv6', device: 'eth1',
 			reqprefix: 'auto', reqaddress: 'try',
-			ip6hint: '2001:db8::/56', ip6ifaceid: '::1',
 			delegate: '0', peerdns: '0',
 		});
 		t.assert_equal(r.proto, 'dhcpv6');
 		t.assert_equal(r.reqprefix, 'auto');
 		t.assert_equal(r.reqaddress, 'try');
-		t.assert_equal(r.ip6hint, '2001:db8::/56');
-		t.assert_equal(r.ip6ifaceid, '::1');
 		t.assert_false(r.delegate);
 		t.assert_false(r.peerdns);
 	});
 	t.it('toUci serializes dhcpv6 fields', () => {
 		let u = interfaces.toUci({
-			proto: 'dhcpv6', reqprefix: 56, reqaddress: 'force',
-			ip6hint: '2001:db8::/56', delegate: true,
+			proto: 'dhcpv6', reqprefix: 56, reqaddress: 'force', delegate: true,
 		});
 		t.assert_equal(u.reqprefix, '56');
 		t.assert_equal(u.reqaddress, 'force');
@@ -519,17 +523,81 @@ t.describe('network.interfaces proto=dhcpv6 client fields', () => {
 	});
 	t.it('validate rejects bad reqaddress enum', () => {
 		let errs = full_validate(interfaces, { proto: 'dhcpv6', reqaddress: 'always' }, null);
-		let found = false;
-		for (let e in errs)
-			if (e.field == 'reqaddress' && e.code == 'not_in_enum') { found = true; break; }
-		t.assert_true(found);
+		t.assert_deep_equal(field_codes(errs, 'reqaddress'), [ 'not_in_enum' ]);
 	});
-	t.it('validate rejects malformed ip6hint', () => {
-		let errs = interfaces.validate({ proto: 'dhcpv6', ip6hint: 'not-an-ipv6' });
-		let found = false;
-		for (let e in errs)
-			if (e.field == 'ip6hint' && e.code == 'invalid_format') { found = true; break; }
-		t.assert_true(found);
+});
+
+t.describe('network.interfaces ip6assign group, read and written for every proto', () => {
+	t.it('fromUci reads the group on a static interface', () => {
+		let r = interfaces.fromUci({
+			'.name': 'lan', '.anonymous': false, proto: 'static', ipaddr: [ '192.168.1.1/24' ],
+			ip6assign: '64', ip6hint: '5', ip6ifaceid: 'eui64',
+			ip6class: [ 'local', 'wan6' ], ip6weight: '10',
+		});
+		t.assert_equal(r.ip6assign, 64);
+		t.assert_equal(r.ip6hint, '5');
+		t.assert_equal(r.ip6ifaceid, 'eui64');
+		t.assert_deep_equal(r.ip6class, [ 'local', 'wan6' ]);
+		t.assert_equal(r.ip6weight, 10);
+	});
+	t.it('fromUci reads the group as null when uci has none of it', () => {
+		let r = interfaces.fromUci({ '.name': 'lan', '.anonymous': false, proto: 'static' });
+		t.assert_equal(r.ip6hint, null);
+		t.assert_equal(r.ip6ifaceid, null);
+		t.assert_equal(r.ip6class, null);
+		t.assert_equal(r.ip6weight, null);
+	});
+	t.it('fromUci splits a scalar ip6class on whitespace, as netifd does', () => {
+		let r = interfaces.fromUci({ '.name': 'lan', '.anonymous': false, proto: 'static', ip6class: 'local  wan6' });
+		t.assert_deep_equal(r.ip6class, [ 'local', 'wan6' ]);
+	});
+	t.it('toUci writes the group on a static interface, and an empty ip6class not at all', () => {
+		let u = interfaces.toUci({
+			proto: 'static', ipaddrs: [ '192.168.1.1/24' ],
+			ip6assign: 64, ip6hint: '5', ip6ifaceid: '::5', ip6class: [ 'local' ], ip6weight: 10,
+		});
+		t.assert_equal(u.ip6hint, '5');
+		t.assert_equal(u.ip6ifaceid, '::5');
+		t.assert_deep_equal(u.ip6class, [ 'local' ]);
+		t.assert_equal(u.ip6weight, '10');
+		t.assert_equal(interfaces.toUci({ proto: 'static', ip6hint: '' }).ip6hint, '');
+		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6class: [] }), 'ip6class'));
+	});
+	t.it('validate accepts the hint and interface id forms LuCI accepts', () => {
+		for (let hint in [ '1', 'a', '0x1f', 'fffffffe', '000000001', '0', '' ])
+			t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'static', ip6hint: hint }, null), 'ip6hint'), [], hint);
+		for (let id in [ 'eui64', 'random', '::1', '::1:2', '0:0:0:0:1::', '' ])
+			t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'static', ip6ifaceid: id }, null), 'ip6ifaceid'), [], id);
+	});
+	t.it('validate refuses a prefix, a non-hex value and a hint at or above 0xffffffff', () => {
+		for (let hint in [ '2001:db8::/56', 'zz', 'ffffffff', '100000000', '0x' ])
+			t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'static', ip6hint: hint }, null), 'ip6hint'), [ 'invalid_format' ], hint);
+	});
+	t.it('validate refuses an interface id with a network half, or no address at all', () => {
+		for (let id in [ '2001:db8::1', 'foo', '1', '::1/64' ])
+			t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'static', ip6ifaceid: id }, null), 'ip6ifaceid'), [ 'invalid_format' ], id);
+	});
+	t.it('refuses an ip6class entry no interface can be named, and a weight outside INT32', () => {
+		let errs = full_validate(interfaces, { proto: 'static', ip6class: [ 'local', 'bad class' ], ip6weight: -1 }, null);
+		t.assert_deep_equal(field_codes(errs, 'ip6class[0]'), []);
+		t.assert_deep_equal(field_codes(errs, 'ip6class[1]'), [ 'invalid_format' ]);
+		t.assert_deep_equal(field_codes(errs, 'ip6weight'), [ 'out_of_range' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { proto: 'static', ip6weight: 3000000000 }, null), 'ip6weight'), [ 'out_of_range' ]);
+	});
+});
+
+t.describe('network.interfaces sourcefilter (dhcpv6, ppp, pppoe)', () => {
+	t.it('fromUci reads it on the protos whose scripts read it, as null when unset', () => {
+		t.assert_false(interfaces.fromUci({ '.name': 'wan6', proto: 'dhcpv6', sourcefilter: '0' }).sourcefilter);
+		t.assert_false(interfaces.fromUci({ '.name': 'wan', proto: 'pppoe', sourcefilter: '0' }).sourcefilter);
+		t.assert_true(interfaces.fromUci({ '.name': 'wan', proto: 'ppp', sourcefilter: '1' }).sourcefilter);
+		t.assert_equal(interfaces.fromUci({ '.name': 'wan6', proto: 'dhcpv6' }).sourcefilter, null);
+		t.assert_false(exists(interfaces.fromUci({ '.name': 'lan', proto: 'static', sourcefilter: '0' }), 'sourcefilter'));
+	});
+	t.it('toUci writes it only for those protos', () => {
+		t.assert_equal(interfaces.toUci({ proto: 'dhcpv6', sourcefilter: false }).sourcefilter, '0');
+		t.assert_equal(interfaces.toUci({ proto: 'pppoe', sourcefilter: true }).sourcefilter, '1');
+		t.assert_false(exists(interfaces.toUci({ proto: 'static', sourcefilter: false }), 'sourcefilter'));
 	});
 });
 

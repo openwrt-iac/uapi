@@ -101,6 +101,16 @@ function as_list_or_null(v) {
 	return [v];
 }
 
+// A daemon that expects a list reads a stored scalar as whitespace-separated words: uci's
+// blob.c splits it that way for netifd, and dnsmasq's init script does the same in shell.
+function as_word_list_or_null(v) {
+	if (v == null) return null;
+	if (type(v) == "array") return v;
+	let out = [];
+	for (let t in split(trim("" + v), /[ \t]+/)) if (t != "") push(out, t);
+	return length(out) > 0 ? out : null;
+}
+
 // Single-line passthrough validation shared by resources that mirror
 // unbound-uci-ext's seam-file generator. The regex pattern uses a literal
 // newline in the character class because ucode's regex parser treats `\n`
@@ -582,7 +592,7 @@ function section_index(conn, pkg, sec_type, key, filter) {
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
-	strict_bool, as_list, as_list_or_null, as_int,
+	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int,
 	has_control_chars, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
@@ -591,7 +601,7 @@ return {
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
-	ipv4_in_cidr, ipv6_in_cidr, addr_in_any_cidr, normalize_addr,
+	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,
 };
