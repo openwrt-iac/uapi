@@ -22,7 +22,9 @@ fi
 
 if [ "$CHANGED" = "1" ]; then
 	uci commit uhttpd
-	/etc/init.d/uhttpd reload
+	# reload and restart both start a stopped uhttpd, which the operator may have
+	# disabled because another web server owns the ports.
+	/etc/init.d/uhttpd enabled && /etc/init.d/uhttpd reload
 fi
 
 exit 0

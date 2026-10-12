@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
+  disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded
+  it, and on OpenWrt both `reload` and `restart` start a stopped service. On a router where
+  another web server owns ports 80 and 443, that started uhttpd beside it. Each step now runs
+  only when uhttpd is enabled. (#203)
+
 ## [3.1.0] - 2026-10-11
 
 ### Added
