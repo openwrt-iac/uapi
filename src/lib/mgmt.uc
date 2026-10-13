@@ -1,4 +1,5 @@
 let fs = require('fs');
+let values = require('values');
 
 // Which interface is the caller reaching uapi through.
 //
@@ -116,9 +117,7 @@ function targets_mgmt_device(conn, dev, targets) {
 	try {
 		conn.uci_foreach("network", "device", function(sec) {
 			if (hit != null || !want[sec.name]) return;
-			let ports = sec.ports;
-			if (type(ports) == "string") ports = [ ports ];
-			for (let port in ports ?? [])
+			for (let port in values.as_word_list_or_null(sec.ports) ?? [])
 				if (port == dev) hit = sec.name;
 		});
 	} catch (e) { return null; }

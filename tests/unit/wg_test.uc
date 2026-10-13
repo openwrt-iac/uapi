@@ -59,6 +59,10 @@ t.describe('wg.to_peer', () => {
 		t.assert_deep_equal(wg.to_peer({ allowed_ips: '10.0.0.2/32' }).allowed_ips,
 		                    ['10.0.0.2/32']);
 	});
+	t.it('splits a scalar allowed_ips into words, as wireguard.sh does', () => {
+		t.assert_deep_equal(wg.to_peer({ allowed_ips: '10.0.0.2/32 10.0.1.0/24' }).allowed_ips,
+		                    ['10.0.0.2/32', '10.0.1.0/24']);
+	});
 	t.it('yields an empty list when allowed_ips is absent', () => {
 		t.assert_deep_equal(wg.to_peer({}).allowed_ips, []);
 	});

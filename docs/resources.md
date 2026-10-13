@@ -51,8 +51,8 @@ packages are deliberately not pulled in.
 |---|---|---|
 | `network/interfaces` | `config interface` | Static/dhcp/dhcpv6/pppoe/wireguard. Optional `id` picks the section name at create time (uci section-name charset, 32 chars, tightened to 15 for `proto=wireguard` because netifd uses it as the kernel netdev name); absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). Some fields apply only to some protos, as the `allOf` entries on `proto` in the spec say: a read omits the others, a write that names one with a value other than null, `""` or `[]` answers `422 conflict`, and a proto switch removes the old proto's options. The options that netifd reads for every proto (`metric`, `defaultroute`, `delegate`, `ip4table`, `ip6table`, `dns`, `mtu`, the `ip6assign` group) apply to all of them. On a proto that uapi does not model, such as `6in4`, a read shows every option that uci stores and a write refuses only `broadcast_flag`. |
 | `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. |
-| `network/routes` | `config route` | Static routes; cross-refs interface. |
-| `network/rules` | `config rule` | Policy routing. |
+| `network/routes` | `config route` | Static routes; cross-refs interface. `table` reads a stored name as its id (253 `default`, 254 `main`, 255 `local`, or the id in `/etc/iproute2/rt_tables`), and 0 when netifd cannot resolve it and drops the route. A write takes an id from 1 to 4294967295. |
+| `network/rules` | `config rule` | Policy routing. `lookup` reads and writes like the `table` of `network/routes`. |
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
 | `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. |
 

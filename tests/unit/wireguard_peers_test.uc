@@ -446,3 +446,18 @@ t.describe('network.wireguard_peers boolean spellings match config_get_bool', ()
 		t.assert_true(wgp.fromUci(sec, null).route_allowed_ips);
 	});
 });
+
+// wireguard.sh reads allowed_ips with config_get, so a scalar holds one prefix per word, and a
+// DELETE has to withdraw the routes of each.
+t.describe('network.wireguard_peers reads a scalar allowed_ips as words', () => {
+	let sec = { '.name': 'p1', '.type': 'wireguard_wg0', '.anonymous': false,
+	            public_key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=',
+	            allowed_ips: '10.0.0.2/32 10.0.1.0/24', route_allowed_ips: '1' };
+	t.it('fromUci', () => {
+		t.assert_deep_equal(wgp.fromUci(sec, null).allowed_ips, [ '10.0.0.2/32', '10.0.1.0/24' ]);
+	});
+	t.it('kernel_ops on remove', () => {
+		let ops = wgp.kernel_ops('remove', null, 'wireguard_wg0', sec);
+		t.assert_deep_equal(ops[0].prev_allowed_ips, [ '10.0.0.2/32', '10.0.1.0/24' ]);
+	});
+});

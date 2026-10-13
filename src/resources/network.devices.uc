@@ -1,6 +1,7 @@
 let values = require('values');
 let platform_bool = values.platform_bool;
-let as_list_or_null = values.as_list_or_null;
+let as_word_list_or_null = values.as_word_list_or_null;
+let netifd_int = values.netifd_int;
 let as_int = values.as_int;
 
 const VALID_TYPES = {
@@ -15,10 +16,10 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		type: section.type ?? null,
-		ports: as_list_or_null(section.ports),
+		ports: as_word_list_or_null(section.ports),
 		vid: as_int(section.vid),
 		ifname: section.ifname ?? null,
-		mtu: as_int(section.mtu),
+		mtu: netifd_int(section.mtu),
 		macaddr: section.macaddr ?? null,
 		ipv6: platform_bool(section.ipv6, true),
 		runtime: {},

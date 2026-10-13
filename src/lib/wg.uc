@@ -37,9 +37,8 @@ function run(cmd) {
 function to_peer(section) {
 	return {
 		public_key: section.public_key,
-		allowed_ips: (type(section.allowed_ips) == "array")
-		             ? section.allowed_ips
-		             : (section.allowed_ips != null ? [section.allowed_ips] : []),
+		// wireguard.sh reads the option with config_get, so a scalar holds one prefix per word.
+		allowed_ips: values.as_word_list_or_null(section.allowed_ips) ?? [],
 		endpoint_host: section.endpoint_host,
 		endpoint_port: section.endpoint_port,
 		persistent_keepalive: section.persistent_keepalive,

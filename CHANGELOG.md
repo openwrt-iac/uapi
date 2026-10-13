@@ -49,6 +49,14 @@ All notable changes to this project will be documented in this file. Format foll
   which options the handler reads. A read there shows every option that uci stores, and a write
   refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so
   a write with an `If-Match` from before the upgrade answers 412. (#208)
+- **`network/routes.table` and `network/rules.lookup` refuse 0.** netifd cannot resolve table 0
+  and drops the route or rule, so such a write answered 200 with no effect. It now answers 422
+  `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. A stored table that netifd cannot
+  resolve, such as a name missing from `/etc/iproute2/rt_tables`, reads as 0 too, and the
+  validation sweep reports it. Every write to that section answers 422 until the table is fixed,
+  where a PUT of the read used to remove the option and move the route into the main table.
+  (#212)
 
 ### Fixed
 
@@ -88,6 +96,26 @@ All notable changes to this project will be documented in this file. Format foll
   truncates it differently on 32- and 64-bit targets. Measured on OpenWrt 25.12.5:
   `metric '0x10'` gives routes with metric 16, `mtu '0x578'` on wireguard gives mtu 1400, and
   `metric '16 '` gives routes without a metric, which uapi reads as null. (#209)
+- **`network/routes` and `network/rules` read a table name as its id.** netifd resolves `table`
+  and `lookup` as a number, as one of the aliases `default`, `main` and `local`, or as a name in
+  `/etc/iproute2/rt_tables`, and LuCI writes the name. uapi read decimals only, so a name read
+  null. A rule with `lookup 'main'` answered 422 "is required" to every write, and a PUT of the
+  read of a route with a named table removed the option and moved the route into the main
+  table. A name now reads as its id, a PUT of the read writes the id, and a PATCH keeps the
+  stored name. Writing a name waits for the next major. (#212)
+- **`network/routes`, `rules`, `devices`, `bridge_vlans` and `wireguard_peers` read integers and
+  lists as netifd and `wireguard.sh` read them**, as #209 did for `network/interfaces`. Route
+  `metric` and `mtu`, rule `priority` and `goto`, device `mtu` and bridge-vlan `vlan` now read
+  hex and octal. A scalar `ports` on a device or a bridge-vlan, and a scalar `allowed_ips` on a
+  peer, now read as their words. Before, a PUT of the read of a bridge with
+  `option ports 'eth0 eth1'` wrote one port named `eth0 eth1`, which netifd cannot find, so the
+  bridge lost both ports. A peer with a scalar `allowed_ips` of several prefixes answered 422 to
+  every write, and uapi's own apply took the whole string as one prefix, so a DELETE did not
+  withdraw the routes of the peer. The management-path guard splits a scalar `ports` too. The
+  ETag of each affected section changes once. Measured on OpenWrt 25.12.5: `table 'uapi55'`
+  with `metric '0x10'` gives a route in that table with metric 16, `table '0'` gives no route,
+  a scalar `ports` with two names gives two bridge members, and a scalar `allowed_ips` with two
+  prefixes gives two routes, which a DELETE withdraws. (#212)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

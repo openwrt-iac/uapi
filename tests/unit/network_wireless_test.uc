@@ -25,6 +25,13 @@ t.describe('network.devices', () => {
 		t.assert_deep_equal(r.ports, ['eth0', 'eth1']);
 	});
 
+	t.it('fromUci reads scalar ports as words and a hex mtu, as netifd does', () => {
+		let r = netdev.fromUci({ '.name': 'br_x', '.anonymous': false, '.type': 'device',
+		                         name: 'br-x', type: 'bridge', ports: 'eth0 eth1', mtu: '0x5dc' });
+		t.assert_deep_equal(r.ports, ['eth0', 'eth1']);
+		t.assert_equal(r.mtu, 1500);
+	});
+
 	t.it('validate accepts a portless bridge (members added later)', () => {
 		let errs = netdev.validate({ name: 'br-tf', type: 'bridge' }, null);
 		let pe = filter(errs, function(e) { return e.field == "ports"; });

@@ -1,6 +1,6 @@
 let values = require('values');
-let as_list_or_null = values.as_list_or_null;
-let as_int = values.as_int;
+let as_word_list_or_null = values.as_word_list_or_null;
+let netifd_int = values.netifd_int;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -8,8 +8,8 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		device: section.device ?? null,
-		vlan: as_int(section.vlan),
-		ports: as_list_or_null(section.ports),
+		vlan: netifd_int(section.vlan),
+		ports: as_word_list_or_null(section.ports),
 		runtime: {},
 	};
 }
