@@ -1226,3 +1226,17 @@ t.describe('network.interfaces ip6prefix is a list', () => {
 		t.assert_deep_equal(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 'fd00:2::1' ] }, null), []);
 	});
 });
+
+// netifd applies a device mtu only from 68 up, and wireguard.sh applies a smaller one that leaves
+// the device with no IPv4. Measured on OpenWrt 25.12.5.
+t.describe('network.interfaces mtu floor', () => {
+	let body = { proto: 'static', ip6addrs: [ 'fd00::1/64' ] };
+	t.it('refuses an mtu below 68 and accepts 68', () => {
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, mtu: 67 }, null), 'mtu'), [ 'out_of_range' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, mtu: 0 }, null), 'mtu'), [ 'out_of_range' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, mtu: 68 }, null), 'mtu'), []);
+	});
+	t.it('reads a stored smaller value as it is', () => {
+		t.assert_equal(interfaces.fromUci({ '.name': 'x', proto: 'wireguard', mtu: '60' }, null).mtu, 60);
+	});
+});

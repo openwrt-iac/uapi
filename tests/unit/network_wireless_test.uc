@@ -32,6 +32,15 @@ t.describe('network.devices', () => {
 		t.assert_equal(r.mtu, 1500);
 	});
 
+	t.it('validate refuses an mtu below 68, which netifd ignores, and reads a stored one as it is', () => {
+		let mtu_codes = (mtu) => map(filter(netdev.validate({ name: 'br-x', type: 'bridge', mtu }, null),
+		                                    (e) => e.field == 'mtu'), (e) => e.code);
+		t.assert_deep_equal(mtu_codes(60), [ 'out_of_range' ]);
+		t.assert_deep_equal(mtu_codes(68), []);
+		t.assert_equal(netdev.fromUci({ '.name': 'br_x', '.anonymous': false, '.type': 'device',
+		                                name: 'br-x', type: 'bridge', mtu: '60' }).mtu, 60);
+	});
+
 	t.it('validate accepts a portless bridge (members added later)', () => {
 		let errs = netdev.validate({ name: 'br-tf', type: 'bridge' }, null);
 		let pe = filter(errs, function(e) { return e.field == "ports"; });

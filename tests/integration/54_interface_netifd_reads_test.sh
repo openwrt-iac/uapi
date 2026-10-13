@@ -118,4 +118,16 @@ sweep=$(body "$(call "$URL/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54") | not' >/dev/null \
 	|| fail "the sweep flagged a section with a list ip6prefix: $sweep"
 
+echo "--- an mtu below 68 is refused on write, and a stored one reads as it is and is swept ---"
+mtu_before=$(uci_get uapi54w.mtu)
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d '{"mtu":60}')
+[ "$(status "$r")" = 422 ] || fail "an mtu of 60 expected 422: $r"
+[ "$(uci_get uapi54w.mtu)" = "$mtu_before" ] || fail "a refused mtu changed uci: $(uci_get uapi54w.mtu)"
+$SSH "uci set network.uapi54w.mtu=60; uci commit network"
+r=$(body "$(call "$URL/network/interfaces/uapi54w")")
+printf '%s' "$r" | jq -e '.mtu == 60' >/dev/null || fail "a stored mtu of 60 did not read as 60: $r"
+sweep=$(body "$(call "$URL/diagnostics?validate=1")")
+printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54w")' >/dev/null \
+	|| fail "the sweep did not list a stored mtu below 68: $sweep"
+
 echo "network/interfaces reads ok"
