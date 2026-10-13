@@ -40,8 +40,10 @@ function to_peer(section) {
 		// wireguard.sh reads the option with config_get, so a scalar holds one prefix per word.
 		allowed_ips: values.as_word_list_or_null(section.allowed_ips) ?? [],
 		endpoint_host: section.endpoint_host,
-		endpoint_port: section.endpoint_port,
-		persistent_keepalive: section.persistent_keepalive,
+		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
+		// Typed rather than quoted: set_peer formats it into a shell command, and a stored value
+		// reaches here from uci without passing through validate().
+		persistent_keepalive: values.wg_int(section.persistent_keepalive),
 		preshared_key: section.preshared_key,
 	};
 }
@@ -111,7 +113,7 @@ function endpoint_arg(host, port) {
 function set_peer(iface, peer) {
 	let args = sprintf("wg set %s peer %s", iface, shellquote(peer.public_key));
 	args += " allowed-ips " + shellquote(join(",", peer.allowed_ips));
-	args += " persistent-keepalive " + (peer.persistent_keepalive ?? 0);
+	args += sprintf(" persistent-keepalive %d", peer.persistent_keepalive ?? 0);
 
 	let psk_path = null;
 	if (peer.preshared_key != null && peer.preshared_key != "") {
@@ -165,7 +167,7 @@ function routes_from(allowed_ips, enabled) {
 }
 
 function peer_routes(section) {
-	return routes_from(to_peer(section).allowed_ips,
+	return routes_from(values.as_word_list_or_null(section.allowed_ips) ?? [],
 	                   values.shell_bool(section.route_allowed_ips, false));
 }
 
@@ -258,6 +260,8 @@ function apply_peer(iface, peer) {
 		return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
 	if (length(peer.allowed_ips) == 0)
 		return sprintf("refusing to apply a peer with no allowed_ips on %s", iface);
+	if (peer.endpoint_host != null && peer.endpoint_host != "" && peer.endpoint_port === 0)
+		return sprintf("refusing to apply a peer whose endpoint port does not resolve on %s", iface);
 
 	// `wg set` cannot unset an endpoint, so clearing one means removing the peer
 	// and setting it fresh. Safe only in this direction: with no endpoint there is

@@ -244,6 +244,44 @@ t.describe('values.netifd_int', () => {
 	});
 });
 
+t.describe('values.wg_int', () => {
+	t.it('reads a decimal after stripping whitespace, as wg does, and null for anything else', () => {
+		t.assert_equal(v.wg_int(' 25 '), 25);
+		t.assert_equal(v.wg_int('25'), 25);
+		t.assert_equal(v.wg_int('off'), null);
+		t.assert_equal(v.wg_int('0;touch /tmp/x'), null);
+		t.assert_equal(v.wg_int(''), null);
+		t.assert_equal(v.wg_int(null), null);
+	});
+});
+
+t.describe('values.service_port', () => {
+	let file = (text) => () => text;
+	let untouched = () => die("the reader ran for a value that needs no file");
+	t.it('reads a decimal from 0 to 65535 after stripping whitespace, without the file', () => {
+		t.assert_equal(v.service_port('51820', untouched), 51820);
+		t.assert_equal(v.service_port(' 51820 ', untouched), 51820);
+		t.assert_equal(v.service_port('+443', untouched), 443);
+		t.assert_equal(v.service_port('0443', untouched), 443);
+		t.assert_equal(v.service_port('65536', untouched), 0);
+		t.assert_equal(v.service_port('-1', untouched), 0);
+	});
+	t.it('looks a name up on a /udp line of /etc/services, as any token of it', () => {
+		let svc = file('# comment\nhttps\t443/tcp\nhttps\t443/udp\t# HTTP over TLS\nsyslog\t514/udp\tlogger\nwg 51820/udp #wg\n');
+		t.assert_equal(v.service_port('https', svc), 443);
+		t.assert_equal(v.service_port('logger', svc), 514);
+		t.assert_equal(v.service_port('wg', svc), 51820);
+		t.assert_equal(v.service_port('HTTP', svc), 0);
+		t.assert_equal(v.service_port('nosuch', svc), 0);
+		t.assert_equal(v.service_port('https', file(null)), 0);
+	});
+	t.it('reads null for nothing set, and 0 for whitespace that wg cannot use', () => {
+		t.assert_equal(v.service_port(null, untouched), null);
+		t.assert_equal(v.service_port('', untouched), null);
+		t.assert_equal(v.service_port('   ', untouched), 0);
+	});
+});
+
 t.describe('values.rt_table_id', () => {
 	let file = (text) => () => text;
 	let untouched = () => die("the reader ran for a value that needs no file");

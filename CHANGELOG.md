@@ -66,6 +66,11 @@ All notable changes to this project will be documented in this file. Format foll
   produced a state no caller can rely on, and it fails loudly. `goto 0` answered `required`
   before. The schema no longer declares `default: "lookup"` on `action`, because the default
   depends on `goto`, and `goto` gets `maximum: 2147483647`. (#218)
+- **`network/wireguard_peers.endpoint_port` declares minimum 0, and a write of 0 answers 422.**
+  A read of 0 means a port name that does not resolve, or a stored `'0'`, which LuCI's form
+  allows, so the old minimum of 1 did not describe the read. That is branch (b) of the type
+  carve-out in `docs/versioning.md`. A write of 0 was already refused. A peer with an endpoint
+  host and a port of 0 is no longer applied to the kernel. (#219)
 
 ### Deprecated
 
@@ -171,6 +176,25 @@ All notable changes to this project will be documented in this file. Format foll
   it, and on OpenWrt both `reload` and `restart` start a stopped service. On a router where
   another web server owns ports 80 and 443, that started uhttpd beside it. Each step now runs
   only when uhttpd is enabled. (#203)
+- **`network/wireguard_peers.endpoint_port` reads a service name as wg resolves it.**
+  `wireguard.sh` passes `endpoint_port` to `wg`, which strips whitespace and resolves a name
+  through `/etc/services`, so `option endpoint_port 'https'` works on the box. uapi read such a
+  name as null. A PATCH of the peer then pushed port 51820 to the kernel, and the restore after a
+  failed write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg
+  uses, and both apply paths push it. A name that does not resolve reads 0, which wg cannot use
+  either. (#219)
+
+### Security
+
+- **A stored `persistent_keepalive` no longer runs as a root shell command.** `src/lib/wg.uc`
+  put a peer's `persistent_keepalive` into the `wg set` command without quoting it. The restore
+  after a failed peer write reapplies the interface's peers from uci, and that path read the raw
+  option, which never passed `validate()`. So a value such as `0;touch /tmp/x` ran as root on
+  the next failed peer write on that interface. It could be written by hand, or through
+  `/raw/network/...` by a token with `raw:network:rw` and `network:rw`, which `docs/security.md`
+  does not grant a shell. The value is now read as a number, after removing whitespace as wg
+  does, and formatted with `%d`. Measured on OpenWrt 25.12.5: the value ran before this change
+  and does not after it. (#219)
 
 ## [3.1.0] - 2026-10-11
 

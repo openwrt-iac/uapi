@@ -1,3 +1,4 @@
+let fs = require('fs');
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_list = values.as_list;
@@ -23,8 +24,8 @@ function fromUci(section) {
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
 		allowed_ips: as_word_list_or_null(section.allowed_ips),
 		endpoint_host: section.endpoint_host ?? null,
-		endpoint_port: as_int(section.endpoint_port),
-		persistent_keepalive: as_int(section.persistent_keepalive),
+		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
+		persistent_keepalive: values.wg_int(section.persistent_keepalive),
 		route_allowed_ips: shell_bool(section.route_allowed_ips, false),
 		disabled: shell_bool(section.disabled, false),
 		runtime: {},
@@ -76,6 +77,12 @@ function validate(json, conn) {
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
 			             message: "must be an IPv4 or IPv6 address or CIDR" });
 	}
+
+	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
+	// as 0.
+	if (json.endpoint_port === 0)
+		push(errs, { field: "endpoint_port", code: "out_of_range",
+		             message: "must be from 1 to 65535: wg cannot use port 0, which is also how a port name that /etc/services does not resolve reads" });
 
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists_with_wg_proto(conn, json.interface))
@@ -186,7 +193,8 @@ return {
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint hostname or IP" },
-		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
+		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535,
+		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
 		route_allowed_ips:    { type: "boolean", default: false,
 		                        description: "Auto-install routes for allowed_ips" },
