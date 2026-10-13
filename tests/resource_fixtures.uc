@@ -180,6 +180,11 @@ const CASES = [
 		           priority: '0x7531', 'goto': '0x7532', disabled: '1' },
 	},
 	{
+		// The goto rule LuCI writes: a goto and no action.
+		file: "network.rules.uc", id: "nr3", pkg: "network",
+		section: { invert: '1', '.type': 'rule', src: '10.2.0.0/16', priority: '30040', 'goto': '30050', disabled: '1' },
+	},
+	{
 		file: "network.devices.uc", id: "dev2", pkg: "network",
 		section: { ipv6: '0', '.type': 'device', name: 'br-hex', type: 'bridge', ports: 'lan3 lan4', mtu: '0x5dc' },
 	},

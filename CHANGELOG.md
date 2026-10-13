@@ -58,6 +58,15 @@ All notable changes to this project will be documented in this file. Format foll
   where a PUT of the read used to remove the option and move the route into the main table.
   (#212)
 
+- **`network/rules` refuses a `goto` that the kernel refuses, with 422.** Beside an action other
+  than goto it answers `conflict`: with lookup, netifd installs a goto rule instead, and the
+  kernel refuses the rule with any other action. A goto that does not jump past `priority`
+  answers `out_of_range`, because the kernel answers "Backward goto not supported", for
+  `goto 0` too. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. `goto 0` answered `required`
+  before. The schema no longer declares `default: "lookup"` on `action`, because the default
+  depends on `goto`, and `goto` gets `maximum: 2147483647`. (#218)
+
 ### Deprecated
 
 - **`network/interfaces.ip6prefix` as a string on write.** v4 removes it, so send an array. The
@@ -143,6 +152,19 @@ All notable changes to this project will be documented in this file. Format foll
   each interface with `ip6prefix` changes once. Measured on OpenWrt 25.12.5: two listed
   prefixes on a static interface both appear in its `ipv6-prefix` status and survive a PUT of
   the read. (#217)
+- **`network/rules` goto rules reach the kernel.** netifd parses `action` with
+  `system_rtn_aton`, which knows `unicast`, `unreachable`, `prohibit`, `blackhole` and `throw`
+  but neither `lookup` nor `goto`, and it drops a rule whose action it cannot read. A goto rule
+  is one with a `goto` and no `action`, which is what LuCI writes. uapi wrote `action 'goto'`,
+  so netifd dropped every goto rule written through uapi while the write answered 200. It also
+  read LuCI's goto rule as action `lookup`, so every write to it answered 422. A read now
+  derives the action as netifd does, with `unicast` read as `lookup`. A write stores no action
+  for lookup and goto, and clears a stored one. A rule that uapi stored before stays
+  uninstalled until its next write; `uci show network | grep "action='goto'"` lists them.
+  Measured on OpenWrt 25.12.5: a rule with only `goto` is installed, the same rule with
+  `action 'goto'` is not, and a PATCH of it through uapi installs it. (#218)
+- **The published `network/rules` conditional accepts a rule whose only selector is `mark`**, as
+  `validate()` does, so a client that validates against the spec can create one. (#218)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

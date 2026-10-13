@@ -28067,7 +28067,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Priority of the rule to jump to when action is goto"
+						"maximum": 2147483647,
+						"description": "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too."
 					},
 					"action": {
 						"type": "string",
@@ -28079,7 +28080,7 @@
 							"blackhole",
 							"throw"
 						],
-						"default": "lookup"
+						"description": "What the rule does with matching traffic. netifd parses no `lookup` or `goto` action: a rule without one is a goto rule when `goto` is set and a lookup rule otherwise, so a read derives the action the same way, and a write stores no action for lookup and goto."
 					},
 					"invert": {
 						"type": "boolean",
@@ -28124,6 +28125,11 @@
 							{
 								"required": [
 									"dest"
+								]
+							},
+							{
+								"required": [
+									"mark"
 								]
 							}
 						]
@@ -28224,7 +28230,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Priority of the rule to jump to when action is goto"
+						"maximum": 2147483647,
+						"description": "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too."
 					},
 					"action": {
 						"type": "string",
@@ -28236,7 +28243,7 @@
 							"blackhole",
 							"throw"
 						],
-						"default": "lookup"
+						"description": "What the rule does with matching traffic. netifd parses no `lookup` or `goto` action: a rule without one is a goto rule when `goto` is set and a lookup rule otherwise, so a read derives the action the same way, and a write stores no action for lookup and goto."
 					},
 					"invert": {
 						"type": "boolean",
@@ -28277,6 +28284,11 @@
 							{
 								"required": [
 									"dest"
+								]
+							},
+							{
+								"required": [
+									"mark"
 								]
 							}
 						]

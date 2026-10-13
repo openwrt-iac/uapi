@@ -31,7 +31,7 @@ ensure_wireguard || fail "no usable wireguard support, so the peer checks cannot
 # Interfaces and their routes first, devices afterwards, each with its own reload: removing
 # both in one reload once left netifd hung until procd respawned it.
 cleanup() {
-	$SSH "for s in uapi55r uapi55z uapi55n uapi55peer uapi55 uapi55w; do uci -q delete network.\$s; done;
+	$SSH "for s in uapi55r uapi55z uapi55n uapi55g uapi55h uapi55i uapi55peer uapi55 uapi55w; do uci -q delete network.\$s; done;
 		uci commit network; /etc/init.d/network reload; sleep 2;
 		uci -q delete network.uapi55_dev; uci -q delete network.uapi55p; uci commit network;
 		/etc/init.d/network reload; sed -i '/^205 uapi55\$/d' /etc/iproute2/rt_tables" 2>/dev/null || true
@@ -53,6 +53,10 @@ $SSH "uci set network.uapi55_dev=device; uci set network.uapi55_dev.name=$BRIDGE
 	uci set network.uapi55z.gateway=10.253.6.254; uci set network.uapi55z.table=0;
 	uci set network.uapi55n=rule; uci set network.uapi55n.src=10.253.6.0/24; uci set network.uapi55n.lookup=uapi55;
 	uci set network.uapi55n.priority=0x7531;
+	uci set network.uapi55g=rule; uci set network.uapi55g.src=10.253.64.0/24; uci set network.uapi55g.priority=30060;
+	uci set network.uapi55g.action=goto; uci set network.uapi55g.goto=30070;
+	uci set network.uapi55h=rule; uci set network.uapi55h.src=10.253.65.0/24; uci set network.uapi55h.priority=30062;
+	uci set network.uapi55h.goto=30070;
 	uci set network.uapi55p=device; uci set network.uapi55p.name=br-uapi55p; uci set network.uapi55p.type=bridge;
 	uci set network.uapi55p.bridge_empty=1; uci set network.uapi55p.ports='uapi55a uapi55b';
 	uci set network.uapi55w=interface; uci set network.uapi55w.proto=wireguard;
@@ -116,5 +120,27 @@ r=$(send PATCH network/wireguard_peers/uapi55peer '{"persistent_keepalive":25}')
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi55peer")
 [ "$(status "$r")" = 200 ] || [ "$(status "$r")" = 204 ] || fail "DELETE of the peer failed: $r"
 wait_for "a DELETE left a route of the peer" '! routes | grep -q "^10.253.6[23].0/24 dev uapi55w"'
+
+echo "--- a goto rule has no action for netifd, and a write repairs a stored one ---"
+# busybox ip prints a goto rule as a lookup, so only the presence of its priority is checked.
+rule_up() { $SSH "ip rule" | grep -q "^$1:"; }
+rule_up 30060 && fail "netifd installed a rule with action 'goto'"
+rule_up 30062 || fail "netifd did not install the goto rule that has no action"
+r=$(read_back network/rules/uapi55g)
+printf '%s' "$r" | jq -e '.action == "goto" and .goto == 30070' >/dev/null || fail "the stored goto rule read wrong: $r"
+r=$(send PATCH network/rules/uapi55g '{"priority":30061}')
+[ "$(status "$r")" = 200 ] && [ -z "$(uci_show uapi55g.action)" ] || fail "a PATCH did not clear action 'goto': $r $(uci_show uapi55g)"
+wait_for "the repaired goto rule was not installed" 'rule_up 30061'
+r=$(read_back network/rules/uapi55h)
+printf '%s' "$r" | jq -e '.action == "goto"' >/dev/null || fail "LuCI's goto rule did not read as goto: $r"
+r=$(send PATCH network/rules/uapi55h '{"priority":30063}')
+[ "$(status "$r")" = 200 ] || fail "a PATCH of LuCI's goto rule expected 200: $r"
+r=$(send POST network/rules '{"id":"uapi55i","src":"10.253.66.0/24","priority":30064,"goto":30070}')
+[ "$(status "$r")" = 200 ] && [ -z "$(uci_show uapi55i.action)" ] || fail "a goto rule created through uapi stored an action: $r"
+wait_for "a goto rule created through uapi was not installed" 'rule_up 30064'
+r=$(send POST network/rules '{"src":"10.253.67.0/24","action":"unreachable","goto":30070}')
+[ "$(status "$r")" = 422 ] || fail "a goto beside another action expected 422: $r"
+r=$(send POST network/rules '{"src":"10.253.67.0/24","priority":30080,"goto":30070}')
+[ "$(status "$r")" = 422 ] || fail "a backward goto expected 422: $r"
 
 echo "network routes, rules, devices and peers read ok"
