@@ -157,6 +157,31 @@ const CASES = [
 		           preshared_key: WG_KEY, endpoint_host: '198.51.100.7', endpoint_port: '51820' },
 	},
 	{
+		// The forms netifd and wireguard.sh read beyond plain decimals and lists: a table alias,
+		// hex integers, and scalars holding several words.
+		file: "network.routes.uc", id: "rt2", pkg: "network",
+		section: { type: 'blackhole', '.type': 'route', interface: 'lan', target: '10.8.0.0/24', table: 'local',
+		           metric: '0x10', mtu: '0x5dc', disabled: '1' },
+	},
+	{
+		file: "network.rules.uc", id: "nr2", pkg: "network",
+		section: { action: 'goto', invert: '1', '.type': 'rule', src: '10.1.0.0/16', lookup: 'main',
+		           priority: '0x7531', 'goto': '0x7532', disabled: '1' },
+	},
+	{
+		file: "network.devices.uc", id: "dev2", pkg: "network",
+		section: { ipv6: '0', '.type': 'device', name: 'br-hex', type: 'bridge', ports: 'lan3 lan4', mtu: '0x5dc' },
+	},
+	{
+		file: "network.bridge_vlans.uc", id: "bv2", pkg: "network",
+		section: { '.type': 'bridge-vlan', device: 'br-probe', vlan: '0x0a', ports: 'lan1:u* lan2:t' },
+	},
+	{
+		file: "network.wireguard_peers.uc", id: "p2", pkg: "network",
+		section: { route_allowed_ips: '1', disabled: '1', '.type': 'wireguard_wg0',
+		           public_key: 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=', allowed_ips: '10.9.0.4/32 10.9.1.0/24' },
+	},
+	{
 		file: "wireless.devices.uc", id: "radio0", pkg: "wireless",
 		section: { disabled: '1', '.type': 'wifi-device', type: 'mac80211', channel: '6', band: '2g' },
 	},

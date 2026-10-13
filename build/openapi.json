@@ -27851,7 +27851,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Routing table id"
+						"maximum": 4294967295,
+						"description": "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route; a write of 0 answers 422."
 					},
 					"metric": {
 						"type": [
@@ -27946,7 +27947,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Routing table id"
+						"maximum": 4294967295,
+						"description": "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route; a write of 0 answers 422."
 					},
 					"metric": {
 						"type": [
@@ -28049,7 +28051,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Routing table id to look up when action is lookup"
+						"maximum": 4294967295,
+						"description": "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422."
 					},
 					"goto": {
 						"type": [
@@ -28205,7 +28208,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Routing table id to look up when action is lookup"
+						"maximum": 4294967295,
+						"description": "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422."
 					},
 					"goto": {
 						"type": [

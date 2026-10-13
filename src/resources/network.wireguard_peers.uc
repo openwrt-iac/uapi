@@ -1,7 +1,7 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_list = values.as_list;
-let as_list_or_null = values.as_list_or_null;
+let as_word_list_or_null = values.as_word_list_or_null;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 let as_int = values.as_int;
@@ -21,7 +21,7 @@ function fromUci(section) {
 		description: section.description ?? null,
 		public_key: section.public_key ?? null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
-		allowed_ips: as_list_or_null(section.allowed_ips),
+		allowed_ips: as_word_list_or_null(section.allowed_ips),
 		endpoint_host: section.endpoint_host ?? null,
 		endpoint_port: as_int(section.endpoint_port),
 		persistent_keepalive: as_int(section.persistent_keepalive),
@@ -128,7 +128,7 @@ return {
 
 		// route_allowed_ips routes outlive the peer, and the apply needs the previous
 		// allowed_ips to know which prefixes this write may have orphaned.
-		let prev_ips = (existing != null) ? as_list(existing.allowed_ips) : [];
+		let prev_ips = (existing != null) ? (as_word_list_or_null(existing.allowed_ips) ?? []) : [];
 		// `existing` is the raw uci section, so this needs the netifd-faithful read:
 		// a section written by hand or by another tool can carry `true`, and reading
 		// that as false tells the apply the old config installed no routes, so the

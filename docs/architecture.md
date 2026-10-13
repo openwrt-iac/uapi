@@ -431,6 +431,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Authorized SSH keys          | `/etc/dropbear/authorized_keys`             | Indefinite        |
 | Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
+| Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Reaped on revoke, else until reboot |
 | Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, until reboot |
 | Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot      |

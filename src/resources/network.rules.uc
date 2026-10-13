@@ -1,8 +1,10 @@
+let fs = require('fs');
 let values = require('values');
 let platform_bool = values.platform_bool;
 let is_valid_cidr = values.is_valid_cidr;
 let is_valid_ipv4 = values.is_valid_ipv4;
-let as_int = values.as_int;
+let netifd_int = values.netifd_int;
+let rt_table_id = values.rt_table_id;
 
 const VALID_ACTIONS = { "lookup": true, "goto": true, "unreachable": true,
                         "prohibit": true, "blackhole": true, "throw": true };
@@ -16,9 +18,9 @@ function fromUci(section) {
 		out: section.out ?? null,
 		src: section.src ?? null,
 		dest: section.dest ?? null,
-		priority: as_int(section.priority),
-		lookup: as_int(section.lookup),
-		goto: as_int(section['goto']),
+		priority: netifd_int(section.priority),
+		lookup: rt_table_id(section.lookup, () => fs.readfile("/etc/iproute2/rt_tables")),
+		goto: netifd_int(section['goto']),
 		action: section.action ?? "lookup",
 		invert: platform_bool(section.invert, false),
 		mark: section.mark ?? null,
@@ -73,9 +75,13 @@ function validate(json) {
 		             message: "must be a valid IPv4 address or CIDR" });
 
 	let action = json.action ?? "lookup";
-	if (action == "lookup" && (json.lookup == null || json.lookup == ""))
+	if (action == "lookup" && (json.lookup == null || json.lookup === ""))
 		push(errs, { field: "lookup", code: "required",
 		             message: "is required when action is lookup" });
+	// The schema allows 0 because a read reports a lookup that netifd cannot resolve as 0.
+	if (json.lookup === 0)
+		push(errs, { field: "lookup", code: "out_of_range",
+		             message: "must be from 1 to 4294967295: netifd drops a rule whose lookup is 0, or a name it cannot resolve, which reads as 0" });
 	if (action == "goto" && (json['goto'] == null || json['goto'] == ""))
 		push(errs, { field: "goto", code: "required",
 		             message: "is required when action is goto" });
@@ -115,8 +121,8 @@ return {
 		disabled: { type: "boolean", default: false,
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
 		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766 },
-		lookup:   { type: ["integer", "null"], minimum: 0,
-		            description: "Routing table id to look up when action is lookup" },
+		lookup:   { type: ["integer", "null"], minimum: 0, maximum: 4294967295,
+		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422." },
 		goto:     { type: ["integer", "null"], minimum: 0,
 		            description: "Priority of the rule to jump to when action is goto" },
 		action:   { type: "string", enum: keys(VALID_ACTIONS), default: "lookup" },

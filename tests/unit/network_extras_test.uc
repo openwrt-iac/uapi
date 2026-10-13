@@ -266,3 +266,79 @@ t.describe('disabled follows each section type parser, which differ', () => {
 		}
 	});
 });
+
+// netifd reads these through uci's blob.c (strtol base 0, scalar lists split into words) and
+// resolves table names itself. Only aliases and numbers here: rt_tables differs per box.
+t.describe('network routes, rules and bridge_vlans read as netifd does', () => {
+	t.it('routes read hex integers and table aliases, and 0 for a table netifd cannot resolve', () => {
+		let r = routes.fromUci({ '.name': 'r', '.type': 'route', target: '10.0.0.0/24', metric: '0x10',
+			mtu: '0x5dc', table: 'local' }, null);
+		t.assert_equal(r.metric, 16);
+		t.assert_equal(r.mtu, 1500);
+		t.assert_equal(r.table, 255);
+		t.assert_equal(routes.fromUci({ '.name': 'r', '.type': 'route', table: '0x2a' }, null).table, 42);
+		t.assert_equal(routes.fromUci({ '.name': 'r', '.type': 'route', table: 'uapi-no-such-table' }, null).table, 0);
+		t.assert_equal(routes.fromUci({ '.name': 'r', '.type': 'route' }, null).table, null);
+	});
+	t.it('routes refuse table 0 as out of range', () => {
+		let errs = filter(full_validate(routes, { target: '10.0.0.0/24', type: 'blackhole', table: 0 }, null),
+		                  (e) => e.field == 'table');
+		t.assert_deep_equal(map(errs, (e) => e.code), [ 'out_of_range' ]);
+	});
+	t.it('rules read hex integers and lookup aliases, and refuse lookup 0 without calling it required', () => {
+		let r = rules.fromUci({ '.name': 'x', '.type': 'rule', src: '10.0.0.0/24', priority: '0x7531',
+			lookup: 'main', 'goto': '010' }, null);
+		t.assert_equal(r.priority, 30001);
+		t.assert_equal(r.lookup, 254);
+		t.assert_equal(r['goto'], 8);
+		let errs = filter(rules.validate({ src: '10.0.0.0/24', lookup: 0 }, null), (e) => e.field == 'lookup');
+		t.assert_deep_equal(map(errs, (e) => e.code), [ 'out_of_range' ]);
+	});
+	t.it('bridge_vlans read a hex vlan and a scalar ports list as words', () => {
+		let v = bv.fromUci({ '.name': 'v', '.type': 'bridge-vlan', device: 'br-x', vlan: '0x0a',
+			ports: 'lan1:t lan2:u*' }, null);
+		t.assert_equal(v.vlan, 10);
+		t.assert_deep_equal(v.ports, [ 'lan1:t', 'lan2:u*' ]);
+	});
+});
+
+t.describe('network routes and rules through the handler', () => {
+	let tx = { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} };
+	let rh = handler.make(routes, tx);
+	let ruh = handler.make(rules, tx);
+	let ctx = () => ({ request_id: "01hx000000000000000000rtid" });
+	function seeded(route_table, rule_lookup) {
+		return ubus.stub({ uci: { network: {
+			r1: { '.type': 'route', '.anonymous': false, target: '10.9.0.0/24', type: 'blackhole',
+			      metric: '7', table: route_table },
+			n1: { '.type': 'rule', '.anonymous': false, src: '10.9.0.0/24', lookup: rule_lookup },
+		} } });
+	}
+	t.it('a PATCH keeps a stored table name, and a PUT of the read writes its id', () => {
+		let c = seeded('local', 'main');
+		t.assert_equal(rh.patch(c, ctx(), 'r1', { metric: 5 }).status, 200);
+		t.assert_equal(c._state.uci.network.r1.table, 'local');
+		let read = rh.get_one(c, ctx(), 'r1').body;
+		delete read.runtime;
+		t.assert_equal(rh.replace(c, ctx(), 'r1', read).status, 200);
+		t.assert_equal(c._state.uci.network.r1.table, '255');
+	});
+	t.it('a rule with lookup main accepts a PATCH', () => {
+		let c = seeded('local', 'main');
+		t.assert_equal(ruh.patch(c, ctx(), 'n1', { priority: 100 }).status, 200);
+		t.assert_equal(c._state.uci.network.n1.lookup, 'main');
+	});
+	t.it('a table netifd cannot resolve blocks a PUT of the read and is swept, rather than moving the route', () => {
+		let c = seeded('uapi-no-such-table', 'main');
+		let read = rh.get_one(c, ctx(), 'r1').body;
+		delete read.runtime;
+		let r = rh.replace(c, ctx(), 'r1', read);
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(map(filter(r.body.errors, (e) => e.field == 'table'), (e) => e.code), [ 'out_of_range' ]);
+		t.assert_equal(c._state.uci.network.r1.table, 'uapi-no-such-table');
+		t.assert_equal(length(rh.sweep(c)), 1);
+	});
+});

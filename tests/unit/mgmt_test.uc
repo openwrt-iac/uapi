@@ -248,6 +248,14 @@ t.describe('mgmt.targets_mgmt_device', () => {
 		t.assert_true(m.targets_mgmt_device(conn, 'eth9', 'br-solo'));
 	});
 
+	t.it('finds a port in a scalar that holds several, as netifd splits it', () => {
+		let conn = ubus.stub({ uci: { network: {
+			br: { '.type': 'device', '.anonymous': false, name: 'br-two',
+			      type: 'bridge', ports: 'eth5 eth9' },
+		} } });
+		t.assert_true(m.targets_mgmt_device(conn, 'eth9', 'br-two'));
+	});
+
 	t.it('says nothing without a device or a target', () => {
 		t.assert_false(m.targets_mgmt_device(box(), null, 'br-lan'));
 		t.assert_false(m.targets_mgmt_device(box(), 'eth0', null));

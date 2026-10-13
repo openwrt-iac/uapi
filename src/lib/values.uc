@@ -154,6 +154,31 @@ function netifd_int(v) {
 	return (n < -2147483648 || n > 2147483647) ? null : n;
 }
 
+const RT_TABLE_ALIASES = { default: 253, main: 254, local: 255 };
+
+// netifd resolves a route `table` or a rule `lookup` with system_resolve_rt_table: a number
+// through strtoul base 0, then three aliases, then /etc/iproute2/rt_tables, whose reader is only
+// called when the first two miss. netifd drops the route when nothing resolves, and table 0 never
+// does, so 0 is what this returns for both: null would read as no table at all, and a PUT of that
+// read would move the route into the main table.
+function rt_table_id(v, read_rt_tables) {
+	if (type(v) != "string") return null;
+	if (match(v, /^[[:space:]]*[+-]?(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/)) {
+		let n = int(v, 0);
+		if (n < 0 && n >= -4294967295) n += 4294967296;
+		if (n >= 1 && n <= 4294967295) return n;
+	}
+	if (exists(RT_TABLE_ALIASES, v)) return RT_TABLE_ALIASES[v];
+	for (let line in split(read_rt_tables() ?? "", "\n")) {
+		let tok = filter(split(line, /[ \t]+/), (t) => t != "");
+		if (length(tok) < 2 || substr(tok[0], 0, 1) == "#" || tok[1] != v) continue;
+		let id = match(tok[0], /^[0-9]+/);
+		let n = id ? int(id[0]) : 0;
+		return (n <= 4294967295) ? n : 0;
+	}
+	return 0;
+}
+
 function is_valid_ipv4(s) {
 	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
 	for (let part in split(s, ".")) {
@@ -603,7 +628,7 @@ function section_index(conn, pkg, sec_type, key, filter) {
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
-	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int,
+	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
 	has_control_chars, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,

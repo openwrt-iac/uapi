@@ -110,6 +110,26 @@ t.describe('property: fromUci -> toUci -> fromUci is stable', () => {
 			  proto: 'static', device: 'br-hex', ipaddr: '10.0.8.1/24 10.0.8.2/24', metric: '0x10',
 			  mtu: '0x578', ip6weight: '010', dns: '192.0.2.1 192.0.2.2' },
 		] },
+		{ name: "network.routes", file: "network.routes.uc", fixtures: [
+			{ '.name': 'r_hex', '.anonymous': false, '.type': 'route', interface: 'lan',
+			  target: '10.8.0.0/24', table: 'local', metric: '0x10', mtu: '0x5dc' },
+		] },
+		{ name: "network.rules", file: "network.rules.uc", fixtures: [
+			{ '.name': 'n_hex', '.anonymous': false, '.type': 'rule', src: '10.1.0.0/16',
+			  lookup: 'main', priority: '0x7531' },
+		] },
+		{ name: "network.devices", file: "network.devices.uc", fixtures: [
+			{ '.name': 'br_hex', '.anonymous': false, '.type': 'device', name: 'br-hex',
+			  type: 'bridge', ports: 'lan3 lan4', mtu: '0x5dc' },
+		] },
+		{ name: "network.bridge_vlans", file: "network.bridge_vlans.uc", fixtures: [
+			{ '.name': 'bv_hex', '.anonymous': false, '.type': 'bridge-vlan', device: 'br-hex',
+			  vlan: '0x0a', ports: 'lan3:u* lan4:t' },
+		] },
+		{ name: "network.wireguard_peers", file: "network.wireguard_peers.uc", fixtures: [
+			{ '.name': 'p_words', '.anonymous': false, '.type': 'wireguard_wg0',
+			  public_key: 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=', allowed_ips: '10.9.0.4/32 10.9.1.0/24' },
+		] },
 		{ name: "unbound.server", file: "unbound.server.uc", fixtures: [
 			{ '.name': 'ub_main', '.type': 'unbound',
 			  enabled: '1', listen_port: '5353', recursion: 'default',

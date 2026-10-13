@@ -1,7 +1,9 @@
+let fs = require('fs');
 let values = require('values');
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
-let as_int = values.as_int;
+let netifd_int = values.netifd_int;
+let rt_table_id = values.rt_table_id;
 let platform_bool = values.platform_bool;
 
 const VALID_TYPES = {
@@ -19,9 +21,9 @@ function fromUci(section) {
 		target: section.target ?? null,
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
-		table: as_int(section.table),
-		metric: as_int(section.metric),
-		mtu: as_int(section.mtu),
+		table: rt_table_id(section.table, () => fs.readfile("/etc/iproute2/rt_tables")),
+		metric: netifd_int(section.metric),
+		mtu: netifd_int(section.mtu),
 		source: section.source ?? null,
 		type: section.type ?? "unicast",
 		// netifd omits a disabled section entirely, so without this a route that does not
@@ -70,6 +72,11 @@ function validate(json, conn) {
 		push(errs, { field: "source", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
 
+	// The schema allows 0 because a read reports a table that netifd cannot resolve as 0.
+	if (json.table === 0)
+		push(errs, { field: "table", code: "out_of_range",
+		             message: "must be from 1 to 4294967295: netifd drops a route whose table is 0, or a name it cannot resolve, which reads as 0" });
+
 	let needs_iface = (json.type == null || json.type == "unicast");
 	if (conn != null && needs_iface && json.interface != null && json.interface != "") {
 		if (values.section_index(conn, 'network', 'interface', '.name')[json.interface] == null)
@@ -99,8 +106,8 @@ return {
 		             description: "IPv4 netmask if target is an address (not CIDR)" },
 		gateway:   { type: ["string", "null"],
 		             description: "IPv4 next-hop address" },
-		table:     { type: ["integer", "null"], minimum: 0,
-		             description: "Routing table id" },
+		table:     { type: ["integer", "null"], minimum: 0, maximum: 4294967295,
+		             description: "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route; a write of 0 answers 422." },
 		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		source:    { type: ["string", "null"],

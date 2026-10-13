@@ -462,6 +462,14 @@ stale enough to be misleading:
   (`PROPERTY_ITERS=1000 make test-property`), which was the iteration gate this
   section asked for.
 
+## Objectives for the next major
+
+- **Routes `table` and rules `lookup` accept table names on write.** netifd resolves both
+  through `/etc/iproute2/rt_tables`, and LuCI writes the name. Since 3.2.0 a read resolves a
+  stored name to its id, so the integer type stays and a PUT of the read writes the id. Taking
+  a name on write needs the type to become a string or a union, which is breaking under
+  `docs/versioning.md` ([#210](https://github.com/openwrt-iac/uapi/issues/210)).
+
 ## Out of scope by design
 
 - **Localization of error `message` strings.** English-only; codes are

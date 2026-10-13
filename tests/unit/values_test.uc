@@ -244,6 +244,39 @@ t.describe('values.netifd_int', () => {
 	});
 });
 
+t.describe('values.rt_table_id', () => {
+	let file = (text) => () => text;
+	let untouched = () => die("the reader ran for a value that needs no file");
+	t.it('reads numbers as strtoul with base 0 does, without the file', () => {
+		t.assert_equal(v.rt_table_id('42', untouched), 42);
+		t.assert_equal(v.rt_table_id('0x10', untouched), 16);
+		t.assert_equal(v.rt_table_id('010', untouched), 8);
+		t.assert_equal(v.rt_table_id(' +7', untouched), 7);
+		t.assert_equal(v.rt_table_id('-1', untouched), 4294967295);
+		t.assert_equal(v.rt_table_id('4294967295', untouched), 4294967295);
+	});
+	t.it('reads the three aliases without the file', () => {
+		t.assert_equal(v.rt_table_id('default', untouched), 253);
+		t.assert_equal(v.rt_table_id('main', untouched), 254);
+		t.assert_equal(v.rt_table_id('local', untouched), 255);
+	});
+	t.it('looks other names up in rt_tables, first match winning', () => {
+		let rt = file('# comment\n128\tprelocal\n0\tunspec\n4255 vpn\n#4256 off\n10abc odd\n4257 vpn\n');
+		t.assert_equal(v.rt_table_id('vpn', rt), 4255);
+		t.assert_equal(v.rt_table_id('prelocal', rt), 128);
+		t.assert_equal(v.rt_table_id('odd', rt), 10);
+		t.assert_equal(v.rt_table_id('off', rt), 0);
+	});
+	t.it('reads 0 for what netifd cannot resolve, and null when nothing is set', () => {
+		let rt = file('0\tunspec\n');
+		for (let s in [ '0', '08', '254 ', '', 'unspec', 'nosuch', '4294967296' ])
+			t.assert_equal(v.rt_table_id(s, rt), 0, s);
+		t.assert_equal(v.rt_table_id('vpn', file(null)), 0);
+		t.assert_equal(v.rt_table_id(null, untouched), null);
+		t.assert_equal(v.rt_table_id([ '42' ], untouched), null);
+	});
+});
+
 t.describe('values.ipv6_words', () => {
 	t.it('expands to eight 16-bit words', () => {
 		t.assert_deep_equal(v.ipv6_words('::1'), [ 0, 0, 0, 0, 0, 0, 0, 1 ]);
