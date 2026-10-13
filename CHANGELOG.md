@@ -71,6 +71,17 @@ All notable changes to this project will be documented in this file. Format foll
   allows, so the old minimum of 1 did not describe the read. That is branch (b) of the type
   carve-out in `docs/versioning.md`. A write of 0 was already refused. A peer with an endpoint
   host and a port of 0 is no longer applied to the kernel. (#219)
+- **`network/interfaces.mtu` and `network/devices.mtu` refuse a value below 68, with 422
+  `out_of_range`.** netifd applies a device mtu only from 68 up and ignores a smaller one
+  without a log, so such a write answered 200 with no effect. On proto wireguard,
+  `wireguard.sh` applies it itself, and below 68 the device carries no IPv4 address while
+  netifd reports the interface up. That tightening uses the carve-out in `docs/versioning.md`
+  for payloads that produced a state no caller can rely on, and it fails loudly. A stored
+  smaller value reads as it is, `GET /diagnostics?validate=1` lists it, and every write to that
+  section answers 422 until it is fixed. LuCI's device form refuses values below 576, and uapi
+  follows netifd. Measured on OpenWrt 25.12.5: a bridge with `mtu '60'` keeps 1500 and one with
+  `mtu '1400'` gets 1400, and a wireguard interface with `mtu '60'` gets MTU 60 and no IPv4
+  address. (#220)
 
 ### Deprecated
 

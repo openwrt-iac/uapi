@@ -359,6 +359,12 @@ function validate(json, conn, id, delta) {
 	    && !is_valid_ipv6_cidr(json.reqprefix))
 		push(errs, { field: "reqprefix", code: "invalid_format",
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
+	// The schema allows a smaller value so that a stored one reads as it is. netifd applies a
+	// device mtu only from 68 up, and wireguard.sh applies a smaller one, which leaves the device
+	// with no IPv4 address while netifd reports the interface up.
+	if (type(json.mtu) == "int" && json.mtu < 68)
+		push(errs, { field: "mtu", code: "out_of_range",
+		             message: "must be at least 68: netifd ignores a smaller device mtu, and a WireGuard device below 68 carries no IPv4" });
 	if (type(json.ip6class) == "array")
 		for (let i = 0; i < length(json.ip6class); i++)
 			if (type(json.ip6class[i]) != "string" || !match(json.ip6class[i], /^[A-Za-z0-9_]+$/))
@@ -455,7 +461,8 @@ return {
 		             description: "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any." },
 		ip6weight: { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
 		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
-		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535 },
+		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535,
+		             description: "MTU of the interface's device. netifd applies it only from 68 up, and wireguard.sh applies a smaller one that leaves the device with no IPv4, so a stored smaller value reads as it is and a write below 68 answers 422." },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,

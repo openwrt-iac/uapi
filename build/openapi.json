@@ -26467,7 +26467,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "MTU of the interface's device. netifd applies it only from 68 up, and wireguard.sh applies a smaller one that leaves the device with no IPv4, so a stored smaller value reads as it is and a write below 68 answers 422."
 					},
 					"auto": {
 						"type": "boolean",
@@ -27118,7 +27119,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "MTU of the interface's device. netifd applies it only from 68 up, and wireguard.sh applies a smaller one that leaves the device with no IPv4, so a stored smaller value reads as it is and a write below 68 answers 422."
 					},
 					"auto": {
 						"type": "boolean",
@@ -27666,7 +27668,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "Device MTU. netifd applies it only from 68 up, so a stored smaller value reads as it is and a write below 68 answers 422."
 					},
 					"macaddr": {
 						"type": [
@@ -27772,7 +27775,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "Device MTU. netifd applies it only from 68 up, so a stored smaller value reads as it is and a write below 68 answers 422."
 					},
 					"macaddr": {
 						"type": [
