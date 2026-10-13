@@ -106,6 +106,9 @@ t.describe('property: fromUci -> toUci -> fromUci is stable', () => {
 			{ '.name': 'lan_core', '.anonymous': false, '.type': 'interface',
 			  proto: 'static', device: 'br-core', ipaddr: ['10.0.7.1/24'], metric: '7',
 			  defaultroute: '0', delegate: '0', ip4table: '4207' },
+			{ '.name': 'lan_hex', '.anonymous': false, '.type': 'interface',
+			  proto: 'static', device: 'br-hex', ipaddr: '10.0.8.1/24 10.0.8.2/24', metric: '0x10',
+			  mtu: '0x578', ip6weight: '010', dns: '192.0.2.1 192.0.2.2' },
 		] },
 		{ name: "unbound.server", file: "unbound.server.uc", fixtures: [
 			{ '.name': 'ub_main', '.type': 'unbound',

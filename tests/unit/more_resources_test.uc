@@ -721,6 +721,34 @@ t.describe('network.interfaces proto scope', () => {
 	});
 });
 
+// The values that netifd reads differently from a plain decimal or a single entry: uci's
+// blob.c parses INT32 options with strtol base 0 and splits a scalar ARRAY option into words.
+t.describe('network.interfaces reads as netifd does', () => {
+	t.it('reads the INT32 options in hex and octal, and drops what netifd drops', () => {
+		let v = interfaces.fromUci({ '.name': 'x', proto: 'static', metric: '0x10', ip6assign: '0x40',
+			ip6weight: '010', mtu: '0X578' });
+		t.assert_equal(v.metric, 16);
+		t.assert_equal(v.ip6assign, 64);
+		t.assert_equal(v.ip6weight, 8);
+		t.assert_equal(v.mtu, 1400);
+		let bad = interfaces.fromUci({ '.name': 'x', proto: 'static', metric: '16 ', mtu: '08', ip6assign: '' });
+		t.assert_equal(bad.metric, null);
+		t.assert_equal(bad.mtu, null);
+		t.assert_equal(bad.ip6assign, null);
+	});
+	t.it('reads a scalar list option as its whitespace-separated words', () => {
+		let st = interfaces.fromUci({ '.name': 'x', proto: 'static', ipaddr: '10.0.0.1/24 10.0.0.2/24',
+			ip6addr: 'fd00::1/64\tfd00::2/64', dns: '192.0.2.1 192.0.2.2' });
+		t.assert_deep_equal(st.ipaddrs, [ '10.0.0.1/24', '10.0.0.2/24' ]);
+		t.assert_equal(st.ipaddr, '10.0.0.1/24');
+		t.assert_deep_equal(st.ip6addrs, [ 'fd00::1/64', 'fd00::2/64' ]);
+		t.assert_deep_equal(st.dns, [ '192.0.2.1', '192.0.2.2' ]);
+		let wg = interfaces.fromUci({ '.name': 'x', proto: 'wireguard', addresses: '10.9.0.1/24 fd00:9::1/64' });
+		t.assert_deep_equal(wg.addresses, [ '10.9.0.1/24', 'fd00:9::1/64' ]);
+		t.assert_equal(interfaces.fromUci({ '.name': 'x', proto: 'static', ipaddr: '' }).ipaddrs, null);
+	});
+});
+
 t.describe('firewall.redirects reflection', () => {
 	t.it('fromUci surfaces reflection as null when uci has nothing set (preserves daemon default on PATCH)', () => {
 		let r = redirects.fromUci({

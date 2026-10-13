@@ -224,6 +224,26 @@ t.describe('values.as_word_list_or_null', () => {
 	});
 });
 
+t.describe('values.netifd_int', () => {
+	t.it('reads hex, octal and decimal as strtol with base 0 does', () => {
+		t.assert_equal(v.netifd_int('0x10'), 16);
+		t.assert_equal(v.netifd_int('0X578'), 1400);
+		t.assert_equal(v.netifd_int('010'), 8);
+		t.assert_equal(v.netifd_int('16'), 16);
+		t.assert_equal(v.netifd_int('0'), 0);
+		t.assert_equal(v.netifd_int(' \t+7'), 7);
+		t.assert_equal(v.netifd_int('-0x10'), -16);
+		t.assert_equal(v.netifd_int('0x7fffffff'), 2147483647);
+		t.assert_equal(v.netifd_int('-2147483648'), -2147483648);
+	});
+	t.it('reads null for what blob.c drops, and for "" and values past int32', () => {
+		for (let s in [ '16 ', '08', '0x', '1e3', 'abc', '', '2147483648', '0xffffffff', '-2147483649' ])
+			t.assert_equal(v.netifd_int(s), null, s);
+		t.assert_equal(v.netifd_int(null), null);
+		t.assert_equal(v.netifd_int([ '16' ]), null);
+	});
+});
+
 t.describe('values.ipv6_words', () => {
 	t.it('expands to eight 16-bit words', () => {
 		t.assert_deep_equal(v.ipv6_words('::1'), [ 0, 0, 0, 0, 0, 0, 0, 1 ]);

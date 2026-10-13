@@ -3,7 +3,6 @@ let strict_bool = values.strict_bool;
 let ids = require('ids');
 let platform_bool = values.platform_bool;
 let as_list = values.as_list;
-let as_list_or_null = values.as_list_or_null;
 let as_word_list_or_null = values.as_word_list_or_null;
 let is_valid_ipv4 = values.is_valid_ipv4;
 let is_valid_cidr = values.is_valid_cidr;
@@ -11,6 +10,7 @@ let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ipv6 = values.is_valid_ipv6;
 let is_valid_ipv6_cidr = values.is_valid_ipv6_cidr;
 let as_int = values.as_int;
+let netifd_int = values.netifd_int;
 let ipv6_words = values.ipv6_words;
 
 const PKG = "network";
@@ -109,10 +109,8 @@ function fromUci(section, conn) {
 	// older configs used `option ipaddr 'x.x.x.x'`. Surface BOTH forms:
 	// `ipaddr` keeps the v1.0/v1.1 contract (a single string; the first entry
 	// when uci has a list), and a new `ipaddrs` array holds the full set.
-	// Coerced by hand rather than through as_list_or_null because the empty string has to
-	// collapse too: a `option ipaddr ''` is uci's way of holding nothing here.
-	let ipaddr_raw = (section.ipaddr == "") ? null : section.ipaddr;
-	let ipaddrs = values.as_list_or_null(ipaddr_raw);
+	// netifd reads a scalar as whitespace-separated words, and `option ipaddr ''` as nothing.
+	let ipaddrs = as_word_list_or_null(section.ipaddr);
 	let ipaddr_first = (ipaddrs != null) ? ipaddrs[0] : null;
 	let view = {
 		id: section['.name'],
@@ -124,21 +122,21 @@ function fromUci(section, conn) {
 		// uci holds IPv6 static addressing in a separate `list ip6addr`, and modelling only
 		// the v4 list made an IPv6-addressed interface read back with no addresses at all and
 		// no indication that a value had been seen and dropped.
-		ip6addrs: as_list_or_null(section.ip6addr),
+		ip6addrs: as_word_list_or_null(section.ip6addr),
 		netmask: section.netmask ?? null,
 		gateway: section.gateway ?? null,
 		broadcast: section.broadcast ?? null,
 		ip6gw: section.ip6gw ?? null,
 		ip6prefix: section.ip6prefix ?? null,
-		dns: as_list_or_null(section.dns),
+		dns: as_word_list_or_null(section.dns),
 		// netifd reads the ip6assign group for every proto. It once lived in the dhcpv6 block, whose
 		// script never reads ip6hint, so a static LAN wrote it into nothing and a PUT erased LuCI's.
-		ip6assign: as_int(section.ip6assign),
+		ip6assign: netifd_int(section.ip6assign),
 		ip6hint: section.ip6hint ?? null,
 		ip6ifaceid: section.ip6ifaceid ?? null,
 		ip6class: as_word_list_or_null(section.ip6class),
-		ip6weight: as_int(section.ip6weight),
-		mtu: as_int(section.mtu),
+		ip6weight: netifd_int(section.ip6weight),
+		mtu: netifd_int(section.mtu),
 		auto: platform_bool(section.auto, true),
 		// `auto` controls bring-up at boot; `disabled` is stronger and separate: netifd
 		// does not register the interface at all, so it has no ubus object and its
@@ -155,7 +153,7 @@ function fromUci(section, conn) {
 		disabled: strict_bool(section.disabled),
 		ip4table: section.ip4table ?? null,
 		ip6table: section.ip6table ?? null,
-		metric: as_int(section.metric),
+		metric: netifd_int(section.metric),
 		// The booleans below read null when uci has nothing explicitly set. Surfacing the daemon's
 		// effective default would have the patch merge write it into uci on the next PATCH,
 		// silently changing the section's surface area for the client.
@@ -172,7 +170,7 @@ function fromUci(section, conn) {
 		reqaddress: section.reqaddress ?? null,
 		sourcefilter: (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null,
 		listen_port: as_int(section.listen_port),
-		addresses: as_list_or_null(section.addresses),
+		addresses: as_word_list_or_null(section.addresses),
 		nohostroute: strict_bool(section.nohostroute),
 		has_private_key: (section.private_key != null && section.private_key != ""),
 		runtime: fetch_runtime(conn, section['.name']),

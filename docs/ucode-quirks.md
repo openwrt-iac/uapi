@@ -157,6 +157,22 @@ A related trap the table cannot catch: an option that is not a boolean at all.
 `lldpd`'s `lldp_description` is free text. Both were typed boolean, so a write
 replaced the operator's value with `"1"`.
 
+### netifd reads integers and lists through the same converter
+
+uci's `blob.c` is also how netifd reads every INT32 and ARRAY option
+(`uci_attr_to_blob` and `uci_array_to_blob`), and neither matches the plain reader:
+
+| Option type | What netifd takes | Example | uapi helper |
+|---|---|---|---|
+| INT32: `metric`, `ip6assign`, `ip6weight`, the device `mtu` | `strtol(v, &end, 0)` with nothing left over: hex after `0x`, octal after `0` | `0x10` is 16, `010` is 8, and `16 ` or `08` drop the option | `netifd_int` |
+| ARRAY: `ipaddr`, `ip6addr`, `dns` | a list as it is, and a scalar split on spaces and tabs | `option dns '192.0.2.1 192.0.2.2'` is two servers | `as_word_list_or_null` |
+
+`as_int` reads decimal only, which is right for a reader that parses base 10 and
+wrong for netifd. `netifd_int` reads `""` and a value past int32 as null, where
+blob.c gives 0 and a truncated number that differs between 32- and 64-bit targets.
+A proto script that loops `for a in ${addresses}` splits a scalar the same way as
+an ARRAY option.
+
 ### Real `ubus` and `uci` modules are `.so` packages
 
 They live in the default `REQUIRE_SEARCH_PATH` ahead of any project paths. Naming a local lib `ubus.uc` shadows nothing because the `.so` wins. uapi calls its abstraction `bus.uc` to avoid the collision.
