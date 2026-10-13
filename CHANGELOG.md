@@ -77,6 +77,17 @@ All notable changes to this project will be documented in this file. Format foll
   declared an integer. That uses branch (b) of the type carve-out in `docs/versioning.md`: the
   server broke its declared type for every such interface. No read changes, because the value was
   already null. (#208)
+- **`network/interfaces` reads integers and lists as netifd reads them.** uci hands netifd an
+  integer option through `strtol` with base 0. uapi read decimals only, so `metric '0x10'`, which
+  netifd applies as 16, read null, and `ip6weight '010'`, which netifd takes as 8, read 10. A
+  scalar `dns`, `ipaddr`, `ip6addr` or wireguard `addresses` with several words read as one entry,
+  while netifd, and the wireguard script for `addresses`, use each word. For example, `option dns '192.0.2.1 192.0.2.2'` is two servers, and
+  a PUT of the old read of a scalar `ipaddr` with two addresses answered 422. `metric`,
+  `ip6assign`, `ip6weight` and `mtu` now read hex and octal, and the lists read as their words.
+  An empty string reads null, as before. A value past int32 now reads null too, because netifd
+  truncates it differently on 32- and 64-bit targets. Measured on OpenWrt 25.12.5:
+  `metric '0x10'` gives routes with metric 16, `mtu '0x578'` on wireguard gives mtu 1400, and
+  `metric '16 '` gives routes without a metric, which uapi reads as null. (#209)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

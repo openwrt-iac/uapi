@@ -143,6 +143,17 @@ function as_int(v) {
 	return null;
 }
 
+// uci's blob.c hands netifd an INT32 option through strtol(v, &end, 0) and drops the option
+// when anything is left over: `0x10` is 16, `010` is 8, and `16 ` is nothing at all. blob.c
+// takes "" as 0 and truncates a value past int32 differently on 32- and 64-bit targets, so both
+// read null here.
+function netifd_int(v) {
+	if (type(v) != "string" || !match(v, /^[[:space:]]*[+-]?(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/))
+		return null;
+	let n = int(v, 0);
+	return (n < -2147483648 || n > 2147483647) ? null : n;
+}
+
 function is_valid_ipv4(s) {
 	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
 	for (let part in split(s, ".")) {
@@ -592,7 +603,7 @@ function section_index(conn, pkg, sec_type, key, filter) {
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
-	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int,
+	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int,
 	has_control_chars, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,

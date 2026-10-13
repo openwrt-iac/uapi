@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+
+. tests/integration/lib/install_uapi.sh
+install_uapi
+
+URL=http://127.0.0.1:8080/api/v3
+ADMIN="Authorization: Bearer $ADMIN_TOKEN"
+BRIDGE=br-uapi54
+fail() { echo "FAIL: $*"; exit 1; }
+call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
+body() { printf '%s\n' "$1" | sed '$d'; }
+status() { printf '%s\n' "$1" | tail -1; }
+uci_get() { $SSH "uci -q get network.$1" || true; }
+routes4254() { $SSH 'ip -4 route show table all' | grep 'table 4254' || true; }
+wait_for() {
+	local what="$1" check="$2"
+	for _ in $(seq 20); do
+		eval "$check" && return 0
+		sleep 1
+	done
+	fail "$what"
+}
+
+ensure_wireguard || fail "no usable wireguard support, so the mtu check cannot run"
+
+# Interfaces first and the bridge afterwards, each with its own reload: removing both in one
+# reload once left netifd hung until procd respawned it.
+cleanup() {
+	$SSH "uci -q delete network.uapi54; uci -q delete network.uapi54w; uci commit network;
+		/etc/init.d/network reload; sleep 2; uci -q delete network.uapi54_dev; uci commit network;
+		/etc/init.d/network reload" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# Written through uci, as a hand edit leaves them: uapi itself writes decimals and lists. The
+# routes go into table 4254, so the box's own routes never move.
+$SSH "uci set network.uapi54_dev=device; uci set network.uapi54_dev.name=$BRIDGE;
+	uci set network.uapi54_dev.type=bridge; uci set network.uapi54_dev.bridge_empty=1;
+	uci set network.uapi54=interface; uci set network.uapi54.proto=static; uci set network.uapi54.device=$BRIDGE;
+	uci set network.uapi54.ipaddr='10.253.4.1/24 10.253.4.2/24'; uci set network.uapi54.metric=0x10;
+	uci set network.uapi54.ip4table=4254; uci set network.uapi54.ip6weight=010;
+	uci set network.uapi54.dns='192.0.2.1 192.0.2.2';
+	uci set network.uapi54w=interface; uci set network.uapi54w.proto=wireguard;
+	uci set network.uapi54w.private_key=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=;
+	uci set network.uapi54w.addresses=10.253.5.1/24; uci set network.uapi54w.ip4table=4254;
+	uci set network.uapi54w.mtu=0x578;
+	uci commit network; /etc/init.d/network reload"
+
+echo "--- hex and octal integers read as the values netifd uses ---"
+wait_for "no route with metric 16 in table 4254" \
+	'routes4254 | grep -q "^10.253.4.0/24 dev $BRIDGE table 4254 .*metric 16"'
+wait_for "wireguard did not set mtu 1400 from 0x578" '$SSH "ip link show uapi54w" | grep -q " mtu 1400 "'
+r=$(body "$(call "$URL/network/interfaces/uapi54")")
+printf '%s' "$r" | jq -e '.metric == 16 and .ip6weight == 8' >/dev/null || fail "metric 0x10 or ip6weight 010 read wrong: $r"
+r=$(body "$(call "$URL/network/interfaces/uapi54w")")
+printf '%s' "$r" | jq -e '.mtu == 1400' >/dev/null || fail "mtu 0x578 read wrong: $r"
+
+echo "--- a scalar list reads as the words netifd uses ---"
+$SSH "ip -4 addr show dev $BRIDGE" | grep -q "inet 10.253.4.2/24" || fail "netifd did not add the second address"
+[ "$($SSH "ubus call network.interface.uapi54 status" | jq -c '.["dns-server"]')" = '["192.0.2.1","192.0.2.2"]' ] \
+	|| fail "netifd did not split dns into two servers"
+read_back=$(body "$(call "$URL/network/interfaces/uapi54")")
+printf '%s' "$read_back" | jq -e '.ipaddrs == ["10.253.4.1/24","10.253.4.2/24"] and .ipaddr == "10.253.4.1/24"
+	and .dns == ["192.0.2.1","192.0.2.2"]' >/dev/null || fail "the scalar lists read wrong: $read_back"
+
+echo "--- a PUT of the read writes the same values in the form uapi writes ---"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54" -d "$read_back")
+[ "$(status "$r")" = 200 ] || fail "PUT of the read expected 200: $r"
+[ "$(uci_get uapi54.metric)" = 16 ] && [ "$(uci_get uapi54.ip6weight)" = 8 ] || fail "PUT did not write the decimals"
+# uci get prints a list and a scalar alike, so the form comes from uci show.
+[ "$($SSH 'uci -q show network.uapi54.ipaddr')" = "network.uapi54.ipaddr='10.253.4.1/24' '10.253.4.2/24'" ] \
+	&& [ "$($SSH 'uci -q show network.uapi54.dns')" = "network.uapi54.dns='192.0.2.1' '192.0.2.2'" ] \
+	|| fail "PUT did not write the addresses and dns as lists: $($SSH 'uci -q show network.uapi54')"
+wait_for "the route lost metric 16 after the PUT" \
+	'routes4254 | grep -q "^10.253.4.0/24 dev $BRIDGE table 4254 .*metric 16"'
+
+echo "--- an integer that netifd drops reads null ---"
+$SSH "uci set network.uapi54.metric='16 '; uci commit network; /etc/init.d/network reload"
+# Matched loosely: on the CI image, the route did not match an exact `scope link$` line.
+for _ in $(seq 20); do
+	route=$(routes4254 | grep "^10.253.4.0/24 dev $BRIDGE " || true)
+	[ -n "$route" ] && ! printf '%s' "$route" | grep -q metric && break
+	sleep 1
+done
+[ -n "$route" ] && ! printf '%s' "$route" | grep -q metric \
+	|| fail "netifd kept a metric for '16 ', or the route is gone: '$route'"
+r=$(body "$(call "$URL/network/interfaces/uapi54")")
+printf '%s' "$r" | jq -e '.metric == null' >/dev/null || fail "metric '16 ' read as a number: $r"
+
+echo "network/interfaces reads ok"
