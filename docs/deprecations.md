@@ -8,24 +8,30 @@ Policy: a deprecation in a minor release means both forms (old and new) are acce
 
 ## Active deprecations
 
-None. 3.0.0 removed everything 2.5.0 had announced, and nothing new is deprecated yet.
+| Field | Replaced by | Deprecated since | Removal target | Migration |
+|---|---|---|---|---|
+| `network/interfaces.ip6prefix` (a string on write) | an array of prefixes | 3.2.0 (targeted, not yet released) | v4 | Send an array. A space-separated string is split into words as netifd splits a stored one, so the prefixes it meant do not change. The read is not part of this deprecation but changed in 3.2.0 itself, as a fix: it is always an array, including for a section that stores one prefix as a scalar, which netifd reads the same way. So a client that reads `ip6prefix` has to accept an array from 3.2.0 on. No `deprecated: true` flag, for the reason given under "How to migrate". |
+
+Every entry above must also appear in the published spec's own description, under
+"Upcoming in v4". That is checked by `make lint-doc-refs`.
 
 A field belongs in this section if and only if it is currently accepted-but-deprecated. Once
 removed in a major it moves to `Removed in past releases` below.
 
 ## How to migrate
 
-For each deprecated input field your client sends, switch to the replacement column. uapi accepts both during the window, so the migration can be staged: update writes first, observe nothing breaks, then drop the old field. Reads are unaffected (response shape unchanged during the window).
+For each deprecated input field your client sends, switch to the replacement column. uapi accepts both during the window, so the migration can be staged: update writes first, observe nothing breaks, then drop the old field. Reads do not change during the window. When the release that opens a window also changes a read, its row says so.
 
-The OpenAPI spec at `/openapi.json` carries `deprecated: true` on every deprecated request field. Codegen tools that respect that flag (openapi-generator, oapi-codegen, etc.) will emit warnings in the generated client when you regenerate; that's the signal your client has surface area to migrate.
+The OpenAPI spec at `/openapi.json` carries `deprecated: true` on every deprecated request field that disappears as a whole. Codegen tools that respect that flag (openapi-generator, oapi-codegen, etc.) will emit warnings in the generated client when you regenerate; that's the signal your client has surface area to migrate.
 
-`network/interfaces.ipaddr` was the exception, and deliberately so. OpenAPI's
-`deprecated` is a property-level flag with no read/write split, so setting it
-would have told a generator the field was disappearing when in fact it survives
-as a read field and only lost its write half. The v3 spec says it precisely:
-`readOnly: true` in the response schema, and no `ipaddr` at all in the request
-one. While the window was open the announcement lived in this table and in the
-field's own `description`, which was the honest signal available.
+A field that stays and loses only a write form carries no flag, and deliberately so.
+OpenAPI's `deprecated` is a property-level flag with no read/write split, so setting it
+would tell a generator the field was disappearing. `network/interfaces.ipaddr` was the
+first case: it survived as a read field and lost its write half, and the v3 spec says it
+precisely, with `readOnly: true` in the response schema and no `ipaddr` at all in the
+request one. `network/interfaces.ip6prefix` is the current case: it keeps its array form
+and loses only the string form on write. While a window is open, the announcement lives
+in this table and in the field's own `description`, which is the honest signal available.
 
 ## Announced response-shape changes
 

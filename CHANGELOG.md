@@ -58,6 +58,12 @@ All notable changes to this project will be documented in this file. Format foll
   where a PUT of the read used to remove the option and move the route into the main table.
   (#212)
 
+### Deprecated
+
+- **`network/interfaces.ip6prefix` as a string on write.** v4 removes it, so send an array. The
+  row is in `docs/deprecations.md`, and the "Upcoming in v4" block of the spec announces it.
+  (#217)
+
 ### Fixed
 
 - **`network/interfaces.ip6hint` and `ip6ifaceid` now apply to every proto, as netifd reads
@@ -116,6 +122,27 @@ All notable changes to this project will be documented in this file. Format foll
   with `metric '0x10'` gives a route in that table with metric 16, `table '0'` gives no route,
   a scalar `ports` with two names gives two bridge members, and a scalar `allowed_ips` with two
   prefixes gives two routes, which a DELETE withdraws. (#212)
+- **`network/interfaces.ip6prefix` reads as an array, the list that netifd reads.** netifd's
+  static proto, `dhcpv6.sh`, `wireguard.sh` and `6in4.sh` read `ip6prefix` as a list, and
+  LuCI's wireguard and 6in4 forms write `list ip6prefix`, even for one prefix. uapi declared a
+  string, so such a section read as an array that broke the declared type. A PUT of that read
+  answered 422 `invalid_type`, every merge-PATCH of the section answered 422 `invalid_format`,
+  even `{"auto": false}`, and `GET /diagnostics?validate=1` flagged it. A read is now always an
+  array, also for a stored scalar, which netifd reads the same way. **Carve-out
+  (`docs/versioning.md`, branch b): a response type changed in a minor, because the server
+  violated its own declared `["string", "null"]` for every section that stores
+  `list ip6prefix`.** A static section, which LuCI writes as a scalar, read back correctly, so
+  branch (a) is not claimed. The change fails loudly for a typed reader: every interface with
+  `ip6prefix` now reads an array, so terraform-provider-uapi before 3.2.0 fails to refresh such
+  an interface. It is silent for a script: `jq -r .ip6prefix` now prints a JSON array, so grep
+  scripts for `.ip6prefix`. Writers keep working, because a string is still accepted and split
+  into words, as netifd splits a stored one. One prefix is stored as a scalar and several as a
+  list, because blob.c drops a list given to a string attribute, and 6rd, map and 464xlat read
+  `ip6prefix` as a string. So a PUT of the read turns LuCI's one-entry list into a scalar,
+  which no reader tells apart. `option ip6prefix ''` reads null instead of `""`. The ETag of
+  each interface with `ip6prefix` changes once. Measured on OpenWrt 25.12.5: two listed
+  prefixes on a static interface both appear in its `ipv6-prefix` status and survive a PUT of
+  the read. (#217)
 
 - **Installing, upgrading or removing uapi no longer starts a uhttpd that the operator
   disabled.** The install hook reloaded uhttpd, the postinst restarted it and the prerm reloaded

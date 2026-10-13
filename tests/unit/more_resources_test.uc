@@ -675,7 +675,7 @@ t.describe('network.interfaces proto scope', () => {
 			ip6prefix: '2001:db8:1::/48', nohostroute: '1', metric: '3' });
 		t.assert_equal(v.ipaddr, '192.0.2.1');
 		t.assert_deep_equal(v.ip6addrs, [ '2001:db8::2/64' ]);
-		t.assert_equal(v.ip6prefix, '2001:db8:1::/48');
+		t.assert_deep_equal(v.ip6prefix, [ '2001:db8:1::/48' ]);
 		t.assert_true(v.nohostroute);
 		t.assert_equal(v.metric, 3);
 		for (let k in [ 'hostname', 'listen_port', 'netmask', 'has_private_key', 'broadcast_flag' ])
@@ -1192,5 +1192,37 @@ t.describe('vnstat/config carries the interface list vnstat actually reads', () 
 	});
 	t.it('accepts a plausible device list', () => {
 		t.assert_equal(length(vc.validate({ interfaces: ['br-lan', 'eth0.30'] })), 0);
+	});
+});
+
+// netifd and the proto scripts read ip6prefix as a list, and LuCI writes a list for wireguard
+// and 6in4. A read is always an array; a write still takes a space-separated string.
+t.describe('network.interfaces ip6prefix is a list', () => {
+	let read = (v) => interfaces.fromUci({ '.name': 'x', proto: 'static', ip6prefix: v }, null).ip6prefix;
+	let write = (v) => interfaces.toUci({ proto: 'static', ip6prefix: v }).ip6prefix;
+	t.it('reads a list, a one-entry list and a scalar of words as an array', () => {
+		t.assert_deep_equal(read([ 'fd00:1::/48', 'fd00:2::/48' ]), [ 'fd00:1::/48', 'fd00:2::/48' ]);
+		t.assert_deep_equal(read([ 'fd00:1::/48' ]), [ 'fd00:1::/48' ]);
+		t.assert_deep_equal(read('fd00:1::/48 fd00:2::/48'), [ 'fd00:1::/48', 'fd00:2::/48' ]);
+		t.assert_equal(read(''), null);
+		t.assert_equal(read(null), null);
+	});
+	t.it('writes one prefix as a scalar and several as a list, from an array or a string', () => {
+		t.assert_deep_equal(write([ 'fd00:1::/48', 'fd00:2::/48' ]), [ 'fd00:1::/48', 'fd00:2::/48' ]);
+		t.assert_equal(write([ 'fd00:1::/48' ]), 'fd00:1::/48');
+		t.assert_deep_equal(write('fd00:1::/48 fd00:2::/48'), [ 'fd00:1::/48', 'fd00:2::/48' ]);
+		t.assert_equal(write('fd00:1::/48'), 'fd00:1::/48');
+		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6prefix: [] }), 'ip6prefix'));
+		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6prefix: '' }), 'ip6prefix'));
+	});
+	t.it('checks each prefix, and the type of each entry', () => {
+		let body = { proto: 'static', ip6addrs: [ 'fd00::1/64' ] };
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 'nope' ] }, null),
+		                                'ip6prefix[1]'), [ 'invalid_format' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: 'fd00:1::/48 nope' }, null),
+		                                'ip6prefix[1]'), [ 'invalid_format' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 1 ] }, null),
+		                                'ip6prefix[1]'), [ 'invalid_type' ]);
+		t.assert_deep_equal(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 'fd00:2::1' ] }, null), []);
 	});
 });

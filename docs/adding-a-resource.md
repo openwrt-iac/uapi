@@ -112,7 +112,7 @@ netmask: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 
 A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. The flag enforces two hard constraints (the framework's `lint-defaults` verifies both):
 
-1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null` or `<jsonkey>: as_list_or_null(section.<ucikey>)`, the two shapes that read an absent key as null. No plain `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
+1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null`, `<jsonkey>: as_list_or_null(section.<ucikey>)` or `<jsonkey>: as_word_list_or_null(section.<ucikey>)`, the three shapes that read an absent key as null. No plain `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
 
 2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type: ["string", "null"]`). The provider sends explicit JSON null to clear; a non-nullable type fails the spec itself.
 
@@ -124,11 +124,12 @@ gateway: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 ```
 
 ```ucode
-// fromUci: gateway: section.gateway ?? null
-// fromUci: dns:     as_list_or_null(section.dns)
+// fromUci: gateway:   section.gateway ?? null
+// fromUci: dns:       as_list_or_null(section.dns)
+// fromUci: ip6prefix: as_word_list_or_null(section.ip6prefix)
 ```
 
-Both read an absent key as `null`, which is what a plain-Optional attribute needs. Lists could
+All three read an absent key as `null`, which is what a plain-Optional attribute needs. Lists could
 not be flagged before 3.0.0, because `as_list` returned `[]` for absent.
 
 Unsafe (lint fails):

@@ -140,7 +140,7 @@ echo "--- on a proto uapi does not model, a read shows what uci stores and a PAT
 $SSH "uci set network.uapi53t=interface; uci set network.uapi53t.proto=6in4; uci set network.uapi53t.auto=0;
 	uci set network.uapi53t.ipaddr=192.0.2.1; uci set network.uapi53t.ip6prefix=2001:db8:53::/48; uci commit network"
 read_back=$(body "$(call "$URL/network/interfaces/uapi53t")")
-printf '%s' "$read_back" | jq -e '.ipaddr == "192.0.2.1" and .ip6prefix == "2001:db8:53::/48" and (has("hostname") | not)' \
+printf '%s' "$read_back" | jq -e '.ipaddr == "192.0.2.1" and .ip6prefix == ["2001:db8:53::/48"] and (has("hostname") | not)' \
 	>/dev/null || fail "a 6in4 read did not show what uci stores: $read_back"
 r=$(send PATCH /uapi53t '{"ip6prefix":"2001:db8:54::/48","nohostroute":true}')
 [ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53t.ip6prefix)" = 2001:db8:54::/48 ] && [ "$(uci_get uapi53t.nohostroute)" = 1 ] \
@@ -151,7 +151,7 @@ r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\"
 	\"peerdns\":false,\"reqprefix\":\"56\",\"sourcefilter\":false}")
 [ "$(status "$r")" = 200 ] || fail "create pppoe expected 200: $r"
 r=$(send POST "" "{\"id\":\"uapi53w\",\"proto\":\"wireguard\",\"auto\":false,\"private_key\":\"$WG_KEY\",
-	\"addresses\":[\"10.253.8.1/24\"]}")
+	\"addresses\":[\"10.253.8.1/24\"],\"ip6prefix\":[\"fd00:53::/48\",\"fd00:54::/48\"]}")
 [ "$(status "$r")" = 200 ] || fail "create wireguard without listen_port expected 200: $r"
 for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w; do
 	printf '%s\t' "$i"

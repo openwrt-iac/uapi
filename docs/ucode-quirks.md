@@ -165,7 +165,7 @@ uci's `blob.c` is also how netifd reads every INT32 and ARRAY option
 | Option type | What netifd takes | Example | uapi helper |
 |---|---|---|---|
 | INT32: interface `metric`, `ip6assign`, `ip6weight`; route `metric`, `mtu`; rule `priority`, `goto`; device `mtu`; bridge-vlan `vlan` | `strtol(v, &end, 0)` with nothing left over: hex after `0x`, octal after `0` | `0x10` is 16, `010` is 8, and `16 ` or `08` drop the option | `netifd_int` |
-| ARRAY: `ipaddr`, `ip6addr`, `dns`, device and bridge-vlan `ports` | a list as it is, and a scalar split on spaces and tabs | `option dns '192.0.2.1 192.0.2.2'` is two servers | `as_word_list_or_null` |
+| ARRAY: `ipaddr`, `ip6addr`, `ip6prefix`, `dns`, device and bridge-vlan `ports` | a list as it is, and a scalar split on spaces and tabs | `option dns '192.0.2.1 192.0.2.2'` is two servers | `as_word_list_or_null` |
 | Routing table: route `table`, rule `lookup` | `system_resolve_rt_table`: a number through `strtoul` base 0 above 0, then `default`, `main`, `local`, then a name in `/etc/iproute2/rt_tables`; netifd drops the route or rule when nothing resolves | `main` is 254, `0` drops the route | `rt_table_id`, which reads 0 for what does not resolve |
 
 `as_int` reads decimal only, which is right for a reader that parses base 10 and
@@ -176,6 +176,10 @@ an ARRAY option. A shell reader that goes through `config_get`, as `wireguard.sh
 does for a peer's `allowed_ips`, also joins a list with spaces, so it splits a
 list entry that holds several words, where `as_word_list_or_null` keeps that
 entry whole and validation then refuses it.
+
+The reverse also holds: blob.c drops a `list` given to an attribute that is not an ARRAY, so
+6rd, map and 464xlat, which declare `ip6prefix` as a string, lose a listed value. That is why
+uapi writes one `ip6prefix` as a scalar and only several as a list.
 
 busybox `ip` reports an id above 255 in `/etc/iproute2/rt_tables` as "database
 tables is corrupted", and `ip route show table 4255` answers "invalid argument",

@@ -110,6 +110,17 @@ const CASES = [
 		           addresses: ['10.9.0.1/24', 'fd00:9::1/64'], listen_port: '51820' },
 	},
 	{
+		// LuCI's wireguard form writes ip6prefix as a list, even with one prefix.
+		file: "network.interfaces.uc", id: "wg_pfx1", pkg: "network",
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'wireguard', private_key: WG_KEY,
+		           addresses: ['10.9.1.1/24'], ip6prefix: ['fd00:91::/48'] },
+	},
+	{
+		file: "network.interfaces.uc", id: "wg_pfx2", pkg: "network",
+		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'wireguard', private_key: WG_KEY,
+		           addresses: ['10.9.2.1/24'], ip6prefix: ['fd00:92::/48', 'fd00:93::/48'] },
+	},
+	{
 		// The core options netifd reads for every proto, which uapi once read only on dhcp,
 		// dhcpv6 or wireguard.
 		file: "network.interfaces.uc", id: "lan_core", pkg: "network",

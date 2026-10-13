@@ -88,4 +88,34 @@ done
 r=$(body "$(call "$URL/network/interfaces/uapi54")")
 printf '%s' "$r" | jq -e '.metric == null' >/dev/null || fail "metric '16 ' read as a number: $r"
 
+echo "--- ip6prefix reads as the list netifd uses, and one prefix is written as a scalar ---"
+# uci show prints a one-entry list like a scalar, so the stored form comes from uci export.
+stored() { $SSH "uci export network" | sed -n "/^config interface '$1'\$/,/^\$/p" | grep ip6prefix || true; }
+prefixes() { $SSH "ubus call network.interface.uapi54 status" | jq -c '[.["ipv6-prefix"][]? | "\(.address)/\(.mask)"] | sort'; }
+$SSH "uci add_list network.uapi54.ip6prefix=fd54:1::/48; uci add_list network.uapi54.ip6prefix=fd54:2::/48;
+	uci add_list network.uapi54w.ip6prefix=fd54:3::/48; uci commit network; /etc/init.d/network reload"
+wait_for "netifd did not take both routed prefixes" '[ "$(prefixes)" = "[\"fd54:1::/48\",\"fd54:2::/48\"]" ]'
+read_back=$(body "$(call "$URL/network/interfaces/uapi54")")
+printf '%s' "$read_back" | jq -e '.ip6prefix == ["fd54:1::/48","fd54:2::/48"]' >/dev/null || fail "two prefixes read wrong: $read_back"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54" -d '{"ip6weight":9}')
+[ "$(status "$r")" = 200 ] || fail "a PATCH next to a list ip6prefix expected 200: $r"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54" \
+	-d "$(body "$(call "$URL/network/interfaces/uapi54")" | jq -c 'del(.runtime)')")
+[ "$(status "$r")" = 200 ] && [ "$(stored uapi54 | grep -c "list ip6prefix")" = 2 ] \
+	|| fail "a PUT of the read did not keep two listed prefixes: $r $(stored uapi54)"
+wait_for "netifd lost a routed prefix after the PUT" '[ "$(prefixes)" = "[\"fd54:1::/48\",\"fd54:2::/48\"]" ]'
+[ "$(stored uapi54w)" = "	list ip6prefix 'fd54:3::/48'" ] || fail "the LuCI-style one-entry list is not in place: $(stored uapi54w)"
+r=$(body "$(call "$URL/network/interfaces/uapi54w")" | jq -c 'del(.runtime)')
+printf '%s' "$r" | jq -e '.ip6prefix == ["fd54:3::/48"]' >/dev/null || fail "a one-entry list read wrong: $r"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d "$r")
+[ "$(status "$r")" = 200 ] && [ "$(stored uapi54w)" = "	option ip6prefix 'fd54:3::/48'" ] \
+	|| fail "a PUT of the read did not write one prefix as a scalar: $r $(stored uapi54w)"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" \
+	-d '{"ip6prefix":"fd54:3::/48 fd54:4::/48"}')
+[ "$(status "$r")" = 200 ] && [ "$(stored uapi54w | grep -c "list ip6prefix")" = 2 ] \
+	|| fail "a string of two prefixes was not stored as a list: $r $(stored uapi54w)"
+sweep=$(body "$(call "$URL/diagnostics?validate=1")")
+printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54") | not' >/dev/null \
+	|| fail "the sweep flagged a section with a list ip6prefix: $sweep"
+
 echo "network/interfaces reads ok"
