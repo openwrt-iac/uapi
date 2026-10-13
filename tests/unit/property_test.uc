@@ -125,6 +125,8 @@ t.describe('property: fromUci -> toUci -> fromUci is stable', () => {
 		{ name: "network.rules", file: "network.rules.uc", fixtures: [
 			{ '.name': 'n_hex', '.anonymous': false, '.type': 'rule', src: '10.1.0.0/16',
 			  lookup: 'main', priority: '0x7531' },
+			{ '.name': 'n_goto', '.anonymous': false, '.type': 'rule', src: '10.2.0.0/16',
+			  priority: '30040', 'goto': '30050' },
 		] },
 		{ name: "network.devices", file: "network.devices.uc", fixtures: [
 			{ '.name': 'br_hex', '.anonymous': false, '.type': 'device', name: 'br-hex',

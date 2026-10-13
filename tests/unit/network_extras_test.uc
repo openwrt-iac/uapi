@@ -342,3 +342,64 @@ t.describe('network routes and rules through the handler', () => {
 		t.assert_equal(length(rh.sweep(c)), 1);
 	});
 });
+
+// netifd's action parser knows neither lookup nor goto, and drops a rule whose action it cannot
+// read: a goto rule is one with a goto and no action. Measured on OpenWrt 25.12.5.
+t.describe('network.rules derives the action as netifd does', () => {
+	let read = (sec) => rules.fromUci({ '.name': 'x', '.type': 'rule', src: '10.0.0.0/24', ...sec }).action;
+	t.it('reads a rule with a goto and no action as goto, and unicast as lookup', () => {
+		t.assert_equal(read({ 'goto': '30030' }), 'goto');
+		t.assert_equal(read({ action: 'goto', 'goto': '30030' }), 'goto');
+		t.assert_equal(read({ action: 'unicast', lookup: '100' }), 'lookup');
+		t.assert_equal(read({ 'goto': '30030 ' }), 'lookup');
+		t.assert_equal(read({ action: 'unreachable' }), 'unreachable');
+		t.assert_equal(read({}), 'lookup');
+	});
+	t.it('writes no action for lookup and goto, and clears a stored one', () => {
+		t.assert_deep_equal(rules.toUci({ src: '10.0.0.0/24', action: 'goto', 'goto': 30030 }).action, []);
+		t.assert_deep_equal(rules.toUci({ src: '10.0.0.0/24', action: 'lookup', lookup: 100 }).action, []);
+		t.assert_equal(rules.toUci({ src: '10.0.0.0/24', action: 'unreachable' }).action, 'unreachable');
+	});
+	t.it('accepts LuCI\'s goto body, and refuses a goto beside another action or one that jumps back', () => {
+		let codes = (body) => map(filter(full_validate(rules, { src: '10.0.0.0/24', ...body }, null),
+		                                 (e) => e.field == 'goto'), (e) => e.code);
+		t.assert_deep_equal(codes({ priority: 30020, 'goto': 30030 }), []);
+		t.assert_deep_equal(codes({ action: 'lookup', lookup: 100, 'goto': 30030 }), [ 'conflict' ]);
+		t.assert_deep_equal(codes({ action: 'unreachable', 'goto': 30030 }), [ 'conflict' ]);
+		t.assert_deep_equal(codes({ priority: 30020, 'goto': 30010 }), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ priority: 30020, 'goto': 30020 }), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ action: 'goto', 'goto': 0 }), [ 'out_of_range' ]);
+	});
+});
+
+t.describe('network.rules goto rules through the handler', () => {
+	let h = handler.make(rules, { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} });
+	let ctx = () => ({ request_id: "01hx000000000000000000goto" });
+	let stored = () => ubus.stub({ uci: { network: {
+		g1: { '.type': 'rule', '.anonymous': false, src: '10.9.0.0/24', priority: '30020',
+		      action: 'goto', 'goto': '30030' },
+	} } });
+	t.it('a PATCH of another field clears the stored action netifd cannot parse', () => {
+		let c = stored();
+		t.assert_equal(h.patch(c, ctx(), 'g1', { priority: 30021 }).status, 200);
+		t.assert_equal(c._state.uci.network.g1.action, null);
+		t.assert_equal(c._state.uci.network.g1['goto'], '30030');
+	});
+	t.it('a PUT of the read clears it too', () => {
+		let c = stored();
+		let read = h.get_one(c, ctx(), 'g1').body;
+		delete read.runtime;
+		t.assert_equal(h.replace(c, ctx(), 'g1', read).status, 200);
+		t.assert_equal(c._state.uci.network.g1.action, null);
+	});
+	t.it('a write answers with the action and ETag of the next read', () => {
+		let c = stored();
+		let w = h.patch(c, ctx(), 'g1', { priority: 30021 });
+		let g = h.get_one(c, ctx(), 'g1');
+		t.assert_equal(w.body.action, 'goto');
+		t.assert_equal(w.headers.ETag, g.headers.ETag);
+	});
+});

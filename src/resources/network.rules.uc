@@ -9,6 +9,14 @@ let rt_table_id = values.rt_table_id;
 const VALID_ACTIONS = { "lookup": true, "goto": true, "unreachable": true,
                         "prohibit": true, "blackhole": true, "throw": true };
 
+// netifd parses `action` with system_rtn_aton, which knows `unicast` but neither `lookup` nor
+// `goto`, and drops a rule whose action it cannot read. Without one, a rule is a goto rule when
+// its goto parses and a lookup rule otherwise, and `unicast` is that same lookup.
+function rule_action(action, has_goto) {
+	if (type(action) == "string" && action != "" && action != "unicast") return action;
+	return has_goto ? "goto" : "lookup";
+}
+
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -21,7 +29,7 @@ function fromUci(section) {
 		priority: netifd_int(section.priority),
 		lookup: rt_table_id(section.lookup, () => fs.readfile("/etc/iproute2/rt_tables")),
 		goto: netifd_int(section['goto']),
-		action: section.action ?? "lookup",
+		action: rule_action(section.action, netifd_int(section['goto']) != null),
 		invert: platform_bool(section.invert, false),
 		mark: section.mark ?? null,
 		// See network.routes: netifd drops a disabled section outright, so an unmodelled
@@ -40,7 +48,9 @@ function toUci(json) {
 	if (json.priority != null) out.priority = "" + json.priority;
 	if (json.lookup != null)  out.lookup = "" + json.lookup;
 	if (json['goto'] != null) out['goto'] = "" + json['goto'];
-	if (json.action != null && json.action != "lookup") out.action = json.action;
+	// Cleared for lookup and goto, so a write repairs a stored `action 'goto'` that netifd
+	// would drop with the whole rule.
+	out.action = (json.action != null && json.action != "lookup" && json.action != "goto") ? json.action : [];
 	if (json.invert != null)  out.invert = json.invert ? "1" : "0";
 	if (json.mark != null)    out.mark = json.mark;
 	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
@@ -74,7 +84,7 @@ function validate(json) {
 		push(errs, { field: "dest", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
 
-	let action = json.action ?? "lookup";
+	let action = rule_action(json.action, json['goto'] != null);
 	if (action == "lookup" && (json.lookup == null || json.lookup === ""))
 		push(errs, { field: "lookup", code: "required",
 		             message: "is required when action is lookup" });
@@ -82,9 +92,18 @@ function validate(json) {
 	if (json.lookup === 0)
 		push(errs, { field: "lookup", code: "out_of_range",
 		             message: "must be from 1 to 4294967295: netifd drops a rule whose lookup is 0, or a name it cannot resolve, which reads as 0" });
-	if (action == "goto" && (json['goto'] == null || json['goto'] == ""))
+	if (action == "goto" && (json['goto'] == null || json['goto'] === ""))
 		push(errs, { field: "goto", code: "required",
 		             message: "is required when action is goto" });
+	// With lookup netifd installs a goto rule, which reads back as one, and the kernel refuses a
+	// goto beside any other action.
+	if (json['goto'] != null && action != "goto")
+		push(errs, { field: "goto", code: "conflict",
+		             message: sprintf("applies only when action is goto, not %s; send null or leave it out", action) });
+	if (action == "goto" && type(json['goto']) == "int"
+	    && (json['goto'] < 1 || (type(json.priority) == "int" && json['goto'] <= json.priority)))
+		push(errs, { field: "goto", code: "out_of_range",
+		             message: "must be at least 1 and above priority: the kernel refuses a goto that does not jump forward" });
 
 	return errs;
 }
@@ -103,6 +122,7 @@ return {
 		    { required: ["out"] },
 		    { required: ["src"] },
 		    { required: ["dest"] },
+		    { required: ["mark"] },
 		  ] },
 		{ if:   { properties: { action: { const: "lookup" } }, required: ["action"] },
 		  then: { required: ["lookup"] } },
@@ -123,9 +143,10 @@ return {
 		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766 },
 		lookup:   { type: ["integer", "null"], minimum: 0, maximum: 4294967295,
 		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422." },
-		goto:     { type: ["integer", "null"], minimum: 0,
-		            description: "Priority of the rule to jump to when action is goto" },
-		action:   { type: "string", enum: keys(VALID_ACTIONS), default: "lookup" },
+		goto:     { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
+		            description: "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too." },
+		action:   { type: "string", enum: keys(VALID_ACTIONS),
+		            description: "What the rule does with matching traffic. netifd parses no `lookup` or `goto` action: a rule without one is a goto rule when `goto` is set and a lookup rule otherwise, so a read derives the action the same way, and a write stores no action for lookup and goto." },
 		invert:   { type: "boolean", default: false,
 		            description: "Invert the match selectors" },
 		mark:     { type: ["string", "null"],
