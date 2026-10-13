@@ -28476,8 +28476,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 65535
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -28563,8 +28564,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 65535
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422."
 					},
 					"persistent_keepalive": {
 						"type": [

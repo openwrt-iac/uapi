@@ -154,6 +154,32 @@ function netifd_int(v) {
 	return (n < -2147483648 || n > 2147483647) ? null : n;
 }
 
+// wg resolves a peer's endpoint port with getaddrinfo after its config parser strips every
+// whitespace character, and musl takes a decimal from 0 to 65535, or else a name that is any
+// token of a /udp line in /etc/services once `#` comments go. wireguard.sh puts 51820 in place
+// of an empty value, so "" reads null; what resolves to nothing reads 0, a port wg cannot use,
+// so the read does not pass for an absent one.
+function service_port(v, read_services) {
+	if (type(v) != "string") return null;
+	if (v == "") return null;
+	let s = replace(v, /[[:space:]]/g, "");
+	if (match(s, /^[+-]?[0-9]+$/)) {
+		let n = int(s);
+		return (n >= 0 && n <= 65535) ? n : 0;
+	}
+	for (let line in split((s == "") ? "" : (read_services() ?? ""), "\n")) {
+		let tok = filter(split(split(line, "#")[0], /[[:space:]]+/), (t) => t != "");
+		let m = (index(tok, s) != -1 && length(tok) > 1) ? match(tok[1], /^([0-9]+)\/udp/) : null;
+		if (m && int(m[1]) <= 65535) return int(m[1]);
+	}
+	return 0;
+}
+
+// wg's config parser strips every whitespace character before it reads a number, so `25 ` is 25.
+function wg_int(v) {
+	return as_int((type(v) == "string") ? replace(v, /[[:space:]]/g, "") : v);
+}
+
 const RT_TABLE_ALIASES = { default: 253, main: 254, local: 255 };
 
 // netifd resolves a route `table` or a rule `lookup` with system_resolve_rt_table: a number
@@ -629,6 +655,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
+	service_port, wg_int,
 	has_control_chars, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,

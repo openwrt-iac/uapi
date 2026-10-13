@@ -127,6 +127,23 @@ $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel was torn down by a ba
 	|| fail "healthy peers changed: was $before, now $(kernel_peers | wc -l)"
 $SSH "uci show network | grep -q nx.invalid" && fail "bad peer was not rolled back out of uci"
 
+# The restore after a failed write reapplies every peer from uci, including ones written by hand
+# that never passed validate(). It has to read them as wireguard.sh does, and run nothing.
+echo "--- a restore applies a hand-written peer as wireguard.sh would, and runs nothing from it ---"
+SIB=$($SSH 'wg genkey | wg pubkey')
+$SSH "rm -f /tmp/uapi45_ran; uci set network.uapi45sib=wireguard_$IFACE; uci set network.uapi45sib.public_key='$SIB';
+	uci set network.uapi45sib.allowed_ips=10.98.99.60/32; uci set network.uapi45sib.endpoint_host=198.51.100.7;
+	uci set network.uapi45sib.endpoint_port=https; uci set network.uapi45sib.persistent_keepalive='0;touch /tmp/uapi45_ran';
+	uci commit network"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
+	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$SIB" '$1 == k { print $2 }')
+$SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove"
+$SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
+[ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
+
 # Rotating a key leaves the kernel holding the previous peer under the old key
 # unless the old one is removed first, which would keep its access alive.
 echo "--- rotating a public key removes the old peer from the kernel ---"

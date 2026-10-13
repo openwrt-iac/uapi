@@ -39,7 +39,11 @@ What uapi defends against, what it doesn't, and what the operator should do.
    `^[A-Za-z0-9_-]+$` (or `^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$` for packages)
    before interpolating, and uses `--` to separate flags from positional
    arguments. Service names from ucitrack are validated before
-   interpolating into `/etc/init.d/<svc>`.
+   interpolating into `/etc/init.d/<svc>`. The WireGuard apply path in
+   `src/lib/wg.uc` quotes keys, allowed IPs and the endpoint with
+   `shellquote`, and formats the port and the keepalive with `%d`, because
+   the restore after a failed write reads peers straight from uci, where a
+   value never passed `validate()`.
 9. **Replay attacks on POST under network flakiness.** `Idempotency-Key`
    caches the response for 24 h; a network-blipped retry returns the cached
    response, not a duplicate side effect. Same key with a different body

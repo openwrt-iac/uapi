@@ -461,3 +461,23 @@ t.describe('network.wireguard_peers reads a scalar allowed_ips as words', () => 
 		t.assert_deep_equal(ops[0].prev_allowed_ips, [ '10.0.0.2/32', '10.0.1.0/24' ]);
 	});
 });
+
+// wireguard.sh hands endpoint_port to wg, which strips whitespace and resolves a service name.
+t.describe('network.wireguard_peers reads endpoint_port as wg does', () => {
+	let read = (port) => wgp.fromUci({ '.name': 'p1', '.type': 'wireguard_wg0', '.anonymous': false,
+	                                   public_key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=', allowed_ips: ['10.0.0.2/32'],
+	                                   endpoint_host: '198.51.100.7', endpoint_port: port }, null).endpoint_port;
+	t.it('reads decimals, nothing and whitespace', () => {
+		t.assert_equal(read('51820'), 51820);
+		t.assert_equal(read(' +443'), 443);
+		t.assert_equal(read(null), null);
+		t.assert_equal(read(''), null);
+		t.assert_equal(read('  '), 0);
+	});
+	t.it('refuses port 0, which is also what a name that does not resolve reads', () => {
+		let errs = filter(full_validate(wgp, { interface: 'wg0', public_key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=',
+		                                       allowed_ips: ['10.0.0.2/32'], endpoint_port: 0 }, null),
+		                  (e) => e.field == 'endpoint_port');
+		t.assert_deep_equal(map(errs, (e) => e.code), [ 'out_of_range' ]);
+	});
+});

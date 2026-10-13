@@ -55,7 +55,7 @@ packages are deliberately not pulled in.
 | `network/routes` | `config route` | Static routes; cross-refs interface. `table` reads a stored name as its id (253 `default`, 254 `main`, 255 `local`, or the id in `/etc/iproute2/rt_tables`), and 0 when netifd cannot resolve it and drops the route. A write takes an id from 1 to 4294967295. |
 | `network/rules` | `config rule` | Policy routing. `lookup` reads and writes like the `table` of `network/routes`. netifd parses no `lookup` or `goto` action: a rule without `action` is a goto rule when `goto` is set and a lookup rule otherwise, so a read derives `action` that way and a write stores no action for those two. A `goto` must jump forward, past `priority`, and goes only with action goto. |
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
-| `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. |
+| `network/wireguard_peers` | `config wireguard_<iface>` (dynamic) | Peers on a wireguard interface; preshared_key masked on read. `endpoint_port` reads a service name such as `https` as its port from `/etc/services`, as wg resolves it, and 0 when the name does not resolve. |
 
 **`option disabled` is modelled on `network/interfaces`, `network/routes` and
 `network/rules`.** netifd drops a disabled section outright on all three: a disabled

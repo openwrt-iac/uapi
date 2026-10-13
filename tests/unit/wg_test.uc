@@ -63,6 +63,14 @@ t.describe('wg.to_peer', () => {
 		t.assert_deep_equal(wg.to_peer({ allowed_ips: '10.0.0.2/32 10.0.1.0/24' }).allowed_ips,
 		                    ['10.0.0.2/32', '10.0.1.0/24']);
 	});
+	t.it('reads the port and the keepalive as numbers, so nothing else reaches the command', () => {
+		let p = wg.to_peer({ public_key: PK, allowed_ips: ['10.0.0.2/32'], endpoint_port: ' 51820',
+		                     persistent_keepalive: ' 25 ' });
+		t.assert_equal(p.endpoint_port, 51820);
+		t.assert_equal(p.persistent_keepalive, 25);
+		t.assert_equal(wg.to_peer({ persistent_keepalive: '0;touch /tmp/x' }).persistent_keepalive, null);
+		t.assert_equal(wg.to_peer({ persistent_keepalive: 'off' }).persistent_keepalive, null);
+	});
 	t.it('yields an empty list when allowed_ips is absent', () => {
 		t.assert_deep_equal(wg.to_peer({}).allowed_ips, []);
 	});
