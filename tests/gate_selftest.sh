@@ -262,6 +262,15 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_marker_leak() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['NetworkInterfacesResponse']['properties']['ip6prefix']['x-uapi-write-string'] = True
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_nan_value() {
 	python3 - <<'EOF'
 import json
@@ -449,6 +458,7 @@ probe lint-openapi-shape "a request field the response omits"    "would emit it 
 probe lint-openapi-shape "a conditional requiring an undeclared prop" "which this half does not declare" mut_conditional_requires_undeclared
 probe lint-openapi-shape "an empty enum"                       "nothing can validate against it"   mut_empty_enum
 probe lint-openapi-shape "a value that is the string NaN"      "evaluated to NaN"                  mut_nan_value
+probe lint-openapi-shape "a source marker in the spec"         "must strip from both halves"       mut_marker_leak
 probe lint-openapi-shape "a transaction header without its set" "declares only"                    mut_kernel_header_unpaired
 probe lint-openapi-shape "a reload header on a raw write"      "never reaches attach_reload_headers" mut_reload_header_on_raw
 probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header is never reached"  mut_etag_on_raw

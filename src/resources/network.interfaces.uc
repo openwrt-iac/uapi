@@ -127,7 +127,7 @@ function fromUci(section, conn) {
 		gateway: section.gateway ?? null,
 		broadcast: section.broadcast ?? null,
 		ip6gw: section.ip6gw ?? null,
-		ip6prefix: section.ip6prefix ?? null,
+		ip6prefix: as_word_list_or_null(section.ip6prefix),
 		dns: as_word_list_or_null(section.dns),
 		// netifd reads the ip6assign group for every proto. It once lived in the dhcpv6 block, whose
 		// script never reads ip6hint, so a static LAN wrote it into nothing and a PUT erased LuCI's.
@@ -199,7 +199,11 @@ function toUci(body) {
 	if (json.gateway != null) out.gateway = json.gateway;
 	if (json.broadcast != null) out.broadcast = json.broadcast;
 	if (json.ip6gw != null) out.ip6gw = json.ip6gw;
-	if (json.ip6prefix != null) out.ip6prefix = json.ip6prefix;
+	// One prefix is written as a scalar: uci's blob.c drops a list given to a string attribute,
+	// and 6rd, map and 464xlat read ip6prefix as one string. A string from a writer is split the
+	// way netifd splits a stored one.
+	let ip6prefix = as_word_list_or_null(json.ip6prefix);
+	if (length(ip6prefix) > 0) out.ip6prefix = (length(ip6prefix) > 1) ? ip6prefix : ip6prefix[0];
 	if (type(json.dns) == "array" && length(json.dns) > 0) out.dns = json.dns;
 	if (json.ip6assign != null) out.ip6assign = "" + json.ip6assign;
 	if (json.ip6hint != null) out.ip6hint = json.ip6hint;
@@ -283,10 +287,11 @@ function validate(json, conn, id, delta) {
 	if (ok("ip6gw") && json.ip6gw != null && json.ip6gw != "" && !is_valid_ipv6(json.ip6gw))
 		push(errs, { field: "ip6gw", code: "invalid_format",
 		             message: "must be a valid IPv6 address without a prefix length" });
-	if (ok("ip6prefix") && json.ip6prefix != null && json.ip6prefix != ""
-	    && !is_valid_ipv6_cidr(json.ip6prefix) && !is_valid_ipv6(json.ip6prefix))
-		push(errs, { field: "ip6prefix", code: "invalid_format",
-		             message: "must be a valid IPv6 address or prefix" });
+	let ip6prefix = ok("ip6prefix") ? as_word_list_or_null(json.ip6prefix) : null;
+	for (let i = 0; i < length(ip6prefix); i++)
+		if (type(ip6prefix[i]) == "string" && !is_valid_ipv6_cidr(ip6prefix[i]) && !is_valid_ipv6(ip6prefix[i]))
+			push(errs, { field: sprintf("ip6prefix[%d]", i), code: "invalid_format",
+			             message: "must be a valid IPv6 address or prefix" });
 	for (let i = 0; ok("ipaddrs") && i < length(json.ipaddrs); i++) {
 		if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
 			push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
@@ -434,8 +439,9 @@ return {
 		             description: "IPv4 broadcast address (static proto). On proto dhcp the same uci option is a flag, `broadcast_flag`." },
 		ip6gw:     { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv6 default gateway, a bare address with no prefix length (static proto)" },
-		ip6prefix: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
-		             description: "IPv6 prefix routed to this device for delegation to clients (static, dhcpv6, wireguard)" },
+		ip6prefix: { type: ["array", "string", "null"], "x-uapi-clear-on-omit": true, "x-uapi-write-string": true,
+		             items: { type: "string" },
+		             description: "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write; v4 removes that (see docs/deprecations.md)." },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
 		dns:       { type: ["array", "null"], items: { type: "string" } },

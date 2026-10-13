@@ -470,6 +470,15 @@ stale enough to be misleading:
   a name on write needs the type to become a string or a union, which is breaking under
   `docs/versioning.md` ([#210](https://github.com/openwrt-iac/uapi/issues/210)).
 
+- **`network/interfaces.ip6prefix` stops taking a string on write.** Since 3.2.0 a read is
+  always an array, and a write still takes the space-separated string that the 3.1 spec
+  declared ([#211](https://github.com/openwrt-iac/uapi/issues/211)). The removal deletes, in one
+  go: `"string"` in the type, the `x-uapi-write-string` marker and its branch in
+  `build/gen_openapi.uc` (the check in `tests/lint_openapi_shape.uc` that no source marker
+  reaches the spec stays), the string path in `toUci` and `validate()`, the sentence in the
+  field description, the row in `docs/deprecations.md` and the `ip6prefix` example in
+  `docs/versioning.md`, and it adds a row to the v3-to-v4 migration document.
+
 ## Out of scope by design
 
 - **Localization of error `message` strings.** English-only; codes are

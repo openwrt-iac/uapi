@@ -108,6 +108,11 @@ coincidence of the current field set. A client may therefore derive writability 
 a field present in the response and absent from the request is server-derived, which is how
 `network/interfaces.ipaddr` reads as computed with no special case.
 
+A request type can be wider than the response type of the same field while a write form is
+phased out, and never narrower. `network/interfaces.ip6prefix` is the case since 3.2.0: a read
+is always an array, and a write still takes the space-separated string that the 3.1 spec
+declared, until the next major removes it.
+
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token
 create sends scopes and gets back a token. They are outside the rule, and outside the lint.

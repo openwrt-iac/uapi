@@ -107,6 +107,11 @@ function walk(node, path) {
 		check_schema(node, path);
 
 	for (let k in node) {
+		// The other x-uapi-* keys are source markers that steer how the generator builds each
+		// half. One that reaches the spec means a half was built without strip_marker, and a
+		// generated client would then read it as part of the contract.
+		if (substr(k, 0, 7) == "x-uapi-" && k != "x-uapi-clear-on-omit")
+			note(path + "/" + k, "is a source-only marker that build/gen_openapi.uc must strip from both halves");
 		// The value of `properties` maps a property NAME to a schema, so it is
 		// not itself a schema. Descending into it blindly would read a uci option
 		// called "enum" or "required" as a keyword on the map and report a

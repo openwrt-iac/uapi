@@ -1833,3 +1833,50 @@ t.describe('If-None-Match: * still creates an absent singleton', () => {
 		t.assert_equal(h.patch(c, cx({ if_none_match: "*" }), { enabled: false }).status, 412);
 	});
 });
+
+// A `list ip6prefix`, which LuCI writes for wireguard even with one prefix, answered 422 to
+// every write: the read handed an array to a check that wanted a string.
+t.describe('handler writes network/interfaces.ip6prefix as a list', () => {
+	let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	let cx = () => ({ request_id: "01hx000000000000000000ip6p" });
+	function seeded(prefix) {
+		return ubus.stub({ uci: { network: {
+			wg9: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+			       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.9.9.1/24' ],
+			       ip6prefix: prefix },
+		} } });
+	}
+	let prefix_sets = (c) => filter(c._state.uci_ops, (op) => op[0] == "set" && op[3] == "ip6prefix");
+	function put_read(c) {
+		let read = ifaces.get_one(c, cx(), 'wg9').body;
+		delete read.runtime;
+		return ifaces.replace(c, cx(), 'wg9', read);
+	}
+	t.it('a merge PATCH of another field answers 200 and leaves the list alone', () => {
+		let c = seeded([ 'fd00:9::/48' ]);
+		t.assert_equal(ifaces.patch(c, cx(), 'wg9', { auto: false }).status, 200);
+		t.assert_deep_equal(prefix_sets(c), []);
+		t.assert_deep_equal(c._state.uci.network.wg9.ip6prefix, [ 'fd00:9::/48' ]);
+	});
+	t.it('a PUT of the read writes one prefix as a scalar and two as a list', () => {
+		let one = seeded([ 'fd00:9::/48' ]);
+		t.assert_equal(put_read(one).status, 200);
+		t.assert_equal(one._state.uci.network.wg9.ip6prefix, 'fd00:9::/48');
+		let two = seeded([ 'fd00:9::/48', 'fd00:8::/48' ]);
+		t.assert_equal(put_read(two).status, 200);
+		t.assert_deep_equal(two._state.uci.network.wg9.ip6prefix, [ 'fd00:9::/48', 'fd00:8::/48' ]);
+	});
+	t.it('a string of two prefixes is stored as a list', () => {
+		let c = seeded(null);
+		t.assert_equal(ifaces.patch(c, cx(), 'wg9', { ip6prefix: 'fd00:9::/48 fd00:8::/48' }).status, 200);
+		t.assert_deep_equal(c._state.uci.network.wg9.ip6prefix, [ 'fd00:9::/48', 'fd00:8::/48' ]);
+	});
+	t.it('the sweep does not flag a stored list', () => {
+		t.assert_deep_equal(ifaces.sweep(seeded([ 'fd00:9::/48', 'fd00:8::/48' ])), []);
+	});
+});
