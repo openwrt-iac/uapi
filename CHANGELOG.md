@@ -83,6 +83,15 @@ All notable changes to this project will be documented in this file. Format foll
   `mtu '1400'` gets 1400, and a wireguard interface with `mtu '60'` gets MTU 60 and no IPv4
   address. (#220)
 
+- **`network/interfaces.mtu` takes 128 to 16384 on proto ppp and pppoe.** `ppp.sh` passes the
+  value to pppd, which refuses anything outside that range. uapi accepted 68 and up there, so
+  such a write answered 200 and the link never came up. A write outside the range now answers
+  422 `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads
+  that produced a state no caller can rely on, and it fails loudly. LuCI's ppp and pppoe forms
+  accept any value up to 9200, 0 to 127 included. Measured on OpenWrt 25.12.5: pppoe with
+  `mtu '100'` logs "mtu value must be between 128 and 16384", and netifd disables the interface
+  with `OPTION_ERROR`, without retrying. (#224)
+
 ### Deprecated
 
 - **`network/interfaces.ip6prefix` as a string on write.** v4 removes it, so send an array. The
@@ -194,6 +203,14 @@ All notable changes to this project will be documented in this file. Format foll
   failed write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg
   uses, and both apply paths push it. A name that does not resolve reads 0, which wg cannot use
   either. (#219)
+- **The `network/interfaces.mtu` description says where netifd applies it.** netifd applies an
+  interface's `mtu` to its device only when that device has no `config device` section of its
+  own, as `br-lan` has in the stock configuration, and to every device that joins the interface
+  later, such as a Wi-Fi netdev. A device with its own section takes its MTU from
+  `network/devices`. Measured on OpenWrt 25.12.5: on a bridge with its own section, the
+  interface's `mtu '1400'` left the bridge at 1500, a device added to the interface got 1400 and
+  the bridge then dropped to 1400 with it, and a dotted VLAN without a section got the
+  interface's value. (#224)
 
 ### Security
 

@@ -27,7 +27,7 @@ ensure_wireguard || fail "no usable wireguard support, so the mtu check cannot r
 # Interfaces first and the bridge afterwards, each with its own reload: removing both in one
 # reload once left netifd hung until procd respawned it.
 cleanup() {
-	$SSH "uci -q delete network.uapi54; uci -q delete network.uapi54w; uci commit network;
+	$SSH "uci -q delete network.uapi54; uci -q delete network.uapi54w; uci -q delete network.uapi54p; uci commit network;
 		/etc/init.d/network reload; sleep 2; uci -q delete network.uapi54_dev; uci commit network;
 		/etc/init.d/network reload" 2>/dev/null || true
 }
@@ -129,5 +129,9 @@ printf '%s' "$r" | jq -e '.mtu == 60' >/dev/null || fail "a stored mtu of 60 did
 sweep=$(body "$(call "$URL/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54w")' >/dev/null \
 	|| fail "the sweep did not list a stored mtu below 68: $sweep"
+
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
+	-d "{\"id\":\"uapi54p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,\"mtu\":100}")
+[ "$(status "$r")" = 422 ] && [ -z "$(uci_get uapi54p)" ] || fail "a pppoe mtu of 100, which pppd refuses, expected 422 and no section: $r"
 
 echo "network/interfaces reads ok"

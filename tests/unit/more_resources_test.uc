@@ -1239,4 +1239,16 @@ t.describe('network.interfaces mtu floor', () => {
 	t.it('reads a stored smaller value as it is', () => {
 		t.assert_equal(interfaces.fromUci({ '.name': 'x', proto: 'wireguard', mtu: '60' }, null).mtu, 60);
 	});
+	t.it('takes 128 to 16384 on ppp and pppoe, which pppd refuses outside, and 68 up elsewhere', () => {
+		let codes = (proto, mtu) => field_codes(full_validate(interfaces, { proto, device: 'eth8', mtu }, null), 'mtu');
+		for (let proto in [ 'ppp', 'pppoe' ]) {
+			t.assert_deep_equal(codes(proto, 127), [ 'out_of_range' ], proto);
+			t.assert_deep_equal(codes(proto, 128), [], proto);
+			t.assert_deep_equal(codes(proto, 16384), [], proto);
+			t.assert_deep_equal(codes(proto, 16385), [ 'out_of_range' ], proto);
+		}
+		t.assert_deep_equal(codes('dhcp', 100), []);
+		t.assert_deep_equal(codes('dhcp', 67), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes('wwan', 100), []);
+	});
 });
