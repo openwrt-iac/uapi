@@ -359,12 +359,20 @@ function validate(json, conn, id, delta) {
 	    && !is_valid_ipv6_cidr(json.reqprefix))
 		push(errs, { field: "reqprefix", code: "invalid_format",
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
-	// The schema allows a smaller value so that a stored one reads as it is. netifd applies a
-	// device mtu only from 68 up, and wireguard.sh applies a smaller one, which leaves the device
-	// with no IPv4 address while netifd reports the interface up.
-	if (type(json.mtu) == "int" && json.mtu < 68)
-		push(errs, { field: "mtu", code: "out_of_range",
-		             message: "must be at least 68: netifd ignores a smaller device mtu, and a WireGuard device below 68 carries no IPv4" });
+	// The schema allows the whole range so that a stored value reads as it is. ppp.sh hands the
+	// mtu to pppd, which exits outside 128..16384 and leaves the interface down. Elsewhere netifd
+	// applies a device mtu only from 68 up, and wireguard.sh applies a smaller one, which leaves
+	// the device with no IPv4 address while netifd reports the interface up.
+	if (type(json.mtu) == "int") {
+		if (json.proto == "ppp" || json.proto == "pppoe") {
+			if (json.mtu < 128 || json.mtu > 16384)
+				push(errs, { field: "mtu", code: "out_of_range",
+				             message: "must be from 128 to 16384: pppd refuses anything else and leaves the interface down" });
+		}
+		else if (json.mtu < 68)
+			push(errs, { field: "mtu", code: "out_of_range",
+			             message: "must be at least 68: netifd ignores a smaller device mtu, and a WireGuard device below 68 carries no IPv4" });
+	}
 	if (type(json.ip6class) == "array")
 		for (let i = 0; i < length(json.ip6class); i++)
 			if (type(json.ip6class[i]) != "string" || !match(json.ip6class[i], /^[A-Za-z0-9_]+$/))
@@ -462,7 +470,7 @@ return {
 		ip6weight: { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
 		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535,
-		             description: "MTU of the interface's device. netifd applies it only from 68 up, and wireguard.sh applies a smaller one that leaves the device with no IPv4, so a stored smaller value reads as it is and a write below 68 answers 422." },
+		             description: "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. wireguard.sh applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422." },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
