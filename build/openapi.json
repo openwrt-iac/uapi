@@ -26670,8 +26670,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 65535
+						"minimum": -1,
+						"maximum": 65535,
+						"description": "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422."
 					},
 					"nohostroute": {
 						"type": "boolean",
@@ -27251,8 +27252,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 65535
+						"minimum": -1,
+						"maximum": 65535,
+						"description": "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422."
 					},
 					"nohostroute": {
 						"type": "boolean",

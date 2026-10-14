@@ -275,6 +275,14 @@ t.describe('values.service_port', () => {
 		t.assert_equal(v.service_port('nosuch', svc), 0);
 		t.assert_equal(v.service_port('https', file(null)), 0);
 	});
+	t.it('reads the unresolved value it is given, for a listen port where 0 is valid', () => {
+		let svc = file('openvpn\t1194/udp\n');
+		for (let s in [ '65536', '-1', 'nosuch', '   ' ])
+			t.assert_equal(v.service_port(s, svc, -1), -1, s);
+		t.assert_equal(v.service_port('0', svc, -1), 0);
+		t.assert_equal(v.service_port('openvpn', svc, -1), 1194);
+		t.assert_equal(v.service_port('', svc, -1), null);
+	});
 	t.it('reads null for nothing set, and 0 for whitespace that wg cannot use', () => {
 		t.assert_equal(v.service_port(null, untouched), null);
 		t.assert_equal(v.service_port('', untouched), null);

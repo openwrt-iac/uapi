@@ -1,3 +1,4 @@
+let fs = require('fs');
 let values = require('values');
 let strict_bool = values.strict_bool;
 let ids = require('ids');
@@ -9,7 +10,6 @@ let is_valid_cidr = values.is_valid_cidr;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ipv6 = values.is_valid_ipv6;
 let is_valid_ipv6_cidr = values.is_valid_ipv6_cidr;
-let as_int = values.as_int;
 let netifd_int = values.netifd_int;
 let ipv6_words = values.ipv6_words;
 
@@ -169,7 +169,7 @@ function fromUci(section, conn) {
 		reqprefix: section.reqprefix ?? null,
 		reqaddress: section.reqaddress ?? null,
 		sourcefilter: (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null,
-		listen_port: as_int(section.listen_port),
+		listen_port: values.service_port(section.listen_port, () => fs.readfile("/etc/services"), -1),
 		addresses: as_word_list_or_null(section.addresses),
 		nohostroute: strict_bool(section.nohostroute),
 		has_private_key: (section.private_key != null && section.private_key != ""),
@@ -354,6 +354,11 @@ function validate(json, conn, id, delta) {
 			push(errs, { field: "ip6ifaceid", code: "invalid_format",
 			             message: "must be eui64, random, or an interface id whose network half is zero, such as ::1" });
 	}
+	// The schema allows -1 because a read reports a port name that /etc/services does not resolve
+	// as -1.
+	if (ok("listen_port") && json.listen_port === -1)
+		push(errs, { field: "listen_port", code: "out_of_range",
+		             message: "must be from 0 to 65535: -1 is how a port name that /etc/services does not resolve reads, and wg cannot bring the interface up with it" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
 	    && !is_valid_ipv6_cidr(json.reqprefix))
@@ -479,7 +484,8 @@ return {
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },
-		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
+		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535,
+		                description: "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422." },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the implicit host-route for wireguard endpoint" },
 		ip4table:     { type: ["string", "null"],

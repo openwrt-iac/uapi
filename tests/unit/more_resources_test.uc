@@ -1252,3 +1252,24 @@ t.describe('network.interfaces mtu floor', () => {
 		t.assert_deep_equal(codes('wwan', 100), []);
 	});
 });
+
+// wireguard.sh hands listen_port to wg, which resolves a service name. -1 is what a name that
+// does not resolve reads, since 0 asks the kernel to pick a port.
+t.describe('network.interfaces listen_port', () => {
+	let wg = { proto: 'wireguard', private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.9.0.1/24' ] };
+	t.it('reads decimals and nothing as before', () => {
+		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: ' 51820' }, null).listen_port, 51820);
+		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: '0' }, null).listen_port, 0);
+		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: '65536' }, null).listen_port, -1);
+		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard' }, null).listen_port, null);
+	});
+	t.it('refuses -1 on wireguard, and still answers only conflict for it on another proto', () => {
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...wg, listen_port: -1 }, null), 'listen_port'), [ 'out_of_range' ]);
+		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...wg, listen_port: 0 }, null), 'listen_port'), []);
+		t.assert_deep_equal(field_codes(interfaces.validate({ proto: 'dhcp', listen_port: -1 }, null), 'listen_port'), [ 'conflict' ]);
+	});
+	t.it('lets a stored -1 through the PATCH that switches proto away from wireguard', () => {
+		let merged = { ...wg, proto: 'dhcp', listen_port: -1 };
+		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { proto: 'dhcp' }), 'listen_port'), []);
+	});
+});

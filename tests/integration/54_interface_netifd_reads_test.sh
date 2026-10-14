@@ -118,6 +118,26 @@ sweep=$(body "$(call "$URL/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54") | not' >/dev/null \
 	|| fail "the sweep flagged a section with a list ip6prefix: $sweep"
 
+echo "--- a listen_port name reads as the port wg resolves, and one that does not resolve reads -1 ---"
+# netifd reads listen_port as an INT32 and drops a name from its own copy, so a change to a name
+# does not restart the interface. ifup reruns wireguard.sh, which reads the name from uci.
+$SSH "uci set network.uapi54w.listen_port=openvpn; uci commit network; ifup uapi54w"
+wait_for "wg did not listen on 1194 for listen_port 'openvpn'" '[ "$($SSH "wg show uapi54w listen-port")" = 1194 ]'
+r=$(body "$(call "$URL/network/interfaces/uapi54w")")
+printf '%s' "$r" | jq -e '.listen_port == 1194' >/dev/null || fail "listen_port 'openvpn' read wrong: $r"
+$SSH "uci set network.uapi54w.listen_port=nosuchservice; uci commit network; ifup uapi54w"
+wait_for "the interface came up with a listen_port that does not resolve" \
+	'[ "$($SSH "ubus call network.interface.uapi54w status" | jq -r .up)" = false ]'
+read_back=$(body "$(call "$URL/network/interfaces/uapi54w")" | jq -c 'del(.runtime)')
+printf '%s' "$read_back" | jq -e '.listen_port == -1' >/dev/null || fail "an unresolved listen_port did not read -1: $read_back"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d "$read_back")
+[ "$(status "$r")" = 422 ] && [ "$(uci_get uapi54w.listen_port)" = nosuchservice ] \
+	|| fail "a PUT of a -1 read expected 422 and no change: $r"
+sweep=$(body "$(call "$URL/diagnostics?validate=1")")
+printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54w")' >/dev/null \
+	|| fail "the sweep did not list an unresolved listen_port: $sweep"
+$SSH "uci -q delete network.uapi54w.listen_port; uci commit network; ifup uapi54w"
+
 echo "--- an mtu below 68 is refused on write, and a stored one reads as it is and is swept ---"
 mtu_before=$(uci_get uapi54w.mtu)
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d '{"mtu":60}')

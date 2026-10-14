@@ -154,25 +154,27 @@ function netifd_int(v) {
 	return (n < -2147483648 || n > 2147483647) ? null : n;
 }
 
-// wg resolves a peer's endpoint port with getaddrinfo after its config parser strips every
-// whitespace character, and musl takes a decimal from 0 to 65535, or else a name that is any
-// token of a /udp line in /etc/services once `#` comments go. wireguard.sh puts 51820 in place
-// of an empty value, so "" reads null; what resolves to nothing reads 0, a port wg cannot use,
-// so the read does not pass for an absent one.
-function service_port(v, read_services) {
+// wg resolves a port with getaddrinfo after its config parser strips every whitespace character,
+// and musl takes a decimal from 0 to 65535, or else a name that is any token of a /udp line in
+// /etc/services once `#` comments go. wireguard.sh treats an empty value as unset, so "" reads
+// null. What resolves to nothing reads `unresolved`, a port wg cannot use: 0 for an endpoint, and
+// -1 for a listen port, where 0 asks the kernel to pick one. Either way the read does not pass
+// for an absent value.
+function service_port(v, read_services, unresolved) {
+	let none = unresolved ?? 0;
 	if (type(v) != "string") return null;
 	if (v == "") return null;
 	let s = replace(v, /[[:space:]]/g, "");
 	if (match(s, /^[+-]?[0-9]+$/)) {
 		let n = int(s);
-		return (n >= 0 && n <= 65535) ? n : 0;
+		return (n >= 0 && n <= 65535) ? n : none;
 	}
 	for (let line in split((s == "") ? "" : (read_services() ?? ""), "\n")) {
 		let tok = filter(split(split(line, "#")[0], /[[:space:]]+/), (t) => t != "");
 		let m = (index(tok, s) != -1 && length(tok) > 1) ? match(tok[1], /^([0-9]+)\/udp/) : null;
 		if (m && int(m[1]) <= 65535) return int(m[1]);
 	}
-	return 0;
+	return none;
 }
 
 // wg's config parser strips every whitespace character before it reads a number, so `25 ` is 25.

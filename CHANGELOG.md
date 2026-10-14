@@ -91,6 +91,14 @@ All notable changes to this project will be documented in this file. Format foll
   accept any value up to 9200, 0 to 127 included. Measured on OpenWrt 25.12.5: pppoe with
   `mtu '100'` logs "mtu value must be between 128 and 16384", and netifd disables the interface
   with `OPTION_ERROR`, without retrying. (#224)
+- **`network/interfaces.listen_port` declares minimum -1, and a write of -1 answers 422.** -1 is
+  what a port name that does not resolve reads, since 0 asks the kernel to pick a port, and wg
+  then cannot bring the interface up. The old minimum of 0 did not describe the read either: a
+  hand-written `option listen_port '-1'` already read -1, and `'65536'` read 65536 above the
+  maximum. That is branch (b) of the type carve-out in `docs/versioning.md`. LuCI writes only 0
+  to 65535, so only a hand edit or another tool reaches it. Every write to an interface that
+  stores such a value now answers 422 until it is fixed, which uses the tightening carve-out
+  for payloads that produced a state no caller can rely on, and fails loudly. (#225)
 
 ### Deprecated
 
@@ -211,6 +219,16 @@ All notable changes to this project will be documented in this file. Format foll
   interface's `mtu '1400'` left the bridge at 1500, a device added to the interface got 1400 and
   the bridge then dropped to 1400 with it, and a dotted VLAN without a section got the
   interface's value. (#224)
+- **`network/interfaces.listen_port` reads a service name as wg resolves it.** `wireguard.sh`
+  writes `ListenPort` for `wg`, which resolves a name through `/etc/services`, so
+  `option listen_port 'openvpn'` makes the tunnel listen on 1194. uapi read such a name as null,
+  and a PUT of the read removed the option, so the tunnel then listened on a random port. A read
+  now gives the port that wg uses. A PUT of the read writes the number, which netifd sees as a
+  change, so it restarts the interface once and drops the tunnel briefly. A PATCH keeps the
+  stored name and restarts nothing. netifd itself reads the option as an integer and does not restart the interface
+  when it changes to a name, so a name takes effect at the next ifup. Measured on OpenWrt
+  25.12.5: `listen_port 'openvpn'` listens on 1194 and reads 1194, and
+  `listen_port 'nosuchservice'` leaves the interface down and reads -1. (#225)
 
 ### Security
 
