@@ -8,9 +8,10 @@
 // were missed, which is the argument for deriving this from the code instead of a list.
 //
 // The check calls each resource's real fromUci on a bare section and demands that whatever comes
-// back null is null-permitted in that resource's Response schema. A resource whose Response
+// back null is null-permitted in that resource's Response schema. A resource whose Request
 // enumerates `proto` is probed once per value as well, because network/interfaces reads a
-// different set of fields for each proto and a bare section shows only the fields of none.
+// different set of fields for each proto and a bare section shows only the fields of none. The
+// Request, because a Response reads any proto that uci stores and enumerates none.
 
 import * as fs from 'fs';
 
@@ -66,7 +67,7 @@ for (let f in files) {
 	resources++;
 
 	let probes = [ null ];
-	let protos = schema.properties.proto?.enum;
+	let protos = schemas[name + "Request"]?.properties?.proto?.enum;
 	if (type(protos) == "array")
 		for (let p in protos) if (p != null) push(probes, p);
 

@@ -24232,7 +24232,7 @@
 					},
 					"schema_properties": {
 						"type": "object",
-						"description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves."
+						"description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves."
 					}
 				}
 			},
@@ -24761,7 +24761,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this rule"
+						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
 					},
 					"target": {
 						"type": [
@@ -24990,7 +24990,8 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this rule"
+						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"maxLength": 122
 					},
 					"target": {
 						"type": [
@@ -25383,7 +25384,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this redirect"
+						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
 					},
 					"target": {
 						"type": "string",
@@ -25589,7 +25590,8 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this redirect"
+						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"maxLength": 122
 					},
 					"target": {
 						"type": "string",
@@ -25795,7 +25797,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this NAT rule"
+						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
 					},
 					"target": {
 						"type": "string",
@@ -25954,7 +25956,8 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this NAT rule"
+						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"maxLength": 122
 					},
 					"target": {
 						"type": "string",
@@ -26397,18 +26400,8 @@
 					},
 					"proto": {
 						"type": "string",
-						"enum": [
-							"static",
-							"dhcp",
-							"dhcpv6",
-							"pppoe",
-							"none",
-							"ppp",
-							"wwan",
-							"wireguard"
-						],
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it"
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads."
 					},
 					"dns": {
 						"type": [
@@ -27050,6 +27043,8 @@
 					},
 					"proto": {
 						"type": "string",
+						"default": "none",
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads.",
 						"enum": [
 							"static",
 							"dhcp",
@@ -27059,9 +27054,7 @@
 							"ppp",
 							"wwan",
 							"wireguard"
-						],
-						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it"
+						]
 					},
 					"dns": {
 						"type": [
@@ -27119,7 +27112,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 68,
 						"maximum": 65535,
 						"description": "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. wireguard.sh applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422."
 					},
@@ -27252,7 +27245,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": -1,
+						"minimum": 0,
 						"maximum": 65535,
 						"description": "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422."
 					},
@@ -27600,6 +27593,29 @@
 								}
 							}
 						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"ppp",
+										"pppoe"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"mtu": {
+									"minimum": 128,
+									"maximum": 16384
+								}
+							}
+						}
 					}
 				]
 			},
@@ -27776,7 +27792,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 68,
 						"maximum": 65535,
 						"description": "Device MTU. netifd applies it only from 68 up, so a stored smaller value reads as it is and a write below 68 answers 422."
 					},
@@ -27959,7 +27975,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 4294967295,
 						"description": "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route; a write of 0 answers 422."
 					},
@@ -28226,7 +28242,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 4294967295,
 						"description": "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422."
 					},
@@ -28235,7 +28251,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 2147483647,
 						"description": "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too."
 					},
@@ -28570,7 +28586,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 65535,
 						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422."
 					},

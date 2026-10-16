@@ -193,7 +193,7 @@ return {
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint hostname or IP" },
-		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535,
+		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
 		route_allowed_ips:    { type: "boolean", default: false,

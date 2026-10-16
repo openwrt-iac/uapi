@@ -46,8 +46,8 @@ All notable changes to this project will be documented in this file. Format foll
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
   LuCI removes it on save. On a proto that uapi does not model, such as `6in4`, uapi cannot know
-  which options the handler reads. A read there shows every option that uci stores, and a write
-  refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so
+  which options the handler reads. A read there shows every modelled option that uci stores, and a
+  PATCH that leaves `proto` out refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so
   a write with an `If-Match` from before the upgrade answers 412. (#208)
 - **`network/routes.table` and `network/rules.lookup` refuse 0.** netifd cannot resolve table 0
   and drops the route or rule, so such a write answered 200 with no effect. It now answers 422
@@ -99,6 +99,19 @@ All notable changes to this project will be documented in this file. Format foll
   to 65535, so only a hand edit or another tool reaches it. Every write to an interface that
   stores such a value now answers 422 until it is fixed, which uses the tightening carve-out
   for payloads that produced a state no caller can rely on, and fails loudly. (#225)
+- **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
+  of a read.** A request inherited the read bounds, so it declared values that every write
+  refuses. `NetworkInterfacesRequest` now declares `listen_port` from 0, and `mtu` from 68, or
+  from 128 to 16384 on proto `ppp` and `pppoe`. `NetworkDevicesRequest.mtu` starts at 68.
+  `endpoint_port` on `network/wireguard_peers`, `table` on `network/routes`, and `lookup` and
+  `goto` on `network/rules` start at 1. The `name` of `firewall/rules`, `firewall/nat` and
+  `firewall/redirects` takes at most 122 characters. The limit counts bytes, so that bound is
+  exact only for an ASCII name. No request changes acceptance, because `validate()` already
+  refused each of these values. `endpoint_port` and `listen_port` return to their 3.1.0 request
+  bounds, which this release had widened with their response bounds. The module marker is
+  `x-uapi-write`, described in `docs/versioning.md`, and `GET /schema/<package>/<resource>`
+  serves it as the module declares it: on `network/interfaces`, the enum of `proto` is now under
+  `x-uapi-write`. (#229)
 
 ### Deprecated
 
@@ -229,6 +242,15 @@ All notable changes to this project will be documented in this file. Format foll
   when it changes to a name, so a name takes effect at the next ifup. Measured on OpenWrt
   25.12.5: `listen_port 'openvpn'` listens on 1194 and reads 1194, and
   `listen_port 'nosuchservice'` leaves the interface down and reads -1. (#225)
+- **A `network/interfaces` read of a proto that uapi does not model conforms to the Response
+  schema.** LuCI writes `6in4`, `gre`, `6rd` and other tunnel protos, and a read answers them as
+  stored, while `NetworkInterfacesResponse.proto` declared an enum of the eight modelled protos.
+  The Response no longer declares that enum, and the Request keeps it. That uses branch (b) of the
+  type carve-out in `docs/versioning.md`: the server broke its declared type for every interface
+  that LuCI configured with such a proto. A POST or PUT with such a proto still answers 422
+  `not_in_enum`, now with a message that names the PATCH, which keeps the options of the proto's
+  handler. A JSON Patch on such an interface now succeeds, as a merge patch already did. Before,
+  it answered 422. (#229)
 
 ### Security
 

@@ -242,6 +242,15 @@ function validate(json, conn, id, delta) {
 	// fields in its merged view, and toUci drops them. The read-only twins never write, and an
 	// empty value asks for nothing, as a module that writes `cond ? [...] : []` sends.
 	let named = delta ?? json;
+	// Here rather than as an enum in schema_properties, which the Response would then declare
+	// although a read answers any proto that uci stores. Only a request that names the proto is
+	// refused, so a PATCH of either kind that leaves it out keeps the options of the handler,
+	// which toUci cannot emit. The sweep passes the read as delta and still lists the section,
+	// because a PUT of it is refused.
+	if (named.proto != null && type(json.proto) == "string" && !VALID_PROTOS[json.proto])
+		push(errs, { field: "proto", code: "not_in_enum",
+		             message: sprintf("must be one of %s: uapi does not write proto %s. A PATCH that leaves proto out keeps the options that its handler reads",
+		                              join(", ", keys(VALID_PROTOS)), json.proto) });
 	if (type(json.proto) == "string")
 		for (let field, v in named) {
 			if (v == null || v === "" || (type(v) == "array" && length(v) == 0)
@@ -422,6 +431,10 @@ return {
 		  then: { required: ["addresses"] } },
 		...proto_scope_conditionals(),
 	],
+	openapi_write_conditional: [
+		{ if:   { properties: { proto: { enum: [ "ppp", "pppoe" ] } }, required: ["proto"] },
+		  then: { properties: { mtu: { minimum: 128, maximum: 16384 } } } },
+	],
 	openapi_runtime: {
 		type: "object",
 		description: "Populated from ubus network.interface.<name> status; empty {} when the interface has no runtime state.",
@@ -440,8 +453,8 @@ return {
 		},
 	},
 	schema_properties: {
-		proto: { type: "string", enum: keys(VALID_PROTOS), default: "none",
-		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it" },
+		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
 		device:    { type: ["string", "null"],
@@ -474,7 +487,7 @@ return {
 		             description: "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any." },
 		ip6weight: { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
 		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
-		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535,
+		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },
 		             description: "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. wireguard.sh applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422." },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
@@ -484,7 +497,7 @@ return {
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },
-		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535,
+		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
 		                description: "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422." },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the implicit host-route for wireguard endpoint" },

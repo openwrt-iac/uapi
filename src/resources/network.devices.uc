@@ -93,7 +93,7 @@ return {
 		           description: "VLAN id for 8021q / 8021ad devices" },
 		ifname:  { type: ["string", "null"],
 		           description: "Underlying parent interface (e.g. for macvlan/8021q)" },
-		mtu:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535,
+		mtu:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },
 		           description: "Device MTU. netifd applies it only from 68 up, so a stored smaller value reads as it is and a write below 68 answers 422." },
 		macaddr: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
 		           description: "MAC address override (colon or dash separated)" },

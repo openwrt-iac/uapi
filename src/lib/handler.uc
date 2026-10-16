@@ -972,7 +972,7 @@ function make(resource, opts) {
 	// Both steps matter and neither is obvious: carry_write_only, or every section
 	// holding a masked secret reports its own secret as missing, which on a
 	// wireguard-heavy router condemns the most important sections on the box; and
-	// check_schema_types, because enum and range constraints live in
+	// check_schema_types, because most enum and range constraints live in
 	// schema_properties rather than in validate(), so skipping it would miss a
 	// whole class of tightening while looking thorough.
 	//
