@@ -109,9 +109,24 @@ a field present in the response and absent from the request is server-derived, w
 `network/interfaces.ipaddr` reads as computed with no special case.
 
 A request type can be wider than the response type of the same field while a write form is
-phased out, and never narrower. `network/interfaces.ip6prefix` is the case since 3.2.0: a read
-is always an array, and a write still takes the space-separated string that the 3.1 spec
-declared, until the next major removes it.
+phased out. `network/interfaces.ip6prefix` is the case since 3.2.0: a read is always an array,
+and a write still takes the space-separated string that the 3.1 spec declared, until the next
+major removes it.
+
+A request can also be narrower than the response, since 3.2.0, where a read returns a value
+that every write refuses. Three kinds of value qualify:
+
+- a stored option that the daemon ignores or cannot use, such as `mtu` below 68 or a route
+  `table` of 0,
+- a value that a read gives for an option it cannot resolve, such as `listen_port` -1 for a
+  service name that /etc/services does not know,
+- a `network/interfaces.proto` that uapi does not model, such as the `6in4` that LuCI writes.
+
+The response declares what a read can return, and the request declares what a write can send,
+so a read-modify-write of such a value fails against the request schema as it fails against the
+server. A module declares the difference with `x-uapi-write`, and
+`tests/unit/write_overlay_test.uc` checks each such keyword against the refusal in
+`validate()`.
 
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token

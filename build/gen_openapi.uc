@@ -106,12 +106,19 @@ const READ_NULLABLE = "x-uapi-read-nullable";
 // A property that still takes a space-separated string on write, a form being phased out, while
 // a read always answers an array: only the request half keeps "string" in its type.
 const WRITE_STRING = "x-uapi-write-string";
+// Keywords that only the request half declares. A read can return a value that validate()
+// refuses on every write, such as a stored mtu below 68 or a proto uapi does not model, so the
+// module schema keeps the read bound for the type gate and the sweep, and the request half
+// takes these instead. tests/unit/write_overlay_test.uc ties each one to a refusal in validate().
+const WRITE_OVERLAY = "x-uapi-write";
 
 function strip_marker(v) {
-	if (type(v) != "object" || (!exists(v, READ_NULLABLE) && !exists(v, WRITE_STRING))) return v;
+	if (type(v) != "object" || (!exists(v, READ_NULLABLE) && !exists(v, WRITE_STRING)
+	                            && !exists(v, WRITE_OVERLAY))) return v;
 	let out = { ...v };
 	delete out[READ_NULLABLE];
 	delete out[WRITE_STRING];
+	delete out[WRITE_OVERLAY];
 	return out;
 }
 
@@ -172,8 +179,11 @@ function request_properties(properties) {
 		// them described that round trip as invalid while the server answered 200 to it.
 		// The type is not what guards a required field anyway; resource.validate() is, and it
 		// answers 422 naming the field for a null `target` on a create.
-		out[k] = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(v)
-		                                                            : strip_marker(v);
+		// The overlay goes in before the widening, so that an enum it brings admits null too.
+		let w = (type(v) == "object" && type(v[WRITE_OVERLAY]) == "object")
+		        ? { ...strip_marker(v), ...v[WRITE_OVERLAY] } : v;
+		out[k] = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(w)
+		                                                            : strip_marker(w);
 	}
 	return out;
 }
@@ -1183,7 +1193,7 @@ function build_schemas() {
 				"id":      { "type": "string", "description": "<package>:<resource> key" },
 				"package": { "type": "string" },
 				"type":    { "type": "string", "description": "uci section type" },
-				"schema_properties": { "type": "object", "description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves." },
+				"schema_properties": { "type": "object", "description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves." },
 			},
 		},
 		"WhoamiResponse": {
@@ -1514,8 +1524,9 @@ function build_schemas() {
 		};
 		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
 			req.required = mod.openapi_required;
-		if (type(mod.openapi_conditional) == "array" && length(mod.openapi_conditional) > 0) {
-			let cond = project_conditional(mod.openapi_conditional, req_satisfiable, ep.path, req_props);
+		let req_conditional = [ ...(mod.openapi_conditional ?? []), ...(mod.openapi_write_conditional ?? []) ];
+		if (length(req_conditional) > 0) {
+			let cond = project_conditional(req_conditional, req_satisfiable, ep.path, req_props);
 			if (length(cond) > 0) req.allOf = cond;
 		}
 		// Only for an endpoint that can actually be written. A generated client reads a

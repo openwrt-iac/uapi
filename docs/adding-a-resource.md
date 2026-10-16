@@ -30,6 +30,7 @@ return {
         { if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
           then: { required: ["addresses"] } },
     ],
+    openapi_write_conditional: [ ... ],           // same shape, emitted on the *Request schema only
     openapi_runtime: {                            // replaces the opaque `runtime: {type: object}`
         type: "object",
         properties: { up: { type: "boolean" }, ... },
@@ -179,6 +180,16 @@ their findings are merged into one response, so a `validate()` that assumes the
 declared types already hold has to guard for itself. Per-field
 constraints that fit (type, enum, range, pattern, items recursion) belong
 here; cross-field / cross-section / format-string logic stays in `validate()`.
+
+The constraints here describe what a read can return, because the sweep checks every stored
+section against them. When `validate()` refuses a value that a read can still return, such as a
+stored `mtu` below 68, keep the read bound here and put the write bound under the property's
+`x-uapi-write`, for example `mtu: { type: ["integer", "null"], minimum: 0, "x-uapi-write": {
+minimum: 68 } }`. The generator puts those keywords on the `*Request` schema only, and the type
+gate does not read them, so `validate()` must refuse the value itself.
+`tests/unit/write_overlay_test.uc` checks that it does, with a value just past each keyword in
+every fixture case of the module. A rule that depends on another field, such as the pppd range
+of `mtu` on proto `ppp`, goes in `openapi_write_conditional`.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

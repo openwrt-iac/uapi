@@ -145,6 +145,10 @@ printf '%s' "$read_back" | jq -e '.ipaddr == "192.0.2.1" and .ip6prefix == ["200
 r=$(send PATCH /uapi53t '{"ip6prefix":"2001:db8:54::/48","nohostroute":true}')
 [ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53t.ip6prefix)" = 2001:db8:54::/48 ] && [ "$(uci_get uapi53t.nohostroute)" = 1 ] \
 	&& [ "$(uci_get uapi53t.ipaddr)" = 192.0.2.1 ] || fail "a PATCH on a 6in4 section was refused or lost ipaddr: $r"
+before=$($SSH 'uci show network.uapi53t')
+r=$(send PUT /uapi53t "$(body "$(call "$URL/network/interfaces/uapi53t")" | jq -c 'del(.id, .managed, .ipaddr, .has_private_key, .runtime)')")
+[ "$(status "$r")" = 422 ] && body "$r" | jq -e '.errors | length == 1 and .[0].field == "proto" and .[0].code == "not_in_enum"' >/dev/null \
+	&& [ "$($SSH 'uci show network.uapi53t')" = "$before" ] || fail "a PUT of a 6in4 read was not refused on proto alone: $r"
 
 echo "--- every read validates against the published Response schema ---"
 r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,
@@ -153,7 +157,7 @@ r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\"
 r=$(send POST "" "{\"id\":\"uapi53w\",\"proto\":\"wireguard\",\"auto\":false,\"private_key\":\"$WG_KEY\",
 	\"addresses\":[\"10.253.8.1/24\"],\"ip6prefix\":[\"fd00:53::/48\",\"fd00:54::/48\"]}")
 [ "$(status "$r")" = 200 ] || fail "create wireguard without listen_port expected 200: $r"
-for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w; do
+for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53t; do
 	printf '%s\t' "$i"
 	body "$(call "$URL/network/interfaces/$i")" | jq -c .
 done > /tmp/uapi53_bodies.tsv

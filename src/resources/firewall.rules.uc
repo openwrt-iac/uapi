@@ -166,7 +166,7 @@ function validate(json, conn) {
 
 	if (type(json.name) == "string" && length(json.name) > values.NAME_MAX)
 		push(errs, { field: "name", code: "out_of_range",
-		             message: sprintf("must be at most %d characters: firewall4 renders it into an nftables comment, which nft caps at 128", values.NAME_MAX) });
+		             message: sprintf("must be at most %d bytes: firewall4 renders it into an nftables comment, which nft caps at 128 bytes", values.NAME_MAX) });
 
 	let protos = as_list(m.proto);
 	let proto_ok = true;
@@ -237,8 +237,8 @@ return {
 		  then: { required: ["set_dscp"] } },
 	],
 	schema_properties: {
-		name:    { type: ["string", "null"],
-		           description: "Human-readable label for this rule" },
+		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
+		           description: "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength." },
 		target:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TARGETS) },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,

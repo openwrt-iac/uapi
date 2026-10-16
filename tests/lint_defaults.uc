@@ -96,7 +96,8 @@ function find_fromuci_defaults(content) {
 function check_schema_default(content, field, expected) {
 	let in_sp = regexp(sprintf('\\b%s:[^a-zA-Z_]*\\{', field));
 	if (!match(content, in_sp)) return "missing-from-schema";
-	let default_re = regexp(sprintf('\\b%s:[^{}]*\\{[^{}]*default:\\s*%s', field, escape_regex(expected)));
+	// A property body may hold one nested object, such as its x-uapi-write keywords.
+	let default_re = regexp(sprintf('\\b%s:[^{}]*\\{([^{}]|\\{[^{}]*\\})*default:\\s*%s', field, escape_regex(expected)));
 	if (!match(content, default_re)) return "missing-default";
 	return null;
 }
@@ -104,8 +105,8 @@ function check_schema_default(content, field, expected) {
 function check_mutex(content) {
 	// A field cannot carry both default: and "x-uapi-clear-on-omit": true.
 	// Two orderings to cover; both match the same dict entry by avoiding {}.
-	let a = regexp('\\{[^{}]*"x-uapi-clear-on-omit":\\s*true[^{}]*default:');
-	let b = regexp('\\{[^{}]*default:[^{}]*"x-uapi-clear-on-omit":\\s*true');
+	let a = regexp('\\{([^{}]|\\{[^{}]*\\})*"x-uapi-clear-on-omit":\\s*true([^{}]|\\{[^{}]*\\})*default:');
+	let b = regexp('\\{([^{}]|\\{[^{}]*\\})*default:([^{}]|\\{[^{}]*\\})*"x-uapi-clear-on-omit":\\s*true');
 	return !!(match(content, a) || match(content, b));
 }
 

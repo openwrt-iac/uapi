@@ -46,6 +46,10 @@ Validated by neutering the restore (`conn.uci_import` in `transaction.uc`): 5 of
 
 Not covered: a crash between commit and reload. Nothing in-process can restore after that, `docs/architecture.md` says so, and it is the reason commit-confirmed apply was designed at all.
 
+## The write-overlay property
+
+A keyword under a property's `x-uapi-write` narrows only the `*Request` schema, and nothing at runtime reads it, so `validate()` is what makes it true. `tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the fixtures of its module. A value just past the keyword must be refused in every case, with the keyword's own code in at least one of them, and the value at it must pass in at least one case. The entries of `openapi_write_conditional` are checked the same way, over the cases that match their `if`. A keyword without a probe fails the test, so a new kind of keyword cannot pass unchecked. Validated by raising the `mtu` bound to 70, by removing the `proto` check from `validate()`, and by raising the pppd floor to 576: each fails its own case.
+
 ## The read-honesty property
 
 Principle 4 as a test: read a section, write the body back, read again, and nothing may change or be rejected. Two layers state it, `tests/unit/read_honesty_test.uc` and `tests/integration/47_read_honesty_test.sh` (both 2.5.0+). Each runs in two forms, because the forms catch different defects.

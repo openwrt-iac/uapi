@@ -670,7 +670,7 @@ t.describe('network.interfaces proto scope', () => {
 		for (let k in [ 'ipaddr', 'netmask', 'addresses', 'private_key' ])
 			t.assert_false(exists(u, k), k);
 	});
-	t.it('on a proto uapi does not model, reads what uci stores and refuses only broadcast_flag', () => {
+	t.it('on a proto uapi does not model, reads what uci stores and refuses the proto only where a write names it', () => {
 		let v = interfaces.fromUci({ '.name': 'henet', proto: '6in4', ipaddr: '192.0.2.1', ip6addr: '2001:db8::2/64',
 			ip6prefix: '2001:db8:1::/48', nohostroute: '1', metric: '3' });
 		t.assert_equal(v.ipaddr, '192.0.2.1');
@@ -687,6 +687,34 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_equal(u.ip6prefix, '2001:db8:1::/48');
 		t.assert_equal(u.nohostroute, '1');
 		t.assert_deep_equal(codes(interfaces.validate({ proto: '6in4', broadcast_flag: true }, null), 'broadcast_flag'), [ 'conflict' ]);
+		t.assert_deep_equal(codes(interfaces.validate(body, null, null, body), 'proto'), [ 'not_in_enum' ]);
+		t.assert_deep_equal(codes(interfaces.validate(body, null, 'henet', { mtu: 1400 }), 'proto'), []);
+	});
+	t.it('refuses a PUT of a 6in4 read, and a PATCH of either kind keeps the options of its handler', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { network: {
+			henet: { '.type': 'interface', '.anonymous': false, proto: '6in4', peeraddr: '192.0.2.1',
+			         ip6prefix: '2001:db8:46::/48' },
+		} } });
+		let sent = { ...ifh.get_one(c, ctx, 'henet').body };
+		for (let k in [ 'id', 'managed', 'ipaddr', 'has_private_key', 'runtime' ]) delete sent[k];
+		let put = ifh.replace(c, ctx, 'henet', sent);
+		t.assert_equal(put.status, 422);
+		t.assert_deep_equal(map(put.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ]);
+		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
+
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+		t.assert_equal(c._state.uci.network.henet.mtu, '1400');
+		t.assert_equal(ifh.patch(c, { ...ctx, json_patch: true }, 'henet',
+			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 200);
+		t.assert_equal(c._state.uci.network.henet.mtu, '1380');
+		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
 	});
 	t.it('checks only what the request named, and never the read-only twins', () => {
 		let merged = { proto: 'dhcp', ipaddr: '10.0.0.1', ipaddrs: [ '10.0.0.1/24' ], netmask: 'junk', has_private_key: true };
@@ -706,7 +734,7 @@ t.describe('network.interfaces proto scope', () => {
 			private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', listen_port: '51820',
 			addresses: [ '10.9.0.1/24' ], nohostroute: '1' };
 		let checked = 0;
-		for (let proto in interfaces.schema_properties.proto.enum) {
+		for (let proto in interfaces.schema_properties.proto["x-uapi-write"].enum) {
 			let view = interfaces.fromUci({ ...full, proto }, null);
 			for (let c in interfaces.openapi_conditional) {
 				let others = c.if?.properties?.proto?.enum;

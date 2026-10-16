@@ -262,6 +262,11 @@ upgrade, rather than one `422` at a time during a write. Every section it report
 is already broken on the router: the rule above is already matching a whole
 protocol rather than a port. The sweep is the first time anyone is told.
 
+One finding is not a break. An interface on a proto that uapi does not model, such as
+the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`, because a PUT of
+it is refused: a PUT replaces the section and would delete the options of the tunnel.
+The tunnel itself works, and a PATCH that leaves `proto` out is accepted.
+
 Three things worth knowing:
 
 - **Opt-in on purpose.** Each resource walks its own uci package, so a package is
