@@ -157,6 +157,9 @@ r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\"
 r=$(send POST "" "{\"id\":\"uapi53w\",\"proto\":\"wireguard\",\"auto\":false,\"private_key\":\"$WG_KEY\",
 	\"addresses\":[\"10.253.8.1/24\"],\"ip6prefix\":[\"fd00:53::/48\",\"fd00:54::/48\"]}")
 [ "$(status "$r")" = 200 ] || fail "create wireguard without listen_port expected 200: $r"
+r=$(send PATCH /uapi53w '{"mtu":1400}')
+[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53w.mtu)" = 1400 ] && [ -z "$(uci_get uapi53w.nohostroute)" ] \
+	|| fail "a PATCH of mtu on a wireguard interface wrote a nohostroute it did not name: $r"
 for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53t; do
 	printf '%s\t' "$i"
 	body "$(call "$URL/network/interfaces/$i")" | jq -c .

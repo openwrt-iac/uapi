@@ -26,6 +26,7 @@
 // Patterns detected (in fromUci's returned dict literal):
 //   - <jsonkey>: <normalize_bool|platform_bool|shell_bool>(section.<ucikey>, true|false)
 //   - <jsonkey>: <same>(section["<ucikey>"], true|false)
+//   - <jsonkey>: strict_bool(section.<ucikey>)   -- default false
 //   - <jsonkey>: section.<ucikey> ?? "literal"
 //
 // Captures the JSON-side key (the schema property name), not the uci-side
@@ -40,10 +41,12 @@
 
 import * as fs from 'fs';
 
-// Empty on purpose: its only entry excused dhcp.hosts.uc:dns as "not surfaced in
-// schema_properties", which toUci contradicted by writing it. Kept as the seam for a
-// field that genuinely is fromUci-internal.
-const ALLOWLIST = {};
+// A field whose default the patterns above see but which is conditional all the same, because
+// the module hides it outside some protos. docs/adding-a-resource.md leaves such a default
+// un-annotated: a client that filled it in would send `false` where the field is refused.
+const ALLOWLIST = {
+	"network.interfaces.uc:nohostroute": "wireguard only",
+};
 
 function read_file(path) {
 	let f = fs.open(path, "r");
@@ -78,9 +81,10 @@ function find_fromuci_defaults(content) {
 	// `(section.X != null) ? ... : null` ternaries (RHS starts with `(`).
 	// Every helper that takes a default, not just normalize_bool. Anchoring on one name
 	// meant that reclassifying 50 fields onto shell_bool silently dropped them from this
-	// gate: it went from seeing 75 fields to 25 while still reporting OK. strict_bool is
-	// absent on purpose, since it takes no default to check.
+	// gate: it went from seeing 75 fields to 25 while still reporting OK. strict_bool takes no
+	// default argument, but it reads an absent option as false all the same.
 	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
+	let strict_re       = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*strict_bool\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)');
 	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
 	let str_re          = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*"([^"]+)"');
 
@@ -88,6 +92,7 @@ function find_fromuci_defaults(content) {
 		let m;
 		if (m = match(line, bool_dot_re))     defaults[m[1]] = m[3];
 		if (m = match(line, bool_bracket_re)) defaults[m[1]] = m[3];
+		if (m = match(line, strict_re))       defaults[m[1]] = "false";
 		if (m = match(line, str_re))          defaults[m[1]] = sprintf('"%s"', m[2]);
 	}
 	return defaults;
