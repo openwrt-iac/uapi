@@ -477,6 +477,25 @@ t.describe('handler.patch', () => {
 		t.assert_true(r.body.enabled);
 	});
 
+	t.it('does not materialise a default that exists only under the proto of the section', () => {
+		let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let c = ubus.stub({ uci: { network: {
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+			       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.9.0.1/24' ] },
+			henet: { '.type': 'interface', '.anonymous': false, proto: '6in4', peeraddr: '192.0.2.1' },
+		} } });
+		for (let id in [ 'wg1', 'henet' ]) {
+			t.assert_equal(ifaces.patch(c, ctx(), id, { mtu: 1400 }).status, 200);
+			t.assert_equal(c._state.uci.network[id].mtu, '1400');
+			t.assert_equal(c._state.uci.network[id].nohostroute, null, id);
+		}
+	});
+
 	t.it('still writes a defaulted field the patch does name', () => {
 		let c = with_existing();
 		let r = rules.patch(c, ctx(), 'r_existing', { enabled: false });

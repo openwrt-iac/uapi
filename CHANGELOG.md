@@ -251,6 +251,14 @@ All notable changes to this project will be documented in this file. Format foll
   `not_in_enum`, now with a message that names the PATCH, which keeps the options of the proto's
   handler. A JSON Patch on such an interface now succeeds, as a merge patch already did. Before,
   it answered 422. (#229)
+- **A `network/interfaces` PATCH no longer writes `nohostroute '0'` when it does not name the
+  field.** A PATCH skips a field whose value is the default, but it took the defaults from an
+  empty section, read as proto `none`, where `nohostroute` does not apply. So every PATCH of a
+  wireguard interface, or of an interface with a proto that uapi does not model, added
+  `nohostroute '0'`. The value had no effect, but the section changed on a write that did not ask
+  for it. A PATCH of any resource now takes the defaults from the section as the write leaves it.
+  A PUT still writes `nohostroute '0'`, as it writes `auto '1'` and `disabled '0'`, because a PUT
+  writes every field of the body. (#230)
 
 ### Security
 

@@ -175,6 +175,70 @@ t.describe('property: no case hides a field behind its own default', () => {
 	}
 });
 
+// A PATCH writes only what it moved, so one that names nothing leaves uci as stored. A seed that
+// stores an option cannot show this, so each case also runs with one option removed whose
+// absence the read fills in: that is where a PATCH can write a value nobody sent, as
+// `nohostroute '0'` was on every PATCH of a wireguard interface.
+//
+// Some writes happen on purpose while the section stores their source option: a legacy name moves
+// to the name the daemon reads, and a rule action that netifd cannot parse is cleared.
+const MOVED_ON_PURPOSE = {
+	"unbound.server.uc/ub": { from: "dnssec_enabled", to: "validator" },
+	"lldpd.config.uc/cfg": { from: "lldp_capabilities", to: "lldp_capability_advertisements" },
+	"network.rules.uc/nr2": { from: "action" },
+};
+// A removal can leave a section that no write accepts, which says nothing here, so the ones
+// known to do that are named and any other refusal fails: an SNAT rule without its `target`
+// reads as masquerade and keeps a `snat_ip` that only SNAT takes.
+const REFUSED_WITHOUT = {
+	"firewall.nat.uc/n1": [ "target" ],
+};
+
+function empty_patch_moves(h, c, section) {
+	let conn = seeded({ ...c, section });
+	let before = json(sprintf("%J", conn._state.uci[c.pkg][c.id]));
+	let r = c.singleton ? h.patch(conn, ctx(), {}) : h.patch(conn, ctx(), c.id, {});
+	if (r.status != 200) return null;
+	let after = conn._state.uci[c.pkg][c.id];
+	let m = MOVED_ON_PURPOSE[c.file + "/" + c.id];
+	let allowed = (m != null && section[m.from] != null) ? [ m.from, m.to ] : [];
+	let moved = [];
+	for (let k in { ...before, ...after })
+		if (index(allowed, k) == -1 && !ph.json_eq(before[k], after[k]))
+			push(moved, sprintf("%s: %J -> %J", k, before[k], after[k]));
+	return moved;
+}
+
+t.describe('property: a PATCH that names nothing leaves uci as stored', () => {
+	for (let c in CASES) {
+		t.it(sprintf("%s/%s, and without each option that a read fills in", c.file, c.id), () => {
+			let mod = loadfile('src/resources/' + c.file)();
+			let h = c.singleton ? handler.make_singleton(mod, { tx: tx_stub() })
+			                    : handler.make(mod, { tx: tx_stub() });
+			let moved = empty_patch_moves(h, c, c.section);
+			if (moved == null) {
+				t.assert_equal("PATCH {} failed on the seed", "PATCH 200");
+				return;
+			}
+			moved = map(moved, (m) => "seed, " + m);
+			let refused = [];
+			for (let u in c.section) {
+				if (substr(u, 0, 1) == ".") continue;
+				let section = { ...c.section };
+				delete section[u];
+				let filled = mod.toUci(mod.fromUci({ '.name': c.id, '.anonymous': false, ...section }, null))[u];
+				if (filled == null || (type(filled) == "array" && length(filled) == 0)) continue;
+				let r = empty_patch_moves(h, c, section);
+				if (r == null) push(refused, u);
+				else for (let m in r) push(moved, sprintf("without %s, %s", u, m));
+			}
+			if (length(moved) > 0)
+				t.assert_equal(join("; ", moved), "nothing written");
+			t.assert_deep_equal(refused, REFUSED_WITHOUT[c.file + "/" + c.id] ?? []);
+		});
+	}
+});
+
 // The case list must not fall behind the resource tree. Every resource with a validate()
 // is writable and therefore has to round-trip; there is no exempt category any more.
 t.describe('property: every writable resource has a round-trip case', () => {

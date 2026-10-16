@@ -511,14 +511,24 @@ function diff_apply(c, p, id, existing, new_opts) {
 // the patch cleared); raw uci options outside it (toUci cannot emit them) are
 // left untouched. Without this, a PATCH that touches one field would delete
 // every stock/operator option the resource happens not to model.
-// The modeled keys a section would carry if it were empty: fromUci's server-side defaults, and
-// nothing else. Projected with a null connection because only the uci-derived half is wanted and
-// `runtime` never reaches toUci anyway. Every resource tolerates a bare section, which
-// tests/lint_response_nullability.uc asserts for all of them on every run.
-function default_footprint(resource, existing) {
-	return resource.toUci(resource.fromUci({
-		'.name': existing['.name'], '.type': existing['.type'], '.anonymous': false,
-	}, null));
+// The modeled keys the section would carry after this write if every key that is absent from uci
+// and unchanged by the request stayed absent: fromUci's defaults, given the rest of the section.
+// A default can depend on another key, as a field that applies to one proto exists only under
+// that proto. An empty section was projected here before, and read as proto none it gave a
+// wireguard interface no `nohostroute` default, so every PATCH wrote `nohostroute '0'`.
+// Projected with a null connection because only the uci-derived half is wanted and `runtime`
+// never reaches toUci anyway.
+function default_footprint(resource, existing, old_opts, new_opts) {
+	let post = { ...existing };
+	for (let k in old_opts)
+		if (!exists(new_opts, k)) delete post[k];
+	for (let k, v in new_opts) {
+		if (v == null || (type(v) == "array" && length(v) == 0))
+			delete post[k];
+		else if (exists(existing, k) || sprintf("%J", old_opts[k]) != sprintf("%J", v))
+			post[k] = v;
+	}
+	return resource.toUci(resource.fromUci(post, null));
 }
 
 function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
@@ -539,9 +549,10 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		// unbound reads `dnssec_enabled` and writes `validator`, so on a box carrying only
 		// the legacy key the projection says validator='1' while uci has no such option, and
 		// skipping there leaves the real key unwritten and the daemon unconfigured. Comparing
-		// against the empty-section projection separates the cases: that legacy-derived '1'
-		// differs from validator's own default of '0', while a firewall rule's `enabled '1'`
-		// is exactly its default.
+		// against the projection of the section without such keys separates the cases: toUci
+		// clears the legacy key, so there validator reads its own default of '0' and the
+		// legacy-derived '1' differs, while a firewall rule's `enabled '1'` is exactly what the
+		// rest of the rule implies.
 		//
 		// Null and the empty list are how toUci says "this key should not be there", so
 		// neither is ever a skip: unbound clears the legacy name with `[]`, and comparing two
@@ -874,8 +885,9 @@ function make(resource, opts) {
 				mgmt_device = mgmt_device_of(resource, r.merged, existing_view);
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts,
-				                 default_footprint(resource, existing));
+				let old_opts = resource.toUci(existing_view);
+				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
+				                 default_footprint(resource, existing, old_opts, new_opts));
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = false;
@@ -1089,8 +1101,9 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "validation", errors: errs };
 
 				let new_opts = resource.toUci(r.merged);
-				diff_apply_patch(c, p, id, existing, resource.toUci(existing_view), new_opts,
-				                 default_footprint(resource, existing));
+				let old_opts = resource.toUci(existing_view);
+				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
+				                 default_footprint(resource, existing, old_opts, new_opts));
 				let view = { ...new_opts };
 				view['.name'] = id;
 				view['.anonymous'] = !!existing['.anonymous'];
