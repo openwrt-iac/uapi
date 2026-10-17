@@ -105,7 +105,7 @@ function validate(json, conn) {
 
 	if (type(m.device) == "string" && length(m.device) > values.DEVICE_MAX)
 		push(errs, { field: "match.device", code: "out_of_range",
-		             message: sprintf("must be at most %d characters, the nftables interface-name limit", values.DEVICE_MAX) });
+		             message: sprintf("must be at most %d bytes, the nftables interface-name limit", values.DEVICE_MAX) });
 
 	for (let f in [["snat_ip", json.snat_ip], ["match.src_ip", m.src_ip], ["match.dest_ip", m.dest_ip]]) {
 		let a = values.address_problem(f[1]);
@@ -170,7 +170,7 @@ return {
 	],
 	schema_properties: {
 		name:      { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
-		             description: "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength." },
+		             description: sprintf("Human-readable label for this NAT rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		target:    { type: "string", enum: keys(VALID_TARGETS), default: "MASQUERADE",
 		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT" },
 		enabled:   { type: "boolean", default: true },
@@ -183,8 +183,8 @@ return {
 			properties: {
 				src_zone:  { type: ["string", "null"],
 				             description: "Outbound (postrouting) zone this rule applies to. Unset matches all egress traffic" },
-				device:    { type: ["string", "null"],
-				             description: "Outbound interface name to match" },
+				device:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.DEVICE_MAX },
+				             description: sprintf("Outbound interface name to match. A write takes at most %d bytes, the interface-name limit of nftables. A name with non-ASCII characters reaches that limit with fewer characters.", values.DEVICE_MAX) },
 				src_ip:    { type: ["string", "null"],
 				             description: "Match source address. firewall4 resolves an address, a prefix in either family, or a uci network name, optionally negated with a leading '!'" },
 				src_port:  { type: ["string", "null"], pattern: values.PORT_MATCH_RE,

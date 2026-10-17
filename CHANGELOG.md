@@ -112,6 +112,11 @@ All notable changes to this project will be documented in this file. Format foll
   `x-uapi-write`, described in `docs/versioning.md`, and `GET /schema/<package>/<resource>`
   serves it as the module declares it: on `network/interfaces`, the enum of `proto` is now under
   `x-uapi-write`. (#229)
+- **`FirewallNatRequest.match.device` declares at most 15 characters.** A write refused a longer
+  name with 422 `out_of_range`, because nftables caps an interface name at 15 bytes, while the
+  request schema declared no limit. The limit counts bytes, so the bound is exact only for an
+  ASCII name. No request changes acceptance. `x-uapi-write` now applies to a nested property as
+  well, and to an array element under `items`. (#232)
 
 ### Deprecated
 
