@@ -238,7 +238,7 @@ return {
 	],
 	schema_properties: {
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
-		           description: "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength." },
+		           description: sprintf("Human-readable label for this rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		target:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TARGETS) },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,

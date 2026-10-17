@@ -188,8 +188,12 @@ stored `mtu` below 68, keep the read bound here and put the write bound under th
 minimum: 68 } }`. The generator puts those keywords on the `*Request` schema only, and the type
 gate does not read them, so `validate()` must refuse the value itself.
 `tests/unit/write_overlay_test.uc` checks that it does, with a value just past each keyword in
-every fixture case of the module. A rule that depends on another field, such as the pppd range
-of `mtu` on proto `ppp`, goes in `openapi_write_conditional`.
+every fixture case of the module. A nested property takes the marker in the same way, such as
+`match.device` on `firewall/nat`, and the test probes it under the path that `validate()`
+reports. An element under `items` takes it too, and the test probes it as the only element of
+its array, under the path that `validate()` gives it, such as `ip6class[0]`. A keyword below an
+element has no probe and fails the test. A rule that depends on another field, such as the pppd range of `mtu` on proto `ppp`,
+goes in `openapi_write_conditional`.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

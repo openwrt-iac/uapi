@@ -232,7 +232,7 @@ return {
 		reflection_zone: { type: ["array", "null"], items: { type: "string" },
 		                   description: "Zones in which NAT reflection is allowed (uci list reflection_zone)" },
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
-		           description: "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength." },
+		           description: sprintf("Human-readable label for this redirect. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		enabled: { type: "boolean", default: true },
 	},
 };

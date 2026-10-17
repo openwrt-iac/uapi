@@ -24761,7 +24761,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
+						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters."
 					},
 					"target": {
 						"type": [
@@ -24990,7 +24990,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"description": "Human-readable label for this rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.",
 						"maxLength": 122
 					},
 					"target": {
@@ -25384,7 +25384,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
+						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters."
 					},
 					"target": {
 						"type": "string",
@@ -25590,7 +25590,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"description": "Human-readable label for this redirect. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.",
 						"maxLength": 122
 					},
 					"target": {
@@ -25797,7 +25797,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength."
+						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters."
 					},
 					"target": {
 						"type": "string",
@@ -25842,7 +25842,7 @@
 									"string",
 									"null"
 								],
-								"description": "Outbound interface name to match"
+								"description": "Outbound interface name to match. A write takes at most 15 bytes, the interface-name limit of nftables. A name with non-ASCII characters reaches that limit with fewer characters."
 							},
 							"src_ip": {
 								"type": [
@@ -25956,7 +25956,7 @@
 							"string",
 							"null"
 						],
-						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment, so a name with non-ASCII characters reaches the limit before the 122 characters of maxLength.",
+						"description": "Human-readable label for this NAT rule. A write takes at most 122 bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.",
 						"maxLength": 122
 					},
 					"target": {
@@ -26002,7 +26002,8 @@
 									"string",
 									"null"
 								],
-								"description": "Outbound interface name to match"
+								"description": "Outbound interface name to match. A write takes at most 15 bytes, the interface-name limit of nftables. A name with non-ASCII characters reaches that limit with fewer characters.",
+								"maxLength": 15
 							},
 							"src_ip": {
 								"type": [

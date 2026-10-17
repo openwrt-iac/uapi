@@ -155,37 +155,52 @@ function widen_null(v) {
 		return w;
 }
 
-function response_properties(properties) {
-	let out = {};
-	for (let k in properties) {
-		let v = properties[k];
-		let w = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(v) : strip_marker(v);
-		if (type(v) == "object" && v[WRITE_STRING] === true)
-			w = { ...w, type: filter(w.type, (t) => t != "string") };
-		out[k] = w;
+// A module nests a schema under `properties` and `items`, as `firewall/nat` keeps `device` under
+// `match`, so the markers of a property apply there too. A marker anywhere else leaks into the
+// document, and lint-openapi-shape stops the build on it.
+function response_schema(v) {
+	if (type(v) != "object") return v;
+	let w = (v[READ_NULLABLE] === true) ? widen_null(v) : strip_marker(v);
+	if (v[WRITE_STRING] === true)
+		w = { ...w, type: filter(w.type, (t) => t != "string") };
+	if (type(w.properties) == "object") {
+		let p = {};
+		for (let k, s in w.properties) p[k] = response_schema(s);
+		w = { ...w, properties: p };
 	}
+	if (type(w.items) == "object") w = { ...w, items: response_schema(w.items) };
+	return w;
+}
+
+// readOnly loses its job in the request half: the property is simply absent from it, at any depth.
+function writable(props, half) {
+	let out = {};
+	for (let k, v in props)
+		if (type(v) != "object" || v.readOnly !== true) out[k] = half(v);
 	return out;
+}
+
+// Both halves widen, because a read-modify-write sends the read view back: a live firewall rule
+// answers with ten null-valued keys, and a request schema that forbade them described that round
+// trip as invalid while the server answered 200 to it. The type is not what guards a required
+// field anyway; resource.validate() is, and it answers 422 naming the field for a null `target`
+// on a create. The overlay goes in before the widening, so that an enum it brings admits null too.
+function request_schema(v) {
+	if (type(v) != "object") return v;
+	if (exists(v, WRITE_OVERLAY) && type(v[WRITE_OVERLAY]) != "object")
+		die(sprintf("x-uapi-write must be an object of keywords, got %J", v[WRITE_OVERLAY]));
+	let w = exists(v, WRITE_OVERLAY) ? { ...strip_marker(v), ...v[WRITE_OVERLAY] } : v;
+	w = (v[READ_NULLABLE] === true) ? widen_null(w) : strip_marker(w);
+	if (type(w.properties) == "object") w = { ...w, properties: writable(w.properties, request_schema) };
+	if (type(w.items) == "object") w = { ...w, items: request_schema(w.items) };
+	return w;
 }
 
 function request_properties(properties) {
 	let out = {};
-	for (let k in properties) {
-		if (RESPONSE_ONLY[k]) continue;
-		let v = properties[k];
-		// readOnly loses its job here: the property is simply absent from this half.
-		if (type(v) == "object" && v.readOnly === true) continue;
-		// Both halves widen, because a read-modify-write sends the read view back: a live
-		// firewall rule answers with ten null-valued keys, and a request schema that forbade
-		// them described that round trip as invalid while the server answered 200 to it.
-		// The type is not what guards a required field anyway; resource.validate() is, and it
-		// answers 422 naming the field for a null `target` on a create.
-		// The overlay goes in before the widening, so that an enum it brings admits null too.
-		let w = (type(v) == "object" && type(v[WRITE_OVERLAY]) == "object")
-		        ? { ...strip_marker(v), ...v[WRITE_OVERLAY] } : v;
-		out[k] = (type(v) == "object" && v[READ_NULLABLE] === true) ? widen_null(w)
-		                                                            : strip_marker(w);
-	}
-	return out;
+	for (let k in properties)
+		if (!RESPONSE_ONLY[k]) out[k] = properties[k];
+	return writable(out, request_schema);
 }
 
 function all_declared(names, props) {
@@ -1477,7 +1492,8 @@ function build_schemas() {
 			}
 		}
 
-		let resp_props = response_properties(properties);
+		let resp_props = {};
+		for (let k in properties) resp_props[k] = response_schema(properties[k]);
 		let s = {
 			"type": "object",
 			"description": sprintf("uapi resource backed by uci %s.%s", mod.package, mod.type),
