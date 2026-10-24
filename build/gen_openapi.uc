@@ -1645,7 +1645,7 @@ function build_doc() {
 				"Locked":             { "description": "Another write holds the same per-package lock; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
 				"TooManyRequests":    { "description": "Per-token rate limit exceeded; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
 				"InternalError":      { "description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"ServiceUnavailable": { "description": "Service unavailable (codes: service_unavailable, init_script_missing)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"ServiceUnavailable": { "description": "Service unavailable (codes: service_unavailable, init_script_missing, config_missing)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 			},
 		},
 	};

@@ -51,6 +51,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
+| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio |
 
 `unsupported_media_type` is reserved and never emitted. uapi never rejects a body
 on `Content-Type`; the header is read for one thing only, switching a PATCH into

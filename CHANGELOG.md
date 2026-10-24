@@ -27,6 +27,10 @@ All notable changes to this project will be documented in this file. Format foll
   `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
   `no`. (#208)
 
+- **`503 config_missing`** answers a write into a uci package whose file under `/etc/config/`
+  does not exist, and names the file. `wireless` is the common case: `wifi config` writes
+  `/etc/config/wireless` only when it finds a radio. (#235)
+
 ### Changed
 
 - **`network/interfaces` refuses a field that the proto of the interface does not take, with 422
@@ -264,6 +268,22 @@ All notable changes to this project will be documented in this file. Format foll
   for it. A PATCH of any resource now takes the defaults from the section as the write leaves it.
   A PUT still writes `nohostroute '0'`, as it writes `auto '1'` and `disabled '0'`, because a PUT
   writes every field of the body. (#230)
+
+- **A write into a uci package without a config file answered 200 and stored nothing.** The uci
+  cursor stores nothing in a missing file and reports it only through a null return, which uapi
+  ignored. On a router without a radio, `POST /wireless/devices` and `POST /wireless/interfaces`
+  answered 200 with an `id` that a GET then answered 404 for, and a raw POST to a package without
+  a file did the same. Such a write now answers `503 config_missing` before any uci write. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. A PUT, PATCH or DELETE of an id there answers the same
+  503 where it answered 404, as with `init_script_missing`. A uci set, rename or commit that the
+  cursor refuses now answers 500 instead of 200, and a raw write whose reload service is not
+  installed answers `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
+
+- **A raw write of an option that uci cannot store answered 200 and stored nothing for it.** The
+  cursor drops an option name outside letters, digits and `_` and still returns true, and it
+  refuses a null, an object or a list that holds one. Such an option, and a `.type` with a space,
+  now answers 422 under the same carve-out. `[]` still removes an option. (#235)
 
 ### Security
 

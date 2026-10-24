@@ -127,6 +127,14 @@ t.describe('handler.make_singleton(unbound.ext)', () => {
 		t.assert_true(r.body.enabled);
 	});
 
+	t.it('patch does not create the section when the config file itself is missing', () => {
+		let c = bus.stub({ uci: {}, ubus: {}, missing_packages: [ 'unbound_ext' ] });
+		let r = ext_h.patch(c, ctx(), { enabled: true });
+		t.assert_equal(r.status, 503);
+		t.assert_equal(r.body.code, 'config_missing');
+		t.assert_deep_equal(c._state.uci_ops, []);
+	});
+
 	t.it('declares create_if_missing in the resource contract', () => {
 		t.assert_true(!!ext_resource.create_if_missing);
 	});

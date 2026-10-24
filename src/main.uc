@@ -366,6 +366,8 @@ function tokens_translate(ctx, r) {
 		return errors.lock_unavailable(ctx, r.error);
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);
+	if (r.kind == "config_missing")
+		return errors.error(ctx, "config_missing", r.message);
 	if (r.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, r.reload_error);
 	if (r.kind == "reload_failed_unrecovered")
@@ -586,6 +588,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);
+	if (r.kind == "config_missing")
+		return errors.error(ctx, "config_missing", r.message);
 	if (r.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, r.reload_error);
 	if (r.kind == "reload_failed_unrecovered")

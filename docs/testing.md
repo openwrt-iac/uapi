@@ -130,6 +130,8 @@ Validated in both directions: adding an option nothing reads is reported as new,
 
 A resource whose package is not on the box answers 503 `init_script_missing`, which is correct behaviour and also indistinguishable from a correct model: nothing exercises the resource, so a section-type mismatch looks exactly like a working one. That is how `vnstat/interfaces` shipped modelling `config interface` sections vnstat has never read.
 
+`wireless/*` is the same case with 503 `config_missing`: without a radio, `wifi config` writes no `/etc/config/wireless`. The wireless tests therefore load `mac80211_hwsim` through `ensure_wireless_radio` first, and `19_wireless_devices_test.sh` moves the file aside once to check the refusal.
+
 `install_uapi` installs lldpd and vnstat2 at bootstrap (about 560 KiB together), so `lldpd/config` and `vnstat/config` are exercised by `49_daemon_gated_resources_test.sh` and included in the stock-config round-trip. `40_unbound_uci_ext_test.sh` installs unbound itself, so `unbound/*` is covered only while that test runs.
 
 Six resource families remain uncovered because their packages stay outside the image: `snmpd/*`, `mwan3/*`, `sqm/queues`, `usteer/config`, `prometheus_node_exporter_lua/config` and `openvpn/*`. That is a standing gap rather than a decision that they cannot be tested, and the prometheus one matters least because most of its surface is now deprecated. Anything asserting what those daemons do has to be run by hand on a real device.

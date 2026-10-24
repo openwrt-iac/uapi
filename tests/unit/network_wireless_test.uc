@@ -75,6 +75,27 @@ t.describe('network.devices', () => {
 	});
 });
 
+t.describe('wireless writes on a router without a radio', () => {
+	let tx = {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	};
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	for (let c in [
+		[ widev, { type: "mac80211" } ],
+		[ wiface, { device: "radio0", mode: "ap", ssid: "x", network: "lan" } ],
+	]) {
+		t.it(sprintf("%s: a POST answers 503 config_missing and stores nothing", c[0].type), () => {
+			let conn = ubus.stub({ uci: {}, missing_packages: [ "wireless" ] });
+			let r = handler.make(c[0], { tx }).create(conn, ctx, c[1]);
+			t.assert_equal(r.status, 503);
+			t.assert_equal(r.body.code, "config_missing");
+			t.assert_true(match(r.body.message, /\/etc\/config\/wireless/) != null);
+			t.assert_deep_equal(conn._state.uci_ops, []);
+		});
+	}
+});
+
 t.describe('wireless.devices', () => {
 	t.it('contract', () => {
 		t.assert_equal(widev.package, "wireless");

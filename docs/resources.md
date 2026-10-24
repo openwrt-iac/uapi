@@ -40,6 +40,15 @@ returns `503 init_script_missing` with the missing
 write. The pre-flight check is part of the atomic transaction recipe;
 no partial state is left behind.
 
+The uci config file has to exist too. `wireless/devices` and
+`wireless/interfaces` need `/etc/config/wireless`, which `wifi config`
+writes only when it finds a radio, and LuCI never creates a radio
+section. On a router without one, a write answers `503 config_missing`
+with the missing path, before any uci write. That includes a PUT, PATCH
+or DELETE of an id that a GET answers 404 for, as with
+`init_script_missing`. A read answers an empty list. The same applies
+to any package whose file was removed. An empty file is enough.
+
 Install the daemon either out of band (`apk add unbound`, etc.) or
 through uapi itself via `POST /api/v3/packages/installed`. The latter
 is what a Terraform configuration would chain via `depends_on` on a

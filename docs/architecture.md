@@ -104,10 +104,12 @@ partial and names the modules the table does not reach.
 Every write request follows this sequence. Failure at any step short-circuits
 without uci state change.
 
-0. **Pre-flight init-script check.** For each entry in the resource's
+0. **Pre-flight checks.** For each entry in the resource's
    `reload` list, confirm `/etc/init.d/<svc>` exists and the name matches
    `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
-   no uci write attempted.
+   no uci write attempted. Then confirm `/etc/config/<package>` exists, because
+   the uci cursor stores nothing in a missing file and reports that only through
+   a null return. Miss → `503 config_missing` with the path.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
 2. **Snapshot.** `uci_export(<package>)` captures the current cursor state

@@ -136,6 +136,24 @@ t.describe('raw.create, client-supplied id', () => {
 		t.assert_equal(r.body.errors[0].code, "invalid_format");
 	});
 
+	t.it('answers 503 config_missing when the package has no config file', () => {
+		let conn = bus.stub({ uci: {}, missing_packages: [ "uapi_nosuchpkg" ] });
+		let r = raw.create(conn, ctx(), ["*:rw"], "uapi_nosuchpkg", { ".type": "thing", a: "1" });
+		t.assert_equal(r.status, 503);
+		t.assert_equal(r.body.code, "config_missing");
+		t.assert_deep_equal(conn._state.uci_ops, []);
+	});
+
+	// ucitrack can name a service that is not installed, and raw answered 500 "unknown kind".
+	t.it('answers 503 init_script_missing when ucitrack names a missing daemon', () => {
+		let conn = bus.stub({ uci: { ucitrack: {
+			t1: { '.type': 'uapi_tracked', init: 'uapi-no-such-daemon' },
+		} } });
+		let r = raw.create(conn, ctx(), ["*:rw"], "uapi_tracked", { ".type": "thing", a: "1" });
+		t.assert_equal(r.status, 503);
+		t.assert_equal(r.body.code, "init_script_missing");
+	});
+
 	t.it('returns 409 when the supplied id already exists', () => {
 		let conn = fw_with({ name: "z_lan",
 			data: { '.type': 'zone', '.anonymous': false, name: 'lan' } });
@@ -143,6 +161,50 @@ t.describe('raw.create, client-supplied id', () => {
 			{ ".type": "rule", id: "z_lan", target: "ACCEPT" });
 		t.assert_equal(r.status, 409);
 		t.assert_equal(r.body.code, "conflict");
+	});
+});
+
+// Each of these answered 200 on a device and stored nothing for the option.
+t.describe('raw writes refuse what uci cannot store', () => {
+	function fw() {
+		return bus.stub({ uci: { firewall: {
+			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT' },
+		} } });
+	}
+	for (let c in [
+		[ "a name outside the uci charset", { "b-c": "1" }, "b-c", "invalid_format" ],
+		[ "a null", { b: null }, "b", "invalid_type" ],
+		[ "an object", { b: { x: 1 } }, "b", "invalid_type" ],
+		[ "a list holding a null", { b: [ "a", null ] }, "b", "invalid_type" ],
+	]) {
+		t.it(sprintf("%s, on create, replace and patch", c[0]), () => {
+			let conn = fw();
+			for (let r in [
+				raw.create(conn, ctx(), ["*:rw"], "firewall", { ".type": "rule", ...c[1] }),
+				raw.replace(conn, ctx(), ["*:rw"], "firewall", "r1", c[1]),
+				raw.patch(conn, ctx(), ["*:rw"], "firewall", "r1", c[1]),
+			]) {
+				t.assert_equal(r.status, 422);
+				t.assert_equal(r.body.errors[0].field, c[2]);
+				t.assert_equal(r.body.errors[0].code, c[3]);
+			}
+			t.assert_deep_equal(conn._state.uci_ops, []);
+		});
+	}
+
+	t.it('a section type with a space', () => {
+		let r = raw.create(fw(), ctx(), ["*:rw"], "firewall", { ".type": "a rule" });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, ".type");
+	});
+
+	// A successful write needs the real flock, so the missing config file is what proves that
+	// the body got past the check: that refusal comes from the transaction.
+	t.it('passes numbers, booleans, lists of them, a hyphenated type and an echoed managed', () => {
+		let conn = bus.stub({ uci: {}, missing_packages: [ "uapi_nosuchpkg" ] });
+		let r = raw.create(conn, ctx(), ["*:rw"], "uapi_nosuchpkg",
+			{ ".type": "wifi-iface", managed: true, n: 5, f: 1.5, on: true, l: [ 1, false, "x" ], e: [] });
+		t.assert_equal(r.body.code, "config_missing");
 	});
 });
 
