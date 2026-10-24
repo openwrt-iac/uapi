@@ -43,16 +43,19 @@ All notable changes to this project will be documented in this file. Format foll
   field is still accepted and stores nothing. A request is checked only for the fields that it
   names, so a PATCH that changes only `proto` succeeds. That PATCH now removes the options of the
   old proto and keeps the options that apply to every proto. Before, it kept the static address
-  fields when it left proto static. With
-  terraform-provider-uapi before 3.2.0, a switch away from static fails, because its update sends
-  the static addresses from its state. Upgrade the provider together with uapi. (#208)
+  fields when it left proto static. With terraform-provider-uapi before 3.2.0, a proto switch
+  fails with 422 when the state holds a field that the new proto does not take. That is always
+  the case away from static, wireguard or a proto that uapi does not model: static requires its
+  addresses, and a read of the other two answers `nohostroute: false`. Upgrade the provider
+  together with uapi. (#208)
 - **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
   LuCI removes it on save. On a proto that uapi does not model, such as `6in4`, uapi cannot know
-  which options the handler reads. A read there shows every modelled option that uci stores, and a
-  PATCH that leaves `proto` out refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so
-  a write with an `If-Match` from before the upgrade answers 412. (#208)
+  which options the handler reads. A read there shows the modelled options that uci stores, and
+  `nohostroute` reads `false` when it is unset, as on wireguard. A PATCH that leaves `proto` out
+  refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so a
+  write with an `If-Match` from before the upgrade answers 412. (#208)
 - **`network/routes.table` and `network/rules.lookup` refuse 0.** netifd cannot resolve table 0
   and drops the route or rule, so such a write answered 200 with no effect. It now answers 422
   `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads that
@@ -197,8 +200,9 @@ All notable changes to this project will be documented in this file. Format foll
   violated its own declared `["string", "null"]` for every section that stores
   `list ip6prefix`.** A static section, which LuCI writes as a scalar, read back correctly, so
   branch (a) is not claimed. The change fails loudly for a typed reader: every interface with
-  `ip6prefix` now reads an array, so terraform-provider-uapi before 3.2.0 fails to refresh such
-  an interface. It is silent for a script: `jq -r .ip6prefix` now prints a JSON array, so grep
+  `ip6prefix` now reads an array, which terraform-provider-uapi before 3.2.0 stores as text, so
+  every plan shows a change for such an interface and the apply fails with an inconsistent
+  result. It is silent for a script: `jq -r .ip6prefix` now prints a JSON array, so grep
   scripts for `.ip6prefix`. Writers keep working, because a string is still accepted and split
   into words, as netifd splits a stored one. One prefix is stored as a scalar and several as a
   list, because blob.c drops a list given to a string attribute, and 6rd, map and 464xlat read
