@@ -6,6 +6,8 @@ let ucitrack = require("ucitrack");
 let handler = require("handler");
 
 const ID_RE = /^[A-Za-z0-9_]+$/;
+const TYPE_RE = /^[!-~]+$/;
+const UCI_SCALAR = { string: true, int: true, double: true, bool: true };
 let load_section = handler.load_section;
 
 const TYPE_DOMAIN_MAP = {
@@ -119,6 +121,10 @@ function translate_raw_tx(ctx, result) {
 		return errors.error(ctx, "not_found", result.message);
 	if (result.kind == "conflict")
 		return errors.error(ctx, "conflict", result.message);
+	if (result.kind == "init_script_missing")
+		return errors.error(ctx, "init_script_missing", result.message);
+	if (result.kind == "config_missing")
+		return errors.error(ctx, "config_missing", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")
@@ -127,12 +133,21 @@ function translate_raw_tx(ctx, result) {
 	                    sprintf("transaction returned unknown kind %J", result.kind));
 }
 
-function reject_dotted_options(body) {
-	for (let k in body) {
-		if (k == ".type" || k == "id") continue;
+// The uci cursor stores nothing for an option name outside its charset and still returns true,
+// and it refuses a null or an object with a null return, so both answered 200 and lost the option.
+function reject_unstorable_options(body) {
+	for (let k, v in body) {
+		if (k == ".type" || k == "id" || k == "managed") continue;
 		if (substr(k, 0, 1) == ".")
 			return errors.field_error(k, "invalid_format",
 			                          sprintf("option %J: dotted keys other than .type are reserved", k));
+		if (!match(k, ID_RE))
+			return errors.field_error(k, "invalid_format",
+			                          sprintf("option %J: uci stores only names of letters, digits and _", k));
+		for (let e in (type(v) == "array") ? v : [ v ])
+			if (!UCI_SCALAR[type(e)])
+				return errors.field_error(k, "invalid_type",
+				                          sprintf("option %J: uci stores a string, a number, a boolean or a list of them, and [] removes the option", k));
 	}
 	return null;
 }
@@ -170,10 +185,13 @@ function create(conn, ctx, scopes, pkg, body) {
 	if (type(sec_type) != "string" || sec_type == "")
 		return errors.validation_failed(ctx,
 			[errors.field_error(".type", "required", "is required on raw create")]);
+	if (!match(sec_type, TYPE_RE))
+		return errors.validation_failed(ctx,
+			[errors.field_error(".type", "invalid_format", "uci takes a section type of printable ASCII without spaces")]);
 
-	let dotted_err = reject_dotted_options(body);
-	if (dotted_err)
-		return errors.validation_failed(ctx, [dotted_err]);
+	let option_err = reject_unstorable_options(body);
+	if (option_err)
+		return errors.validation_failed(ctx, [option_err]);
 
 	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
 		sprintf("creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
@@ -236,9 +254,9 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 		sprintf("writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
 	if (denied != null) return denied;
 
-	let dotted_err = reject_dotted_options(body);
-	if (dotted_err)
-		return errors.validation_failed(ctx, [dotted_err]);
+	let option_err = reject_unstorable_options(body);
+	if (option_err)
+		return errors.validation_failed(ctx, [option_err]);
 
 	let reload = ucitrack.reload_services(conn, pkg);
 	let new_opts = {};
@@ -293,9 +311,9 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 		sprintf("writing %s.%s via /raw/", pkg, id));
 	if (denied != null) return denied;
 
-	let dotted_err = reject_dotted_options(body);
-	if (dotted_err)
-		return errors.validation_failed(ctx, [dotted_err]);
+	let option_err = reject_unstorable_options(body);
+	if (option_err)
+		return errors.validation_failed(ctx, [option_err]);
 
 	let reload = ucitrack.reload_services(conn, pkg);
 	let updates = {};

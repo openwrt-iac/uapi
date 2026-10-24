@@ -23795,6 +23795,7 @@
 							"reload_failed_unrecovered",
 							"service_unavailable",
 							"init_script_missing",
+							"config_missing",
 							"batch_partial_failure"
 						],
 						"description": "Machine-readable error code. Stable within a major. Clients should branch on HTTP status first and treat unknown codes gracefully (the project's additive contract permits new codes within a major)."
@@ -34574,7 +34575,7 @@
 				}
 			},
 			"ServiceUnavailable": {
-				"description": "Service unavailable (codes: service_unavailable, init_script_missing)",
+				"description": "Service unavailable (codes: service_unavailable, init_script_missing, config_missing)",
 				"content": {
 					"application/json": {
 						"schema": {

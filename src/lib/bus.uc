@@ -21,6 +21,20 @@ function connect(opts) {
 	let cursor = uci_mod.cursor();
 	let debug = (opts != null && opts.debug) ? require('log') : null;
 
+	// The cursor reports a failed write by returning null and raises nothing: on a missing
+	// package, `set` and `commit` both answer null with "Entry not found", so a write that stored
+	// nothing answered 200. A delete of what is already gone has the result it asked for.
+	function wrote(op, pkg, r) {
+		if (r == null) die(sprintf("uci %s %s: %s", op, pkg, cursor.error() ?? "failed"));
+		return r;
+	}
+	function removed(pkg, r) {
+		let err = cursor.error();
+		if (r == null && err != "Entry not found")
+			die(sprintf("uci delete %s: %s", pkg, err ?? "failed"));
+		return r;
+	}
+
 	return {
 		call: function(service, method, args) {
 			if (debug)
@@ -48,22 +62,25 @@ function connect(opts) {
 		// accepted create into a 500.
 		uci_set: function(pkg, section, option, value) {
 			if (type(value) == "array" && length(value) == 0)
-				return cursor.delete(pkg, section, option);
-			return cursor.set(pkg, section, option, value);
+				return removed(pkg, cursor.delete(pkg, section, option));
+			return wrote("set", pkg, cursor.set(pkg, section, option, value));
 		},
 		uci_create_section: function(pkg, name, sec_type) {
-			return cursor.set(pkg, name, sec_type);
+			return wrote("set", pkg, cursor.set(pkg, name, sec_type));
 		},
 		uci_rename: function(pkg, section, new_name) {
-			return cursor.rename(pkg, section, new_name);
+			return wrote("rename", pkg, cursor.rename(pkg, section, new_name));
 		},
 		uci_delete: function(pkg, section, option) {
-			return option != null
+			return removed(pkg, option != null
 				? cursor.delete(pkg, section, option)
-				: cursor.delete(pkg, section);
+				: cursor.delete(pkg, section));
 		},
 		uci_commit: function(pkg) {
-			return cursor.commit(pkg);
+			return wrote("commit", pkg, cursor.commit(pkg));
+		},
+		uci_package_exists: function(pkg) {
+			return fs_mod.stat("/etc/config/" + pkg) != null;
 		},
 		uci_revert: function(pkg) {
 			return cursor.revert(pkg);
@@ -94,6 +111,7 @@ function stub(initial) {
 	let init = initial ?? {};
 	let st = {
 		uci: deepcopy(init.uci ?? {}),
+		missing_packages: init.missing_packages ?? [],
 		ubus_responses: { ...(init.ubus ?? {}) },
 		ubus_calls: [],
 		uci_ops: [],
@@ -180,6 +198,10 @@ function stub(initial) {
 		uci_commit: function(pkg) {
 			record("commit", pkg);
 			return true;
+		},
+
+		uci_package_exists: function(pkg) {
+			return index(st.missing_packages, pkg) == -1;
 		},
 
 		uci_revert: function(pkg) {

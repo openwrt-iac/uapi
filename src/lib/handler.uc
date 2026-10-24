@@ -484,6 +484,8 @@ function translate_tx(ctx, result) {
 		return errors.error(ctx, "precondition_failed", result.message);
 	if (result.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", result.message);
+	if (result.kind == "config_missing")
+		return errors.error(ctx, "config_missing", result.message);
 	if (result.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, result.reload_error);
 	if (result.kind == "reload_failed_unrecovered")

@@ -38,6 +38,14 @@ function default_check_services(services) {
 	return null;
 }
 
+// A write into a config file that does not exist stores nothing, and the uci cursor raises
+// nothing either, so this answers first. Nothing on the box created the file: the package that
+// ships it is missing, or, for `wireless`, the radio that `wifi config` would have described.
+function missing_config(conn, pkg) {
+	if (conn.uci_package_exists(pkg)) return null;
+	return sprintf("/etc/config/%s not found: the package or hardware that creates it is missing on this router", pkg);
+}
+
 function default_reload(services) {
 	for (let svc in services) {
 		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
@@ -204,6 +212,9 @@ function transaction(conn, params) {
 	let svc_err = check_services(services);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
+	let cfg_err = missing_config(conn, pkg);
+	if (cfg_err != null)
+		return { ok: false, kind: "config_missing", message: cfg_err };
 
 	let lock = acquire(path);
 	// `null` means a test/legacy stub that pre-dates the contention sentinel;
@@ -268,6 +279,11 @@ function multi_transaction(conn, params) {
 	let sorted = [];
 	for (let p in unique) push(sorted, p);
 	sort(sorted);
+	for (let p in sorted) {
+		let cfg_err = missing_config(conn, p);
+		if (cfg_err != null)
+			return { ok: false, kind: "config_missing", message: cfg_err };
+	}
 
 	let acquired = [];
 	let g = _lock_one(path, "s");

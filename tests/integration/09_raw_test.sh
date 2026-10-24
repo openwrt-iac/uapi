@@ -46,6 +46,12 @@ echo "--- POST without .type returns 422 ---"
 no_type=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/firewall" -d '{"target":"ACCEPT"}')
 echo "$no_type" | tail -1 | grep -q '^422$' || fail "missing .type expected 422"
 
+echo "--- an option that uci cannot store returns 422 instead of a 200 that stored nothing ---"
+for body in '{"bad-name":"1"}' '{"comment":null}' '{"comment":{"x":1}}'; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/firewall/$id" -d "$body")
+	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
+done
+
 echo "--- raw POST with only firewall:ro denies (composition check) ---"
 denied=$(curl -sS -H "$FW_RO" -w "\n%{http_code}" -X POST -H 'Content-Type: application/json' "$URL/raw/firewall" -d '{
 	".type": "rule", "target": "ACCEPT", "src": "lan"
@@ -130,7 +136,18 @@ left=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
 echo "  read stays boolean, and the stale option is swept"
 $SSH "uci -q delete firewall.uapi_legacy_mg; uci commit firewall" >/dev/null 2>&1
 
-echo "--- POST to an unknown package writes the file but reports reloaded:false ---"
+echo "--- POST to a package with no config file answers 503 config_missing and creates nothing ---"
+$SSH 'rm -f /etc/config/uapi_test_unknown'
+unknown=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/uapi_test_unknown" -d '{
+	".type": "thing", "color": "red"
+}')
+echo "$unknown"
+echo "$unknown" | tail -1 | grep -q '^503$' || fail "POST without a config file expected 503"
+echo "$unknown" | grep -q '"code": "config_missing"' || fail "expected config_missing"
+$SSH 'test ! -e /etc/config/uapi_test_unknown' || fail "a refused write created the config file"
+
+echo "--- POST to a package uapi cannot reload stores the section and reports reloaded:false ---"
+$SSH 'touch /etc/config/uapi_test_unknown'
 unknown=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/uapi_test_unknown" -d '{
 	".type": "thing", "color": "red"
 }')
@@ -138,6 +155,8 @@ echo "$unknown"
 echo "$unknown" | tail -1 | grep -q '^200$' || fail "unknown pkg POST expected 200"
 echo "$unknown" | grep -q '"reloaded": false' || fail "expected reloaded:false for unknown package"
 echo "$unknown" | grep -q '"reload_note"' || fail "expected reload_note for unknown package"
+$SSH 'uci -q show uapi_test_unknown' | grep -q "color='red'" || fail "the section was not stored"
+$SSH 'rm -f /etc/config/uapi_test_unknown'
 
 echo "--- DELETE the rule ---"
 deleted=$(call -X DELETE "$URL/raw/firewall/$id")

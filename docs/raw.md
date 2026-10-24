@@ -64,6 +64,10 @@ The response is the new section plus:
 
 `reloaded: false` plus a `reload_note` string when uapi does not know which service to reload for the package. The configuration is on disk; you must reload the relevant daemon manually.
 
+A package needs its file under `/etc/config/` before a write, as with `uci` itself. Without one, a write answers `503 config_missing` and creates nothing. An empty file is enough, for example after `touch /etc/config/<package>`.
+
+An option name takes letters, digits and `_`, and a value is a string, a number, a boolean or a list of them, because that is what uci stores. `.type` takes printable ASCII without spaces, and option names that start with `.` are reserved. Anything else answers `422`, because uci would store nothing for it. `[]` removes an option.
+
 `PUT` replaces all non-meta options. `PATCH` merges. `DELETE` is `204 No Content`.
 
 ## Auth

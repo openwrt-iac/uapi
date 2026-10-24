@@ -26,6 +26,7 @@ const STATUS_BY_CODE = {
 	reload_failed_unrecovered: 500,
 	service_unavailable: 503,
 	init_script_missing: 503,
+	config_missing: 503,
 };
 
 const FIELD_CODES = {
@@ -51,7 +52,7 @@ const ALL_CODES = [
 	"precondition_failed", "unsupported_media_type",
 	"validation_failed", "locked", "too_many_requests",
 	"internal_error", "reload_failed_restored", "reload_failed_unrecovered",
-	"service_unavailable", "init_script_missing",
+	"service_unavailable", "init_script_missing", "config_missing",
 	"batch_partial_failure",
 ];
 

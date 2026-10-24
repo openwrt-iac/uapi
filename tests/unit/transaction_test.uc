@@ -372,6 +372,42 @@ t.describe('transaction, default_check_services pre-flight', () => {
 	});
 });
 
+t.describe('transaction, config pre-flight', () => {
+	t.it('refuses a package whose config file is missing, before any uci op', () => {
+		let conn = ubus.stub({ uci: {}, missing_packages: [ "wireless" ] });
+		let r = tx.transaction(conn, build_params({
+			package: "wireless", reload_services: [],
+			acquire: function() { return {}; }, release: function() {},
+		}));
+		t.assert_equal(r.kind, "config_missing");
+		t.assert_true(match(r.message, /\/etc\/config\/wireless not found/) != null);
+		t.assert_deep_equal(conn._state.uci_ops, []);
+	});
+
+	t.it('reports a missing init script first', () => {
+		let conn = ubus.stub({ uci: {}, missing_packages: [ "wireless" ] });
+		let r = tx.transaction(conn, build_params({
+			package: "wireless",
+			check_services: function() { return "init script /etc/init.d/x not found"; },
+		}));
+		t.assert_equal(r.kind, "init_script_missing");
+	});
+
+	t.it('refuses a batch that names a missing package, before any lock or uci op', () => {
+		let conn = ubus.stub({ uci: { fw: {} }, missing_packages: [ "wireless" ] });
+		let r = tx.multi_transaction(conn, {
+			packages: [ "fw", "wireless" ], reload_services: [],
+			fn: function(c) {
+				c.uci_set("fw", "r1", "target", "ACCEPT");
+				return { ok: true, body: {} };
+			},
+			reload: noop_reload, check_services: noop_check,
+		});
+		t.assert_equal(r.kind, "config_missing");
+		t.assert_deep_equal(conn._state.uci_ops, []);
+	});
+});
+
 t.describe('transaction, lock release', () => {
 	t.it('releases the lock when fn throws', () => {
 		let locks = harness_locks(true);

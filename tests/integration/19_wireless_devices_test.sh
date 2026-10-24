@@ -55,4 +55,40 @@ echo "$patched" | grep -q '"channel": 6' || fail "PATCH did not update channel"
 echo "--- DELETE /wireless/devices/$id ---"
 call -X DELETE "$URL/wireless/devices/$id" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
 
+echo "--- without /etc/config/wireless, a write answers 503 config_missing and stores nothing ---"
+# A router without a radio has no such file, because `wifi config` writes it only for hardware it finds.
+$SSH 'mv /etc/config/wireless /tmp/uapi19-wireless'
+restore_wireless() { $SSH 'test -e /tmp/uapi19-wireless && mv /tmp/uapi19-wireless /etc/config/wireless' || true; }
+trap 'restore_wireless; cleanup' EXIT INT TERM
+for ep in devices interfaces; do
+	case $ep in
+	devices) body='{"type": "mac80211"}' ;;
+	interfaces) body='{"device": "radio0", "mode": "ap", "ssid": "uapi19", "network": "lan"}' ;;
+	esac
+	r=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/$ep" -d "$body")
+	echo "$r" | tail -1 | grep -q '^503$' && echo "$r" | grep -q '"code": "config_missing"' \
+		&& echo "$r" | grep -q '/etc/config/wireless' || fail "POST /wireless/$ep without the config: $r"
+	call "$URL/wireless/$ep" | sed '$d' | jq -e 'length == 0' >/dev/null || fail "GET /wireless/$ep is not empty"
+done
+$SSH 'test ! -e /etc/config/wireless' || fail "a refused write created /etc/config/wireless"
+restore_wireless
+
+echo "--- the installed bus raises on a uci write that stores nothing, and not on a delete of nothing ---"
+$SSH 'cat > /tmp/uapi19-bus.uc' <<'UC'
+let b = require("bus").connect();
+let out = [];
+for (let op in [ "set", "commit", "delete" ]) {
+	let r = "ok";
+	try {
+		if (op == "set") b.uci_set("uapi_nosuchpkg", "s", "o", "1");
+		else if (op == "commit") b.uci_commit("uapi_nosuchpkg");
+		else b.uci_delete("network", "loopback", "uapi_no_such_option");
+	} catch (e) { r = "died"; }
+	push(out, op + "=" + r);
+}
+print(join(" ", out), "\n");
+UC
+out=$($SSH 'ucode -L /usr/share/uapi/lib /tmp/uapi19-bus.uc; rm -f /tmp/uapi19-bus.uc')
+[ "$out" = "set=died commit=died delete=ok" ] || fail "bus checks: $out"
+
 echo "wireless.devices CRUD ok."
