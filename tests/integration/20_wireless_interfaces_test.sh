@@ -99,6 +99,24 @@ got=$($SSH "for o in encryption ieee80211r ft_over_ds ft_psk_generate_local mobi
 [ "$got" = "psk2+ccmp 1 0 0 4f57 ap1 02aabbccddee 1 ff:ff:ff:ff:ff:ff,*,$kh 00:00:00:00:00:00,00:00:00:00:00:00,$kh supersecret " ] \
 	|| fail "PUT of the read changed the options: $got"
 
+# wifi-scripts writes these into hostapd's config without escaping, so a newline added a
+# directive, and hostapd refuses its whole config for one key holder entry it cannot parse.
+echo "--- a key, nasid or key holder entry that hostapd cannot take answers 422 and changes nothing ---"
+for body in '{"key":"abcdefgh\nssid2=\"x\""}' '{"nasid":"ap1\nssid2=\"x\""}' '{"key":"short"}' \
+	"{\"r0kh\":[\"02:00:00:00:00:01,ap1,$kh$kh\\nssid2=x\"]}" \
+	'{"r0kh":["02:00:00:00:00:01,ap1,secret"]}' "{\"r1kh\":[\"02:00:00:00:00:01,ap1,$kh\"]}"; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$sid" -d "$body")
+	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
+done
+got=$($SSH "for o in key nasid r0kh r1kh; do uci get wireless.$sid.\$o; done" | tr '\n' ' ')
+[ "$got" = "supersecret ap1 ff:ff:ff:ff:ff:ff,*,$kh 00:00:00:00:00:00,00:00:00:00:00:00,$kh " ] \
+	|| fail "a refused PATCH changed uci: $got"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$sid" \
+	-d "{\"r0kh\":[\"02:00:00:00:00:01,ap-1.example.com,$kh$kh\"]}")
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of a 64-hex-digit r0kh entry: $r"
+$SSH "uci get wireless.$sid.r0kh" | grep -qx "02:00:00:00:00:01,ap-1.example.com,$kh$kh" \
+	|| fail "the r0kh entry was not stored"
+
 echo "--- DELETE both ---"
 call -X DELETE "$URL/wireless/interfaces/$sid" | tail -1 | grep -q '^204$' || fail "secured DELETE expected 204"
 call -X DELETE "$URL/wireless/interfaces/$id"  | tail -1 | grep -q '^204$' || fail "open DELETE expected 204"

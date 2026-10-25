@@ -199,9 +199,9 @@ t.describe('wireless.interfaces', () => {
 	t.it('PATCH that supplies a key overrides the stored one', () => {
 		let c = seeded_wiface();
 		let r = wiface_handler().patch(c, { request_id: "01hx0000000000000000000000" },
-		                               'w1', { key: 'new' });
+		                               'w1', { key: 'newsecret' });
 		t.assert_equal(r.status, 200);
-		t.assert_equal(c._state.uci.wireless.w1.key, 'new');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
 	});
 });
 
@@ -395,5 +395,116 @@ t.describe('wireless.interfaces has_key is always present and honest', () => {
 			t.assert_equal(length(handler.check_schema_types(wiface.schema_properties,
 			                                                 { has_key: view.has_key })), 0);
 		}
+	});
+});
+
+// wifi-scripts writes these four into hostapd's config without escaping, so a newline in one
+// added a hostapd directive, and hostapd refuses its whole config for one bad key holder entry.
+t.describe('wireless.interfaces values that reach hostapd as config lines', () => {
+	const H32 = '00112233445566778899aabbccddeeff';
+	const H64 = H32 + H32;
+	function bytes(n) {
+		let s = '';
+		for (let i = 0; i < n; i++) s += 'a';
+		return s;
+	}
+	function field_errs(body, field) {
+		return filter(full_validate(wiface, { device: 'radio0', ...body }, null),
+		              (e) => e.field == field);
+	}
+
+	t.it('refuses a control character in a key, nasid or key holder entry, in any mode', () => {
+		for (let enc in [ 'psk2', 'sae', 'wpa2', 'none' ]) {
+			let errs = field_errs({ encryption: enc, key: 'abcdefgh\nssid2="x"' }, 'key');
+			t.assert_deep_equal(map(errs, (e) => e.code), [ 'invalid_format' ]);
+		}
+		t.assert_deep_equal(map(field_errs({ nasid: 'ap1\nssid2="x"' }, 'nasid'), (e) => e.code),
+		                    [ 'invalid_format' ]);
+		t.assert_deep_equal(map(field_errs({ nasid: 'ap1\t' }, 'nasid'), (e) => e.code),
+		                    [ 'invalid_format' ]);
+		t.assert_deep_equal(map(field_errs({ r0kh: [ '02:00:00:00:00:01,ap1,' + H64 + '\nssid2="x"' ] }, 'r0kh[0]'),
+		                        (e) => e.code), [ 'invalid_format' ]);
+	});
+
+	t.it('takes a passphrase of 8 to 63 bytes or a PSK of 64 hex digits, as wifi-scripts does', () => {
+		for (let enc in [ 'psk', 'psk2', 'psk-mixed', 'sae', 'sae-mixed', 'psk2+ccmp' ]) {
+			for (let k in [ bytes(8), bytes(63), H64, 'café-au-lait' ])
+				t.assert_equal(length(field_errs({ encryption: enc, key: k }, 'key')), 0);
+			for (let k in [ bytes(7), substr(H64, 1) + 'g', bytes(65) ])
+				t.assert_deep_equal(map(field_errs({ encryption: enc, key: k }, 'key'), (e) => e.code),
+				                    [ 'invalid_format' ]);
+		}
+	});
+
+	t.it('leaves the length of a RADIUS secret or a WEP key alone', () => {
+		for (let enc in [ 'wpa2', 'wpa3', 'wep', 'owe' ])
+			t.assert_equal(length(field_errs({ encryption: enc, key: 'short' }, 'key')), 0);
+	});
+
+	t.it('caps nasid at the 48 bytes that hostapd takes for 802.11r', () => {
+		t.assert_equal(length(field_errs({ nasid: bytes(48) }, 'nasid')), 0);
+		t.assert_deep_equal(map(field_errs({ nasid: bytes(49) }, 'nasid'), (e) => e.code), [ 'out_of_range' ]);
+	});
+
+	t.it('takes the key holder entries that hostapd parses, wifi-scripts defaults included', () => {
+		for (let e in [ 'ff:ff:ff:ff:ff:ff,*,' + H32, '02:00:00:00:00:01,ap-1.example.com,' + H64,
+		                '02:00:00:00:00:01,' + bytes(47) + ',' + H64 ])
+			t.assert_equal(length(field_errs({ r0kh: [ e ] }, 'r0kh[0]')), 0);
+		for (let e in [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32,
+		                '02:00:00:00:00:01,02:00:00:00:00:02,' + H64 ])
+			t.assert_equal(length(field_errs({ r1kh: [ e ] }, 'r1kh[0]')), 0);
+	});
+
+	t.it('refuses the key holder entries that hostapd refuses, without naming the entry', () => {
+		let cases = [
+			[ 'r0kh', '02:00:00:00:00:01,ap1,secret' ],
+			[ 'r0kh', '02:00:00:00:00:01,ap1' ],
+			[ 'r0kh', '02:00:00:00:00:01,' + bytes(48) + ',' + H64 ],
+			[ 'r0kh', '02:00:00:00:00:01,ap 1,' + H64 ],
+			[ 'r0kh', '02:00:00:00:00:01,ap,1,' + H64 ],
+			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H32 + '0' ],
+			[ 'r0kh', '02:00:00:00:00:01,,' + H64 ],
+			[ 'r0kh', '0200.0000.0001,ap1,' + H64 ],
+			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H64 + H32 ],
+			[ 'r1kh', '02:00:00:00:00:01,ap1,' + H64 ],
+		];
+		let valid = { r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32, r1kh: '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 };
+		for (let c in cases) {
+			let errs = filter(full_validate(wiface, { device: 'radio0', [c[0]]: [ valid[c[0]], c[1] ] }, null),
+			                  (e) => index(e.field, c[0]) == 0);
+			t.assert_deep_equal(map(errs, (e) => [ e.field, e.code ]), [ [ c[0] + '[1]', 'invalid_format' ] ]);
+			t.assert_equal(index(errs[0].message, c[1]), -1);
+		}
+	});
+
+	let tx = {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	};
+	function stored(extra) {
+		return ubus.stub({ uci: { wireless: {
+			w1: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0', mode: 'ap',
+			      ssid: 'home', encryption: 'psk2', key: 'short', ...extra },
+		} } });
+	}
+
+	t.it('a PATCH with an injected key answers 422 and leaves uci alone', () => {
+		let c = stored({ key: 'correcthorse' });
+		let r = handler.make(wiface, { tx }).patch(c, { request_id: "01hx0000000000000000000000" },
+		                                         'w1', { key: 'abcdefgh\nssid2="x"' });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(c._state.uci.wireless.w1.key, 'correcthorse');
+	});
+
+	// The key and the lists are never read back, so a PUT carries the stored ones. Checking those
+	// would refuse every write of a section whose stored value LuCI or a shell wrote.
+	t.it('a PUT that omits the key and the key holders keeps stored ones it would refuse', () => {
+		let c = stored({ r0kh: [ '02:00:00:00:00:01,ap1,secret' ] });
+		let r = handler.make(wiface, { tx }).replace(c, { request_id: "01hx0000000000000000000000" }, 'w1',
+		                                           { device: 'radio0', mode: 'ap', ssid: 'home2', encryption: 'psk2' });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.ssid, 'home2');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'short');
+		t.assert_deep_equal(c._state.uci.wireless.w1.r0kh, [ '02:00:00:00:00:01,ap1,secret' ]);
 	});
 });

@@ -29105,7 +29105,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier"
+						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier. Unset, hostapd uses the BSSID without colons. A write takes at most 48 bytes with no control character"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29122,7 +29122,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 10000"
+						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 14 days (20160 minutes). 0 turns the timeout off"
 					},
 					"r1_key_holder": {
 						"type": [
@@ -29205,7 +29205,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key that a write sends has no control character, and with psk, psk2, psk-mixed, sae or sae-mixed it is 8 to 63 bytes or 64 hex digits, which is what wifi-scripts accepts"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29413,7 +29413,8 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier"
+						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier. Unset, hostapd uses the BSSID without colons. A write takes at most 48 bytes with no control character",
+						"maxLength": 48
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29430,7 +29431,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 10000"
+						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 14 days (20160 minutes). 0 turns the timeout off"
 					},
 					"r1_key_holder": {
 						"type": [
@@ -29448,12 +29449,13 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key that a write sends has no control character, and with psk, psk2, psk-mixed, sae or sae-mixed it is 8 to 63 bytes or 64 hex digits, which is what wifi-scripts accepts"
 					},
 					"r0kh": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5},[!-+.-~-]{1,47},([0-9A-Fa-f]{32}){1,2}$"
 						},
 						"writeOnly": true,
 						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
@@ -29461,7 +29463,8 @@
 					"r1kh": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5},[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5},([0-9A-Fa-f]{32}){1,2}$"
 						},
 						"writeOnly": true,
 						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
