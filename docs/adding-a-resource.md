@@ -22,6 +22,7 @@ return {
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
     validate: function(json, conn, id, delta) { ... return []; }, // {field, code, message}[]
+    validate_new: function(json) { ... return []; }, // optional: see "Rules that a stored value can fail"
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
 
     // OpenAPI hints (consumed by build/gen_openapi.uc, not by the runtime):
@@ -196,6 +197,21 @@ reports. An element under `items` takes it too, and the test probes it as the on
 its array, under the path that `validate()` gives it, such as `ip6class[0]`. A keyword below an
 element has no probe and fails the test. A rule that depends on another field, such as the pppd range of `mtu` on proto `ppp`,
 goes in `openapi_write_conditional`.
+
+### Rules that a stored value can fail
+
+`validate()` refuses a write whenever the section it leaves behind breaks a rule, so a stored
+value that a rule refuses blocks every write of the section until a write replaces it. That is
+right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi can break in uci,
+when the section must stay writable: disabling an SSID that holds an injected key has to work. Put
+such rules in `validate_new(json)`. They see the section as if it were enabled, because another
+writer can enable it later. The handler runs them on the section as it was and as the write
+leaves it, and refuses the write only for an error that it adds, compared by field, code and
+message. So a write that leaves a stored value alone, disabling included, is never refused for
+it, and a write that makes a stored value break, by turning a daemon option on for instance, is.
+A write that turns a `disabled` field from true to false counts every error as new. The sweep
+runs `validate_new()` on every stored section, disabled ones included, and lists every error.
+`wireless/interfaces` and `network/wireguard_peers` use it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

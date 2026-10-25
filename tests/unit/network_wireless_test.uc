@@ -10,6 +10,7 @@ function full_validate(r, body, conn) {
 	let out = [];
 	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
+	for (let e in (r.validate_new != null) ? r.validate_new(body) : []) push(out, e);
 	return out;
 }
 
@@ -474,7 +475,7 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		];
 		let valid = { r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32, r1kh: '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 };
 		for (let c in cases) {
-			let errs = filter(full_validate(wiface, { device: 'radio0', [c[0]]: [ valid[c[0]], c[1] ] }, null),
+			let errs = filter(full_validate(wiface, { device: 'radio0', ...FT, [c[0]]: [ valid[c[0]], c[1] ] }, null),
 			                  (e) => index(e.field, c[0]) == 0);
 			t.assert_deep_equal(map(errs, (e) => [ e.field, e.code ]), [ [ c[0] + '[1]', 'invalid_format' ] ], c[1]);
 			t.assert_equal(index(errs[0].message, c[1]), -1);
@@ -521,7 +522,9 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		let c = stored({ disabled: '1' });
 		t.assert_equal(h().patch(c, CTX, 'w1', { key: 'abcdefgh\nssid2="x"' }).status, 422);
 		t.assert_equal(h().patch(c, CTX, 'w1', { nasid: bytes(1025) }).status, 422);
-		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad' ] }).status, 422);
+		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nx=1' ] }).status, 422);
+		// hostapd does not read the lists without fast transition, so their grammar waits for it.
+		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad' ] }).status, 200);
 	});
 
 	// A write is never refused for a value that it leaves alone, so disabling an injected SSID, the
@@ -551,6 +554,16 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		c = stored({ mode: 'sta', encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ 'bad' ] });
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
+	});
+
+	// The handler compares the errors of the SSID before and after the write, so a stored error that
+	// the write leaves as it is never blocks it, whichever field the write names.
+	t.it('a write is not refused for a stored error that it leaves as it is', () => {
+		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ 'bad' ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 ] }).status, 200);
+		c = stored({ encryption: 'sae', ieee80211r: '1', nasid: bytes(49) });
+		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'sae', ieee80211r: true,
+		                                           nasid: bytes(49), disabled: true }).status, 200);
 	});
 
 	t.it('a long stored nasid blocks the writes that turn fast transition on, and no other', () => {

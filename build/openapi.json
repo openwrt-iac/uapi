@@ -29105,7 +29105,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write that changes it refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, unless the SSID stored the same value already. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29205,7 +29205,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. Like every rule on this resource, it is checked when a write changes the key or enables the SSID, so a write that leaves a stored key alone, or disables the SSID, is not refused for it"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves a stored key alone, disabling the SSID included, is not refused for it, and one that enables the SSID is"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29413,7 +29413,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write that changes it refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, unless the SSID stored the same value already. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
 						"maxLength": 1024
 					},
 					"reassociation_deadline": {
@@ -29449,13 +29449,12 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. Like every rule on this resource, it is checked when a write changes the key or enables the SSID, so a write that leaves a stored key alone, or disables the SSID, is not refused for it"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves a stored key alone, disabling the SSID included, is not refused for it, and one that enables the SSID is"
 					},
 					"r0kh": {
 						"type": "array",
 						"items": {
-							"type": "string",
-							"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][^ ,]{0,47}[ ,][0-9A-Fa-f]{32}"
+							"type": "string"
 						},
 						"writeOnly": true,
 						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
@@ -29463,8 +29462,7 @@
 					"r1kh": {
 						"type": "array",
 						"items": {
-							"type": "string",
-							"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][0-9A-Fa-f]{32}"
+							"type": "string"
 						},
 						"writeOnly": true,
 						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
@@ -29556,7 +29554,6 @@
 								}
 							},
 							"required": [
-								"mode",
 								"ieee80211r",
 								"encryption"
 							]
@@ -29565,6 +29562,112 @@
 							"properties": {
 								"nasid": {
 									"maxLength": 48
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"mode": {
+									"const": "ap"
+								},
+								"ieee80211r": {
+									"const": true
+								},
+								"encryption": {
+									"enum": [
+										"owe",
+										"psk2",
+										"psk-mixed",
+										"sae",
+										"sae-mixed",
+										"wpa2",
+										"wpa3",
+										"wpa3-mixed",
+										"psk2+ccmp",
+										"psk2+ccmp256",
+										"psk2+gcmp",
+										"psk2+gcmp256",
+										"psk2+tkip",
+										"psk2+tkip+ccmp",
+										"psk2+aes",
+										"psk2+tkip+aes",
+										"psk2+aes+tkip",
+										"psk2+ccmp+tkip",
+										"psk-mixed+ccmp",
+										"psk-mixed+ccmp256",
+										"psk-mixed+gcmp",
+										"psk-mixed+gcmp256",
+										"psk-mixed+tkip",
+										"psk-mixed+tkip+ccmp",
+										"psk-mixed+aes",
+										"psk-mixed+tkip+aes",
+										"psk-mixed+aes+tkip",
+										"psk-mixed+ccmp+tkip",
+										"sae+ccmp",
+										"sae+ccmp256",
+										"sae+gcmp",
+										"sae+gcmp256",
+										"sae+tkip",
+										"sae+tkip+ccmp",
+										"sae+aes",
+										"sae+tkip+aes",
+										"sae+aes+tkip",
+										"sae+ccmp+tkip",
+										"wpa2+ccmp",
+										"wpa2+ccmp256",
+										"wpa2+gcmp",
+										"wpa2+gcmp256",
+										"wpa2+tkip",
+										"wpa2+tkip+ccmp",
+										"wpa2+aes",
+										"wpa2+tkip+aes",
+										"wpa2+aes+tkip",
+										"wpa2+ccmp+tkip",
+										"wpa3+ccmp",
+										"wpa3+ccmp256",
+										"wpa3+gcmp",
+										"wpa3+gcmp256",
+										"wpa3+tkip",
+										"wpa3+tkip+ccmp",
+										"wpa3+aes",
+										"wpa3+tkip+aes",
+										"wpa3+aes+tkip",
+										"wpa3+ccmp+tkip",
+										"wpa3-mixed+ccmp",
+										"wpa3-mixed+ccmp256",
+										"wpa3-mixed+gcmp",
+										"wpa3-mixed+gcmp256",
+										"wpa3-mixed+tkip",
+										"wpa3-mixed+tkip+ccmp",
+										"wpa3-mixed+aes",
+										"wpa3-mixed+tkip+aes",
+										"wpa3-mixed+aes+tkip",
+										"wpa3-mixed+ccmp+tkip"
+									]
+								},
+								"ft_psk_generate_local": {
+									"const": false
+								}
+							},
+							"required": [
+								"ieee80211r",
+								"encryption",
+								"ft_psk_generate_local"
+							]
+						},
+						"then": {
+							"properties": {
+								"r0kh": {
+									"items": {
+										"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][^ ,]{0,47}[ ,][0-9A-Fa-f]{32}"
+									}
+								},
+								"r1kh": {
+									"items": {
+										"pattern": "^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}[^ ,]*[ ,][0-9A-Fa-f]{32}"
+									}
 								}
 							}
 						}
