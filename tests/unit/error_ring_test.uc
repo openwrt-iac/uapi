@@ -40,6 +40,17 @@ t.describe('error_ring', () => {
 		t.assert_equal(v[length(v) - 1].request_id, "r" + (er.CAP + 4));
 	});
 
+	t.it('clips a long message, since a 400 before auth can name a key of any length', () => {
+		wipe();
+		let exact = "";
+		for (let i = 0; i < er.MAX_MESSAGE; i++) exact += "a";
+		er.append({ ts: 1, request_id: "r1", code: "bad_request", status: 400, message: exact });
+		er.append({ ts: 2, request_id: "r2", code: "bad_request", status: 400, message: exact + "b" });
+		let v = er.read();
+		t.assert_equal(v[0].message, exact);
+		t.assert_equal(v[1].message, exact + "...");
+	});
+
 	t.it('survives garbage on disk by returning empty', () => {
 		wipe();
 		try { fs.mkdir("/tmp/uapi-error-ring"); } catch (_) {}

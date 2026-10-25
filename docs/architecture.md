@@ -112,8 +112,11 @@ without uci state change.
    a null return. Miss → `503 config_missing` with the path.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
-2. **Snapshot.** `uci_export(<package>)` captures the current cursor state
-   into an in-memory string.
+2. **Snapshot.** `uci_unload(<package>)`, then `uci_export(<package>)` captures
+   the package file into an in-memory string. The unload matters: the preview
+   before the lock loaded the package into the cursor, which serves every later
+   read from that copy, so a commit by LuCI or a shell in between was invisible
+   to the write.
 3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta)`
    run inside the lock. Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
@@ -223,7 +226,8 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    batches skip lock+snapshot+commit+reload entirely.
 3. Acquire global SH + per-package EX in sorted package order
    (deadlock-free).
-4. `uci_export()` each package into a snapshot.
+4. `uci_unload()` and `uci_export()` each package into a snapshot, as in step 2
+   of the single-package recipe.
 5. Run each sub-request in order via `BARE_RESOURCES`/`BARE_SINGLETONS` -
    handlers that skip their own per-package flock + snapshot + commit + reload
    (since the outer multi_transaction has those covered).

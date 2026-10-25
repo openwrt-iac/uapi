@@ -303,7 +303,10 @@ daemon state with no validation to run.
 The `recent_errors` ring is best-effort: writes to `/tmp/uapi-error-ring/`
 must never disrupt the actual response, so a disk-full or permission
 failure simply produces an empty ring rather than a 5xx on the original
-request. The ring caps at 20 entries (oldest dropped first).
+request. The ring caps at 20 entries (oldest dropped first), and keeps the
+first 512 bytes of each message, ending a cut one with `...`: a 400 for a
+control character in a body names the key before authentication, so an
+unclipped message let any client store a body of any size in RAM.
 
 `lock_state` reports which uapi lock files exist under `/var/lock`, not
 which locks are held right now: `flock` is released when the fd closes

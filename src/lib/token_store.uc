@@ -91,9 +91,7 @@ function list_public(conn) {
 function get_public(conn, name) {
 	let s = conn.uci_get(PACKAGE, name);
 	if (!s || type(s) != "object" || s['.type'] != TOKEN_TYPE) return null;
-	let view = { ...s };
-	view['.name'] = name;
-	return _read_record(view, false);
+	return _read_record(s, false);
 }
 
 function _ensure_uapi_file(conn) {
@@ -206,11 +204,14 @@ function remove(conn, name, tx_overrides) {
 			if (!existing || type(existing) != "object" || existing['.type'] != TOKEN_TYPE)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("Token %J not found", name) };
-			c.uci_delete(pkg, name);
+			// The name, not `name`: uci also resolves `@token[0]`, which the bucket's
+			// charset refuses, so a revoke by position left the bucket behind.
+			let real = existing['.name'];
+			c.uci_delete(pkg, real);
 			// Inside the transaction so a rolled-back revoke does not lose the bucket,
 			// and best-effort because a revoke must not fail on a tmpfs hiccup.
-			try { ratelimit.forget(name); } catch (_) {}
-			return { ok: true, body: { deleted: name } };
+			try { ratelimit.forget(real); } catch (_) {}
+			return { ok: true, body: { deleted: real } };
 		},
 	};
 	for (let k in tx_overrides ?? {}) params[k] = tx_overrides[k];

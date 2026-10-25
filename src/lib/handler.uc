@@ -669,12 +669,12 @@ function default_merge_for_patch(existing_json, body) {
 	return merged;
 }
 
+// `.name` comes from the cursor, not from `id`: uci also resolves `@rule[0]` and `@[-1]`, and
+// a read then named the section by that position instead of its name. A write takes the name
+// from here too, so its response, its ETag and its uniqueness check name the same section.
 function load_section(conn, pkg, id) {
 	let s = conn.uci_get(pkg, id);
-	if (type(s) != "object") return null;
-	let view = { ...s };
-	view['.name'] = id;
-	return view;
+	return type(s) == "object" ? s : null;
 }
 
 function make(resource, opts) {
@@ -809,6 +809,7 @@ function make(resource, opts) {
 				// binding rather than reassigning body, because it holds a plaintext
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
+				if (existing) id = existing['.name'];
 				let write_body = carry_write_only(resource, body, existing);
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body);
 				if (length(errs) > 0)
@@ -859,6 +860,7 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
+				id = existing['.name'];
 				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
@@ -917,6 +919,7 @@ function make(resource, opts) {
 				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
+				id = existing['.name'];
 				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
@@ -951,6 +954,7 @@ function make(resource, opts) {
 		if (!preview || !type_predicate(preview['.type']))
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
+		id = preview['.name'];
 		if (!preview['.anonymous']) {
 			let view = resource.fromUci(preview, conn);
 			return set_etag_header(errors.ok(ctx, view), view);

@@ -136,6 +136,10 @@ All notable changes to this project will be documented in this file. Format foll
 - **A raw PUT or PATCH refuses a `.type` or an `id` that differs from the section, with 422
   `read_only`.** Before, it answered 200 and changed neither. An echo of the values of the section
   still passes. (#237)
+- **`/diagnostics` keeps the first 512 bytes of each error message**, and ends a cut message with
+  `...`. The 400 for a control character in a request body names the key, and it answers before
+  authentication, so without a limit any client could store a body of any size in the error ring,
+  which lives in RAM. The response itself still carries the whole message. (#242)
 
 ### Deprecated
 
@@ -323,6 +327,25 @@ All notable changes to this project will be documented in this file. Format foll
   `docs/errors.md` says, and names a list item by its index, such as `proto[1]`. (#237)
 - **The spec declared any raw request body.** `RawSectionRequest` now declares the option names,
   the values and the `.type` that a raw write takes. (#237)
+- **A write read the package as it was before uapi took the lock.** The read that checks the
+  target and the scope loads the package into uapi's uci cursor, and the cursor served every later
+  read of the write from that copy. A commit by LuCI or a shell in the milliseconds before the lock
+  was then invisible to the write: a PUT kept an option that the commit had added, and the
+  response showed a section that uci did not store. The commit itself merged both, so no change
+  was lost. The transaction now drops the package from the cursor once it holds the lock, for
+  every write and for `/batch`. A raw write also checks again that the section has the type that
+  the scope check approved, and answers 404 when another section took the name in between, where
+  it wrote its body into that section. (#242)
+- **A path that names a section by position, such as `@zone[0]` or `@[-1]`, answered with the
+  position as its `id`.** uci resolves the position, and uapi put the text of the path in place of
+  the section name, on raw, on the curated resources and on `/tokens`. `id` is now the section
+  name, and a write by position acts on that section. A curated PUT by position no longer refuses
+  a unique field, such as the `name` of a firewall zone or the `ip` of a DHCP host, as taken by the
+  section itself, and a token revoked by position no longer leaves its rate-limit bucket in
+  `/tmp/uapi-ratelimit/`. (#242)
+- **A raw PATCH removes the reload fields that a write stored as options before 3.2.0**, as it
+  removes a stored `managed`. Only a PUT removed them, and a write response showed a stored
+  `reload_note` next to a fresh `reloaded`. (#242)
 
 ### Security
 

@@ -113,13 +113,16 @@ curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/raw/firewall/$mg_id"
 # derived boolean, so the response came back as "0" against a schema declaring boolean.
 # Deriving after the copy fixes the read; the sweep removes the residue, which previously
 # only a full replace could do.
-echo "--- raw: a stored managed neither shadows the read nor survives a patch ---"
+echo "--- raw: a stored managed neither shadows the read nor survives a patch, nor do the reload fields ---"
 $SSH "uci -q delete firewall.uapi_legacy_mg
       uci set firewall.uapi_legacy_mg=rule
       uci set firewall.uapi_legacy_mg.name=uapi_legacy_mg
       uci set firewall.uapi_legacy_mg.target=ACCEPT
       uci set firewall.uapi_legacy_mg.src=lan
       uci set firewall.uapi_legacy_mg.managed=0
+      uci set firewall.uapi_legacy_mg.reloaded=0
+      uci add_list firewall.uapi_legacy_mg.reload_services=x
+      uci set firewall.uapi_legacy_mg.reload_note=stale
       uci commit firewall" >/dev/null 2>&1
 seeded=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
 [ "$seeded" = "0" ] || fail "seed did not take"
@@ -131,8 +134,9 @@ echo "$read_back" | head -1 | grep -q '"managed":[[:space:]]*true' \
 patched=$(call -X PATCH -H 'Content-Type: application/json' \
 	"$URL/raw/firewall/uapi_legacy_mg" -d '{"name":"uapi_legacy_mg2"}')
 echo "$patched" | tail -1 | grep -q '^200$' || fail "patch over a legacy section expected 200"
-left=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
-[ -z "$left" ] || fail "the stale managed option survived a patch: $left"
+echo "$patched" | grep -q '"reload_note"' && fail "a stored reload_note showed in the response: $patched"
+left=$($SSH "for o in managed reloaded reload_services reload_note; do uci -q get firewall.uapi_legacy_mg.\$o; done" | tr -d '\r')
+[ -z "$left" ] || fail "a stale derived option survived a patch: $left"
 echo "  read stays boolean, and the stale option is swept"
 $SSH "uci -q delete firewall.uapi_legacy_mg; uci commit firewall" >/dev/null 2>&1
 
@@ -185,6 +189,13 @@ echo "$got" | grep -q '"id": "zt"' || fail "id did not read as the section name:
 r=$(echo "$got" | sed '$d' | call -X PUT -H 'Content-Type: application/json' "$URL/raw/$P/zt" --data-binary @-)
 echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $r"
 [ "$($SSH "uci -q get $P.zt.id" | tr -d '\r')" = "8056c2e21c000001" ] || fail "a PUT of the read deleted option id"
+
+echo "--- an id by position reads and writes the section under its name ---"
+r=$(call -g "$URL/raw/$P/@network[0]")
+echo "$r" | grep -q '"id": "zt"' || fail "@network[0] did not read as zt: $r"
+r=$(call -g -X PATCH -H 'Content-Type: application/json' "$URL/raw/$P/@network[0]" -d '{"id":"zt","y":"1"}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of @network[0] with its name expected 200: $r"
+[ "$($SSH "uci -q get $P.zt.y" | tr -d '\r')" = "1" ] || fail "PATCH of @network[0] did not reach zt"
 
 echo "--- a POST without id takes the lowercase first letter of the type ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/$P" -d '{".type":"Thing"}')

@@ -62,7 +62,7 @@ t.describe('ubus.stub, uci read', () => {
 		let c = ubus.stub({
 			uci: { sys: { main: { hostname: 'r1' } } }
 		});
-		t.assert_deep_equal(c.uci_get('sys', 'main'), { hostname: 'r1' });
+		t.assert_deep_equal(c.uci_get('sys', 'main'), { hostname: 'r1', '.name': 'main' });
 	});
 });
 

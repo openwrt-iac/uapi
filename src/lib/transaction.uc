@@ -232,6 +232,12 @@ function transaction(conn, params) {
 	let result = null;
 	let caught = null;
 	try {
+		// The preview before the lock loaded the package into this cursor, and libuci serves
+		// every later read from that copy. A commit by LuCI or a shell in between was then
+		// invisible to fn: a PUT kept an option that it had to remove, and the response showed
+		// a section that uci did not store. The commit itself re-reads the file, so only the
+		// reads were stale.
+		conn.uci_unload(pkg);
 		let snapshot = conn.uci_export(pkg);
 		result = run_inner(conn, pkg, services, fn, snapshot,
 		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied),
@@ -312,7 +318,10 @@ function multi_transaction(conn, params) {
 	let result = null;
 	let caught = null;
 	try {
-		for (let pkg in sorted) snapshots[pkg] = conn.uci_export(pkg);
+		for (let pkg in sorted) {
+			conn.uci_unload(pkg);
+			snapshots[pkg] = conn.uci_export(pkg);
+		}
 		let inner = fn(conn);
 		if (!inner || inner.ok === false) {
 			for (let pkg in sorted) conn.uci_revert(pkg);
