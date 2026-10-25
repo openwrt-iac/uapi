@@ -69,6 +69,23 @@ echo "$patched" | grep -q '"has_key": true' || fail "PATCH lost has_key (key was
 $SSH "uci get wireless.$sid.key" | grep -q '^supersecret$' \
 	|| fail "uci-level key was overwritten or lost during PATCH"
 
+echo "--- a PUT of the read keeps a forced cipher and the 802.11r options (#238) ---"
+$SSH "uci set wireless.$sid.encryption=psk2+ccmp
+      uci set wireless.$sid.ieee80211r=1
+      uci set wireless.$sid.ft_over_ds=0
+      uci set wireless.$sid.ft_psk_generate_local=1
+      uci set wireless.$sid.mobility_domain=4f57
+      uci commit wireless"
+read_body=$(curl -sS -H "$ADMIN" "$URL/wireless/interfaces/$sid")
+echo "$read_body" | jq -e '.encryption == "psk2+ccmp" and .ieee80211r == true and .ft_over_ds == false
+	and .ft_psk_generate_local == true and .mobility_domain == "4f57"' >/dev/null \
+	|| fail "GET did not read the options: $read_body"
+put=$(call -X PUT -H 'Content-Type: application/json' "$URL/wireless/interfaces/$sid" \
+	-d "$(echo "$read_body" | jq -c 'del(.id, .managed, .runtime, .has_key) | .ssid = "uapi-test-ft"')")
+echo "$put" | tail -1 | grep -q '^200$' || fail "PUT of the read: $put"
+got=$($SSH "for o in encryption ieee80211r ft_over_ds ft_psk_generate_local mobility_domain key; do uci get wireless.$sid.\$o; done" | tr '\n' ' ')
+[ "$got" = "psk2+ccmp 1 0 1 4f57 supersecret " ] || fail "PUT of the read changed the options: $got"
+
 echo "--- DELETE both ---"
 call -X DELETE "$URL/wireless/interfaces/$sid" | tail -1 | grep -q '^204$' || fail "secured DELETE expected 204"
 call -X DELETE "$URL/wireless/interfaces/$id"  | tail -1 | grep -q '^204$' || fail "open DELETE expected 204"

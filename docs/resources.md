@@ -105,8 +105,8 @@ Reload: `firewall` (fw4).
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), band, channel, htmode, country, txpower. |
-| `wireless/interfaces` | `config wifi-iface` | SSIDs. `key` write-only; responses include `has_key: bool`. `runtime` carries iwinfo state. |
+| `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), the `path`, `phy` and `radio` that bind them to their hardware, band, channel, htmode, country, txpower, cell_density, legacy_rates. |
+| `wireless/interfaces` | `config wifi-iface` | SSIDs, with 802.11r (`ieee80211r`, `ft_over_ds`, `ft_psk_generate_local`, `mobility_domain`). `key` write-only; responses include `has_key: bool`. `runtime` carries iwinfo state. |
 
 Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 `runtime` block on `wireless/interfaces`.

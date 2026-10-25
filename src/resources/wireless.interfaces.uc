@@ -10,9 +10,18 @@ const VALID_ENCRYPTION = {
 	"sae": true, "sae-mixed": true,
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
 };
+// LuCI appends a forced cipher to the modes it offers one for, as in psk2+ccmp, and
+// parse_encryption in wifi-scripts also reads the older aes spellings.
+const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed" ];
+const CIPHERS = [ "ccmp", "ccmp256", "gcmp", "gcmp256", "tkip", "tkip+ccmp",
+                  "aes", "tkip+aes", "aes+tkip", "ccmp+tkip" ];
+for (let m in CIPHER_MODES)
+	for (let c in CIPHERS)
+		VALID_ENCRYPTION[m + "+" + c] = true;
 // Encryption modes that take no passphrase. owe (Opportunistic Wireless
 // Encryption) is keyless and is the stock default on 6 GHz radios.
 const NO_KEY_ENCRYPTION = { "none": true, "wep": true, "owe": true };
+const KEY_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !NO_KEY_ENCRYPTION[e]);
 
 function lookup_ifname(conn, section_name) {
 	let status = null;
@@ -70,6 +79,11 @@ function fromUci(section, conn) {
 		disabled: platform_bool(section.disabled, false),
 		hidden: platform_bool(section.hidden, false),
 		isolate: platform_bool(section.isolate, false),
+		ieee80211r: platform_bool(section.ieee80211r, false),
+		ft_over_ds: platform_bool(section.ft_over_ds, false),
+		ft_psk_generate_local: (section.ft_psk_generate_local != null)
+		                       ? platform_bool(section.ft_psk_generate_local, null) : null,
+		mobility_domain: section.mobility_domain ?? null,
 		runtime: fetch_runtime(conn, section['.name']),
 		// Always present, and an empty key is not a key. The published schema declares
 		// a non-nullable boolean, so the previous absent-or-true form meant a keyless
@@ -90,6 +104,11 @@ function toUci(json) {
 	if (json.disabled != null) out.disabled = json.disabled ? "1" : "0";
 	if (json.hidden != null) out.hidden = json.hidden ? "1" : "0";
 	if (json.isolate != null) out.isolate = json.isolate ? "1" : "0";
+	if (json.ieee80211r != null) out.ieee80211r = json.ieee80211r ? "1" : "0";
+	if (json.ft_over_ds != null) out.ft_over_ds = json.ft_over_ds ? "1" : "0";
+	if (json.ft_psk_generate_local != null)
+		out.ft_psk_generate_local = json.ft_psk_generate_local ? "1" : "0";
+	if (json.mobility_domain != null) out.mobility_domain = json.mobility_domain;
 	return out;
 }
 
@@ -124,7 +143,7 @@ return {
 	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
 	openapi_conditional: [
-		{ if:   { properties: { encryption: { enum: ["psk", "psk2", "psk-mixed", "sae", "sae-mixed", "wpa", "wpa2", "wpa3", "wpa3-mixed"] } },
+		{ if:   { properties: { encryption: { enum: KEY_ENCRYPTION } },
 		          required: ["encryption"] },
 		  then: { required: ["key"] } },
 	],
@@ -161,5 +180,13 @@ return {
 		              description: "Suppress SSID in beacon frames" },
 		isolate:    { type: "boolean", default: false,
 		              description: "Block station-to-station traffic on this AP" },
+		ieee80211r: { type: "boolean", default: false,
+		              description: "802.11r fast BSS transition between the access points of one mobility domain" },
+		ft_over_ds: { type: "boolean", default: false,
+		              description: "802.11r over the distribution system instead of over the air" },
+		ft_psk_generate_local: { "x-uapi-read-nullable": true, type: "boolean",
+		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise" },
+		mobility_domain: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{4}$",
+		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID" },
 	},
 };

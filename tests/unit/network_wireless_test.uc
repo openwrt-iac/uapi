@@ -205,6 +205,125 @@ t.describe('wireless.interfaces', () => {
 	});
 });
 
+// A PUT deletes every option the resource does not model, so before 3.2.0 a PUT of the read
+// deleted the radio's path, which left wifi-scripts without a phy to bring up, and the SSID's
+// 802.11r options. The sections are the ones a real access point stores (#238).
+t.describe('wireless PUT of the read keeps what LuCI and wifi config store', () => {
+	let tx = {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	};
+	function seeded() {
+		return ubus.stub({ uci: { wireless: {
+			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211',
+			          path: '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0', channel: '1',
+			          band: '2g', htmode: 'HT40', cell_density: '0', legacy_rates: '1' },
+			default_radio0: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0',
+			                  network: 'lan', mode: 'ap', ssid: 'home', encryption: 'psk2+ccmp',
+			                  key: 'correcthorse', ieee80211r: '1', ft_over_ds: '0',
+			                  ft_psk_generate_local: '1', mobility_domain: '4f57' },
+		} } });
+	}
+	function put_read(mod, id, change) {
+		let c = seeded();
+		let h = handler.make(mod, { tx });
+		let body = h.get_one(c, { request_id: "01hx0000000000000000000000" }, id).body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_key' ]) delete body[k];
+		for (let k, v in change) body[k] = v;
+		let r = h.replace(c, { request_id: "01hx0000000000000000000000" }, id, body);
+		t.assert_equal(r.status, 200);
+		return c._state.uci.wireless[id];
+	}
+
+	t.it('a radio keeps path, cell_density and legacy_rates', () => {
+		let s = put_read(widev, 'radio0', { channel: 6 });
+		t.assert_equal(s.channel, '6');
+		t.assert_equal(s.path, '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0');
+		t.assert_equal(s.cell_density, '0');
+		t.assert_equal(s.legacy_rates, '1');
+	});
+
+	t.it('an SSID keeps a forced cipher and its 802.11r options', () => {
+		let s = put_read(wiface, 'default_radio0', { ssid: 'home2' });
+		t.assert_equal(s.ssid, 'home2');
+		t.assert_equal(s.encryption, 'psk2+ccmp');
+		t.assert_equal(s.key, 'correcthorse');
+		t.assert_equal(s.ieee80211r, '1');
+		t.assert_equal(s.ft_over_ds, '0');
+		t.assert_equal(s.ft_psk_generate_local, '1');
+		t.assert_equal(s.mobility_domain, '4f57');
+	});
+});
+
+t.describe('wireless.devices radio binding and rates', () => {
+	t.it('fromUci reads phy and radio, as wifi config writes them on a multi-radio phy', () => {
+		let r = widev.fromUci({ '.name': 'radio1', '.anonymous': false, '.type': 'wifi-device',
+		                        type: 'mac80211', phy: 'mt7996', radio: '1', band: '5g' });
+		t.assert_equal(r.phy, 'mt7996');
+		t.assert_equal(r.radio, 1);
+		t.assert_equal(r.path, null);
+	});
+
+	t.it('fromUci reads unset rate options as the wifi-scripts defaults', () => {
+		let r = widev.fromUci({ '.name': 'radio0', '.anonymous': false, '.type': 'wifi-device',
+		                        type: 'mac80211' });
+		t.assert_equal(r.cell_density, 0);
+		t.assert_equal(r.legacy_rates, false);
+	});
+
+	t.it('schema refuses a cell_density above 3', () => {
+		let errs = full_validate(widev, { type: 'mac80211', cell_density: 4 }, null);
+		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'cell_density'), (e) => e.code),
+		                    [ 'out_of_range' ]);
+	});
+});
+
+t.describe('wireless.interfaces encryption with a forced cipher', () => {
+	t.it('accepts the suffixes LuCI writes and the aes spellings wifi-scripts reads', () => {
+		for (let e in [ 'psk2+ccmp', 'psk-mixed+tkip+ccmp', 'sae+gcmp256', 'wpa2+ccmp256', 'psk2+aes' ]) {
+			let errs = full_validate(wiface, { device: 'radio0', encryption: e, key: 'correcthorse' }, null);
+			t.assert_equal(length(errs), 0);
+		}
+	});
+
+	t.it('requires a key with a forced cipher, as without one', () => {
+		let errs = full_validate(wiface, { device: 'radio0', encryption: 'psk2+ccmp' }, null);
+		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'key'), (e) => e.code), [ 'required' ]);
+	});
+
+	t.it('refuses a cipher on a mode LuCI offers none for, and an unknown cipher', () => {
+		for (let e in [ 'owe+ccmp', 'none+ccmp', 'psk2+ccmp+tkip+aes', 'psk2+des' ]) {
+			let errs = full_validate(wiface, { device: 'radio0', encryption: e, key: 'correcthorse' }, null);
+			t.assert_deep_equal(uniq(map(filter(errs, (e) => e.field == 'encryption'), (e) => e.code)),
+			                    [ 'not_in_enum' ]);
+		}
+	});
+});
+
+t.describe('wireless.interfaces 802.11r', () => {
+	t.it('fromUci reads an unset ft_psk_generate_local as null, since its default depends on encryption', () => {
+		let r = wiface.fromUci({ '.name': 'w1', '.anonymous': false, device: 'radio0',
+		                         encryption: 'psk2', key: 'x', ieee80211r: '1' }, null);
+		t.assert_equal(r.ieee80211r, true);
+		t.assert_equal(r.ft_over_ds, false);
+		t.assert_equal(r.ft_psk_generate_local, null);
+		t.assert_equal(r.mobility_domain, null);
+	});
+
+	t.it('fromUci reads the booleans as netifd parse_bool does', () => {
+		let r = wiface.fromUci({ '.name': 'w1', '.anonymous': false, device: 'radio0',
+		                         ieee80211r: 'yes', ft_psk_generate_local: 'on' }, null);
+		t.assert_equal(r.ieee80211r, false);
+		t.assert_equal(r.ft_psk_generate_local, null);
+	});
+
+	t.it('schema refuses a mobility_domain that is not 4 hex digits', () => {
+		let errs = full_validate(wiface, { device: 'radio0', mobility_domain: '4f5' }, null);
+		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'mobility_domain'), (e) => e.code),
+		                    [ 'invalid_format' ]);
+	});
+});
+
 // has_key was set only when a key existed, so the member was absent rather than false
 // while the published schema declares a non-nullable boolean: a keyless section violated
 // the spec the server ships. An empty key also reported true, claiming a key that is not
