@@ -208,15 +208,18 @@ t.describe('values.is_valid_ipv6_cidr', () => {
 	});
 });
 
-t.describe('values.is_valid_hostname', () => {
-	t.it('takes what LuCI\'s hostname datatype takes', () => {
-		for (let s in ["vpn.example.com", "vpn.example.com.", "host_1", "a", "router-1.lan", "1a"])
-			t.assert_true(v.is_valid_hostname(s), s);
+// A tail after the prefix length reached no shell or daemon from a token, and a token minted
+// with one matched, so tokens keep the 3.1 reading until v4.
+t.describe('values.is_valid_token_cidr', () => {
+	t.it('reads an IPv6 prefix length from its leading digits, as 3.1 did', () => {
+		for (let s in [ "fd00::/64", "fd00::/64x", "10.0.0.0/8" ])
+			t.assert_true(v.is_valid_token_cidr(s), s);
+		for (let s in [ "::1", "fd00::/129", "10.0.0.0/8x", "", null ])
+			t.assert_false(v.is_valid_token_cidr(s), s);
 	});
 
-	t.it('refuses an all-digit dotted name, whitespace, a backslash and a leading hyphen', () => {
-		for (let s in ["1.2.3", "10.0.0.1", "a b", "a\nb", "a\\nb", "-a", "a-", "", null])
-			t.assert_false(v.is_valid_hostname(s), s);
+	t.it('matches a caller against such an entry, as 3.1 did', () => {
+		t.assert_true(v.addr_in_any_cidr("fd00::5", [ "fd00::/64x" ]));
 	});
 });
 

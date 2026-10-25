@@ -46,8 +46,8 @@ function to_peer(section) {
 		allowed_ips: values.as_word_list_or_null(section.allowed_ips) ?? [],
 		endpoint_host: section.endpoint_host,
 		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
-		// Typed rather than quoted: set_peer formats it into a shell command, and a stored value
-		// reaches here from uci without passing through validate().
+		// Read as wg reads it, since a stored value reaches here from uci without passing through
+		// validate(), and set_peer_argv() gives it to `wg set` with %d.
 		persistent_keepalive: values.wg_int(section.persistent_keepalive),
 		preshared_key: section.preshared_key,
 	};
@@ -149,7 +149,7 @@ function route_prefix(allowed_ip) {
 	// The kernel prints 0.0.0.0/0 and ::/0 as "default", so a route we installed
 	// from a catch-all peer would not be recognised when reading state back, and
 	// a rollback would leave it in place. Both spellings are accepted on input.
-	if (allowed_ip == "default" || match(allowed_ip, values.LEADING_ZERO_LEN_RE)) return null;
+	if (allowed_ip == "default") return null;
 	let v6 = index(allowed_ip, ":") >= 0;
 	if (values.is_valid_cidr_any(allowed_ip)) return { prefix: allowed_ip, v6: v6 };
 	if (values.is_valid_ip(allowed_ip))
@@ -186,11 +186,12 @@ function route_table(conn, iface, v6) {
 // Spelled to match what netifd installs, verified against a real interface:
 // `<prefix> proto static scope link dev <iface>` for v4, and the same without a
 // scope for v6, where iproute2's default metric 1024 is what netifd ends up with.
+function ip_route(v6, args, table) {
+	return [ "ip", ...(v6 ? [ "-6" ] : []), "route", ...args, ...(table != null ? [ "table", table ] : []) ];
+}
+
 function route_cmd(verb, iface, r, table) {
-	let argv = [ "ip", ...(r.v6 ? [ "-6" ] : []), "route", verb, r.prefix, "dev", iface, "proto", "static" ];
-	if (!r.v6) push(argv, "scope", "link");
-	if (table != null) push(argv, "table", table);
-	return argv;
+	return ip_route(r.v6, [ verb, r.prefix, "dev", iface, "proto", "static", ...(r.v6 ? [] : [ "scope", "link" ]) ], table);
 }
 
 // Routes are shared: two peers can carry overlapping allowed_ips, and a
@@ -222,8 +223,7 @@ function installed_routes(conn, iface) {
 	let out = [];
 	for (let v6 in [false, true]) {
 		let table = route_table(conn, iface, v6);
-		let r = run([ "ip", ...(v6 ? [ "-6" ] : []), "route", "show", "dev", iface, "proto", "static",
-		              ...(table != null ? [ "table", table ] : []) ]);
+		let r = run(ip_route(v6, [ "show", "dev", iface, "proto", "static" ], table));
 		if (!r.ok) continue;
 		for (let line in split(r.output, "\n")) {
 			let first = split(trim(line), " ")[0];

@@ -187,6 +187,9 @@ $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 # int() read "::/0;id>uapi45_route;" as ::/0, and the DELETE of a disabled peer handed the stored
 # prefix to `ip route del` through a shell, which ran `id` as root. wireguard.sh expands the
 # escapes of the config it gives `wg syncconf`, so a plain-text \n in endpoint_host added a peer.
+# The stored peer below no longer reaches `ip route`, because route_prefix drops its prefix, so
+# this step guards the check and not the quoting. The unit tests run each command through a
+# real shell for that.
 echo "--- an allowed IP with a tail, or an escape in endpoint_host, is refused, and a stored one runs nothing ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"::/0;id>uapi45_route;\"],
