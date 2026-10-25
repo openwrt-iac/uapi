@@ -62,11 +62,7 @@ function strict_bool(v) {
 // how a feed URL appended a second, attacker-chosen apk repository which every later install
 // trusted and no read path showed, since both parsed one line.
 function has_control_chars(s) {
-	for (let i = 0; i < length(s); i++) {
-		let c = ord(substr(s, i, 1));
-		if (c < 32 || c == 127) return true;
-	}
-	return false;
+	return type(s) == "string" && (index(s, "\u0000") >= 0 || match(s, /[\x01-\x1f\x7f]/) != null);
 }
 
 // uci keeps tab, newline and carriage return, but drops a value with any other control byte when

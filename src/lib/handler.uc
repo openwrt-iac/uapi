@@ -583,10 +583,11 @@ function carry_write_only(resource, body, existing) {
 		return body;
 
 	let out = { ...body };
+	// uci can hold a one-entry list as an option, and the daemons read it as a list.
 	for (let k in sp)
 		if (type(sp[k]) == "object" && sp[k].writeOnly
 		    && out[k] == null && existing[k] != null)
-			out[k] = existing[k];
+			out[k] = (sp[k].type == "array" && type(existing[k]) == "string") ? [ existing[k] ] : existing[k];
 	return out;
 }
 
