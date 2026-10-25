@@ -138,33 +138,18 @@ t.describe('network.wireguard_peers.validate', () => {
 		                    [ 'invalid_format' ]);
 	});
 
-	t.it('refuses a prefix length that ip route reads as octal and wg as decimal, when it routes them', () => {
-		function aip_codes(a, routed) {
-			return map(filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-			                                 allowed_ips: [a], route_allowed_ips: routed }, null),
-			                  (e) => e.field == 'allowed_ips[0]'), (e) => e.code);
-		}
-		for (let a in [ 'fd00::/012', '10.0.0.0/08', 'fd00::/010', '10.0.0.0/09' ]) {
-			t.assert_deep_equal(aip_codes(a, true), [ 'invalid_format' ], a);
-			t.assert_deep_equal(aip_codes(a, false), [], a);
-		}
-		for (let a in [ 'fd00::/07', '10.0.0.0/00', 'fd00::/007', 'fd00::/64' ])
-			t.assert_deep_equal(aip_codes(a, true), [], a);
-	});
-
 	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
 	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
-	// with a colon, and wg reads `#` as a comment.
-	t.it('takes a host name or an address as endpoint_host, and refuses what breaks the config', () => {
+	// with a colon. Any other host is left to wg, as before.
+	t.it('refuses an escape, a control character or brackets in endpoint_host', () => {
 		function host_errs(h) {
 			return filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			                             allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
-		for (let h in [ 'vpn.example.com', 'host_1', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
+		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[fd00::1]', '[vpn.example.com]',
-		                'vpn.example.com#1', 'vpn.example.com:51820', 'vpn%wan', 'x$(id)y', 'fd00::1%' ])
+		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', '[vpn.example.com]' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
 	});
 
@@ -174,10 +159,11 @@ t.describe('network.wireguard_peers.validate', () => {
 		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'allowed_ips[0]'), (e) => e.code), [ 'invalid_format' ]);
 	});
 
-	// netifd builds no disabled peer and uapi removes one from the kernel.
-	t.it('checks neither allowed_ips nor endpoint_host on a disabled peer', () => {
-		t.assert_deep_equal(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-		                                   allowed_ips: [ 'garbage' ], endpoint_host: '[fd00::1]', disabled: true }, null), []);
+	// LuCI's Enable writes only disabled=0, so a value stored on a disabled peer becomes live later.
+	t.it('refuses a broken value that a write sends to a disabled peer', () => {
+		t.assert_deep_equal(map(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+		                                       allowed_ips: [ '::/0;id>x;' ], endpoint_host: '[fd00::1]', disabled: true }, null),
+		                        (e) => e.field), [ 'allowed_ips[0]', 'endpoint_host' ]);
 	});
 
 	t.it('accepts a dual-stack peer', () => {
@@ -239,6 +225,16 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		body.disabled = false;
 		t.assert_equal(h.replace(c, ctx(), 'g_existing', body).status, 422);
 		t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '[fd00::1]');
+	});
+
+	t.it('a write to a disabled peer is not refused for a stored value, only for one that it sends', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.disabled = '1';
+		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
+		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1\\n[Peer]' }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '::/0;id>x;' ] }).status, 422);
 	});
 
 	// A stored escape adds the peer again at every ifup while it is enabled, so the sweep lists the
@@ -354,6 +350,17 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		let ops = [];
 		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
 		t.assert_true(ops[0].prev_route_allowed_ips);
+	});
+
+	// netifd and uapi install no route for a disabled peer, so a route for the same prefix belongs to
+	// someone else.
+	t.it('leaves prev_route_allowed_ips false for a peer that was disabled', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.route_allowed_ips = '1';
+		c._state.uci.network.g_existing.disabled = '1';
+		let ops = [];
+		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
+		t.assert_false(ops[0].prev_route_allowed_ips);
 	});
 
 	t.it('leaves prev_route_allowed_ips false when the option is absent', () => {

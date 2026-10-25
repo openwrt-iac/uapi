@@ -202,10 +202,11 @@ t.describe('wg route prefixes', () => {
 		t.assert_deep_equal(wg.route_prefixes(['::/0;id>x;'], true), []);
 	});
 
-	// validate() refuses a new one, but a peer stored before 3.2.0 got its route from `ip route`
-	// with the same text, so the same text withdraws it.
-	t.it('keeps a stored prefix length with a leading zero, so its route can still be withdrawn', () => {
-		t.assert_deep_equal(wg.route_prefixes(['fd00::/012'], true), [ { prefix: 'fd00::/012', v6: true } ]);
+	// validate() refuses a length of four digits since 3.2.0, but a peer stored before got its route
+	// from `ip route` with the same text, so the same text withdraws it.
+	t.it('keeps a stored prefix length with leading zeros, so its route can still be withdrawn', () => {
+		t.assert_deep_equal(wg.route_prefixes(['fd00::/012', 'fd00::/0064'], true),
+		                    [ { prefix: 'fd00::/012', v6: true }, { prefix: 'fd00::/0064', v6: true } ]);
 	});
 });
 
