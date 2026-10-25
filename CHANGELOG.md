@@ -45,9 +45,10 @@ All notable changes to this project will be documented in this file. Format foll
   old proto and keeps the options that apply to every proto. Before, it kept the static address
   fields when it left proto static. With terraform-provider-uapi before 3.2.0, a proto switch
   fails with 422 when the state holds a field that the new proto does not take. That is always
-  the case away from static, wireguard or a proto that uapi does not model: static requires its
-  addresses, and a read of the other two answers `nohostroute: false`. Upgrade the provider
-  together with uapi. (#208)
+  the case away from static or wireguard, and away from a proto that uapi does not model unless
+  the new proto is wireguard: static requires its addresses, a read of the other two answers
+  `nohostroute: false`, and only wireguard takes `nohostroute`. Upgrade the provider together
+  with uapi. (#208)
 - **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
@@ -124,6 +125,17 @@ All notable changes to this project will be documented in this file. Format foll
   request schema declared no limit. The limit counts bytes, so the bound is exact only for an
   ASCII name. No request changes acceptance. `x-uapi-write` now applies to a nested property as
   well, and to an array element under `items`. (#232)
+
+- **A raw write removes an option for `null` and `""`, as for `[]`.** uci removes an option set to
+  `""`, LuCI does the same for both, and a raw PATCH merges as RFC 7396 says, where `null` removes
+  a member. Before, `""` removed the option while the response still showed it, and `null` answered
+  200 and stored nothing. (#237)
+- **A raw write answers with the section as uci stores it, as a GET reads it.** Before, it echoed
+  the request: `true` where uci stored `"1"`, a number where uci stored text, and `[]` for an
+  option that the write had removed. (#237)
+- **A raw PUT or PATCH refuses a `.type` or an `id` that differs from the section, with 422
+  `read_only`.** Before, it answered 200 and changed neither. An echo of the values of the section
+  still passes. (#237)
 
 ### Deprecated
 
@@ -276,18 +288,41 @@ All notable changes to this project will be documented in this file. Format foll
 - **A write into a uci package without a config file answered 200 and stored nothing.** The uci
   cursor stores nothing in a missing file and reports it only through a null return, which uapi
   ignored. On a router without a radio, `POST /wireless/devices` and `POST /wireless/interfaces`
-  answered 200 with an `id` that a GET then answered 404 for, and a raw POST to a package without
-  a file did the same. Such a write now answers `503 config_missing` before any uci write. That
+  answered 200 with an `id` that a GET then answered 404 for, and a raw POST to a package without a
+  file did the same. Such a write now answers `503 config_missing` before any uci write. That
   tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. A PUT, PATCH or DELETE of an id there answers the same
-  503 where it answered 404, as with `init_script_missing`. A uci set, rename or commit that the
-  cursor refuses now answers 500 instead of 200, and a raw write whose reload service is not
-  installed answers `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
+  caller can rely on, and it fails loudly. A PUT, PATCH or DELETE of a curated id there answers the
+  same 503 where it answered 404, as with `init_script_missing`. The raw ones still answer 404,
+  because they look up the section first. A uci set, rename or commit that the cursor refuses now
+  answers 500 instead of 200, and a raw write whose reload service is not installed answers `503
+  init_script_missing` instead of a 500 that named an unknown kind. (#235)
 
-- **A raw write of an option that uci cannot store answered 200 and stored nothing for it.** The
-  cursor drops an option name outside letters, digits and `_` and still returns true, and it
-  refuses a null, an object or a list that holds one. Such an option, and a `.type` with a space,
-  now answers 422 under the same carve-out. `[]` still removes an option. (#235)
+- **A raw write of an option that uci cannot store answered 200 and stored nothing, or only part of
+  it.** The cursor drops an option name outside letters, digits and `_` and still returns true. It
+  refuses an object, and from a list that holds a null, an object or another list it stores only
+  some of the items. Such an option, and a `.type` with a space on create, now answers 422 under
+  the same carve-out. (#235)
+
+- **A request body with a NUL or a control character answered 200 and stored something else.** uci
+  drops a value with a control character other than tab, newline and carriage return when it
+  replays the commit, and a NUL cuts the value short. A NUL also cut the check of an id short, so
+  `"n1\u0000-x"` passed the section-name charset and created section `n1`. Such a body now answers
+  `400 bad_request` on every endpoint, and the message names the field that holds a control
+  character. (#237)
+- **A raw POST without an `id` answered 500 for a type that does not start with a lowercase
+  letter**, such as `LoadPlugin` in olsrd. The generated id now takes the first letter of the type
+  in lowercase, or `u`. (#237)
+- **A raw read showed a stored `option id` as the section id**, as in a zerotier `network` section,
+  and a PUT of that read deleted the option. `id` is now always the section name, and a PUT keeps
+  the option. (#237)
+- **A raw write stored `reloaded`, `reload_services` and `reload_note` as options when a client
+  sent a write response back.** They are now ignored, as `managed` is. (#237)
+- **A raw POST with an `id` of `0` or `false` got a generated id.** It now answers 422, as another
+  id outside the section-name charset does. (#237)
+- **A raw 422 named only the first refused field.** It now lists every refused field, as
+  `docs/errors.md` says, and names a list item by its index, such as `proto[1]`. (#237)
+- **The spec declared any raw request body.** `RawSectionRequest` now declares the option names,
+  the values and the `.type` that a raw write takes. (#237)
 
 ### Security
 
@@ -300,6 +335,13 @@ All notable changes to this project will be documented in this file. Format foll
   does not grant a shell. The value is now read as a number, after removing whitespace as wg
   does, and formatted with `%d`. Measured on OpenWrt 25.12.5: the value ran before this change
   and does not after it. (#219)
+
+- **A raw `.type` with `#` or `;` created a section of another type past the scope check.** uci
+  writes the type unquoted, so `config rule#x` re-reads as an anonymous `rule`. The scope check had
+  mapped `rule#x` to the bare `firewall` domain, so a token with `raw:firewall:rw`, `firewall:rw`
+  and `firewall:rules:ro` could create a firewall rule. A `.type` with `'`, `"` or `\` left the
+  package unparseable, and only a shell could repair it. A `.type` that holds any of these five
+  characters now answers 422. The re-read was measured on OpenWrt 25.12.5. (#237)
 
 ## [3.1.0] - 2026-10-11
 

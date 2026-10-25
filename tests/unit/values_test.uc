@@ -731,3 +731,34 @@ t.describe('values.dnsmasq_value_problem', () => {
 			t.assert_true(v.dnsmasq_value_problem(s) != null, s);
 	});
 });
+
+t.describe('values.unstorable_text_path', () => {
+	t.it('names the first key or string that holds a control byte uci drops', () => {
+		t.assert_equal(v.unstorable_text_path({ a: "x", b: "y\u0001z" }), "b");
+		t.assert_equal(v.unstorable_text_path({ "k\u0002": "x" }), "k\u0002");
+		t.assert_equal(v.unstorable_text_path({ l: [ "a", "b\u0008" ] }), "l[1]");
+		t.assert_equal(v.unstorable_text_path({ o: { p: [ { q: "\u000b" } ] } }), "o.p[0].q");
+		t.assert_equal(v.unstorable_text_path({ c: "\u001f" }), "c");
+		t.assert_equal(v.unstorable_text_path([ "ok", "\u000c" ]), "body[1]");
+		t.assert_equal(v.unstorable_text_path("\u000e"), "body");
+	});
+
+	t.it('passes tab, newline, carriage return, DEL and non-strings, which uci keeps', () => {
+		t.assert_equal(v.unstorable_text_path({ a: "x\ty\nz\r", b: "\u007f", n: 5, f: false, z: null, e: [] }), null);
+		t.assert_equal(v.unstorable_text_path(null), null);
+	});
+});
+
+t.describe('values.json_has_nul', () => {
+	// json() parses {"k\u0000x": 1} as {"k": 1}, so a key's NUL shows only in the text.
+	t.it('finds the NUL escape in a key or a value', () => {
+		t.assert_true(v.json_has_nul('{"k\\u0000x": 1}'));
+		t.assert_true(v.json_has_nul('{"a": "\\u0000"}'));
+		t.assert_true(v.json_has_nul('{"a": "x\\\\\\u0000"}'));
+	});
+
+	t.it('ignores an escaped backslash that a plain u0000 follows', () => {
+		t.assert_false(v.json_has_nul('{"a": "x\\\\u0000"}'));
+		t.assert_false(v.json_has_nul('{"a": "\\u0001"}'));
+	});
+});

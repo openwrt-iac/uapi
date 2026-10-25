@@ -72,6 +72,10 @@ There is no type name for it: `type(null)` is the null value itself, so `type(x)
 
 `false == ""` and `0 == ""` are true, while `false == null` and `0 == null` are false. A test for an empty string written `v == ""` therefore also matches `false` and `0`: in `network.interfaces` it let `sourcefilter: false` pass as an empty value. Write `v === ""` when `v` can be a boolean or a number.
 
+### `match()` and `json()` stop at the first NUL
+
+`match("rule\u0000 x", /^[!-~]+$/)` returns `[ "rule" ]`: an anchored pattern checks only the prefix and passes. uci takes C strings and then stores `rule`. `json()` also cuts an object key at its first NUL, so `{"k\u0000x": 1}` parses as `{ "k": 1 }`. `main.uc` therefore refuses the NUL escape in the request text (`values.json_has_nul`) before any handler runs.
+
 ### `const` is real
 
 `const X = ...` is parsed and enforced. Top-level data tables in this repo are mostly `const`.
@@ -101,6 +105,10 @@ It returns the hex digest. There is no separate `sha256_hex`.
 ### `cursor.set(pkg, name, type)` (three args) creates a named section
 
 Prefer this over `cursor.add` + `cursor.rename` when you want a specific name from the start. uapi uses ULID-named sections for everything it creates.
+
+### uci writes a section type unquoted
+
+`uci_validate_type` takes any printable ASCII except the space, but the export writes `config <type>` without quotes. A type with `"`, `#`, `'`, `;` or `\` therefore commits and reads back as syntax: `config rule#x 's'` re-reads as an anonymous `rule`, and a quote leaves the package unparseable. Measured on OpenWrt 25.12.5. `src/raw.uc` refuses these five.
 
 ### File-handle locking uses single-char flags
 

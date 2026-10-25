@@ -67,6 +67,38 @@ function has_control_chars(s) {
 	return false;
 }
 
+// uci keeps tab, newline and carriage return, but drops a value with any other control byte when
+// it replays the commit (uci_validate_text), and the write still answered 200.
+const UCI_DROPPED_CTRL_RE = /[\x01-\x08\x0b\x0c\x0e-\x1f]/;
+
+// Returns the path of the first key or string in a request body that uci would drop, or null.
+function unstorable_text_path(v, path) {
+	if (type(v) == "string")
+		return match(v, UCI_DROPPED_CTRL_RE) ? (path ?? "body") : null;
+	if (type(v) == "array") {
+		for (let i = 0; i < length(v); i++) {
+			let bad = unstorable_text_path(v[i], sprintf("%s[%d]", path ?? "body", i));
+			if (bad != null) return bad;
+		}
+	}
+	else if (type(v) == "object") {
+		for (let k, e in v) {
+			let p = (path == null) ? k : path + "." + k;
+			let bad = match(k, UCI_DROPPED_CTRL_RE) ? p : unstorable_text_path(e, p);
+			if (bad != null) return bad;
+		}
+	}
+	return null;
+}
+
+// A NUL ends the C string that uci stores, and match() also stops there, so an anchored pattern
+// checks only the prefix: an id "n1\u0000-x" passed /^[A-Za-z0-9_]+$/ and uci stored section n1.
+// The check reads the text, because json() cuts an object key at its first NUL. A raw NUL byte
+// fails the parse, so the escape is the one form left, led by an odd number of backslashes.
+function json_has_nul(text) {
+	return match(text, /(^|[^\\])(\\\\)*\\u0000/) != null;
+}
+
 // A value bound for dnsmasq's config lands in a one-line directive such as
 // `dhcp-host=tag:a,aa:bb:..,10.0.0.5,name`, where each of these is syntax. Measured on dnsmasq
 // 2.93: a comma ends the field, and dnsmasq refuses to start when the rest is not a field;
@@ -658,7 +690,7 @@ return {
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
 	service_port, wg_int,
-	has_control_chars, dnsmasq_value_problem,
+	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	require_present, section_index,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,

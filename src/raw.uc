@@ -7,7 +7,16 @@ let handler = require("handler");
 
 const ID_RE = /^[A-Za-z0-9_]+$/;
 const TYPE_RE = /^[!-~]+$/;
+// uci takes these in a type, but writes the type unquoted, so the file re-reads them as a
+// quote, a comment, a separator or an escape. `config rule#x 's'` came back as an anonymous
+// rule, which the scope check had mapped to [firewall], and a quote left the package unparseable.
+const TYPE_UNQUOTED_RE = /["#';\\]/;
 const UCI_SCALAR = { string: true, int: true, double: true, bool: true };
+// Body keys that are not options. `.type` and `id` name the section. `managed` and the reload
+// fields are derived on every response, so a read-modify-write client echoes them, and stored
+// as options they would shadow the derived values on the way back out.
+const NOT_OPTIONS = { ".type": true, "id": true, "managed": true,
+                      "reloaded": true, "reload_services": true, "reload_note": true };
 let load_section = handler.load_section;
 
 const TYPE_DOMAIN_MAP = {
@@ -91,6 +100,9 @@ function normalize_section(s) {
 	for (let k in s) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (secret[k]) continue;
+		// zerotier stores its network id as `option id`, which used to replace the section
+		// name here, so the read named a section that did not exist.
+		if (k == "id") continue;
 		out[k] = s[k];
 	}
 	// After the copy, not before it. `managed` is derived from `.anonymous`, but a section
@@ -133,23 +145,47 @@ function translate_raw_tx(ctx, result) {
 	                    sprintf("transaction returned unknown kind %J", result.kind));
 }
 
-// The uci cursor stores nothing for an option name outside its charset and still returns true,
-// and it refuses a null or an object with a null return, so both answered 200 and lost the option.
-function reject_unstorable_options(body) {
+// Raw has no toUci, so this is where a body becomes uci options. The cursor stores nothing for a
+// name outside the uci charset and still returns true, refuses a null or an object, and keeps
+// only part of a list that holds one. null and "" remove the option, as [] does: "" is uci's own
+// removal, and the binding drops a "" that leads a longer list.
+function writable_options(body) {
+	let opts = {}, errs = [];
 	for (let k, v in body) {
-		if (k == ".type" || k == "id" || k == "managed") continue;
-		if (substr(k, 0, 1) == ".")
-			return errors.field_error(k, "invalid_format",
-			                          sprintf("option %J: dotted keys other than .type are reserved", k));
-		if (!match(k, ID_RE))
-			return errors.field_error(k, "invalid_format",
-			                          sprintf("option %J: uci stores only names of letters, digits and _", k));
-		for (let e in (type(v) == "array") ? v : [ v ])
-			if (!UCI_SCALAR[type(e)])
-				return errors.field_error(k, "invalid_type",
-				                          sprintf("option %J: uci stores a string, a number, a boolean or a list of them, and [] removes the option", k));
+		if (NOT_OPTIONS[k]) continue;
+		if (!match(k, ID_RE)) {
+			push(errs, errors.field_error(k, "invalid_format", "must hold only letters, digits and _, the option names uci stores"));
+			continue;
+		}
+		if (v == null || v === "") {
+			opts[k] = [];
+			continue;
+		}
+		if (type(v) != "array") {
+			if (!UCI_SCALAR[type(v)])
+				push(errs, errors.field_error(k, "invalid_type", "must be a string, a number, a boolean, a list of them, or null to remove the option"));
+			opts[k] = v;
+			continue;
+		}
+		for (let i = 0; i < length(v); i++)
+			if (!UCI_SCALAR[type(v[i])])
+				push(errs, errors.field_error(sprintf("%s[%d]", k, i), "invalid_type", "must be a string, a number or a boolean"));
+		if (length(v) > 1 && v[0] === "")
+			push(errs, errors.field_error(k + "[0]", "invalid_format", "must not be empty at the start of a longer list, because uci drops it"));
+		opts[k] = v;
 	}
-	return null;
+	return { opts, errors: errs };
+}
+
+// The section is named by the path and typed by uci, so a body can only echo them. Before,
+// any value answered 200 and changed nothing.
+function identity_errors(body, id, sec_type) {
+	let errs = [];
+	if (body[".type"] != null && body[".type"] !== sec_type)
+		push(errs, errors.field_error(".type", "read_only", sprintf("must be %J, the type of the section: raw cannot change it", sec_type)));
+	if (body.id != null && body.id !== id)
+		push(errs, errors.field_error("id", "read_only", sprintf("must be %J, the section in the path: raw cannot rename it", id)));
+	return errs;
 }
 
 function list(conn, ctx, scopes, pkg) {
@@ -182,47 +218,38 @@ function create(conn, ctx, scopes, pkg, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
 	let sec_type = body[".type"];
+	let new_id = body.id;
+	let client_supplied_id = new_id != null && new_id !== "";
+	let errs = [];
 	if (type(sec_type) != "string" || sec_type == "")
-		return errors.validation_failed(ctx,
-			[errors.field_error(".type", "required", "is required on raw create")]);
-	if (!match(sec_type, TYPE_RE))
-		return errors.validation_failed(ctx,
-			[errors.field_error(".type", "invalid_format", "uci takes a section type of printable ASCII without spaces")]);
-
-	let option_err = reject_unstorable_options(body);
-	if (option_err)
-		return errors.validation_failed(ctx, [option_err]);
+		push(errs, errors.field_error(".type", "required", "is required on raw create"));
+	else if (!match(sec_type, TYPE_RE) || match(sec_type, TYPE_UNQUOTED_RE))
+		push(errs, errors.field_error(".type", "invalid_format",
+			"must be printable ASCII without spaces or any of \" # ' ; \\, because uci writes the type unquoted"));
+	if (client_supplied_id && (type(new_id) != "string" || !match(new_id, ID_RE)))
+		push(errs, errors.field_error("id", "invalid_format",
+			"must hold only letters, digits and _, the section names uci stores"));
+	let w = writable_options(body);
+	push(errs, ...w.errors);
+	if (length(errs) > 0)
+		return errors.validation_failed(ctx, errs);
 
 	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
 		sprintf("creating %s.%s (type %s) via /raw/", pkg, sec_type, sec_type));
 	if (denied != null) return denied;
 
-	let client_supplied_id = body.id != null && body.id != "";
-	let new_id;
 	if (client_supplied_id) {
-		new_id = body.id;
-		if (type(new_id) != "string" || !match(new_id, ID_RE))
-			return errors.validation_failed(ctx,
-				[errors.field_error("id", "invalid_format",
-				                    "id must match /^[A-Za-z0-9_]+$/ (uci section-name charset)")]);
 		if (load_section(conn, pkg, new_id) != null)
 			return errors.error(ctx, "conflict",
 			                    sprintf("Section %s.%s already exists", pkg, new_id));
 	} else {
-		new_id = ids.new_id(substr(sec_type, 0, 1));
+		// ids.new_id takes only lowercase letters, so a type such as olsrd's LoadPlugin, or
+		// one that starts with a digit, answered 500.
+		let initial = lc(substr(sec_type, 0, 1));
+		new_id = ids.new_id(match(initial, /^[a-z]$/) ? initial : null);
 	}
 
 	let reload = ucitrack.reload_services(conn, pkg);
-	let opts = {};
-	for (let k in body) {
-		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
-		// toUci to drop unknown keys, so without this a read-modify-write client writes a
-		// literal `option managed` into the section, and normalize_section then lets that
-		// stored option shadow the derived value on the way back out.
-		if (k == ".type" || k == "id" || k == "managed") continue;
-		opts[k] = body[k];
-	}
-
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
@@ -231,12 +258,8 @@ function create(conn, ctx, scopes, pkg, body) {
 				return { ok: false, kind: "conflict",
 				         message: sprintf("Section %s.%s already exists", pkg, new_id) };
 			c.uci_create_section(p, new_id, sec_type);
-			for (let k in opts) c.uci_set(p, new_id, k, opts[k]);
-			let view = { ...opts };
-			view['.name'] = new_id;
-			view['.anonymous'] = false;
-			view['.type'] = sec_type;
-			return { ok: true, body: build_response_body(view, reload) };
+			for (let k in w.opts) c.uci_set(p, new_id, k, w.opts[k]);
+			return { ok: true, body: build_response_body(load_section(c, p, new_id), reload) };
 		},
 	});
 
@@ -254,20 +277,13 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 		sprintf("writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
 	if (denied != null) return denied;
 
-	let option_err = reject_unstorable_options(body);
-	if (option_err)
-		return errors.validation_failed(ctx, [option_err]);
+	let w = writable_options(body);
+	let errs = identity_errors(body, id, sec_type);
+	push(errs, ...w.errors);
+	if (length(errs) > 0)
+		return errors.validation_failed(ctx, errs);
 
 	let reload = ucitrack.reload_services(conn, pkg);
-	let new_opts = {};
-	for (let k in body) {
-		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
-		// toUci to drop unknown keys, so without this a read-modify-write client writes a
-		// literal `option managed` into the section, and normalize_section then lets that
-		// stored option shadow the derived value on the way back out.
-		if (k == ".type" || k == "id" || k == "managed") continue;
-		new_opts[k] = body[k];
-	}
 
 	let result = transaction.transaction(conn, {
 		package: pkg,
@@ -280,20 +296,17 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 			let secret = SECRET_BY_TYPE[existing['.type']] ?? {};
 			for (let k in existing) {
 				if (substr(k, 0, 1) == ".") continue;
-				if (exists(new_opts, k)) continue;
-				// A stripped secret is absent from every read, so no replace body can
-				// carry it back. Deleting it here would make an ordinary read-modify-write
-				// destroy the credential, which is the trap `carry_write_only` exists to
+				if (exists(w.opts, k)) continue;
+				// A stripped secret, or a stored `option id` hidden behind the section name,
+				// is absent from every read, so no replace body can carry it back. Deleting
+				// it here would make an ordinary read-modify-write destroy the credential or
+				// zerotier's network id, which is the trap `carry_write_only` exists to
 				// avoid on the curated side.
-				if (secret[k]) continue;
+				if (secret[k] || k == "id") continue;
 				c.uci_delete(p, id, k);
 			}
-			for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
-			let view = { ...new_opts };
-			view['.name'] = id;
-			view['.anonymous'] = !!existing['.anonymous'];
-			view['.type'] = existing['.type'];
-			return { ok: true, body: build_response_body(view, reload) };
+			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
+			return { ok: true, body: build_response_body(load_section(c, p, id), reload) };
 		},
 	});
 
@@ -311,20 +324,13 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 		sprintf("writing %s.%s via /raw/", pkg, id));
 	if (denied != null) return denied;
 
-	let option_err = reject_unstorable_options(body);
-	if (option_err)
-		return errors.validation_failed(ctx, [option_err]);
+	let w = writable_options(body);
+	let errs = identity_errors(body, id, sec_type);
+	push(errs, ...w.errors);
+	if (length(errs) > 0)
+		return errors.validation_failed(ctx, errs);
 
 	let reload = ucitrack.reload_services(conn, pkg);
-	let updates = {};
-	for (let k in body) {
-		// `managed` is derived from uci's `.anonymous` flag and never stored. Raw has no
-		// toUci to drop unknown keys, so without this a read-modify-write client writes a
-		// literal `option managed` into the section, and normalize_section then lets that
-		// stored option shadow the derived value on the way back out.
-		if (k == ".type" || k == "id" || k == "managed") continue;
-		updates[k] = body[k];
-	}
 
 	let result = transaction.transaction(conn, {
 		package: pkg,
@@ -335,16 +341,12 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
 			// Sweep a stored `managed` left by a client from before raw stopped copying it.
-			// Nothing else reaches it: the guard above keeps the key out of `updates`, so
-			// even the empty-array clear idiom cannot target it, and until now only a full
-			// replace removed it. An empty array is uci's "no such option".
+			// Nothing else reaches it: NOT_OPTIONS keeps the key out of every body, so even
+			// the removal idiom cannot target it, and until now only a full replace removed
+			// it. An empty array is uci's "no such option".
 			if (exists(existing, "managed")) c.uci_set(p, id, "managed", []);
-			for (let k in updates) c.uci_set(p, id, k, updates[k]);
-			let view = { ...existing, ...updates };
-			delete view.managed;
-			view['.name'] = id;
-			view['.type'] = existing['.type'];
-			return { ok: true, body: build_response_body(view, reload) };
+			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
+			return { ok: true, body: build_response_body(load_section(c, p, id), reload) };
 		},
 	});
 
@@ -385,5 +387,6 @@ return {
 	patch,
 	remove,
 	inferred_domain_path,
+	writable_options,
 	TYPE_DOMAIN_MAP,
 };

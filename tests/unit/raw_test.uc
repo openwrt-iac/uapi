@@ -92,6 +92,15 @@ t.describe('raw.get_one, normalization and per-type scope', () => {
 		t.assert_equal(r.body.target, "ACCEPT");
 	});
 
+	// zerotier stores its network id as `option id`, and the read used to name that instead.
+	t.it('keeps the section name as id when the section stores an option id', () => {
+		let conn = bus.stub({ uci: { zerotier: {
+			earth: { '.type': 'network', '.anonymous': false, id: '8056c2e21c000001' },
+		} } });
+		let r = raw.get_one(conn, ctx(), ["*:rw"], "zerotier", "earth");
+		t.assert_equal(r.body.id, "earth");
+	});
+
 	t.it('marks anonymous sections as managed=false', () => {
 		let r = raw.get_one(with_data(), ctx(), ["*:rw"], "firewall", "cfg00");
 		t.assert_equal(r.status, 200);
@@ -136,6 +145,16 @@ t.describe('raw.create, client-supplied id', () => {
 		t.assert_equal(r.body.errors[0].code, "invalid_format");
 	});
 
+	// ucode's `0 == ""` and `false == ""` are true, so both read as no id and got a generated one.
+	t.it('rejects an id of 0 or false instead of generating one', () => {
+		for (let id in [ 0, false ]) {
+			let r = raw.create(fw_with(null), ctx(), ["*:rw"], "firewall",
+				{ ".type": "rule", id, target: "ACCEPT" });
+			t.assert_equal(r.status, 422);
+			t.assert_equal(r.body.errors[0].field, "id");
+		}
+	});
+
 	t.it('answers 503 config_missing when the package has no config file', () => {
 		let conn = bus.stub({ uci: {}, missing_packages: [ "uapi_nosuchpkg" ] });
 		let r = raw.create(conn, ctx(), ["*:rw"], "uapi_nosuchpkg", { ".type": "thing", a: "1" });
@@ -164,18 +183,23 @@ t.describe('raw.create, client-supplied id', () => {
 	});
 });
 
-// Each of these answered 200 on a device and stored nothing for the option.
+// Each of these answered 200 on a device and stored nothing, or only part of what was sent.
 t.describe('raw writes refuse what uci cannot store', () => {
 	function fw() {
 		return bus.stub({ uci: { firewall: {
 			r1: { '.type': 'rule', '.anonymous': false, target: 'ACCEPT' },
 		} } });
 	}
+	function fields(r) { return map(r.body.errors, e => [ e.field, e.code ]); }
+
 	for (let c in [
 		[ "a name outside the uci charset", { "b-c": "1" }, "b-c", "invalid_format" ],
-		[ "a null", { b: null }, "b", "invalid_type" ],
+		[ "a dotted name", { ".b": "1" }, ".b", "invalid_format" ],
 		[ "an object", { b: { x: 1 } }, "b", "invalid_type" ],
-		[ "a list holding a null", { b: [ "a", null ] }, "b", "invalid_type" ],
+		[ "a list holding a null", { b: [ "a", null ] }, "b[1]", "invalid_type" ],
+		[ "a list holding an object", { b: [ "a", { x: 1 } ] }, "b[1]", "invalid_type" ],
+		[ "a nested list", { b: [ "a", [ "b", "c" ] ] }, "b[1]", "invalid_type" ],
+		[ "an empty string that leads a longer list", { b: [ "", "x" ] }, "b[0]", "invalid_format" ],
 	]) {
 		t.it(sprintf("%s, on create, replace and patch", c[0]), () => {
 			let conn = fw();
@@ -185,27 +209,94 @@ t.describe('raw writes refuse what uci cannot store', () => {
 				raw.patch(conn, ctx(), ["*:rw"], "firewall", "r1", c[1]),
 			]) {
 				t.assert_equal(r.status, 422);
-				t.assert_equal(r.body.errors[0].field, c[2]);
-				t.assert_equal(r.body.errors[0].code, c[3]);
+				t.assert_deep_equal(fields(r), [ [ c[2], c[3] ] ]);
 			}
-			t.assert_deep_equal(conn._state.uci_ops, []);
 		});
 	}
 
-	t.it('a section type with a space', () => {
-		let r = raw.create(fw(), ctx(), ["*:rw"], "firewall", { ".type": "a rule" });
-		t.assert_equal(r.status, 422);
-		t.assert_equal(r.body.errors[0].field, ".type");
+	t.it('lists every refused field in one 422', () => {
+		let r = raw.create(fw(), ctx(), ["*:rw"], "firewall",
+			{ ".type": "a b", id: "x.y", "b-c": "1", d: {}, e: [ 1, null ] });
+		t.assert_deep_equal(fields(r), [
+			[ ".type", "invalid_format" ], [ "id", "invalid_format" ],
+			[ "b-c", "invalid_format" ], [ "d", "invalid_type" ], [ "e[1]", "invalid_type" ],
+		]);
 	});
 
-	// A successful write needs the real flock, so the missing config file is what proves that
-	// the body got past the check: that refusal comes from the transaction.
-	t.it('passes numbers, booleans, lists of them, a hyphenated type and an echoed managed', () => {
-		let conn = bus.stub({ uci: {}, missing_packages: [ "uapi_nosuchpkg" ] });
-		let r = raw.create(conn, ctx(), ["*:rw"], "uapi_nosuchpkg",
-			{ ".type": "wifi-iface", managed: true, n: 5, f: 1.5, on: true, l: [ 1, false, "x" ], e: [] });
-		t.assert_equal(r.body.code, "config_missing");
+	// uci takes the five, but writes the type unquoted, so the file re-reads them as syntax.
+	for (let st in [ "a\"b", "a#b", "a'b", "a;b", "a\\b", "a b", "th\u00e9", "a\u0001b" ])
+		t.it(sprintf("refuses the section type %J", st), () => {
+			let r = raw.create(fw(), ctx(), ["*:rw"], "firewall", { ".type": st, target: "ACCEPT" });
+			t.assert_deep_equal(fields(r), [ [ ".type", "invalid_format" ] ]);
+		});
+
+	// `rule#x` mapped to the bare [firewall] domain, and uci re-read it as a rule.
+	t.it('refuses rule#x before the scope check can map it past firewall:rules:ro', () => {
+		let scopes = [ "raw:firewall:rw", "firewall:rw", "firewall:rules:ro" ];
+		let r = raw.create(fw(), ctx(), scopes, "firewall", { ".type": "rule#x", id: "probe", target: "ACCEPT" });
+		t.assert_deep_equal(fields(r), [ [ ".type", "invalid_format" ] ]);
+		r = raw.create(fw(), ctx(), scopes, "firewall", { ".type": "rule", target: "ACCEPT" });
+		t.assert_equal(r.body.code, "insufficient_scope");
 	});
+
+	t.it('refuses a type or an id that differs from the section on replace and patch', () => {
+		for (let w in [ raw.replace, raw.patch ]) {
+			let r = w(fw(), ctx(), ["*:rw"], "firewall", "r1", { ".type": "zone", id: "r2", target: "DROP" });
+			t.assert_deep_equal(fields(r), [ [ ".type", "read_only" ], [ "id", "read_only" ] ]);
+		}
+	});
+});
+
+// A write that succeeds needs the real flock, so these read what the transaction would set.
+t.describe('raw.writable_options', () => {
+	t.it('turns null and "" into a removal, and keeps every other value as sent', () => {
+		let w = raw.writable_options({ z: null, s: "", e: [], n: 5, l: [ "a", "" ], one: [ "" ] });
+		t.assert_deep_equal(w.errors, []);
+		t.assert_deep_equal(w.opts, { z: [], s: [], e: [], n: 5, l: [ "a", "" ], one: [ "" ] });
+	});
+
+	t.it('leaves out the keys that name the section or that a response derives', () => {
+		let w = raw.writable_options({ ".type": "t", id: "s1", managed: true, reloaded: false,
+		                               reload_services: [ "firewall" ], reload_note: "x", a: "1" });
+		t.assert_deep_equal(w.opts, { a: "1" });
+	});
+});
+
+// A successful write needs the real flock, so the missing config file is what proves that a
+// body got past the checks: that refusal comes from the transaction.
+t.describe('raw writes pass what uci can store', () => {
+	function missing() {
+		return bus.stub({
+			uci: { uapi_nosuchpkg: { s1: { '.type': 'thing', '.anonymous': false, a: '1' } } },
+			missing_packages: [ "uapi_nosuchpkg" ],
+		});
+	}
+	let body = { managed: null, reloaded: false, reload_services: [ "firewall" ], reload_note: "x",
+	             n: 5, f: 1.5, on: true, l: [ 1, false, "x" ], one: [ "" ], tail: [ "a", "" ],
+	             e: [], z: null, s: "" };
+
+	t.it('on create, with a punctuated type and a null id', () => {
+		for (let st in [ "wifi-iface", "a.b:c@d+e" ]) {
+			let r = raw.create(missing(), ctx(), ["*:rw"], "uapi_nosuchpkg",
+				{ ".type": st, id: null, ...body });
+			t.assert_equal(r.body.code, "config_missing");
+		}
+	});
+
+	t.it('on replace and patch, with an echo of the type and id', () => {
+		for (let w in [ raw.replace, raw.patch ]) {
+			let r = w(missing(), ctx(), ["*:rw"], "uapi_nosuchpkg", "s1",
+				{ ".type": "thing", id: "s1", ...body });
+			t.assert_equal(r.body.code, "config_missing");
+		}
+	});
+
+	// ids.new_id takes only lowercase letters and died on these, which answered 500.
+	for (let st in [ "LoadPlugin", "6in4", "_x" ])
+		t.it(sprintf("generates an id for the type %J", st), () => {
+			let r = raw.create(missing(), ctx(), ["*:rw"], "uapi_nosuchpkg", { ".type": st });
+			t.assert_equal(r.body.code, "config_missing");
+		});
 });
 
 t.describe('raw permission composition for writes', () => {
