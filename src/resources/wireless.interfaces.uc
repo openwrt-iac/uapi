@@ -47,11 +47,32 @@ const KEY_HOLDERS = {
 // hostapd refuses a NAS identifier longer than 48 bytes when 802.11r is on. Without 802.11r it is
 // the RADIUS NAS-Identifier, which takes more.
 const NASID_MAX = 48;
+// hostapd reads its config 4096 bytes at a time and takes the rest of a longer line as a line of
+// its own, which is the newline injection again without a newline. wpa_supplicant cuts a network
+// line at 2000 bytes. A key or nasid stays well under both.
+const LINE_MAX = 1024;
+
+function base_encryption(e) {
+	return (type(e) == "string") ? split(e, "+")[0] : "none";
+}
+
+// iface_roaming() in wifi-scripts turns 802.11r on only with WPA2 or later, and uses the key
+// holder lists only when ft_psk_generate_local is off, which is its default for every mode but
+// psk, psk2 and psk-mixed.
+const BELOW_WPA2 = { "none": true, "wep": true, "psk": true, "wpa": true };
+const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
+const FT_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !BELOW_WPA2[base_encryption(e)]);
+function roaming(v) {
+	let base = base_encryption(v.encryption);
+	let ft = v.ieee80211r === true && !BELOW_WPA2[base];
+	return { ft: ft, key_holders: ft && !(v.ft_psk_generate_local ?? LOCAL_FT_KEYS[base] ?? false) };
+}
 
 // In AP mode, hostapd reads a key of 8 to 63 bytes as a passphrase and one of 64 hex digits as a
 // PSK, but SAE needs the passphrase: given only a PSK, hostapd has no SAE password, and no WPA3
 // client can join. wpa_supplicant gets the key in quotes, so in sta and adhoc it is a passphrase,
-// while SAE and mesh take it as a password of any length. LuCI applies the AP rule in every mode.
+// while SAE and mesh take it as a password with no length rule. LuCI applies the AP rule in every
+// mode.
 function key_problem(key, mode, encryption) {
 	let base = (type(encryption) == "string") ? split(encryption, "+")[0] : null;
 	if (!PASSPHRASE_MODES[base]) return null;
@@ -171,15 +192,21 @@ function toUci(json) {
 	return out;
 }
 
-// The key and the key holder lists are write-only, so a PUT carries the stored ones into json. A
-// control character is never legitimate in them and stays an injection while it is stored, so a
-// carried one is refused too, and the sweep lists it. Their form is checked only when the request
-// sends them, or when it changes the encryption or the mode that the key is checked against:
-// refusing a stored value that wifi-scripts takes would refuse every later write of the section.
-function validate(json, conn, id, delta) {
+// A rule that a stored value can fail is checked only when the request changes the value, or a
+// field that the rule depends on, as uci holds them. A PUT sends a read back, and carries the
+// write-only key and key holder lists, so checking what it does not change would refuse every
+// write of a section that LuCI or a shell wrote, a write that only disables it included. A control
+// character is never legitimate here and stays an injection while it is stored, so it is refused
+// whatever the request changes, and the sweep lists it.
+function validate(json, conn, id) {
 	let errs = [];
-	let named = delta ?? json;
-	let stored = (conn != null && id != null) ? conn.uci_get("wireless", id) : null;
+	let s = (conn != null && id != null) ? conn.uci_get("wireless", id) : null;
+	let before = { mode: s?.mode ?? "ap", encryption: s?.encryption ?? "none",
+	               ieee80211r: platform_bool(s?.ieee80211r, false),
+	               ft_psk_generate_local: platform_bool(s?.ft_psk_generate_local, null) };
+	let after = { mode: json.mode ?? "ap", encryption: json.encryption ?? "none",
+	              ieee80211r: json.ieee80211r === true, ft_psk_generate_local: json.ft_psk_generate_local };
+	let changed = (k) => sprintf("%J", json[k]) != sprintf("%J", s?.[k]);
 
 	values.require_present(errs, json, "device");
 
@@ -196,30 +223,39 @@ function validate(json, conn, id, delta) {
 		push(errs, { field: "key", code: "required",
 		             message: sprintf("is required when encryption is %J", json.encryption) });
 
-	let rule_changed = (named.encryption != null && named.encryption != (stored?.encryption ?? "none"))
-	                   || (named.mode != null && named.mode != (stored?.mode ?? "ap"));
 	if (type(json.key) == "string" && values.has_control_chars(json.key))
 		push(errs, { field: "key", code: "invalid_format", message: ONE_LINE });
-	else if (type(json.key) == "string" && json.key != "" && (named.key != null || rule_changed)) {
-		let problem = key_problem(json.key, json.mode, json.encryption);
+	else if (type(json.key) == "string" && json.key != ""
+	         && (changed("key") || after.mode != before.mode || after.encryption != before.encryption)) {
+		let problem = (length(json.key) > LINE_MAX)
+			? sprintf("must be at most %d bytes: wifi-scripts writes it as one line of the daemon's config", LINE_MAX)
+			: key_problem(json.key, after.mode, json.encryption);
 		if (problem != null)
-			push(errs, { field: "key", code: "invalid_format", message: problem });
+			push(errs, { field: "key", code: (length(json.key) > LINE_MAX) ? "out_of_range" : "invalid_format",
+			             message: problem });
 	}
 
-	if (type(json.nasid) == "string" && values.has_control_chars(json.nasid))
-		push(errs, { field: "nasid", code: "invalid_format", message: ONE_LINE });
-	else if (type(json.nasid) == "string" && json.ieee80211r === true
-	         && (named.nasid != null || named.ieee80211r === true) && length(json.nasid) > NASID_MAX)
-		push(errs, { field: "nasid", code: "out_of_range",
-		             message: sprintf("must be at most %d bytes with ieee80211r on: hostapd refuses a longer NAS identifier for 802.11r", NASID_MAX) });
+	let roam = roaming(after), roam_before = roaming(before);
+	if (type(json.nasid) == "string") {
+		if (values.has_control_chars(json.nasid))
+			push(errs, { field: "nasid", code: "invalid_format", message: ONE_LINE });
+		else if (changed("nasid") && length(json.nasid) > LINE_MAX)
+			push(errs, { field: "nasid", code: "out_of_range",
+			             message: sprintf("must be at most %d bytes: wifi-scripts writes it as one line of hostapd's config", LINE_MAX) });
+		else if (roam.ft && length(json.nasid) > NASID_MAX && (changed("nasid") || !roam_before.ft))
+			push(errs, { field: "nasid", code: "out_of_range",
+			             message: sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX) });
+	}
 
-	// Each entry ends with the key that the key holders share, so no message names it.
+	// Each entry ends with the key that the key holders share, so no message names it. uci can
+	// hold a single entry as an option rather than a list.
 	for (let field, kh in KEY_HOLDERS) {
-		if (type(json[field]) != "array") continue;
-		let sent = type(named[field]) == "array";
-		for (let i = 0; i < length(json[field]); i++) {
-			let e = json[field][i];
-			if (type(e) == "string" && (values.has_control_chars(e) || (sent && !match(e, kh.re))))
+		let list = (type(json[field]) == "string") ? [ json[field] ] : json[field];
+		if (type(list) != "array") continue;
+		let check_form = changed(field) || (roam.key_holders && !roam_before.key_holders);
+		for (let i = 0; i < length(list); i++) {
+			let e = list[i];
+			if (type(e) == "string" && (values.has_control_chars(e) || (check_form && !match(e, kh.re))))
 				push(errs, { field: sprintf("%s[%d]", field, i), code: "invalid_format",
 				             message: kh.message });
 		}
@@ -243,7 +279,8 @@ return {
 		  then: { required: ["key"] } },
 	],
 	openapi_write_conditional: [
-		{ if:   { properties: { ieee80211r: { const: true } }, required: ["ieee80211r"] },
+		{ if:   { properties: { ieee80211r: { const: true }, encryption: { enum: FT_ENCRYPTION } },
+		          required: ["ieee80211r", "encryption"] },
 		  then: { properties: { nasid: { maxLength: NASID_MAX } } } },
 	],
 	openapi_runtime: {
@@ -270,7 +307,7 @@ return {
 		              description: "SSID broadcast (or joined in sta mode)" },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
-		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. With psk, psk2, psk-mixed, sae or sae-mixed, a key that a write sends, or that it moves to another encryption or mode, is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length" },
+		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. A key that a write changes, or moves to another encryption or mode, is at most 1024 bytes, and with psk, psk2, psk-mixed, sae or sae-mixed it is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length" },
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
@@ -287,8 +324,8 @@ return {
 		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all" },
 		mobility_domain: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{4}$",
 		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID" },
-		nasid:      { type: ["string", "null"],
-		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write takes no control character, and with ieee80211r on at most %d bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma", NASID_MAX) },
+		nasid:      { type: ["string", "null"], "x-uapi-write": { maxLength: LINE_MAX },
+		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write that changes it takes no control character and at most %d bytes, and at most %d with 802.11r on, which needs ieee80211r and WPA2 or later. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma", LINE_MAX, NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], minimum: 1000, maximum: 65535,
 		              description: "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000" },
 		r0_key_lifetime: { type: ["integer", "null"], minimum: 0,

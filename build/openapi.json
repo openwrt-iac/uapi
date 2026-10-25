@@ -29105,7 +29105,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write takes no control character, and with ieee80211r on at most 48 bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write that changes it takes no control character and at most 1024 bytes, and at most 48 with 802.11r on, which needs ieee80211r and WPA2 or later. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29205,7 +29205,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. With psk, psk2, psk-mixed, sae or sae-mixed, a key that a write sends, or that it moves to another encryption or mode, is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. A key that a write changes, or moves to another encryption or mode, is at most 1024 bytes, and with psk, psk2, psk-mixed, sae or sae-mixed it is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29413,7 +29413,8 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write takes no control character, and with ieee80211r on at most 48 bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write that changes it takes no control character and at most 1024 bytes, and at most 48 with 802.11r on, which needs ieee80211r and WPA2 or later. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma",
+						"maxLength": 1024
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29448,7 +29449,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. With psk, psk2, psk-mixed, sae or sae-mixed, a key that a write sends, or that it moves to another encryption or mode, is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. A key that a write changes, or moves to another encryption or mode, is at most 1024 bytes, and with psk, psk2, psk-mixed, sae or sae-mixed it is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29478,10 +29479,83 @@
 							"properties": {
 								"ieee80211r": {
 									"const": true
+								},
+								"encryption": {
+									"enum": [
+										"owe",
+										"psk2",
+										"psk-mixed",
+										"sae",
+										"sae-mixed",
+										"wpa2",
+										"wpa3",
+										"wpa3-mixed",
+										"psk2+ccmp",
+										"psk2+ccmp256",
+										"psk2+gcmp",
+										"psk2+gcmp256",
+										"psk2+tkip",
+										"psk2+tkip+ccmp",
+										"psk2+aes",
+										"psk2+tkip+aes",
+										"psk2+aes+tkip",
+										"psk2+ccmp+tkip",
+										"psk-mixed+ccmp",
+										"psk-mixed+ccmp256",
+										"psk-mixed+gcmp",
+										"psk-mixed+gcmp256",
+										"psk-mixed+tkip",
+										"psk-mixed+tkip+ccmp",
+										"psk-mixed+aes",
+										"psk-mixed+tkip+aes",
+										"psk-mixed+aes+tkip",
+										"psk-mixed+ccmp+tkip",
+										"sae+ccmp",
+										"sae+ccmp256",
+										"sae+gcmp",
+										"sae+gcmp256",
+										"sae+tkip",
+										"sae+tkip+ccmp",
+										"sae+aes",
+										"sae+tkip+aes",
+										"sae+aes+tkip",
+										"sae+ccmp+tkip",
+										"wpa2+ccmp",
+										"wpa2+ccmp256",
+										"wpa2+gcmp",
+										"wpa2+gcmp256",
+										"wpa2+tkip",
+										"wpa2+tkip+ccmp",
+										"wpa2+aes",
+										"wpa2+tkip+aes",
+										"wpa2+aes+tkip",
+										"wpa2+ccmp+tkip",
+										"wpa3+ccmp",
+										"wpa3+ccmp256",
+										"wpa3+gcmp",
+										"wpa3+gcmp256",
+										"wpa3+tkip",
+										"wpa3+tkip+ccmp",
+										"wpa3+aes",
+										"wpa3+tkip+aes",
+										"wpa3+aes+tkip",
+										"wpa3+ccmp+tkip",
+										"wpa3-mixed+ccmp",
+										"wpa3-mixed+ccmp256",
+										"wpa3-mixed+gcmp",
+										"wpa3-mixed+gcmp256",
+										"wpa3-mixed+tkip",
+										"wpa3-mixed+tkip+ccmp",
+										"wpa3-mixed+aes",
+										"wpa3-mixed+tkip+aes",
+										"wpa3-mixed+aes+tkip",
+										"wpa3-mixed+ccmp+tkip"
+									]
 								}
 							},
 							"required": [
-								"ieee80211r"
+								"ieee80211r",
+								"encryption"
 							]
 						},
 						"then": {
