@@ -28540,7 +28540,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, without brackets. An IPv6 address can carry a %zone, such as fe80::1%wan"
+						"description": "Remote endpoint hostname or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash or a control character is refused"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28628,7 +28628,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, without brackets. An IPv6 address can carry a %zone, such as fe80::1%wan"
+						"description": "Remote endpoint hostname or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash or a control character is refused"
 					},
 					"endpoint_port": {
 						"type": [

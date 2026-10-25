@@ -105,7 +105,7 @@ function cmd_create(opts) {
 	// produces a token that denies every request with `ip_not_permitted` and
 	// the operator has no signal what went wrong.
 	for (let c in opts.allowed_cidrs) {
-		if (!values.is_valid_cidr_any(c))
+		if (!values.is_valid_token_cidr(c))
 			die(sprintf("uapi-token create: %J is not a valid IPv4 or IPv6 CIDR", c));
 	}
 

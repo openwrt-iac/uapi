@@ -5,9 +5,8 @@ let fs = require('fs');
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
 
-// endpoint_host is caller-supplied free-form text that ends up in a shell command,
-// so this is the only thing standing between a hostname and command execution.
-// Same idiom as LuCI's wireguard backend.
+// Every wg and ip argument goes through shellquote, and the restore reads values from uci that
+// no validate() saw. Same idiom as LuCI's wireguard backend.
 t.describe('wg.shellquote', () => {
 	t.it('wraps a plain value in single quotes', () => {
 		t.assert_equal(wg.shellquote("vpn.example.org"), "'vpn.example.org'");
@@ -203,8 +202,10 @@ t.describe('wg route prefixes', () => {
 		t.assert_deep_equal(wg.route_prefixes(['::/0;id>x;'], true), []);
 	});
 
-	t.it('rejects a prefix length with a leading zero, which ip route reads as octal', () => {
-		t.assert_deep_equal(wg.route_prefixes(['fd00::/012', '10.0.0.0/08'], true), []);
+	// validate() refuses a new one, but a peer stored before 3.2.0 got its route from `ip route`
+	// with the same text, so the same text withdraws it.
+	t.it('keeps a stored prefix length with a leading zero, so its route can still be withdrawn', () => {
+		t.assert_deep_equal(wg.route_prefixes(['fd00::/012'], true), [ { prefix: 'fd00::/012', v6: true } ]);
 	});
 });
 
@@ -213,15 +214,16 @@ t.describe('wg route prefixes', () => {
 // quoted. The commands run here with `ip` and `wg` as no-op shell functions.
 t.describe('wg commands quote every argument', () => {
 	function writes_nothing(argv) {
-		let dir = sprintf("/tmp/uapi-wg-quote-%d", time());
-		t.assert_true(fs.mkdir(dir), "mkdir " + dir);
+		let mk = fs.popen("mktemp -d /tmp/uapi-wg-quote.XXXXXX");
+		let dir = trim(mk.read("all") ?? "");
+		mk.close();
+		t.assert_true(match(dir, /^\/tmp\/uapi-wg-quote\./) != null, "mktemp gave " + dir);
 		let p = fs.popen(sprintf("ip() { :; }; wg() { :; }; cd %s || exit 1; %s; echo done",
 		                         dir, wg.command_line(argv)));
 		let out = p.read("all");
 		p.close();
 		let left = fs.lsdir(dir);
-		for (let f in left ?? []) fs.unlink(dir + "/" + f);
-		fs.rmdir(dir);
+		system([ "rm", "-rf", dir ]);
 		t.assert_equal(trim(out), "done");
 		t.assert_deep_equal(left, []);
 	}
@@ -260,10 +262,8 @@ t.describe('wg.route_table', () => {
 	});
 });
 
-// wg needs an IPv6 endpoint bracketed to find the port, but the caller may have
-// bracketed it already: that is the form `wg show endpoints` prints back, so it
-// round-trips straight into a PUT. Double-bracketing made wg refuse the peer,
-// turning a valid body into a 500.
+// wg needs an IPv6 endpoint bracketed to find the port. validate() refuses a bracketed host
+// since 3.2.0, but a peer stored before can hold one, and double-bracketing made wg refuse it.
 t.describe('wg IPv6 endpoint bracketing', () => {
 	function endpoint_arg(host) { return wg.endpoint_arg(host, 51820); }
 

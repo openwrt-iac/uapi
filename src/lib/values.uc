@@ -308,16 +308,16 @@ function is_valid_ipv6_cidr(s) {
 	return int(parts[1]) <= 128;
 }
 
-// iproute2 reads a prefix length in base 0, so `/012` is /10 to `ip route` and /12 to wg and to
-// uapi, and `/08` is refused. The route for an allowed IP then covers another prefix.
-const LEADING_ZERO_LEN_RE = /\/0[0-9]/;
-
-// LuCI's `hostname` datatype: word characters, or dotted labels that are not all digits, so that
-// 1.2.3 is not taken for a name.
-function is_valid_hostname(s) {
-	if (type(s) != "string" || length(s) > 253) return false;
-	if (match(s, /^[A-Za-z0-9_]+$/)) return true;
-	return match(s, /^[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9]\.?$/) != null && match(s, /[^0-9.]/) != null;
+// Tokens keep the 3.1 reading of an IPv6 prefix length, which int() takes from its leading
+// digits: a token minted with `fd00::/64x` matched fd00::/64, and refusing it is a v4 change. No
+// allowed_cidrs value reaches a shell or a daemon.
+function is_valid_token_cidr(s) {
+	if (is_valid_cidr(s)) return true;
+	if (type(s) != "string") return false;
+	let parts = split(s, "/");
+	if (length(parts) != 2 || !is_valid_ipv6(parts[0])) return false;
+	let prefix = int(parts[1]);
+	return prefix >= 0 && prefix <= 128;
 }
 
 // Stock OpenWrt configs ship IPv6 CIDRs in several places
@@ -409,7 +409,7 @@ function ipv6_words(s) {
 }
 
 function ipv6_in_cidr(addr, cidr) {
-	if (!is_valid_ipv6_cidr(cidr)) return false;
+	if (index(cidr, ":") == -1 || !is_valid_token_cidr(cidr)) return false;
 	let parts = split(cidr, "/");
 	let a = ipv6_words(addr), n = ipv6_words(parts[0]);
 	if (a == null || n == null) return false;
@@ -709,13 +709,12 @@ return {
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE,
-	LEADING_ZERO_LEN_RE,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
-	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any, is_valid_hostname,
+	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any, is_valid_token_cidr,
 	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,
