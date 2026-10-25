@@ -42,9 +42,10 @@ All notable changes to this project will be documented in this file. Format foll
   wifi-scripts writes `nasid`, `r0kh` and `r1kh` into hostapd's config as lines, so a write refuses
   a newline in them and a `nasid` or an entry over 1024 bytes. With fast transition, it refuses a
   `nasid` over 48 bytes and, when hostapd reads the key holder lists, an entry that hostapd cannot
-  parse. A write is refused only for an error that it adds, so a write that leaves a stored value
-  alone, disabling the SSID included, is never refused for it, while one that turns fast
-  transition on over a stored value that breaks it, or that enables the SSID, is.
+  parse. A write that leaves a field as it is, disabling the SSID included, is never refused for a
+  problem that the field already had. A write that changes the field, that turns fast transition
+  on over a stored value that breaks it, or that enables the SSID through `disabled`, is. Enabling
+  its radio, or moving it to another radio or mode, is not checked.
   `GET /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole
   group keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped,
   wifi-scripts derives lists that the other access points do not share. `ft_psk_generate_local`
@@ -439,16 +440,16 @@ All notable changes to this project will be documented in this file. Format foll
 
 - **A newline in `wireless/interfaces.key` added a line to hostapd's config.** wifi-scripts writes
   the key as `wpa_passphrase=<key>` without escaping, so each newline in it started a hostapd
-  directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd
-  directive that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in
-  `\nssid2="x"` answered 200, and hostapd broadcast `x` while every read showed the stored SSID.
-  A key with a newline now answers 422 `invalid_format` in every mode and encryption, because
-  another writer can enable the SSID or change its encryption later. A write is refused only for
-  a newline that it adds, or when it enables the SSID, so a write that leaves a stored key alone,
-  disabling the SSID included, is not refused for it, and `GET /api/v3/diagnostics?validate=1`
-  lists the SSID. Enabling the radio of such an SSID is not checked. That tightening uses the
-  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on, and
-  it fails loudly. LuCI's key field takes one line only. (#246)
+  directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd directive
+  that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in `\nssid2="x"`
+  answered 200, and hostapd broadcast `x` while every read showed the stored SSID. A key with a
+  newline now answers 422 `invalid_format` in every mode and encryption, because another writer can
+  enable the SSID or change its encryption later. A write that sets the key, or that enables the
+  SSID through `disabled`, is refused for it. A write that leaves the key as it is, disabling the
+  SSID included, is not, and `GET /api/v3/diagnostics?validate=1` lists the SSID. Enabling its
+  radio, or moving it to another radio or mode, is not checked. That tightening uses the carve-out
+  in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. LuCI's key field takes one line only. (#246)
 
 ## [3.1.0] - 2026-10-11
 

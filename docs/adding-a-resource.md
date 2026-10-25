@@ -206,12 +206,14 @@ right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi
 when the section must stay writable: disabling an SSID that holds an injected key has to work. Put
 such rules in `validate_new(json)`. They see the section as if it were enabled, because another
 writer can enable it later. The handler runs them on the section as it was and as the write
-leaves it, and refuses the write only for an error that it adds, compared by field, code and
-message. So a write that leaves a stored value alone, disabling included, is never refused for
-it, and a write that makes a stored value break, by turning a daemon option on for instance, is.
+leaves it, and refuses the write only for an error that it adds: an error that the section had
+before, by field, code and message, in a field that the write leaves as it is, is not new. So a
+write that leaves a field alone, disabling included, is never refused for an error that the field
+already had, and a write that changes the field, or that makes a stored value break by turning a
+daemon option on, is. A resource reports each problem of a value as its own error, so that one
+error cannot hide another that a write adds.
 A write that turns a `disabled` field from true to false counts every error as new. The sweep
 runs `validate_new()` on every stored section, disabled ones included, and lists every error.
-`wireless/interfaces` and `network/wireguard_peers` use it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable
