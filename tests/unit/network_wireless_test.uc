@@ -218,10 +218,19 @@ t.describe('wireless PUT of the read keeps what LuCI and wifi config store', () 
 			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211',
 			          path: '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0', channel: '1',
 			          band: '2g', htmode: 'HT40', cell_density: '0', legacy_rates: '1' },
+			radio1: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211',
+			          macaddr: '02:00:00:00:00:01', band: '5g' },
 			default_radio0: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0',
 			                  network: 'lan', mode: 'ap', ssid: 'home', encryption: 'psk2+ccmp',
 			                  key: 'correcthorse', ieee80211r: '1', ft_over_ds: '0',
 			                  ft_psk_generate_local: '1', mobility_domain: '4f57' },
+			ft_kh: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0',
+			          mode: 'ap', ssid: 'corp', encryption: 'psk2', key: 'correcthorse',
+			          ieee80211r: '1', ft_psk_generate_local: '0', nasid: 'ap1',
+			          reassociation_deadline: '20000', r0_key_lifetime: '10000',
+			          r1_key_holder: '02aabbccddee', pmk_r1_push: '1',
+			          r0kh: [ 'ff:ff:ff:ff:ff:ff,*,00112233445566778899aabbccddeeff' ],
+			          r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,00112233445566778899aabbccddeeff' ] },
 		} } });
 	}
 	function put_read(mod, id, change) {
@@ -234,6 +243,28 @@ t.describe('wireless PUT of the read keeps what LuCI and wifi config store', () 
 		t.assert_equal(r.status, 200);
 		return c._state.uci.wireless[id];
 	}
+
+	t.it('a radio bound only by macaddr keeps it', () => {
+		t.assert_equal(put_read(widev, 'radio1', { channel: 36 }).macaddr, '02:00:00:00:00:01');
+	});
+
+	// Half of the group used to be worse than none: a PUT kept 802.11r on and dropped the key
+	// holders, so wifi-scripts derived ones that the other access points do not share.
+	t.it('an SSID keeps the whole 802.11r group, the key holder lists included', () => {
+		let s = put_read(wiface, 'ft_kh', { ssid: 'corp2' });
+		for (let k, v in { nasid: 'ap1', reassociation_deadline: '20000', r0_key_lifetime: '10000',
+		                   r1_key_holder: '02aabbccddee', pmk_r1_push: '1' })
+			t.assert_equal(s[k], v);
+		t.assert_deep_equal(s.r0kh, [ 'ff:ff:ff:ff:ff:ff,*,00112233445566778899aabbccddeeff' ]);
+		t.assert_deep_equal(s.r1kh, [ '00:00:00:00:00:00,00:00:00:00:00:00,00112233445566778899aabbccddeeff' ]);
+	});
+
+	t.it('a read reports the key holder lists without their keys', () => {
+		let body = handler.make(wiface, { tx }).get_one(seeded(), { request_id: "01hx0000000000000000000000" }, 'ft_kh').body;
+		t.assert_equal(body.has_r0kh, true);
+		t.assert_equal(body.has_r1kh, true);
+		t.assert_false(exists(body, 'r0kh') || exists(body, 'r1kh'));
+	});
 
 	t.it('a radio keeps path, cell_density and legacy_rates', () => {
 		let s = put_read(widev, 'radio0', { channel: 6 });

@@ -205,14 +205,18 @@ const CASES = [
 	{
 		file: "wireless.devices.uc", id: "radio0", pkg: "wireless",
 		section: { disabled: '1', '.type': 'wifi-device', type: 'mac80211', channel: '6', band: '2g',
-		           path: 'platform/soc/18000000.wifi', radio: '1', cell_density: '2', legacy_rates: '1' },
+		           path: 'platform/soc/18000000.wifi', macaddr: '02:00:00:00:00:01', radio: '1',
+		           cell_density: '2', legacy_rates: '1' },
 	},
 	{
 		file: "wireless.interfaces.uc", id: "w1", pkg: "wireless",
 		modify: { key: "ssid", value: "home2" },
 		section: { disabled: '1', hidden: '1', isolate: '1', '.type': 'wifi-iface', device: 'radio0', ssid: 'home', encryption: 'psk2+ccmp',
 		           key: 'correcthorse', mode: 'sta', ieee80211r: '1', ft_over_ds: '1', ft_psk_generate_local: '0',
-		           mobility_domain: '4f57' },
+		           mobility_domain: '4f57', nasid: 'ap1', reassociation_deadline: '20000',
+		           r0_key_lifetime: '10000', r1_key_holder: '02aabbccddee', pmk_r1_push: '1',
+		           r0kh: [ 'ff:ff:ff:ff:ff:ff,*,00112233445566778899aabbccddeeff' ],
+		           r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,00112233445566778899aabbccddeeff' ] },
 	},
 	{
 		file: "dhcp.hosts.uc", id: "h1", pkg: "dhcp",

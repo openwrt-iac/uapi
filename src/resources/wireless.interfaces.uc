@@ -1,5 +1,6 @@
 let values = require('values');
 let platform_bool = values.platform_bool;
+let as_int = values.as_int;
 
 const VALID_MODES = {
 	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true,
@@ -10,7 +11,7 @@ const VALID_ENCRYPTION = {
 	"sae": true, "sae-mixed": true,
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
 };
-// LuCI appends a forced cipher to the modes it offers one for, as in psk2+ccmp, and
+// LuCI appends a forced cipher, as in psk2+ccmp, to these modes of the enum, and
 // parse_encryption in wifi-scripts also reads the older aes spellings.
 const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed" ];
 const CIPHERS = [ "ccmp", "ccmp256", "gcmp", "gcmp256", "tkip", "tkip+ccmp",
@@ -81,9 +82,17 @@ function fromUci(section, conn) {
 		isolate: platform_bool(section.isolate, false),
 		ieee80211r: platform_bool(section.ieee80211r, false),
 		ft_over_ds: platform_bool(section.ft_over_ds, false),
-		ft_psk_generate_local: (section.ft_psk_generate_local != null)
-		                       ? platform_bool(section.ft_psk_generate_local, null) : null,
+		ft_psk_generate_local: platform_bool(section.ft_psk_generate_local, null),
 		mobility_domain: section.mobility_domain ?? null,
+		nasid: section.nasid ?? null,
+		reassociation_deadline: as_int(section.reassociation_deadline),
+		r0_key_lifetime: as_int(section.r0_key_lifetime),
+		r1_key_holder: section.r1_key_holder ?? null,
+		pmk_r1_push: platform_bool(section.pmk_r1_push, false),
+		// Each r0kh and r1kh entry ends with the key that the key holders share, so the
+		// lists are write-only like `key`, and a PUT of the read keeps them.
+		has_r0kh: section.r0kh != null,
+		has_r1kh: section.r1kh != null,
 		runtime: fetch_runtime(conn, section['.name']),
 		// Always present, and an empty key is not a key. The published schema declares
 		// a non-nullable boolean, so the previous absent-or-true form meant a keyless
@@ -109,6 +118,13 @@ function toUci(json) {
 	if (json.ft_psk_generate_local != null)
 		out.ft_psk_generate_local = json.ft_psk_generate_local ? "1" : "0";
 	if (json.mobility_domain != null) out.mobility_domain = json.mobility_domain;
+	if (json.nasid != null) out.nasid = json.nasid;
+	if (json.reassociation_deadline != null) out.reassociation_deadline = "" + json.reassociation_deadline;
+	if (json.r0_key_lifetime != null) out.r0_key_lifetime = "" + json.r0_key_lifetime;
+	if (json.r1_key_holder != null) out.r1_key_holder = json.r1_key_holder;
+	if (json.pmk_r1_push != null) out.pmk_r1_push = json.pmk_r1_push ? "1" : "0";
+	if (json.r0kh != null) out.r0kh = json.r0kh;
+	if (json.r1kh != null) out.r1kh = json.r1kh;
 	return out;
 }
 
@@ -185,8 +201,26 @@ return {
 		ft_over_ds: { type: "boolean", default: false,
 		              description: "802.11r over the distribution system instead of over the air" },
 		ft_psk_generate_local: { "x-uapi-read-nullable": true, type: "boolean",
-		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise" },
+		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all" },
 		mobility_domain: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{4}$",
 		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID" },
+		nasid:      { type: ["string", "null"],
+		              description: "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier" },
+		reassociation_deadline: { type: ["integer", "null"], minimum: 1000, maximum: 65535,
+		              description: "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000" },
+		r0_key_lifetime: { type: ["integer", "null"], minimum: 0,
+		              description: "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 10000" },
+		r1_key_holder: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{12}$",
+		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID" },
+		pmk_r1_push: { type: "boolean", default: false,
+		              description: "Push the PMK-R1 to the other key holders instead of waiting for them to pull it" },
+		r0kh:       { type: "array", items: { type: "string" }, writeOnly: true,
+		              description: "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key" },
+		has_r0kh:   { type: "boolean", readOnly: true,
+		              description: "True if r0kh is configured (the entries are never returned)" },
+		r1kh:       { type: "array", items: { type: "string" }, writeOnly: true,
+		              description: "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out" },
+		has_r1kh:   { type: "boolean", readOnly: true,
+		              description: "True if r1kh is configured (the entries are never returned)" },
 	},
 };

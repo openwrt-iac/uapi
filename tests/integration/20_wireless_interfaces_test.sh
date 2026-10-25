@@ -24,7 +24,11 @@ echo "$created" | tail -1 | grep -q '^200$' || fail "POST expected 200"
 id=$(echo "$created" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ -n "$id" ] || fail "POST missing id"
 
-cleanup() { curl -sS -H "$ADMIN" -X DELETE "$URL/wireless/interfaces/$id" >/dev/null 2>&1 || true; }
+cleanup() {
+	for i in $id ${sid:-}; do
+		curl -sS -H "$ADMIN" -X DELETE "$URL/wireless/interfaces/$i" >/dev/null 2>&1 || true
+	done
+}
 trap cleanup EXIT INT TERM
 
 echo "--- GET /wireless/interfaces/$id ---"
@@ -69,22 +73,31 @@ echo "$patched" | grep -q '"has_key": true' || fail "PATCH lost has_key (key was
 $SSH "uci get wireless.$sid.key" | grep -q '^supersecret$' \
 	|| fail "uci-level key was overwritten or lost during PATCH"
 
-echo "--- a PUT of the read keeps a forced cipher and the 802.11r options (#238) ---"
+echo "--- a PUT of the read keeps a forced cipher and the 802.11r group, key holders included (#238) ---"
+kh=00112233445566778899aabbccddeeff
 $SSH "uci set wireless.$sid.encryption=psk2+ccmp
       uci set wireless.$sid.ieee80211r=1
       uci set wireless.$sid.ft_over_ds=0
-      uci set wireless.$sid.ft_psk_generate_local=1
+      uci set wireless.$sid.ft_psk_generate_local=0
       uci set wireless.$sid.mobility_domain=4f57
+      uci set wireless.$sid.nasid=ap1
+      uci set wireless.$sid.r1_key_holder=02aabbccddee
+      uci set wireless.$sid.pmk_r1_push=1
+      uci add_list wireless.$sid.r0kh=ff:ff:ff:ff:ff:ff,*,$kh
+      uci add_list wireless.$sid.r1kh=00:00:00:00:00:00,00:00:00:00:00:00,$kh
       uci commit wireless"
 read_body=$(curl -sS -H "$ADMIN" "$URL/wireless/interfaces/$sid")
 echo "$read_body" | jq -e '.encryption == "psk2+ccmp" and .ieee80211r == true and .ft_over_ds == false
-	and .ft_psk_generate_local == true and .mobility_domain == "4f57"' >/dev/null \
-	|| fail "GET did not read the options: $read_body"
+	and .ft_psk_generate_local == false and .mobility_domain == "4f57" and .nasid == "ap1"
+	and .r1_key_holder == "02aabbccddee" and .pmk_r1_push == true and .has_r0kh and .has_r1kh
+	and (has("r0kh") or has("r1kh") | not)' >/dev/null \
+	|| fail "GET did not read the options, or showed a key holder list: $read_body"
 put=$(call -X PUT -H 'Content-Type: application/json' "$URL/wireless/interfaces/$sid" \
-	-d "$(echo "$read_body" | jq -c 'del(.id, .managed, .runtime, .has_key) | .ssid = "uapi-test-ft"')")
+	-d "$(echo "$read_body" | jq -c 'del(.id, .managed, .runtime, .has_key, .has_r0kh, .has_r1kh) | .ssid = "uapi-test-ft"')")
 echo "$put" | tail -1 | grep -q '^200$' || fail "PUT of the read: $put"
-got=$($SSH "for o in encryption ieee80211r ft_over_ds ft_psk_generate_local mobility_domain key; do uci get wireless.$sid.\$o; done" | tr '\n' ' ')
-[ "$got" = "psk2+ccmp 1 0 1 4f57 supersecret " ] || fail "PUT of the read changed the options: $got"
+got=$($SSH "for o in encryption ieee80211r ft_over_ds ft_psk_generate_local mobility_domain nasid r1_key_holder pmk_r1_push r0kh r1kh key; do uci get wireless.$sid.\$o; done" | tr '\n' ' ')
+[ "$got" = "psk2+ccmp 1 0 0 4f57 ap1 02aabbccddee 1 ff:ff:ff:ff:ff:ff,*,$kh 00:00:00:00:00:00,00:00:00:00:00:00,$kh supersecret " ] \
+	|| fail "PUT of the read changed the options: $got"
 
 echo "--- DELETE both ---"
 call -X DELETE "$URL/wireless/interfaces/$sid" | tail -1 | grep -q '^204$' || fail "secured DELETE expected 204"

@@ -13,6 +13,7 @@ function fromUci(section) {
 		type: section.type ?? null,
 		path: section.path ?? null,
 		phy: section.phy ?? null,
+		macaddr: section.macaddr ?? null,
 		radio: as_int(section.radio),
 		band: section.band ?? null,
 		channel: (section.channel == "auto" || section.channel == null)
@@ -34,6 +35,7 @@ function toUci(json) {
 	if (json.type != null) out.type = json.type;
 	if (json.path != null) out.path = json.path;
 	if (json.phy != null) out.phy = json.phy;
+	if (json.macaddr != null) out.macaddr = json.macaddr;
 	if (json.radio != null) out.radio = "" + json.radio;
 	if (json.band != null) out.band = json.band;
 	if (json.channel != null) out.channel = "" + json.channel;
@@ -73,9 +75,11 @@ return {
 	schema_properties: {
 		type:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TYPES) },
 		path:     { type: ["string", "null"],
-		            description: "Device path of the phy under /sys/devices, as `wifi config` writes it. With `phy`, what binds this section to its hardware: wifi-scripts brings up no radio that neither one matches" },
+		            description: "Device path of the phy under /sys/devices, as `wifi config` writes it. With `macaddr` and `phy`, what binds this section to its hardware: wifi-scripts tries `path`, then `macaddr`, then `phy`, and brings up no radio that none of them matches" },
 		phy:      { type: ["string", "null"],
 		            description: "Name of the phy, as in board.json. `wifi config` writes it instead of `path` when the phy is not named phyN" },
+		macaddr:  { type: ["string", "null"],
+		            description: "MAC address of the phy. Older `wifi detect` configurations bind a radio with it instead of `path`" },
 		radio:    { type: ["integer", "null"], minimum: 0,
 		            description: "Index of the radio on a phy that has several, as `wifi config` writes it" },
 		band:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_BANDS) },
