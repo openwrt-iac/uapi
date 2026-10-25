@@ -298,12 +298,22 @@ function is_valid_cidr(s) {
 	return prefix >= 0 && prefix <= 32;
 }
 
+// int() reads only the leading digits, so "::/0;id>x;" passed as ::/0, and wg.uc gave that
+// string to `ip route` through a shell, which ran `id` as root.
 function is_valid_ipv6_cidr(s) {
 	if (type(s) != "string" || index(s, "/") == -1) return false;
 	let parts = split(s, "/");
-	if (length(parts) != 2 || !is_valid_ipv6(parts[0])) return false;
-	let prefix = int(parts[1]);
-	return prefix >= 0 && prefix <= 128;
+	if (length(parts) != 2 || !is_valid_ipv6(parts[0]) || !match(parts[1], /^[0-9]{1,3}$/))
+		return false;
+	return int(parts[1]) <= 128;
+}
+
+// LuCI's `hostname` datatype: word characters, or dotted labels that are not all digits, so that
+// 1.2.3 is not taken for a name.
+function is_valid_hostname(s) {
+	if (type(s) != "string" || length(s) > 253) return false;
+	if (match(s, /^[A-Za-z0-9_]+$/)) return true;
+	return match(s, /^[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9]\.?$/) != null && match(s, /[^0-9.]/) != null;
 }
 
 // Stock OpenWrt configs ship IPv6 CIDRs in several places
@@ -700,7 +710,7 @@ return {
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
-	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
+	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any, is_valid_hostname,
 	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,

@@ -43,9 +43,9 @@ What uapi defends against, what it doesn't, and what the operator should do.
    `src/lib/wg.uc` quotes keys, allowed IPs and the endpoint with
    `shellquote`, and formats the port and the keepalive with `%d`, because
    the restore after a failed write reads peers straight from uci, where a
-   value never passed `validate()`. Its `ip route` commands take a prefix,
-   an interface name and a table name unquoted, and wg.uc checks each one
-   itself before it runs them.
+   value never passed `validate()`. Its `ip route` commands quote the
+   prefix, the interface name and the table name in the same way, and
+   wg.uc also checks each one before it runs them.
 9. **Replay attacks on POST under network flakiness.** `Idempotency-Key`
    caches the response for 24 h; a network-blipped retry returns the cached
    response, not a duplicate side effect. Same key with a different body

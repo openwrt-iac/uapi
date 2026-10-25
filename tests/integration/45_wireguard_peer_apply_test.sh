@@ -171,9 +171,8 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 has_peer "$PEER4" || fail "re-enabled peer was not reinstalled"
 call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 
-# endpoint_host is the only caller-supplied value that reaches a shell command,
-# so it is quoted rather than validated. This is the assertion that the quoting
-# holds; a regression here is remote command execution, not a cosmetic bug.
+# endpoint_host reaches a shell command, so it is quoted as well as validated. A
+# regression here is remote command execution, not a cosmetic bug.
 echo "--- a command substitution in endpoint_host does not execute ---"
 $SSH "rm -f /tmp/uapi-wg-injection" >/dev/null 2>&1
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
@@ -181,6 +180,27 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 	    \"endpoint_host\":\"x\$(touch /tmp/uapi-wg-injection)y\",\"endpoint_port\":51820}")
 $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 	&& fail "endpoint_host was interpolated into the shell and executed"
+
+# int() read "::/0;id>uapi45_route;" as ::/0, and the DELETE of a disabled peer handed the stored
+# prefix to `ip route del` through a shell, which ran `id` as root. wireguard.sh expands the
+# escapes of the config it gives `wg syncconf`, so a plain-text \n in endpoint_host added a peer.
+echo "--- an allowed IP with a tail, or an escape in endpoint_host, is refused, and a stored one runs nothing ---"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"::/0;id>uapi45_route;\"],
+	    \"route_allowed_ips\":true,\"disabled\":true}")
+[ "$(status_of "$r")" = "422" ] || fail "allowed IP with a tail expected 422, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d '{"interface":"'"$IFACE"'","public_key":"'"$PEER3"'","allowed_ips":["10.98.99.33/32"],
+	    "endpoint_host":"192.0.2.1\\0072443\\n[Peer]","endpoint_port":51820}')
+[ "$(status_of "$r")" = "422" ] || fail "endpoint_host with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
+ROUTE_PEER=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45rt=wireguard_$IFACE; uci set network.uapi45rt.public_key='$ROUTE_PEER'
+	uci add_list network.uapi45rt.allowed_ips='::/0;id>uapi45_route;'
+	uci set network.uapi45rt.route_allowed_ips=1; uci set network.uapi45rt.disabled=1; uci commit network"
+r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45rt")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of the stored peer: $(body_of "$r")"
+ran=$($SSH "find / -xdev -name uapi45_route 2>/dev/null")
+[ -z "$ran" ] || { $SSH "rm -f $ran"; fail "a stored allowed IP ran as a shell command: $ran"; }
 
 # route_allowed_ips means "install routes for this peer's allowed IPs". netifd
 # does that from its proto handler, so without it here the peer sits in the

@@ -453,6 +453,31 @@ All notable changes to this project will be documented in this file. Format foll
   produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line only.
   (#246)
 
+- **A WireGuard peer's `allowed_ips` ran a command as root.** `is_valid_ipv6_cidr` read the prefix
+  length with `int()`, which stops at the first non-digit, so `::/0;id>x;` passed as `::/0`.
+  `src/lib/wg.uc` then gave the prefix to `ip route del` through a shell, unquoted. A token with
+  `network:wireguard_peers:rw` stored the value on a disabled peer with `route_allowed_ips`, and
+  the DELETE of that peer ran `id` as root. Measured on OpenWrt 25.12.5: the file that the command
+  wrote held `uid=0(root)`. Every release since 2.4.1 has this. wg.uc now quotes the prefix, the
+  interface and the table, and an IPv6 prefix length must be 1 to 3 digits. The check is shared,
+  so `network/interfaces` (`addresses`, `ip6addrs`, `ip6prefix`, `reqprefix`), `mwan3/rules`,
+  the address fields of `firewall/rules`, `firewall/nat` and `firewall/redirects`, and the
+  `allowed_cidrs` of `/tokens` now refuse an IPv6 prefix with anything after its length too. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. No IPv6 prefix in the uci configs of the OpenWrt feeds
+  has such a tail. (#247)
+
+- **A WireGuard peer's `endpoint_host` added a hidden peer at the next ifup.** On OpenWrt 25.12,
+  wireguard.sh builds the config for `wg syncconf` with `printf %b`, which expands escapes, so the
+  plain text `\n` in the host became a line break. A host such as
+  `192.0.2.1\0072443\n[Peer]\nPublicKey=...\nAllowedIPs=0.0.0.0/0` added a peer that took the
+  allowed IPs, and no read of uapi or LuCI showed it. Measured on OpenWrt 25.12.5 with a token
+  scoped `network:wireguard_peers:rw`: a POST while the interface was down answered 200, and the
+  next ifup installed the extra peer. Every release since 1.1.0 accepts such a host.
+  `endpoint_host` now takes a hostname or an IP address, as LuCI's `host` datatype does, or an
+  IPv6 address in brackets, as `wg show endpoints` prints it. That tightening uses the same
+  carve-out, and it fails loudly. (#247)
+
 ## [3.1.0] - 2026-10-11
 
 ### Added

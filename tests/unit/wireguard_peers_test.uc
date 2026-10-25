@@ -129,6 +129,29 @@ t.describe('network.wireguard_peers.validate', () => {
 		}
 	});
 
+	t.it('refuses an IPv6 prefix with anything after its length', () => {
+		let errs = wgp.validate({
+			interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			allowed_ips: ['::/0;id>x;'],
+		}, null);
+		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'allowed_ips[0]'), (e) => e.code),
+		                    [ 'invalid_format' ]);
+	});
+
+	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text
+	// `\n` became a line break inside the config that `wg syncconf` reads.
+	t.it('takes a hostname or an address as endpoint_host, and refuses an escape', () => {
+		function host_errs(h) {
+			return filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			                             allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
+			              (e) => e.field == 'endpoint_host');
+		}
+		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', '[fd00::1]', '' ])
+			t.assert_equal(length(host_errs(h)), 0, h);
+		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[vpn.example.com]', '[fd00::1' ])
+			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
+	});
+
 	t.it('accepts a dual-stack peer', () => {
 		let errs = wgp.validate({
 			interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',

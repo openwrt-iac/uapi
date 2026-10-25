@@ -188,9 +188,11 @@ stores it, because the restore after a failed write reads the peers straight
 from uci, where a value never passed `validate()`. `wg set` takes the public
 key, the allowed IPs and the endpoint through `shellquote`, and the port and
 the keepalive through `%d`. `ip route` takes the prefix, the interface name and
-the table name unquoted, so wg.uc passes them only after its own checks:
-`route_prefix` keeps an address or a CIDR and drops anything else, and the
-interface and table names must match `^[A-Za-z0-9_-]+$`. A preshared key is
+the table name through `shellquote` too. wg.uc also checks them before it runs
+the command: `route_prefix` keeps an address or a CIDR and drops anything else,
+and the interface and table names must match `^[A-Za-z0-9_-]+$`. The checks
+alone were not enough: a prefix such as `::/0;id>x;` passed `route_prefix`,
+because the IPv6 prefix length was read with `int()`. A preshared key is
 passed as a `0600` file on tmpfs, never as an argument, so it never appears in
 `ps`.
 

@@ -185,11 +185,12 @@ function route_table(conn, iface, v6) {
 // Spelled to match what netifd installs, verified against a real interface:
 // `<prefix> proto static scope link dev <iface>` for v4, and the same without a
 // scope for v6, where iproute2's default metric 1024 is what netifd ends up with.
+// The prefix comes from uci on the withdraw path, where no validate() ran.
 function route_cmd(verb, iface, r, table) {
 	let cmd = sprintf("ip %sroute %s %s dev %s proto static",
-	                  r.v6 ? "-6 " : "", verb, r.prefix, iface);
+	                  r.v6 ? "-6 " : "", verb, shellquote(r.prefix), shellquote(iface));
 	if (!r.v6) cmd += " scope link";
-	if (table != null) cmd += " table " + table;
+	if (table != null) cmd += " table " + shellquote(table);
 	return cmd;
 }
 
@@ -222,8 +223,8 @@ function installed_routes(conn, iface) {
 	let out = [];
 	for (let v6 in [false, true]) {
 		let table = route_table(conn, iface, v6);
-		let cmd = sprintf("ip %sroute show dev %s proto static", v6 ? "-6 " : "", iface);
-		if (table != null) cmd += " table " + table;
+		let cmd = sprintf("ip %sroute show dev %s proto static", v6 ? "-6 " : "", shellquote(iface));
+		if (table != null) cmd += " table " + shellquote(table);
 		let r = run(cmd);
 		if (!r.ok) continue;
 		for (let line in split(r.output, "\n")) {
@@ -385,4 +386,4 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg,
-         route_prefixes: routes_from, route_table };
+         route_prefixes: routes_from, route_table, route_cmd };

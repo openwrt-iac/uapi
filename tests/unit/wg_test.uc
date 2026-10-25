@@ -1,6 +1,7 @@
 let t = require('harness');
 let ubus = require('bus');
 let wg = require('wg');
+let fs = require('fs');
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
 
@@ -196,6 +197,26 @@ t.describe('wg route prefixes', () => {
 	t.it('rejects an out-of-range prefix length', () => {
 		t.assert_deep_equal(wg.route_prefixes(['10.0.0.0/33'], true), []);
 		t.assert_deep_equal(wg.route_prefixes(['fd00::/129'], true), []);
+	});
+
+	t.it('rejects a prefix length followed by anything', () => {
+		t.assert_deep_equal(wg.route_prefixes(['::/0;id>x;'], true), []);
+	});
+});
+
+// The withdraw path reads the prefix from uci, where no validate() ran, and the command goes
+// through a shell. A stored `::/0;id>x;` ran `id` as root before the prefix was quoted.
+t.describe('wg.route_cmd', () => {
+	t.it('runs no part of a stored prefix, interface or table as a command', () => {
+		let dir = sprintf("/tmp/uapi-wg-route-cmd-%d", time());
+		fs.mkdir(dir);
+		let cmd = wg.route_cmd("del", "wg1;id>y;", { prefix: "::/0;id>x;", v6: true }, "77;id>z;");
+		let p = fs.popen(sprintf("cd %s && ip() { :; }; %s", dir, cmd));
+		p.close();
+		let left = fs.lsdir(dir) ?? [];
+		for (let f in left) fs.unlink(dir + "/" + f);
+		fs.rmdir(dir);
+		t.assert_deep_equal(left, []);
 	});
 });
 
