@@ -301,12 +301,16 @@ function is_valid_cidr(s) {
 // int() reads only the leading digits, so "::/0;id>x;" passed as ::/0, and wg.uc gave that
 // string to `ip route` through a shell, which ran `id` as root.
 function is_valid_ipv6_cidr(s) {
-	if (type(s) != "string" || index(s, "/") == -1) return false;
+	if (type(s) != "string") return false;
 	let parts = split(s, "/");
 	if (length(parts) != 2 || !is_valid_ipv6(parts[0]) || !match(parts[1], /^[0-9]{1,3}$/))
 		return false;
 	return int(parts[1]) <= 128;
 }
+
+// iproute2 reads a prefix length in base 0, so `/012` is /10 to `ip route` and /12 to wg and to
+// uapi, and `/08` is refused. The route for an allowed IP then covers another prefix.
+const LEADING_ZERO_LEN_RE = /\/0[0-9]/;
 
 // LuCI's `hostname` datatype: word characters, or dotted labels that are not all digits, so that
 // 1.2.3 is not taken for a name.
@@ -705,6 +709,7 @@ return {
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE,
+	LEADING_ZERO_LEN_RE,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,

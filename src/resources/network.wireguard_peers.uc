@@ -53,7 +53,14 @@ function interface_exists_with_wg_proto(conn, name) {
 	                            function(s) { return s.proto == "wireguard"; })[name] != null;
 }
 
-function validate(json, conn) {
+// A zone names an interface, so it takes what an interface name takes.
+function valid_endpoint_host(host) {
+	let zoned = match(host, /^([^%]+)%([A-Za-z0-9_.-]{1,15})$/);
+	if (zoned) return values.is_valid_ipv6(zoned[1]);
+	return is_valid_ip(host) || values.is_valid_hostname(host);
+}
+
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	if (json.interface == null || json.interface == "")
@@ -76,19 +83,20 @@ function validate(json, conn) {
 		if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
 			             message: "must be an IPv4 or IPv6 address or CIDR" });
+		else if (match(aips[i], values.LEADING_ZERO_LEN_RE))
+			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
+			             message: "must not start its prefix length with 0: ip route reads it as octal, and wg as decimal" });
 	}
 
 	// wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a
 	// backslash in the host is an escape: `\n[Peer]` in plain text added a peer that no read
-	// showed, at the next ifup. The bracketed IPv6 form is what `wg show endpoints` prints.
-	let host = json.endpoint_host;
-	if (type(host) == "string" && host != "") {
-		let bracketed = match(host, /^\[(.*)\]$/);
-		if (bracketed ? !values.is_valid_ipv6(bracketed[1])
-		              : !is_valid_ip(host) && !values.is_valid_hostname(host))
-			push(errs, { field: "endpoint_host", code: "invalid_format",
-			             message: "must be a hostname or an IP address" });
-	}
+	// showed, at the next ifup. It also brackets every host with a colon, so a bracketed IPv6
+	// address reaches wg as `[[...]]` and the whole tunnel fails at ifup. Only what the request
+	// names is checked, so a PATCH that disables a peer is not refused for its stored host.
+	let host = (delta ?? json).endpoint_host;
+	if (type(host) == "string" && host != "" && !valid_endpoint_host(host))
+		push(errs, { field: "endpoint_host", code: "invalid_format",
+		             message: "must be a hostname, or an IP address without brackets, with an optional %zone on an IPv6 one" });
 
 	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
 	// as 0.
@@ -204,7 +212,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, or an IPv6 address in brackets, as `wg show endpoints` prints it" },
+		                        description: "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, without brackets. An IPv6 address can carry a %zone, such as fe80::1%wan" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

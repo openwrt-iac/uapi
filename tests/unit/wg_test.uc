@@ -202,21 +202,39 @@ t.describe('wg route prefixes', () => {
 	t.it('rejects a prefix length followed by anything', () => {
 		t.assert_deep_equal(wg.route_prefixes(['::/0;id>x;'], true), []);
 	});
+
+	t.it('rejects a prefix length with a leading zero, which ip route reads as octal', () => {
+		t.assert_deep_equal(wg.route_prefixes(['fd00::/012', '10.0.0.0/08'], true), []);
+	});
 });
 
-// The withdraw path reads the prefix from uci, where no validate() ran, and the command goes
-// through a shell. A stored `::/0;id>x;` ran `id` as root before the prefix was quoted.
-t.describe('wg.route_cmd', () => {
-	t.it('runs no part of a stored prefix, interface or table as a command', () => {
-		let dir = sprintf("/tmp/uapi-wg-route-cmd-%d", time());
-		fs.mkdir(dir);
-		let cmd = wg.route_cmd("del", "wg1;id>y;", { prefix: "::/0;id>x;", v6: true }, "77;id>z;");
-		let p = fs.popen(sprintf("cd %s && ip() { :; }; %s", dir, cmd));
+// The withdraw path and the restore read peers from uci, where no validate() ran, and every
+// command goes through a shell. A stored `::/0;id>x;` ran `id` as root before each argument was
+// quoted. The commands run here with `ip` and `wg` as no-op shell functions.
+t.describe('wg commands quote every argument', () => {
+	function writes_nothing(argv) {
+		let dir = sprintf("/tmp/uapi-wg-quote-%d", time());
+		t.assert_true(fs.mkdir(dir), "mkdir " + dir);
+		let p = fs.popen(sprintf("ip() { :; }; wg() { :; }; cd %s || exit 1; %s; echo done",
+		                         dir, wg.command_line(argv)));
+		let out = p.read("all");
 		p.close();
-		let left = fs.lsdir(dir) ?? [];
-		for (let f in left) fs.unlink(dir + "/" + f);
+		let left = fs.lsdir(dir);
+		for (let f in left ?? []) fs.unlink(dir + "/" + f);
 		fs.rmdir(dir);
+		t.assert_equal(trim(out), "done");
 		t.assert_deep_equal(left, []);
+	}
+
+	t.it('route_cmd runs no part of a stored prefix, interface or table', () => {
+		writes_nothing(wg.route_cmd("del", "wg1;id>y;", { prefix: "::/0;id>x;", v6: true }, "77;id>z;"));
+	});
+
+	t.it('set_peer runs no part of a stored key, allowed IP or endpoint', () => {
+		writes_nothing(wg.set_peer_argv("wg1;id>a;", {
+			public_key: "k;id>b;", allowed_ips: [ "10.0.0.2/32;id>c;" ],
+			endpoint_host: "x$(id>d)y", endpoint_port: 51820, persistent_keepalive: 25,
+		}, null));
 	});
 });
 

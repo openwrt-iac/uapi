@@ -458,14 +458,19 @@ All notable changes to this project will be documented in this file. Format foll
   `src/lib/wg.uc` then gave the prefix to `ip route del` through a shell, unquoted. A token with
   `network:wireguard_peers:rw` stored the value on a disabled peer with `route_allowed_ips`, and
   the DELETE of that peer ran `id` as root. Measured on OpenWrt 25.12.5: the file that the command
-  wrote held `uid=0(root)`. Every release since 2.4.1 has this. wg.uc now quotes the prefix, the
-  interface and the table, and an IPv6 prefix length must be 1 to 3 digits. The check is shared,
-  so `network/interfaces` (`addresses`, `ip6addrs`, `ip6prefix`, `reqprefix`), `mwan3/rules`,
-  the address fields of `firewall/rules`, `firewall/nat` and `firewall/redirects`, and the
-  `allowed_cidrs` of `/tokens` now refuse an IPv6 prefix with anything after its length too. That
-  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. No IPv6 prefix in the uci configs of the OpenWrt feeds
-  has such a tail. (#247)
+  wrote held `uid=0(root)`. Every release since 2.4.1 has this. wg.uc now builds every `wg` and
+  `ip` command as an argument list and quotes each argument, and an IPv6 prefix length must be 1 to
+  3 digits. The check is shared, so `network/interfaces` (`addresses`, `ip6addrs`, `ip6prefix`,
+  `reqprefix`), `mwan3/rules`, the address fields of `firewall/rules`, `firewall/nat` and
+  `firewall/redirects`, and the `allowed_cidrs` of `/tokens` now refuse an IPv6 prefix with
+  anything after its length too. A WireGuard `allowed_ips` entry also refuses a prefix length
+  that starts with 0, such as `/012`: `ip route` reads it as octal and wg as decimal, so the route
+  covered another prefix. That tightening uses the carve-out in `docs/versioning.md` for payloads
+  that produced a state no caller can rely on, and it fails loudly. No IPv6 prefix in the uci
+  configs of the OpenWrt feeds has such a tail. A token minted with such an `allowed_cidrs` entry,
+  which the CLI also took, no longer matches it, so its requests from that network answer 401:
+  mint it again. `GET /api/v3/diagnostics?validate=1` lists a stored peer or interface that holds
+  such a value. (#247)
 
 - **A WireGuard peer's `endpoint_host` added a hidden peer at the next ifup.** On OpenWrt 25.12,
   wireguard.sh builds the config for `wg syncconf` with `printf %b`, which expands escapes, so the
@@ -474,9 +479,14 @@ All notable changes to this project will be documented in this file. Format foll
   allowed IPs, and no read of uapi or LuCI showed it. Measured on OpenWrt 25.12.5 with a token
   scoped `network:wireguard_peers:rw`: a POST while the interface was down answered 200, and the
   next ifup installed the extra peer. Every release since 1.1.0 accepts such a host.
-  `endpoint_host` now takes a hostname or an IP address, as LuCI's `host` datatype does, or an
-  IPv6 address in brackets, as `wg show endpoints` prints it. That tightening uses the same
-  carve-out, and it fails loudly. (#247)
+  `endpoint_host` now takes a hostname or an IP address, as LuCI's `host` datatype does, and an
+  IPv6 address can carry a `%zone`. It refuses an IPv6 address in brackets, which uapi took
+  before: wireguard.sh brackets it again, and on OpenWrt 25.12.5 wg then refused the whole config
+  at ifup (`Unable to find port of endpoint: '[[fd00::1]]:51820'`), so the tunnel stayed down. It
+  also refuses the short and octal IPv4 forms that getaddrinfo takes, such as `1.2.3` and
+  `010.0.0.1`, as LuCI does. That tightening uses the same carve-out, and it fails loudly. Only a
+  host that the request names is checked, so a PATCH that disables a peer is not refused for its
+  stored host, and `GET /api/v3/diagnostics?validate=1` lists the peers that hold one. (#247)
 
 ## [3.1.0] - 2026-10-11
 
