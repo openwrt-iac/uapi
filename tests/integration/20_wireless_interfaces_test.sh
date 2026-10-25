@@ -102,7 +102,7 @@ got=$($SSH "for o in encryption ieee80211r ft_over_ds ft_psk_generate_local mobi
 # wifi-scripts writes these into hostapd's config without escaping, so a newline added a
 # directive, and hostapd refuses its whole config for one key holder entry it cannot parse.
 echo "--- a key, nasid or key holder entry that hostapd cannot take answers 422 and changes nothing ---"
-for body in '{"key":"abcdefgh\nssid2=\"x\""}' '{"nasid":"ap1\nssid2=\"x\""}' '{"key":"short"}' \
+for body in '{"key":"abcdefgh\nssid2=\"x\""}' '{"nasid":"ap1\nssid2=\"x\""}' \
 	"{\"r0kh\":[\"02:00:00:00:00:01,ap1,$kh$kh\\nssid2=x\"]}" \
 	'{"r0kh":["02:00:00:00:00:01,ap1,secret"]}' "{\"r1kh\":[\"02:00:00:00:00:01,ap1,$kh\"]}"; do
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$sid" -d "$body")

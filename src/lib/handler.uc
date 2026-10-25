@@ -3,6 +3,7 @@ let errors = require("errors");
 let transaction = require("transaction");
 let jsonpatch = require("jsonpatch");
 let mgmt = require("mgmt");
+let values = require("values");
 
 // ETag computation. Uses sha256 from ucode-mod-digest when available (real
 // router); falls back to a non-crypto stable string hash for unit-test
@@ -583,11 +584,11 @@ function carry_write_only(resource, body, existing) {
 		return body;
 
 	let out = { ...body };
-	// uci can hold a one-entry list as an option, and the daemons read it as a list.
+	// uci can hold a list as an option, which netifd splits on whitespace.
 	for (let k in sp)
 		if (type(sp[k]) == "object" && sp[k].writeOnly
 		    && out[k] == null && existing[k] != null)
-			out[k] = (sp[k].type == "array" && type(existing[k]) == "string") ? [ existing[k] ] : existing[k];
+			out[k] = (sp[k].type == "array") ? values.as_word_list_or_null(existing[k]) : existing[k];
 	return out;
 }
 
