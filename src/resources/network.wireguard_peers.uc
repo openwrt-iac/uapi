@@ -78,6 +78,18 @@ function validate(json, conn) {
 			             message: "must be an IPv4 or IPv6 address or CIDR" });
 	}
 
+	// wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a
+	// backslash in the host is an escape: `\n[Peer]` in plain text added a peer that no read
+	// showed, at the next ifup. The bracketed IPv6 form is what `wg show endpoints` prints.
+	let host = json.endpoint_host;
+	if (type(host) == "string" && host != "") {
+		let bracketed = match(host, /^\[(.*)\]$/);
+		if (bracketed ? !values.is_valid_ipv6(bracketed[1])
+		              : !is_valid_ip(host) && !values.is_valid_hostname(host))
+			push(errs, { field: "endpoint_host", code: "invalid_format",
+			             message: "must be a hostname or an IP address" });
+	}
+
 	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
 	// as 0.
 	if (json.endpoint_port === 0)
@@ -192,7 +204,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint hostname or IP" },
+		                        description: "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, or an IPv6 address in brackets, as `wg show endpoints` prints it" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

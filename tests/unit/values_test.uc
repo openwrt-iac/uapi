@@ -198,6 +198,26 @@ t.describe('values.is_valid_ipv6_cidr', () => {
 		for (let s in ["10.0.0.0/8", "::/129", "::/-1", "::1", "", null, 1234])
 			t.assert_false(v.is_valid_ipv6_cidr(s));
 	});
+
+	// int() stops at the first non-digit, so each of these read as a valid prefix, and
+	// wg.uc ran the first one through a shell as root.
+	t.it('rejects anything after the prefix length', () => {
+		for (let s in ["::/0;id>x;", "2001:db8::/48 ; id ;", "::/64 foo", "::/0\n", "fe80::/64\r",
+		               "2001:db8::/+48", "2001:db8::/ 48", "::/", "::/1234"])
+			t.assert_false(v.is_valid_ipv6_cidr(s), s);
+	});
+});
+
+t.describe('values.is_valid_hostname', () => {
+	t.it('takes what LuCI\'s hostname datatype takes', () => {
+		for (let s in ["vpn.example.com", "vpn.example.com.", "host_1", "a", "router-1.lan", "1a"])
+			t.assert_true(v.is_valid_hostname(s), s);
+	});
+
+	t.it('refuses an all-digit dotted name, whitespace, a backslash and a leading hyphen', () => {
+		for (let s in ["1.2.3", "10.0.0.1", "a b", "a\nb", "a\\nb", "-a", "a-", "", null])
+			t.assert_false(v.is_valid_hostname(s), s);
+	});
 });
 
 t.describe('values.is_valid_cidr_any', () => {
