@@ -204,13 +204,15 @@ const CASES = [
 	},
 	{
 		file: "wireless.devices.uc", id: "radio0", pkg: "wireless",
-		section: { disabled: '1', '.type': 'wifi-device', type: 'mac80211', channel: '6', band: '2g' },
+		section: { disabled: '1', '.type': 'wifi-device', type: 'mac80211', channel: '6', band: '2g',
+		           path: 'platform/soc/18000000.wifi', radio: '1', cell_density: '2', legacy_rates: '1' },
 	},
 	{
 		file: "wireless.interfaces.uc", id: "w1", pkg: "wireless",
 		modify: { key: "ssid", value: "home2" },
-		section: { disabled: '1', hidden: '1', isolate: '1', '.type': 'wifi-iface', device: 'radio0', ssid: 'home', encryption: 'psk2',
-		           key: 'correcthorse', mode: 'sta' },
+		section: { disabled: '1', hidden: '1', isolate: '1', '.type': 'wifi-iface', device: 'radio0', ssid: 'home', encryption: 'psk2+ccmp',
+		           key: 'correcthorse', mode: 'sta', ieee80211r: '1', ft_over_ds: '1', ft_psk_generate_local: '0',
+		           mobility_domain: '4f57' },
 	},
 	{
 		file: "dhcp.hosts.uc", id: "h1", pkg: "dhcp",

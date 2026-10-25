@@ -27,6 +27,17 @@ All notable changes to this project will be documented in this file. Format foll
   `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
   `no`. (#208)
 
+- **`wireless/devices` and `wireless/interfaces` model the options that `wifi config` and
+  LuCI store on a radio and an SSID.** A PUT replaces the section with what the resource models,
+  so a PUT of the read deleted them, and an IaC client updates with PUT. Without `path`, which
+  `wifi config` writes for every radio whose phy is named `phyN`, wifi-scripts finds no phy and
+  the radio stays down with all its SSIDs, so the first apply that changed a radio took its Wi-Fi
+  down. On an SSID, the 802.11r options were dropped, which turned fast roaming off.
+  `wireless/devices` gains `path`, `phy` and `radio`, which bind the section to its hardware, and
+  LuCI's `cell_density` and `legacy_rates`. `wireless/interfaces` gains `ieee80211r`,
+  `ft_over_ds`, `ft_psk_generate_local` and `mobility_domain`. `ft_psk_generate_local` reads null
+  when unset, because wifi-scripts then picks it from `encryption`. (#239)
+
 - **`503 config_missing`** answers a write into a uci package whose file under `/etc/config/`
   does not exist, and names the file. `wireless` is the common case: `wifi config` writes
   `/etc/config/wireless` only when it finds a radio. (#235)
@@ -159,6 +170,13 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Fixed
 
+- **`wireless/interfaces.encryption` accepts a forced cipher, such as `psk2+ccmp`.** LuCI appends
+  the cipher when one is chosen, and wifi-scripts reads the suffix. A read of such an SSID answered
+  a value outside the declared enum, and a PUT of the read answered 422 `not_in_enum`, so the SSID
+  could not be updated with PUT at all. The enum now lists each mode that LuCI offers a cipher for,
+  followed by `+` and one of the ciphers that wifi-scripts parses, `aes` spellings included. These
+  are new enum values, so no client changes. A key is required with a forced cipher as without
+  one. (#239)
 - **`network/interfaces.ip6hint` and `ip6ifaceid` now apply to every proto, as netifd reads
   them.** They were read and written only for proto `dhcpv6`. On a static interface, which is where
   they matter, a write answered 200 and stored nothing, so no caller could choose which /64 an

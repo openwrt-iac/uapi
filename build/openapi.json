@@ -28694,6 +28694,28 @@
 							null
 						]
 					},
+					"path": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `phy`, what binds this section to its hardware: wifi-scripts brings up no radio that neither one matches"
+					},
+					"phy": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Name of the phy, as in board.json. `wifi config` writes it instead of `path` when the phy is not named phyN"
+					},
+					"radio": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Index of the radio on a phy that has several, as `wifi config` writes it"
+					},
 					"band": {
 						"type": [
 							"string",
@@ -28741,6 +28763,18 @@
 						"minimum": 0,
 						"maximum": 30,
 						"description": "TX power in dBm"
+					},
+					"cell_density": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 3,
+						"default": 0,
+						"description": "Basic rates by coverage cell density: 0 disabled, 1 normal, 2 high, 3 very high"
+					},
+					"legacy_rates": {
+						"type": "boolean",
+						"default": false,
+						"description": "Allow the legacy 802.11b rates"
 					},
 					"disabled": {
 						"type": "boolean",
@@ -28776,6 +28810,28 @@
 							null
 						]
 					},
+					"path": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `phy`, what binds this section to its hardware: wifi-scripts brings up no radio that neither one matches"
+					},
+					"phy": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Name of the phy, as in board.json. `wifi config` writes it instead of `path` when the phy is not named phyN"
+					},
+					"radio": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Index of the radio on a phy that has several, as `wifi config` writes it"
+					},
 					"band": {
 						"type": [
 							"string",
@@ -28823,6 +28879,18 @@
 						"minimum": 0,
 						"maximum": 30,
 						"description": "TX power in dBm"
+					},
+					"cell_density": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 3,
+						"default": 0,
+						"description": "Basic rates by coverage cell density: 0 disabled, 1 normal, 2 high, 3 very high"
+					},
+					"legacy_rates": {
+						"type": "boolean",
+						"default": false,
+						"description": "Allow the legacy 802.11b rates"
 					},
 					"disabled": {
 						"type": "boolean",
@@ -28894,7 +28962,87 @@
 							"wpa",
 							"wpa2",
 							"wpa3",
-							"wpa3-mixed"
+							"wpa3-mixed",
+							"psk+ccmp",
+							"psk+ccmp256",
+							"psk+gcmp",
+							"psk+gcmp256",
+							"psk+tkip",
+							"psk+tkip+ccmp",
+							"psk+aes",
+							"psk+tkip+aes",
+							"psk+aes+tkip",
+							"psk+ccmp+tkip",
+							"psk2+ccmp",
+							"psk2+ccmp256",
+							"psk2+gcmp",
+							"psk2+gcmp256",
+							"psk2+tkip",
+							"psk2+tkip+ccmp",
+							"psk2+aes",
+							"psk2+tkip+aes",
+							"psk2+aes+tkip",
+							"psk2+ccmp+tkip",
+							"psk-mixed+ccmp",
+							"psk-mixed+ccmp256",
+							"psk-mixed+gcmp",
+							"psk-mixed+gcmp256",
+							"psk-mixed+tkip",
+							"psk-mixed+tkip+ccmp",
+							"psk-mixed+aes",
+							"psk-mixed+tkip+aes",
+							"psk-mixed+aes+tkip",
+							"psk-mixed+ccmp+tkip",
+							"sae+ccmp",
+							"sae+ccmp256",
+							"sae+gcmp",
+							"sae+gcmp256",
+							"sae+tkip",
+							"sae+tkip+ccmp",
+							"sae+aes",
+							"sae+tkip+aes",
+							"sae+aes+tkip",
+							"sae+ccmp+tkip",
+							"wpa+ccmp",
+							"wpa+ccmp256",
+							"wpa+gcmp",
+							"wpa+gcmp256",
+							"wpa+tkip",
+							"wpa+tkip+ccmp",
+							"wpa+aes",
+							"wpa+tkip+aes",
+							"wpa+aes+tkip",
+							"wpa+ccmp+tkip",
+							"wpa2+ccmp",
+							"wpa2+ccmp256",
+							"wpa2+gcmp",
+							"wpa2+gcmp256",
+							"wpa2+tkip",
+							"wpa2+tkip+ccmp",
+							"wpa2+aes",
+							"wpa2+tkip+aes",
+							"wpa2+aes+tkip",
+							"wpa2+ccmp+tkip",
+							"wpa3+ccmp",
+							"wpa3+ccmp256",
+							"wpa3+gcmp",
+							"wpa3+gcmp256",
+							"wpa3+tkip",
+							"wpa3+tkip+ccmp",
+							"wpa3+aes",
+							"wpa3+tkip+aes",
+							"wpa3+aes+tkip",
+							"wpa3+ccmp+tkip",
+							"wpa3-mixed+ccmp",
+							"wpa3-mixed+ccmp256",
+							"wpa3-mixed+gcmp",
+							"wpa3-mixed+gcmp256",
+							"wpa3-mixed+tkip",
+							"wpa3-mixed+tkip+ccmp",
+							"wpa3-mixed+aes",
+							"wpa3-mixed+tkip+aes",
+							"wpa3-mixed+aes+tkip",
+							"wpa3-mixed+ccmp+tkip"
 						],
 						"default": "none"
 					},
@@ -28912,6 +29060,31 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Block station-to-station traffic on this AP"
+					},
+					"ieee80211r": {
+						"type": "boolean",
+						"default": false,
+						"description": "802.11r fast BSS transition between the access points of one mobility domain"
+					},
+					"ft_over_ds": {
+						"type": "boolean",
+						"default": false,
+						"description": "802.11r over the distribution system instead of over the air"
+					},
+					"ft_psk_generate_local": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise"
+					},
+					"mobility_domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{4}$",
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID"
 					},
 					"runtime": {
 						"type": "object",
@@ -29034,7 +29207,87 @@
 							"wpa",
 							"wpa2",
 							"wpa3",
-							"wpa3-mixed"
+							"wpa3-mixed",
+							"psk+ccmp",
+							"psk+ccmp256",
+							"psk+gcmp",
+							"psk+gcmp256",
+							"psk+tkip",
+							"psk+tkip+ccmp",
+							"psk+aes",
+							"psk+tkip+aes",
+							"psk+aes+tkip",
+							"psk+ccmp+tkip",
+							"psk2+ccmp",
+							"psk2+ccmp256",
+							"psk2+gcmp",
+							"psk2+gcmp256",
+							"psk2+tkip",
+							"psk2+tkip+ccmp",
+							"psk2+aes",
+							"psk2+tkip+aes",
+							"psk2+aes+tkip",
+							"psk2+ccmp+tkip",
+							"psk-mixed+ccmp",
+							"psk-mixed+ccmp256",
+							"psk-mixed+gcmp",
+							"psk-mixed+gcmp256",
+							"psk-mixed+tkip",
+							"psk-mixed+tkip+ccmp",
+							"psk-mixed+aes",
+							"psk-mixed+tkip+aes",
+							"psk-mixed+aes+tkip",
+							"psk-mixed+ccmp+tkip",
+							"sae+ccmp",
+							"sae+ccmp256",
+							"sae+gcmp",
+							"sae+gcmp256",
+							"sae+tkip",
+							"sae+tkip+ccmp",
+							"sae+aes",
+							"sae+tkip+aes",
+							"sae+aes+tkip",
+							"sae+ccmp+tkip",
+							"wpa+ccmp",
+							"wpa+ccmp256",
+							"wpa+gcmp",
+							"wpa+gcmp256",
+							"wpa+tkip",
+							"wpa+tkip+ccmp",
+							"wpa+aes",
+							"wpa+tkip+aes",
+							"wpa+aes+tkip",
+							"wpa+ccmp+tkip",
+							"wpa2+ccmp",
+							"wpa2+ccmp256",
+							"wpa2+gcmp",
+							"wpa2+gcmp256",
+							"wpa2+tkip",
+							"wpa2+tkip+ccmp",
+							"wpa2+aes",
+							"wpa2+tkip+aes",
+							"wpa2+aes+tkip",
+							"wpa2+ccmp+tkip",
+							"wpa3+ccmp",
+							"wpa3+ccmp256",
+							"wpa3+gcmp",
+							"wpa3+gcmp256",
+							"wpa3+tkip",
+							"wpa3+tkip+ccmp",
+							"wpa3+aes",
+							"wpa3+tkip+aes",
+							"wpa3+aes+tkip",
+							"wpa3+ccmp+tkip",
+							"wpa3-mixed+ccmp",
+							"wpa3-mixed+ccmp256",
+							"wpa3-mixed+gcmp",
+							"wpa3-mixed+gcmp256",
+							"wpa3-mixed+tkip",
+							"wpa3-mixed+tkip+ccmp",
+							"wpa3-mixed+aes",
+							"wpa3-mixed+tkip+aes",
+							"wpa3-mixed+aes+tkip",
+							"wpa3-mixed+ccmp+tkip"
 						],
 						"default": "none"
 					},
@@ -29052,6 +29305,31 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Block station-to-station traffic on this AP"
+					},
+					"ieee80211r": {
+						"type": "boolean",
+						"default": false,
+						"description": "802.11r fast BSS transition between the access points of one mobility domain"
+					},
+					"ft_over_ds": {
+						"type": "boolean",
+						"default": false,
+						"description": "802.11r over the distribution system instead of over the air"
+					},
+					"ft_psk_generate_local": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise"
+					},
+					"mobility_domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{4}$",
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID"
 					},
 					"key": {
 						"type": "string",
