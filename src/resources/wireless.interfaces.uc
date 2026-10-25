@@ -205,13 +205,15 @@ function validate_new(json) {
 	if (type(json.key) == "string" && index(json.key, "\n") >= 0)
 		push(errs, { field: "key", code: "invalid_format", message: ONE_LINE });
 
+	// Each problem is its own error, because the handler compares errors: one error that hid another
+	// would let a write turn fast transition on over a nasid that already held a newline.
 	let r = roaming(json);
 	if (type(json.nasid) == "string") {
 		if (length(json.nasid) > LINE_MAX)
 			push(errs, { field: "nasid", code: "out_of_range", message: TOO_LONG });
-		else if (index(json.nasid, "\n") >= 0)
+		if (index(json.nasid, "\n") >= 0)
 			push(errs, { field: "nasid", code: "invalid_format", message: ONE_LINE });
-		else if (r.ft && length(json.nasid) > NASID_MAX)
+		if (r.ft && length(json.nasid) > NASID_MAX)
 			push(errs, { field: "nasid", code: "out_of_range",
 			             message: sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX) });
 	}
@@ -227,9 +229,9 @@ function validate_new(json) {
 			if (type(e) != "string") continue;
 			if (length(e) > LINE_MAX)
 				push(errs, { field: f, code: "out_of_range", message: TOO_LONG });
-			else if (index(e, "\n") >= 0)
+			if (index(e, "\n") >= 0)
 				push(errs, { field: f, code: "invalid_format", message: ONE_LINE });
-			else if (r.key_holders && !match(e, kh.re))
+			if (r.key_holders && !match(e, kh.re))
 				push(errs, { field: f, code: "invalid_format", message: kh.message });
 		}
 	}
@@ -285,7 +287,7 @@ return {
 		              description: "SSID broadcast (or joined in sta mode)" },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
-		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves a stored key alone, disabling the SSID included, is not refused for it, and one that enables the SSID is" },
+		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is, disabling the SSID included, is not refused for it, and one that enables the SSID is" },
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
@@ -303,7 +305,7 @@ return {
 		mobility_domain: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{4}$",
 		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID" },
 		nasid:      { type: ["string", "null"], "x-uapi-write": { maxLength: LINE_MAX },
-		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, and more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, unless the SSID stored the same value already. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX) },
+		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, and more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. A write that leaves nasid as it is, and does not enable the SSID, is not refused for a problem that nasid already had. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], minimum: 1000, maximum: 65535,
 		              description: "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000" },
 		r0_key_lifetime: { type: ["integer", "null"], minimum: 0,

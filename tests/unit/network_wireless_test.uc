@@ -200,9 +200,9 @@ t.describe('wireless.interfaces', () => {
 	t.it('PATCH that supplies a key overrides the stored one', () => {
 		let c = seeded_wiface();
 		let r = wiface_handler().patch(c, { request_id: "01hx0000000000000000000000" },
-		                               'w1', { key: 'newsecret' });
+		                               'w1', { key: 'new' });
 		t.assert_equal(r.status, 200);
-		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'new');
 	});
 });
 
@@ -435,6 +435,7 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 	t.it('caps nasid at 1024 bytes, and at 48 with fast transition', () => {
 		t.assert_deep_equal(codes({ nasid: bytes(1024) }, 'nasid'), []);
 		t.assert_deep_equal(codes({ nasid: bytes(1025) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ nasid: bytes(1025) + '\n' }, 'nasid'), [ 'out_of_range', 'invalid_format' ]);
 		for (let enc in [ 'psk2', 'sae', 'wpa2' ]) {
 			let ft = { mode: 'ap', encryption: enc, key: 'correcthorse', ieee80211r: true };
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(48) }, 'nasid'), [], enc);
@@ -506,8 +507,8 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(c._state.uci.wireless.w1.key, 'correcthorse');
 	});
 
-	// A write that changes a field that a rule reads checks the rule, also on a disabled SSID, so it
-	// cannot leave a stored value that hostapd refuses once LuCI enables the SSID.
+	// The rules see the SSID as if it were enabled, so a write to a disabled SSID that makes a stored
+	// value break adds an error, and LuCI cannot enable it into a config that hostapd refuses.
 	t.it('a write to a disabled SSID that makes a stored value break the config is refused', () => {
 		let c = stored({ disabled: '1', encryption: 'psk', ieee80211r: '1', nasid: bytes(60) });
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
@@ -564,6 +565,21 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		c = stored({ encryption: 'sae', ieee80211r: '1', nasid: bytes(49) });
 		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'sae', ieee80211r: true,
 		                                           nasid: bytes(49), disabled: true }).status, 200);
+	});
+
+	// An error that the field already had is new when the write changes the field, so swapping one
+	// injection for another is refused, and one error cannot hide another that the write adds.
+	t.it('a write that changes a field with an error, or adds a second error to it, is refused', () => {
+		let c = stored({ key: 'abcdefgh\nfoo=1' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { key: 'abcdefgh\nssid2="evil"' }).status, 422);
+		c = stored({ disabled: '1', nasid: 'ap1\nx=1' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { nasid: 'ap1\nssid2="evil"' }).status, 422);
+		c = stored({ encryption: 'sae', nasid: bytes(60) + '\nx=1' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => e.code), [ 'out_of_range' ]);
+		c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0',
+		             r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ], r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad', 'ff:ff:ff:ff:ff:ff,*,' + H32 ] }).status, 422);
 	});
 
 	t.it('a long stored nasid blocks the writes that turn fast transition on, and no other', () => {

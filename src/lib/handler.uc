@@ -275,6 +275,27 @@ check_schema_types = function(schema_properties, body, prefix) {
 	return errs;
 };
 
+// A resource's validate_new() holds rules that a stored value can fail, such as a value that a
+// daemon reads as a config line. Its rules see the section as if it were enabled, because another
+// writer, such as LuCI, can enable it later. A write is refused only for an error that it adds:
+// one that the section as it was, carried write-only fields included, does not have in a field
+// that the write leaves as it is. So a write that leaves a field alone is never refused for an
+// error that the field already had, disabling included, while a write that changes the field, or
+// that makes a stored value break by turning a daemon option on, is. Enabling a disabled section
+// counts every error as new. The sweep passes no `before`, so it lists all.
+function new_errors(resource, after, before) {
+	let errs = resource.validate_new(after) ?? [];
+	if (length(errs) == 0 || before == null || (before.disabled === true && after.disabled !== true))
+		return errs;
+	let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
+	let had = {};
+	for (let e in resource.validate_new(before) ?? []) had[id(e)] = true;
+	return filter(errs, function(e) {
+		let f = match(e.field, /^[A-Za-z0-9_]+/)?.[0];
+		return !had[id(e)] || sprintf("%J", after[f]) != sprintf("%J", before[f]);
+	});
+}
+
 // schema_body: type-checked by check_schema_types (the wire delta from the
 // client). validate_body: passed to resource.validate (the FULL post-merge
 // view for cross-field checks). For POST/PUT both are the same body. For
@@ -286,21 +307,6 @@ check_schema_types = function(schema_properties, body, prefix) {
 // `delta` is what the request itself named, for checks that must not fire on a field the caller
 // never sent: a PATCH that switches network/interfaces away from static still carries the old
 // addresses in its merged view, and refusing them there would make the switch impossible.
-// A resource's validate_new() holds rules that a stored value can fail, such as a value that a
-// daemon reads as a config line. Its rules see the section as if it were enabled, because another
-// writer, such as LuCI, can enable it later. A write is refused only for an error that it adds:
-// one that the section as it was, carried write-only fields included, does not have. So a write
-// that leaves a stored value alone, disabling included, is never refused for it, while a write
-// that makes a stored value break, by turning a daemon option on for instance, is. Enabling a
-// disabled section counts every error as new. The sweep passes no `before`, so it lists all.
-function new_errors(resource, after, before) {
-	let errs = resource.validate_new(after) ?? [];
-	if (before == null || (before.disabled === true && after.disabled !== true)) return errs;
-	let had = {};
-	for (let e in resource.validate_new(before) ?? []) had[sprintf("%s|%s|%s", e.field, e.code, e.message)] = true;
-	return filter(errs, (e) => !had[sprintf("%s|%s|%s", e.field, e.code, e.message)]);
-}
-
 function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
@@ -894,7 +900,7 @@ function make(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 carry_write_only(resource, existing_view, existing));
+				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1123,7 +1129,8 @@ function make_singleton(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 synthesized ? null : carry_write_only(resource, existing_view, existing));
+				                                 (resource.validate_new != null && !synthesized)
+				                                 ? carry_write_only(resource, existing_view, existing) : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

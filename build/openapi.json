@@ -29105,7 +29105,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, unless the SSID stored the same value already. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. A write that leaves nasid as it is, and does not enable the SSID, is not refused for a problem that nasid already had. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29205,7 +29205,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves a stored key alone, disabling the SSID included, is not refused for it, and one that enables the SSID is"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is, disabling the SSID included, is not refused for it, and one that enables the SSID is"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29413,7 +29413,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, unless the SSID stored the same value already. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, and more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. A write that leaves nasid as it is, and does not enable the SSID, is not refused for a problem that nasid already had. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
 						"maxLength": 1024
 					},
 					"reassociation_deadline": {
@@ -29449,7 +29449,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves a stored key alone, disabling the SSID included, is not refused for it, and one that enables the SSID is"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is, disabling the SSID included, is not refused for it, and one that enables the SSID is"
 					},
 					"r0kh": {
 						"type": "array",
