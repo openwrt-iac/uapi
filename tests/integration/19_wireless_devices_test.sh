@@ -55,21 +55,28 @@ echo "$patched" | grep -q '"channel": 6' || fail "PATCH did not update channel"
 echo "--- DELETE /wireless/devices/$id ---"
 call -X DELETE "$URL/wireless/devices/$id" | tail -1 | grep -q '^204$' || fail "DELETE expected 204"
 
-echo "--- a PUT of the stock radio's read keeps path, cell_density and legacy_rates (#238) ---"
+echo "--- a PUT of the stock radio's read keeps path, macaddr, cell_density and legacy_rates (#238) ---"
 # `wifi config` binds the radio to its phy with path; without it, wifi-scripts finds no phy.
+# The PUT rewrites the stock radio, so its file goes back whatever the outcome.
+$SSH 'cp /etc/config/wireless /tmp/uapi19-radio0.bak'
+restore_radio0() { $SSH 'test -e /tmp/uapi19-radio0.bak && mv /tmp/uapi19-radio0.bak /etc/config/wireless' || true; }
+trap 'restore_radio0; cleanup' EXIT INT TERM
 stock_path=$($SSH 'uci get wireless.radio0.path')
 [ -n "$stock_path" ] || fail "wifi config wrote no path for radio0"
-$SSH 'uci set wireless.radio0.cell_density=2; uci set wireless.radio0.legacy_rates=1; uci commit wireless'
+$SSH 'uci set wireless.radio0.macaddr=02:00:00:00:00:99; uci set wireless.radio0.cell_density=2
+      uci set wireless.radio0.legacy_rates=1; uci commit wireless'
 read_body=$(curl -sS -H "$ADMIN" "$URL/wireless/devices/radio0")
-echo "$read_body" | jq -e --arg p "$stock_path" '.path == $p and .cell_density == 2 and .legacy_rates == true' >/dev/null \
+echo "$read_body" | jq -e --arg p "$stock_path" '.path == $p and .macaddr == "02:00:00:00:00:99"
+	and .cell_density == 2 and .legacy_rates == true' >/dev/null \
 	|| fail "GET radio0 did not read the options: $read_body"
 put=$(call -X PUT -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" \
 	-d "$(echo "$read_body" | jq -c 'del(.id, .managed, .runtime)')")
 echo "$put" | tail -1 | grep -q '^200$' || fail "PUT of the read: $put"
 [ "$($SSH 'uci get wireless.radio0.path')" = "$stock_path" ] || fail "PUT of the read lost path"
-[ "$($SSH 'uci get wireless.radio0.cell_density; uci get wireless.radio0.legacy_rates' | tr '\n' ' ')" = "2 1 " ] \
-	|| fail "PUT of the read lost cell_density or legacy_rates"
-$SSH 'uci delete wireless.radio0.cell_density; uci delete wireless.radio0.legacy_rates; uci commit wireless'
+got=$($SSH 'for o in macaddr cell_density legacy_rates; do uci get wireless.radio0.$o; done' | tr '\n' ' ')
+[ "$got" = "02:00:00:00:00:99 2 1 " ] || fail "PUT of the read changed the options: $got"
+restore_radio0
+trap cleanup EXIT INT TERM
 
 echo "--- without /etc/config/wireless, a write answers 503 config_missing and stores nothing ---"
 # A router without a radio has no such file, because `wifi config` writes it only for hardware it finds.

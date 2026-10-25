@@ -28699,7 +28699,7 @@
 							"string",
 							"null"
 						],
-						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `phy`, what binds this section to its hardware: wifi-scripts brings up no radio that neither one matches"
+						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `macaddr` and `phy`, what binds this section to its hardware: wifi-scripts tries `path`, then `macaddr`, then `phy`, and brings up no radio that none of them matches"
 					},
 					"phy": {
 						"type": [
@@ -28707,6 +28707,13 @@
 							"null"
 						],
 						"description": "Name of the phy, as in board.json. `wifi config` writes it instead of `path` when the phy is not named phyN"
+					},
+					"macaddr": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "MAC address of the phy. Older `wifi detect` configurations bind a radio with it instead of `path`"
 					},
 					"radio": {
 						"type": [
@@ -28815,7 +28822,7 @@
 							"string",
 							"null"
 						],
-						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `phy`, what binds this section to its hardware: wifi-scripts brings up no radio that neither one matches"
+						"description": "Device path of the phy under /sys/devices, as `wifi config` writes it. With `macaddr` and `phy`, what binds this section to its hardware: wifi-scripts tries `path`, then `macaddr`, then `phy`, and brings up no radio that none of them matches"
 					},
 					"phy": {
 						"type": [
@@ -28823,6 +28830,13 @@
 							"null"
 						],
 						"description": "Name of the phy, as in board.json. `wifi config` writes it instead of `path` when the phy is not named phyN"
+					},
+					"macaddr": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "MAC address of the phy. Older `wifi detect` configurations bind a radio with it instead of `path`"
 					},
 					"radio": {
 						"type": [
@@ -29076,7 +29090,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise"
+						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all"
 					},
 					"mobility_domain": {
 						"type": [
@@ -29085,6 +29099,53 @@
 						],
 						"pattern": "^[0-9A-Fa-f]{4}$",
 						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID"
+					},
+					"nasid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier"
+					},
+					"reassociation_deadline": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1000,
+						"maximum": 65535,
+						"description": "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000"
+					},
+					"r0_key_lifetime": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 10000"
+					},
+					"r1_key_holder": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{12}$",
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID"
+					},
+					"pmk_r1_push": {
+						"type": "boolean",
+						"default": false,
+						"description": "Push the PMK-R1 to the other key holders instead of waiting for them to pull it"
+					},
+					"has_r0kh": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "True if r0kh is configured (the entries are never returned)"
+					},
+					"has_r1kh": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "True if r1kh is configured (the entries are never returned)"
 					},
 					"runtime": {
 						"type": "object",
@@ -29145,6 +29206,22 @@
 						"type": "string",
 						"writeOnly": true,
 						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
+					},
+					"r0kh": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"writeOnly": true,
+						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
+					},
+					"r1kh": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"writeOnly": true,
+						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
 					}
 				},
 				"required": [
@@ -29321,7 +29398,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk, psk2 or psk-mixed, and false otherwise"
+						"description": "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all"
 					},
 					"mobility_domain": {
 						"type": [
@@ -29331,10 +29408,63 @@
 						"pattern": "^[0-9A-Fa-f]{4}$",
 						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID"
 					},
+					"nasid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier"
+					},
+					"reassociation_deadline": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1000,
+						"maximum": 65535,
+						"description": "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000"
+					},
+					"r0_key_lifetime": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"description": "802.11r lifetime of the PMK-R0 in minutes. Unset, hostapd uses 10000"
+					},
+					"r1_key_holder": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{12}$",
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID"
+					},
+					"pmk_r1_push": {
+						"type": "boolean",
+						"default": false,
+						"description": "Push the PMK-R1 to the other key holders instead of waiting for them to pull it"
+					},
 					"key": {
 						"type": "string",
 						"writeOnly": true,
 						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field"
+					},
+					"r0kh": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"writeOnly": true,
+						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
+					},
+					"r1kh": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"writeOnly": true,
+						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
 					}
 				},
 				"required": [

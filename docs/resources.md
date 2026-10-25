@@ -105,8 +105,8 @@ Reload: `firewall` (fw4).
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), the `path`, `phy` and `radio` that bind them to their hardware, band, channel, htmode, country, txpower, cell_density, legacy_rates. |
-| `wireless/interfaces` | `config wifi-iface` | SSIDs, with 802.11r (`ieee80211r`, `ft_over_ds`, `ft_psk_generate_local`, `mobility_domain`). `key` write-only; responses include `has_key: bool`. `runtime` carries iwinfo state. |
+| `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), the `path`, `macaddr`, `phy` and `radio` that bind them to their hardware, band, channel, htmode, country, txpower, cell_density, legacy_rates. |
+| `wireless/interfaces` | `config wifi-iface` | SSIDs, with every 802.11r option of LuCI's WLAN roaming tab. `key`, `r0kh` and `r1kh` are write-only, and a PUT that leaves them out keeps them; responses include `has_key`, `has_r0kh` and `has_r1kh`. A PUT still requires `key` for the EAP modes, which LuCI writes without one. `runtime` carries iwinfo state. |
 
 Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 `runtime` block on `wireless/interfaces`.
