@@ -465,21 +465,21 @@ All notable changes to this project will be documented in this file. Format foll
   `firewall/redirects` now refuse an IPv6 prefix with anything after its length too: netifd, fw4
   and `ip route` refuse or misread one, and fw4 drops the rule. That tightening uses the carve-out
   in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. No IPv6 prefix in the uci configs of the OpenWrt feeds has such a tail. On a WireGuard
-  peer, a write checks `allowed_ips` when it changes them or enables the peer, so a write that
-  leaves stored ones alone, disabling included, is not refused for them. On the other resources, a
-  write of a section that stores such a prefix answers 422 until it replaces the value, as for any
-  other value that they refuse. `GET /api/v3/diagnostics?validate=1` lists both. (#247)
+  loudly. No IPv6 prefix in the uci configs of the OpenWrt feeds has such a tail. A write of a
+  section that stores such a prefix answers 422 until it replaces the value, as for any other
+  value that these resources refuse, and `GET /api/v3/diagnostics?validate=1` lists the section.
+  (#247)
 
 - **A token's `allowed_cidrs` could admit every IPv6 address.** The same `int()` reading took
   `fd00::/0x40`, `fd00::/0.64` or `fd00::/-0` as `/0`, so a token minted with such an entry was
-  usable from any IPv6 source. Every release since 3.0.0, which matches IPv6 callers, has this. A
-  prefix length must now be digits only: the mint refuses another one with 422, or with an error
-  from `uapi-token`, and a stored one admits no caller, so the token answers 401. A token minted
-  with an entry such as `fd00::/64x`, which matched `fd00::/64`, also answers 401 now and must be
-  minted again. That break uses the carve-out in `docs/versioning.md` for payloads that produced a
-  state no caller can rely on: the same reading that gave `/64` here gave `/0` one character
-  away. (#247)
+  usable from any IPv6 source. Every release since 3.0.0, which matches IPv6 callers, has this. An
+  IPv6 prefix length must now be 1 to 3 digits: the mint refuses another one with 422, or with an
+  error from `uapi-token`, and a stored one admits no caller, so the token answers 401. The
+  validation sweep does not cover tokens, and `uapi-token list` shows their `allowed_cidrs`. A token
+  minted with an entry such as `fd00::/64x`, which matched `fd00::/64`, also answers 401 now and
+  must be minted again. That break uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on: the same reading that gave `/64` here gave `/0` one
+  character away. (#247)
 
 - **A WireGuard peer's `endpoint_host` added a hidden peer at the next ifup.** On OpenWrt 25.12,
   wireguard.sh builds the config for `wg syncconf` with `printf %b`, which expands escapes, so the
@@ -487,18 +487,18 @@ All notable changes to this project will be documented in this file. Format foll
   `192.0.2.1\0072443\n[Peer]\nPublicKey=...\nAllowedIPs=0.0.0.0/0` added a peer that took the
   allowed IPs, and no read of uapi or LuCI showed it. Measured on OpenWrt 25.12.5 with a token
   scoped `network:wireguard_peers:rw`: a POST while the interface was down answered 200, and the
-  next ifup installed the extra peer. Every release since 1.1.0 accepts such a host.
-  `endpoint_host` now refuses a backslash, a newline and brackets. wireguard.sh brackets every
-  host with a colon, so a bracketed IPv6 address, which uapi took before, already failed the
-  whole tunnel: on OpenWrt 25.12.5 wg refused the config with
-  `Unable to find port of endpoint: '[[fd00::1]]:51820'`. A write checks the host when it changes
-  it, also on a disabled peer, because another writer such as LuCI can enable the peer later, and
-  when it enables the peer. A write that leaves a stored host alone, disabling included, is not
-  refused for it, and `GET /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled
-  or not. The same holds for a stored `public_key` or `preshared_key` that is not a WireGuard key,
-  which reaches the same `printf %b`. That tightening uses the same carve-out, and it fails
-  loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and from a shell, so the
-  fix that closes it for every writer belongs upstream. (#247)
+  next ifup installed the extra peer. Every release since 1.1.0 accepts such a host. `endpoint_host`
+  now refuses a backslash, a newline and brackets. wireguard.sh brackets every host with a colon, so
+  a bracketed IPv6 address, which uapi took before, already failed the whole tunnel: on OpenWrt
+  25.12.5 wg refused the config with `Unable to find port of endpoint: '[[fd00::1]]:51820'`. The
+  rule sees the peer as if it were enabled, because another writer such as LuCI can enable it later,
+  and a write is refused only for an error that it adds, or when it enables the peer. So a write
+  that leaves a stored host alone, disabling included, is not refused for it, and `GET
+  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The same holds for a
+  stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same `printf
+  %b`. That tightening uses the same carve-out, and it fails loudly. wireguard.sh takes the same
+  host from LuCI's RPC, from `/raw` and from a shell, so the fix that closes it for every writer
+  belongs upstream. (#247)
 
 ## [3.1.0] - 2026-10-11
 

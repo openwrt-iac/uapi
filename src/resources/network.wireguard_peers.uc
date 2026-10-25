@@ -67,17 +67,8 @@ function endpoint_host_problem(host) {
 	return null;
 }
 
-const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
-
-// A direct call, as from a test, checks every rule, as a create does.
-const EVERY_RULE = { sweep: false, changes: () => true, applies: () => true };
-
-// Each rule names the fields that it reads, and `write` decides whether this write checks it: see
-// write_scope() in the handler. The keys are checked here as well as by their schema pattern,
-// because the schema sees only what a PATCH sends, and a stored key reaches the same printf %b.
-function validate(json, conn, id, delta, write) {
+function validate(json, conn) {
 	let errs = [];
-	write ??= EVERY_RULE;
 
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required",
@@ -87,10 +78,6 @@ function validate(json, conn, id, delta, write) {
 		push(errs, { field: "public_key", code: "required",
 		             message: "is required" });
 
-	for (let k in [ "public_key", "preshared_key" ])
-		if (type(json[k]) == "string" && json[k] != "" && !match(json[k], WG_KEY_RE) && write.applies(json, [ k ]))
-			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
-
 	// wg accepts an IPv4 or IPv6 prefix, or a bare address of either family which
 	// it widens to /32 or /128. Requiring IPv4 CIDR rejected every IPv6 peer, so
 	// a dual-stack tunnel could not be configured through the API at all, and
@@ -99,18 +86,10 @@ function validate(json, conn, id, delta, write) {
 	if (length(aips) == 0)
 		push(errs, { field: "allowed_ips", code: "required",
 		             message: "must be a non-empty list of addresses or CIDRs" });
-	if (write.applies(json, [ "allowed_ips" ]))
-		for (let i = 0; i < length(aips); i++)
-			if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
-				push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
-				             message: "must be an IPv4 or IPv6 address or CIDR" });
-
-	// wireguard.sh reads a list option as its words joined by spaces.
-	let host = (type(json.endpoint_host) == "array") ? join(" ", json.endpoint_host) : json.endpoint_host;
-	if (type(host) == "string" && write.applies(json, [ "endpoint_host" ])) {
-		let problem = endpoint_host_problem(host);
-		if (problem != null)
-			push(errs, { field: "endpoint_host", code: "invalid_format", message: problem });
+	for (let i = 0; i < length(aips); i++) {
+		if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
+			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
+			             message: "must be an IPv4 or IPv6 address or CIDR" });
 	}
 
 	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
@@ -125,6 +104,30 @@ function validate(json, conn, id, delta, write) {
 			             message: sprintf(
 			               "no network interface %J with proto=wireguard exists",
 			               json.interface) });
+	}
+
+	return errs;
+}
+
+const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
+
+// The rules on what wireguard.sh hands to wg through printf %b, on the peer as if it were enabled.
+// The handler refuses a write only for an error that it adds: see new_errors(). The keys are
+// checked here as well as by their schema pattern, because the schema sees only what a PATCH
+// sends, and a stored key reaches the same printf %b.
+function validate_new(json) {
+	let errs = [];
+
+	for (let k in [ "public_key", "preshared_key" ])
+		if (type(json[k]) == "string" && json[k] != "" && !match(json[k], WG_KEY_RE))
+			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
+
+	// wireguard.sh reads a list option as its words joined by spaces.
+	let host = (type(json.endpoint_host) == "array") ? join(" ", json.endpoint_host) : json.endpoint_host;
+	if (type(host) == "string") {
+		let problem = endpoint_host_problem(host);
+		if (problem != null)
+			push(errs, { field: "endpoint_host", code: "invalid_format", message: problem });
 	}
 
 	return errs;
@@ -212,6 +215,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	validate_new: validate_new,
 	openapi_singular: "wireguard peer",
 	merge_for_patch: merge_for_patch,
 	openapi_required: ["interface", "public_key", "allowed_ips"],
@@ -227,7 +231,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write that changes it, or that enables the peer, refuses a backslash, a newline and brackets" },
+		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets, unless the peer stored the same host already and the write does not enable it" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

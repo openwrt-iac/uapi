@@ -49,9 +49,10 @@ curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
 `allowed_cidrs` takes prefixes of either family, and a list may mix them. A caller is matched
 against entries of its own family only, so `0.0.0.0/0` does not admit an IPv6 caller and `::/0`
 does not admit an IPv4 one: a dual-stack router that means "any" has to say both. A caller
-arriving as an IPv4-mapped IPv6 address is matched against the IPv4 entries. A prefix length is
-digits only: an entry such as `fd00::/0x40`, which 3.1 read as `/0`, is refused at mint time, and a
-stored one admits no caller.
+arriving as an IPv4-mapped IPv6 address is matched against the IPv4 entries. An IPv6 prefix length
+is 1 to 3 digits: an entry such as `fd00::/0x40`, which 3.1 read as `/0`, is refused at mint time,
+and a stored one admits no caller. The validation sweep does not cover tokens, so
+`uapi-token list` is where a stored entry shows.
 
 The requested scopes must be a strict subset of the caller's. Escalation
 returns `403 scope_escalation_blocked`. The same request with a name
