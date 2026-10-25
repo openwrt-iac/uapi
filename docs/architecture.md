@@ -182,12 +182,16 @@ peers, it is the platform's abstraction for peers. uci remains the only config
 writer, the kernel state is derived from committed uci rather than from the
 request, and nothing new runs in the background.
 
-The one caller-supplied value that reaches the shell is `endpoint_host`. It is
-quoted with the same idiom LuCI uses rather than validated, so no previously
-accepted payload starts being rejected. Public keys and addresses are pattern
-checked instead, since their charsets carry no shell metacharacters. A preshared
-key is passed as a `0600` file on tmpfs, never as an argument, so it never
-appears in `ps`.
+`src/lib/wg.uc` makes every value safe for the shell itself, on the value as uci
+stores it, because the restore after a failed write reads the peers straight
+from uci, where a value never passed `validate()`. `wg set` takes the public
+key, the allowed IPs and the endpoint through `shellquote`, and the port and
+the keepalive through `%d`. `ip route` takes the prefix, the interface name and
+the table name unquoted, so wg.uc passes them only after its own checks:
+`route_prefix` keeps an address or a CIDR and drops anything else, and the
+interface and table names must match `^[A-Za-z0-9_-]+$`. A preshared key is
+passed as a `0600` file on tmpfs, never as an argument, so it never appears in
+`ps`.
 
 `route_allowed_ips` asks for a route per allowed IP, which netifd installs from
 the proto handler, so the apply installs them too: without that the peer is in
@@ -438,6 +442,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
+| Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
 | Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Reaped on revoke, else until reboot |
 | Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, until reboot |
 | Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot      |

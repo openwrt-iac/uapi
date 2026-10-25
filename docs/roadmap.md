@@ -352,9 +352,9 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   apply it guards (wrapping a `network:routes`-only apply needs `:rw` on all
   6 `network`-backed resources, since the revert can restore any of them), so
   the guide must say "mint the wrap token at package granularity" or a narrow
-  token gets a confusing 403 on arm. New endpoint, so a minor bump (2.4.0+),
-  not a 2.3.x patch. Defer the merge
-  until `apply-confirm` is feed-stable and a concrete consumer asks: the
+  token gets a confusing 403 on arm. New endpoint, so a minor bump, not a
+  patch. Defer the merge until `apply-confirm` is feed-stable and a
+  concrete consumer asks: the
   provider stays Option A (write path untouched) and the wrap is operator-
   driven. Two residual hazards want a reference wrapper-with-ack/rollback-trap,
   owned by the provider repo (the concrete consumer), not prose alone: the
@@ -376,16 +376,14 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   streaming or change feeds. Fundamentally incompatible with the
   fork-per-request model. Punt.
 - **Per-field RBAC.** Granular write permissions like "can edit MTU but not
-  IP on `network/interfaces`". Scope-level is enough for v2; this is
+  IP on `network/interfaces`". Scope-level is enough today, and this is
   enterprise creep. Don't add until requested by a real deployment.
 - **Content-Type negotiation (YAML, msgpack).** Single-content-type
   (`application/json`) is correct for IaC. Defer indefinitely.
 - **CORS.** Admin UI is LuCI; no browser-direct use case for uapi.
 - **More resources.** Curation completeness rule in `docs/adding-a-resource.md`: add when a
   typical real configuration sets options the curated layer doesn't
-  surface. Current gap candidates worth opportunistic curation:
-  `mwan3/*`, `usteer/*` (passive band-steering daemon for OpenWrt 22+
-  multi-AP setups), `openvpn/*` (the daemon is supported by uci natively).
+  surface.
 ## Install the deferred packages in CI
 
 Partly done in 2.5.0. lldpd and vnstat2 are installed by `install_uapi`'s bootstrap, about
@@ -468,11 +466,11 @@ stale enough to be misleading:
   through `/etc/iproute2/rt_tables`, and LuCI writes the name. Since 3.2.0 a read resolves a
   stored name to its id, so the integer type stays and a PUT of the read writes the id. Taking
   a name on write needs the type to become a string or a union, which is breaking under
-  `docs/versioning.md` ([#210](https://github.com/openwrt-iac/uapi/issues/210)).
+  `docs/versioning.md` ([#240](https://github.com/openwrt-iac/uapi/issues/240)).
 
 - **`network/interfaces.ip6prefix` stops taking a string on write.** Since 3.2.0 a read is
   always an array, and a write still takes the space-separated string that the 3.1 spec
-  declared ([#211](https://github.com/openwrt-iac/uapi/issues/211)). The removal deletes, in one
+  declared ([#241](https://github.com/openwrt-iac/uapi/issues/241)). The removal deletes, in one
   go: `"string"` in the type, the `x-uapi-write-string` marker and its branch in
   `build/gen_openapi.uc` (the check in `tests/lint_openapi_shape.uc` that no source marker
   reaches the spec stays), the string path in `toUci` and `validate()`, the sentence in the

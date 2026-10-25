@@ -244,13 +244,19 @@ Smushed uci names (`dynamicdhcp`, `commonname`, `expandhosts`,
    RC cycle. The consistency gain doesn't pay for the disruption when
    the existing name is already canonical to uci.
 
-Two name shapes WILL be renamed:
+Three name shapes WILL be renamed:
 
 - **Terraform reserved or HCL block keywords** (the rc4 batch above).
   These don't work as Terraform attributes.
 - **Names that mislead** (e.g. `dhcp.servers.runtime.active_leases_v4_total`
   was renamed to `active_leases_v4_box_total` in rc2 because the
   original name suggested per-server semantics for a box-wide counter).
+- **One uci option that means two things under another field's value.**
+  `network/interfaces.broadcast_flag` is uci `broadcast` on proto dhcp,
+  where it is udhcpc's flag, while `broadcast` stays the address on proto
+  static. Each section reads and writes only one of the two names. The
+  waiver in `lint-wire-names` records that reason, but the lint checks only
+  that a waiver exists, so the resource's own tests carry the disjointness.
 
 If you're curating a new uci option, default to the uci name. If it
 collides with a Terraform/HCL keyword or actively misleads, rename

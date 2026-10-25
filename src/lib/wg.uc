@@ -19,9 +19,9 @@ const SAFE_IFACE_RE = /^[A-Za-z0-9_-]+$/;
 const PUBKEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
 
 // Same idiom as LuCI's wireguard backend: single-quote and escape embedded
-// quotes. endpoint_host is caller-supplied free-form text, so it must never
-// reach the shell unquoted; keys and addresses are pattern-checked instead
-// because their charsets carry no shell metacharacters.
+// quotes. The restore after a failed write reads peers straight from uci, where
+// no validate() ran, so a peer's strings reach `wg set` through here and its numbers
+// through %d.
 function shellquote(s) {
 	return "'" + replace("" + (s ?? ""), "'", "'\\''") + "'";
 }

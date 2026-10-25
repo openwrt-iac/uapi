@@ -34,21 +34,22 @@ All notable changes to this project will be documented in this file. Format foll
 ### Changed
 
 - **`network/interfaces` refuses a field that the proto of the interface does not take, with 422
-  `conflict` naming the field.** The spec publishes which protos take each field, as `allOf`
-  entries on `proto`. Before, such a write answered 200 with no effect. A static address field
-  such as `ipaddrs` or `netmask` was stored on any proto and read back, but netifd ignores it
-  outside proto static. Any other field, such as `hostname` on a static interface, was dropped.
-  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. A `null`, an empty string or an empty list for such a
-  field is still accepted and stores nothing. A request is checked only for the fields that it
-  names, so a PATCH that changes only `proto` succeeds. That PATCH now removes the options of the
-  old proto and keeps the options that apply to every proto. Before, it kept the static address
-  fields when it left proto static. With terraform-provider-uapi before 3.2.0, a proto switch
-  fails with 422 when the state holds a field that the new proto does not take. That is always
-  the case away from static or wireguard, and away from a proto that uapi does not model unless
-  the new proto is wireguard: static requires its addresses, a read of the other two answers
-  `nohostroute: false`, and only wireguard takes `nohostroute`. Upgrade the provider together
-  with uapi. (#208)
+  `conflict` naming the field.** The spec publishes which protos take each field, as `allOf` entries
+  on `proto`. Before, such a write answered 200 with no effect. A static address field such as
+  `ipaddrs` or `netmask` was stored on any proto and read back, but netifd ignores it outside proto
+  static. Any other field, such as `hostname` on a static interface, was dropped. That tightening
+  uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely
+  on, and it fails loudly. A `null`, an empty string or an empty list for such a field is still
+  accepted and stores nothing. A request is checked only for the fields that it names, so a PATCH
+  that changes only `proto` succeeds, unless the section fails a check of the new proto: static
+  requires an address, wireguard a private key and addresses, and ppp and pppoe take an `mtu` from
+  128 to 16384 only. That PATCH now removes the options of the old proto and keeps the options that
+  apply to every proto. Before, it kept the static address fields when it left proto static. With
+  terraform-provider-uapi before 3.2.0, a proto switch fails with 422 when the state holds a field
+  that the new proto does not take. That is always the case away from static or wireguard, and away
+  from a proto that uapi does not model unless the new proto is wireguard: static requires its
+  addresses, a read of the other two answers `nohostroute: false`, and only wireguard takes
+  `nohostroute`. Upgrade the provider together with uapi. (#208)
 - **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
@@ -56,7 +57,14 @@ All notable changes to this project will be documented in this file. Format foll
   which options the handler reads. A read there shows the modelled options that uci stores, and
   `nohostroute` reads `false` when it is unset, as on wireguard. A PATCH that leaves `proto` out
   refuses only `broadcast_flag`. The ETag of every interface changes once at the upgrade, so a
-  write with an `If-Match` from before the upgrade answers 412. (#208)
+  write with an `If-Match` from before the upgrade answers 412. The Response schema requires only
+  `proto`, as in 3.1.0, which already omitted the dhcp, dhcpv6 and wireguard fields on the other
+  protos, so a field that a proto does not take is absent, not removed from the schema. On proto
+  dhcp, uci `broadcast` is udhcpc's flag, and 3.1.0 read it as the static broadcast address, as
+  `"broadcast": "1"`. No value of it was ever a correct answer there, which is branch (a) of the
+  type carve-out in `docs/versioning.md`. It now reads as `broadcast_flag`, and `broadcast` is
+  absent on dhcp. That is silent for a script: `jq .broadcast` prints null, so grep scripts for
+  `.broadcast` on dhcp interfaces. (#208)
 - **`network/routes.table` and `network/rules.lookup` refuse 0.** netifd cannot resolve table 0
   and drops the route or rule, so such a write answered 200 with no effect. It now answers 422
   `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads that
@@ -64,7 +72,9 @@ All notable changes to this project will be documented in this file. Format foll
   resolve, such as a name missing from `/etc/iproute2/rt_tables`, reads as 0 too, and the
   validation sweep reports it. Every write to that section answers 422 until the table is fixed,
   where a PUT of the read used to remove the option and move the route into the main table.
-  (#212)
+  `table` and `lookup` also declare `maximum: 4294967295`, and a larger write answers 422
+  `out_of_range`. netifd keeps a table id in 32 bits, so a larger number named another table or
+  none, under the same carve-out. (#212)
 
 - **`network/rules` refuses a `goto` that the kernel refuses, with 422.** Beside an action other
   than goto it answers `conflict`: with lookup, netifd installs a goto rule instead, and the
@@ -74,11 +84,11 @@ All notable changes to this project will be documented in this file. Format foll
   produced a state no caller can rely on, and it fails loudly. `goto 0` answered `required`
   before. The schema no longer declares `default: "lookup"` on `action`, because the default
   depends on `goto`, and `goto` gets `maximum: 2147483647`. (#218)
-- **`network/wireguard_peers.endpoint_port` declares minimum 0, and a write of 0 answers 422.**
-  A read of 0 means a port name that does not resolve, or a stored `'0'`, which LuCI's form
-  allows, so the old minimum of 1 did not describe the read. That is branch (b) of the type
-  carve-out in `docs/versioning.md`. A write of 0 was already refused. A peer with an endpoint
-  host and a port of 0 is no longer applied to the kernel. (#219)
+- **`NetworkWireguardPeersResponse.endpoint_port` declares minimum 0.** A read of 0 means a port
+  name that does not resolve, a number above 65535, or a stored `'0'`, which LuCI's form allows,
+  so the old minimum of 1 did not describe the read. That is branch (b) of the type carve-out in
+  `docs/versioning.md`. The Request keeps minimum 1, as in 3.1.0, so a write of 0 still answers
+  422. A peer with an endpoint host and a port of 0 is no longer applied to the kernel. (#219)
 - **`network/interfaces.mtu` and `network/devices.mtu` refuse a value below 68, with 422
   `out_of_range`.** netifd applies a device mtu only from 68 up and ignores a smaller one
   without a log, so such a write answered 200 with no effect. On proto wireguard,
@@ -92,31 +102,30 @@ All notable changes to this project will be documented in this file. Format foll
   address. (#220)
 
 - **`network/interfaces.mtu` takes 128 to 16384 on proto ppp and pppoe.** `ppp.sh` passes the
-  value to pppd, which refuses anything outside that range. uapi accepted 68 and up there, so
-  such a write answered 200 and the link never came up. A write outside the range now answers
-  422 `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads
-  that produced a state no caller can rely on, and it fails loudly. LuCI's ppp and pppoe forms
-  accept any value up to 9200, 0 to 127 included. Measured on OpenWrt 25.12.5: pppoe with
+  value to pppd, which refuses anything outside that range. uapi 3.1.0 accepted 0 to 65535
+  there, so such a write answered 200 and the link never came up. A write outside the range now
+  answers 422 `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. LuCI's ppp and pppoe
+  forms accept any value up to 9200, 0 to 127 included. Measured on OpenWrt 25.12.5: pppoe with
   `mtu '100'` logs "mtu value must be between 128 and 16384", and netifd disables the interface
   with `OPTION_ERROR`, without retrying. (#224)
-- **`network/interfaces.listen_port` declares minimum -1, and a write of -1 answers 422.** -1 is
-  what a port name that does not resolve reads, since 0 asks the kernel to pick a port, and wg
-  then cannot bring the interface up. The old minimum of 0 did not describe the read either: a
-  hand-written `option listen_port '-1'` already read -1, and `'65536'` read 65536 above the
-  maximum. That is branch (b) of the type carve-out in `docs/versioning.md`. LuCI writes only 0
-  to 65535, so only a hand edit or another tool reaches it. Every write to an interface that
-  stores such a value now answers 422 until it is fixed, which uses the tightening carve-out
-  for payloads that produced a state no caller can rely on, and fails loudly. (#225)
+- **`NetworkInterfacesResponse.listen_port` declares minimum -1.** -1 is what a port name that does
+  not resolve reads, since 0 asks the kernel to pick a port, and wg then cannot bring the interface
+  up. The old minimum of 0 did not describe the read either: a hand-written `option listen_port
+  '-1'` already read -1, and `'65536'` read 65536 above the maximum. That is branch (b) of the type
+  carve-out in `docs/versioning.md`. The Request keeps minimum 0, as in 3.1.0, so a write of -1
+  answers 422. LuCI writes only 0 to 65535, so only a hand edit or another tool reaches -1. Every
+  write to an interface that stores such a value now answers 422 until it is fixed, which uses the
+  tightening carve-out for payloads that produced a state no caller can rely on, and fails loudly.
+  (#225)
 - **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
   of a read.** A request inherited the read bounds, so it declared values that every write
-  refuses. `NetworkInterfacesRequest` now declares `listen_port` from 0, and `mtu` from 68, or
-  from 128 to 16384 on proto `ppp` and `pppoe`. `NetworkDevicesRequest.mtu` starts at 68.
-  `endpoint_port` on `network/wireguard_peers`, `table` on `network/routes`, and `lookup` and
-  `goto` on `network/rules` start at 1. The `name` of `firewall/rules`, `firewall/nat` and
-  `firewall/redirects` takes at most 122 characters. The limit counts bytes, so that bound is
-  exact only for an ASCII name. No request changes acceptance, because `validate()` already
-  refused each of these values. `endpoint_port` and `listen_port` return to their 3.1.0 request
-  bounds, which this release had widened with their response bounds. The module marker is
+  refuses. `NetworkInterfacesRequest.mtu` now starts at 68, or takes 128 to 16384 on proto `ppp`
+  and `pppoe`. `NetworkDevicesRequest.mtu` starts at 68. `table` on `network/routes`, and
+  `lookup` and `goto` on `network/rules` start at 1. The `name` of `firewall/rules`,
+  `firewall/nat` and `firewall/redirects` takes at most 122 characters. The limit counts bytes,
+  so that bound is exact only for an ASCII name. No request changes acceptance, because
+  `validate()` already refused each of these values. The module marker is
   `x-uapi-write`, described in `docs/versioning.md`, and `GET /schema/<package>/<resource>`
   serves it as the module declares it: on `network/interfaces`, the enum of `proto` is now under
   `x-uapi-write`. (#229)
@@ -135,7 +144,8 @@ All notable changes to this project will be documented in this file. Format foll
   option that the write had removed. (#237)
 - **A raw PUT or PATCH refuses a `.type` or an `id` that differs from the section, with 422
   `read_only`.** Before, it answered 200 and changed neither. An echo of the values of the section
-  still passes. (#237)
+  still passes. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. (#237)
 - **`/diagnostics` keeps the first 512 bytes of each error message**, and ends a cut message with
   `...`. The 400 for a control character in a request body names the key, and it answers before
   authentication, so without a limit any client could store a body of any size in the error ring,
@@ -160,15 +170,16 @@ All notable changes to this project will be documented in this file. Format foll
   tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
   caller can rely on, and it fails loudly: an interface that already stores such a value answers
   422 to every write, naming the field, until the value is corrected or cleared, for example with
-  `"ip6hint": ""`. An empty string still clears either option, and `ip6ifaceid` now also accepts
-  `eui64` and `random`, which it refused. (#206)
+  `"ip6hint": ""`. 3.1.0 accepted only the prefix form, on dhcpv6, so this is the case for every
+  `ip6hint` that uapi 3.1.0 wrote. An empty string still clears either option, and `ip6ifaceid`
+  now also accepts `eui64` and `random`, which it refused. (#206)
 - **`network/interfaces` reads and writes the options that netifd takes on every proto, on every
   proto.** `metric`, `defaultroute`, `delegate`, `ip4table` and `ip6table` each applied to some
   protos only: `metric` not to static, and `ip4table` not to dhcp. On the other protos, a write
   answered 200 and stored nothing, and a PUT erased a value that LuCI wrote. The same was true of
-  `peerdns` and `reqprefix` on `pppoe`, and of `clientid` on `dhcpv6`, where it is a DUID. Measured
-  on OpenWrt 25.12.5: `metric` and `ip4table` on a static interface put its routes into that
-  table with that metric. (#208)
+  `peerdns` on `pppoe`, `ppp` and `wwan`, of `reqprefix` on `pppoe` and `ppp`, and of `clientid` on
+  `dhcpv6`, where it is a DUID. Measured on OpenWrt 25.12.5: `metric` and `ip4table` on a static
+  interface put its routes into that table with that metric. (#208)
 - **`network/interfaces.listen_port` is declared nullable.** A wireguard interface without
   `option listen_port` reads it as null, because the kernel then picks the port, and the spec
   declared an integer. That uses branch (b) of the type carve-out in `docs/versioning.md`: the
@@ -176,7 +187,7 @@ All notable changes to this project will be documented in this file. Format foll
   already null. (#208)
 - **`network/interfaces` reads integers and lists as netifd reads them.** uci hands netifd an
   integer option through `strtol` with base 0. uapi read decimals only, so `metric '0x10'`, which
-  netifd applies as 16, read null, and `ip6weight '010'`, which netifd takes as 8, read 10. A
+  netifd applies as 16, read null, and `ip6assign '010'`, which netifd takes as 8, read 10. A
   scalar `dns`, `ipaddr`, `ip6addr` or wireguard `addresses` with several words read as one entry,
   while netifd, and the wireguard script for `addresses`, use each word. For example, `option dns '192.0.2.1 192.0.2.2'` is two servers, and
   a PUT of the old read of a scalar `ipaddr` with two addresses answered 422. `metric`,
@@ -246,13 +257,17 @@ All notable changes to this project will be documented in this file. Format foll
   it, and on OpenWrt both `reload` and `restart` start a stopped service. On a router where
   another web server owns ports 80 and 443, that started uhttpd beside it. Each step now runs
   only when uhttpd is enabled. (#203)
-- **`network/wireguard_peers.endpoint_port` reads a service name as wg resolves it.**
-  `wireguard.sh` passes `endpoint_port` to `wg`, which strips whitespace and resolves a name
-  through `/etc/services`, so `option endpoint_port 'https'` works on the box. uapi read such a
-  name as null. A PATCH of the peer then pushed port 51820 to the kernel, and the restore after a
-  failed write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg
-  uses, and both apply paths push it. A name that does not resolve reads 0, which wg cannot use
-  either. (#219)
+- **`network/wireguard_peers.endpoint_port` reads a service name as wg resolves it.** `wireguard.sh`
+  passes `endpoint_port` to `wg`, which strips whitespace and resolves a name through
+  `/etc/services`, so `option endpoint_port 'https'` works on the box. uapi read such a name as
+  null. A PATCH of the peer then pushed port 51820 to the kernel, and the restore after a failed
+  write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg uses, and both
+  apply paths push it. A name that does not resolve reads 0, which wg cannot use either, and so does
+  a number above 65535, which read above the declared maximum. A peer that stores such a name read
+  null in 3.1.0 and passed a PATCH, and now answers 422 to every write until the port is fixed. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
+  can rely on, and it fails loudly. `persistent_keepalive` now reads with whitespace removed, as wg
+  reads it, so `'25 '` reads 25 where it read null. (#219)
 - **The `network/interfaces.mtu` description says where netifd applies it.** netifd applies an
   interface's `mtu` to its device only when that device has no `config device` section of its
   own, as `br-lan` has in the stock configuration, and to every device that joins the interface
@@ -279,15 +294,15 @@ All notable changes to this project will be documented in this file. Format foll
   that LuCI configured with such a proto. A POST or PUT with such a proto still answers 422
   `not_in_enum`, now with a message that names the PATCH, which keeps the options of the proto's
   handler. A JSON Patch on such an interface now succeeds, as a merge patch already did. Before,
-  it answered 422. (#229)
+  it answered 422. No read changes, so nothing fails: a client that validated the read failed on
+  such an interface and now passes. (#229)
 - **A `network/interfaces` PATCH no longer writes `nohostroute '0'` when it does not name the
   field.** A PATCH skips a field whose value is the default, but it took the defaults from an
   empty section, read as proto `none`, where `nohostroute` does not apply. So every PATCH of a
-  wireguard interface, or of an interface with a proto that uapi does not model, added
-  `nohostroute '0'`. The value had no effect, but the section changed on a write that did not ask
-  for it. A PATCH of any resource now takes the defaults from the section as the write leaves it.
-  A PUT still writes `nohostroute '0'`, as it writes `auto '1'` and `disabled '0'`, because a PUT
-  writes every field of the body. (#230)
+  wireguard interface added `nohostroute '0'`. The value had no effect, but the section changed
+  on a write that did not ask for it. A PATCH of any resource now takes the defaults from the
+  section as the write leaves it. A PUT still writes `nohostroute '0'`, as it writes `auto '1'`
+  and `disabled '0'`, because a PUT writes every field of the body. (#230)
 
 - **A write into a uci package without a config file answered 200 and stored nothing.** The uci
   cursor stores nothing in a missing file and reports it only through a null return, which uapi
@@ -304,15 +319,20 @@ All notable changes to this project will be documented in this file. Format foll
 - **A raw write of an option that uci cannot store answered 200 and stored nothing, or only part of
   it.** The cursor drops an option name outside letters, digits and `_` and still returns true. It
   refuses an object, and from a list that holds a null, an object or another list it stores only
-  some of the items. Such an option, and a `.type` with a space on create, now answers 422 under
-  the same carve-out. (#235)
+  some of the items. Such an option, and a `.type` outside printable ASCII on create, such as one
+  with a space, now answers 422 under the same carve-out. (#235)
 
 - **A request body with a NUL or a control character answered 200 and stored something else.** uci
-  drops a value with a control character other than tab, newline and carriage return when it
-  replays the commit, and a NUL cuts the value short. A NUL also cut the check of an id short, so
+  drops a value with a control character other than tab, newline and carriage return when it replays
+  the commit, and a NUL cuts the value short. A NUL also cut the check of an id short, so
   `"n1\u0000-x"` passed the section-name charset and created section `n1`. Such a body now answers
-  `400 bad_request` on every endpoint, and the message names the field that holds a control
-  character. (#237)
+  `400 bad_request` on every endpoint. The message names the field that holds a control character,
+  but not the one that holds a NUL, because `json()` cuts an object key at its first NUL. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
+  can rely on, and it fails loudly. A field check that refused such a byte with 422 before, such as
+  `system/password`, the `name` of `dhcp/hosts` or the enum of `firewall/rules.target`, now answers
+  400 instead. A tab, a newline, a carriage return and DEL still reach the field checks, because uci
+  stores them, and a check that refuses them still answers 422. (#237)
 - **A raw POST without an `id` answered 500 for a type that does not start with a lowercase
   letter**, such as `LoadPlugin` in olsrd. The generated id now takes the first letter of the type
   in lowercase, or `u`. (#237)
@@ -322,7 +342,15 @@ All notable changes to this project will be documented in this file. Format foll
 - **A raw write stored `reloaded`, `reload_services` and `reload_note` as options when a client
   sent a write response back.** They are now ignored, as `managed` is. (#237)
 - **A raw POST with an `id` of `0` or `false` got a generated id.** It now answers 422, as another
-  id outside the section-name charset does. (#237)
+  id outside the section-name charset does. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. (#237)
+- **A raw list of several items that starts with `""` answered 200 and stored the list without
+  that item.** The uci binding drops a leading empty item. Such a list now answers 422 and names
+  the item, such as `server[0]`. A list of one `""` still passes, so the one-item placeholders in
+  the stock aria2, dufs and dnsproxy configs read and write back unchanged. That tightening uses
+  the carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on,
+  and it fails loudly. (#237)
 - **A raw 422 named only the first refused field.** It now lists every refused field, as
   `docs/errors.md` says, and names a list item by its index, such as `proto[1]`. (#237)
 - **The spec declared any raw request body.** `RawSectionRequest` now declares the option names,
@@ -364,7 +392,10 @@ All notable changes to this project will be documented in this file. Format foll
   mapped `rule#x` to the bare `firewall` domain, so a token with `raw:firewall:rw`, `firewall:rw`
   and `firewall:rules:ro` could create a firewall rule. A `.type` with `'`, `"` or `\` left the
   package unparseable, and only a shell could repair it. A `.type` that holds any of these five
-  characters now answers 422. The re-read was measured on OpenWrt 25.12.5. (#237)
+  characters now answers 422. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. No section type in
+  the uci configs of the OpenWrt feeds holds one of these characters. The re-read was measured on
+  OpenWrt 25.12.5. (#237)
 
 ## [3.1.0] - 2026-10-11
 
