@@ -477,14 +477,6 @@ stale enough to be misleading:
   field description, the row in `docs/deprecations.md` and the `ip6prefix` example in
   `docs/versioning.md`, and it adds a row to the v3-to-v4 migration document.
 
-- **A token's `allowed_cidrs` refuses an IPv6 prefix with anything after its length.** Since
-  3.2.0 every other field refuses one, through `values.is_valid_ipv6_cidr`, because netifd, fw4
-  and `ip route` refuse or misread it. A token keeps the 3.1 reading in `is_valid_token_cidr`,
-  which takes the leading digits, because a token minted with `fd00::/64x` matched fd00::/64 and
-  no `allowed_cidrs` value reaches a shell or a daemon. The change makes the mint and the match
-  use `is_valid_cidr_any`, deletes `is_valid_token_cidr`, and adds a row to the v3-to-v4
-  migration document.
-
 ## Out of scope by design
 
 - **Localization of error `message` strings.** English-only; codes are

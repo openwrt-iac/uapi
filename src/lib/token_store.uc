@@ -130,7 +130,7 @@ function _validate_create_body(body) {
 			push(errs, errors.field_error("allowed_cidrs", "invalid_type",
 				"must be an array of CIDR strings"));
 		else for (let i = 0; i < length(body.allowed_cidrs); i++) {
-			if (!values.is_valid_token_cidr(body.allowed_cidrs[i]))
+			if (!values.is_valid_cidr_any(body.allowed_cidrs[i]))
 				push(errs, errors.field_error(sprintf("allowed_cidrs[%d]", i),
 					"invalid_format", "must be IPv4/N or IPv6/N"));
 		}

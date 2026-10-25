@@ -308,18 +308,6 @@ function is_valid_ipv6_cidr(s) {
 	return int(parts[1]) <= 128;
 }
 
-// Tokens keep the 3.1 reading of an IPv6 prefix length, which int() takes from its leading
-// digits: a token minted with `fd00::/64x` matched fd00::/64, and refusing it is a v4 change. No
-// allowed_cidrs value reaches a shell or a daemon.
-function is_valid_token_cidr(s) {
-	if (is_valid_cidr(s)) return true;
-	if (type(s) != "string") return false;
-	let parts = split(s, "/");
-	if (length(parts) != 2 || !is_valid_ipv6(parts[0])) return false;
-	let prefix = int(parts[1]);
-	return prefix >= 0 && prefix <= 128;
-}
-
 // Stock OpenWrt configs ship IPv6 CIDRs in several places
 // (mwan3 default_rule_v6's `option dest_ip '::/0'` is the forcing case).
 function is_valid_cidr_any(s) {
@@ -409,7 +397,7 @@ function ipv6_words(s) {
 }
 
 function ipv6_in_cidr(addr, cidr) {
-	if (!is_valid_token_cidr(cidr)) return false;
+	if (!is_valid_ipv6_cidr(cidr)) return false;
 	let parts = split(cidr, "/");
 	let a = ipv6_words(addr), n = ipv6_words(parts[0]);
 	if (a == null || n == null) return false;
@@ -714,7 +702,7 @@ return {
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
-	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any, is_valid_token_cidr,
+	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines,

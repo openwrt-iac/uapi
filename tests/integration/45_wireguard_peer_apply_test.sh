@@ -202,13 +202,14 @@ $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 # prefix to `ip route del` through a shell, which ran `id` as root. A write refuses that prefix now,
 # also on a disabled peer, because another writer can enable it later. A peer written by hand
 # with the prefix must run nothing when the API deletes it. wireguard.sh expands the escapes of the
-# config it gives `wg syncconf`, so an escape in endpoint_host is refused too, as are brackets.
+# config it gives `wg syncconf`, so an escape in endpoint_host is refused too, with or without a
+# bracket, and so are brackets.
 echo "--- an allowed IP with a tail, an escape or brackets in endpoint_host is refused, and a stored one runs nothing ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"::/0;id>uapi45_route;\"],
 	    \"route_allowed_ips\":true,\"disabled\":true}")
 [ "$(status_of "$r")" = "422" ] || fail "allowed IP with a tail expected 422, got $(status_of "$r"): $(body_of "$r")"
-for host in '192.0.2.1\\0072443\\n[Peer]' '[fd00::1]'; do
+for host in '192.0.2.1\\0072443\\nPublicKey=x' '192.0.2.1\\0072443\\n[Peer]' '[fd00::1]'; do
 	r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 		-d '{"interface":"'"$IFACE"'","public_key":"'"$PEER3"'","allowed_ips":["10.98.99.33/32"],
 		    "endpoint_host":"'"$host"'","endpoint_port":51820}')
@@ -220,7 +221,7 @@ $SSH "uci set network.uapi45rt=wireguard_$IFACE; uci set network.uapi45rt.public
 	uci set network.uapi45rt.route_allowed_ips=1; uci commit network"
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45rt")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of the stored peer: $(body_of "$r")"
-ran=$($SSH "find / /tmp -xdev -name uapi45_route 2>/dev/null")
+ran=$($SSH "find / /tmp -xdev -name uapi45_route 2>/dev/null" || true)
 [ -z "$ran" ] || { $SSH "find / /tmp -xdev -name uapi45_route -exec rm -f {} +"; fail "a stored allowed IP ran as a shell command: $ran"; }
 
 # route_allowed_ips means "install routes for this peer's allowed IPs". netifd

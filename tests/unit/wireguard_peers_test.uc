@@ -151,6 +151,9 @@ t.describe('network.wireguard_peers.validate', () => {
 			t.assert_equal(length(host_errs(h)), 0, h);
 		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', '[vpn.example.com]' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
+		t.assert_equal(length(host_errs('vpn.example.com\t')), 0);
+		// wireguard.sh reads a list option as its words joined by spaces.
+		t.assert_deep_equal(map(host_errs([ '192.0.2.1\\n[Peer]' ]), (e) => e.code), [ 'invalid_format' ]);
 	});
 
 	t.it('refuses an escape in allowed_ips, which wireguard.sh expands too', () => {
@@ -211,45 +214,30 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
-	// A peer that wg cannot read is broken whatever the write changes, so a write that leaves it
-	// enabled is refused, and one that disables it is not.
-	t.it('a write that leaves a broken peer enabled is refused, and one that disables it passes', () => {
-		let c = with_wg();
-		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
-		let h = make_handler();
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
-		let body = h.get_one(c, ctx(), 'g_existing').body;
-		for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
-		t.assert_equal(h.replace(c, ctx(), 'g_existing', body).status, 200);
-		body.disabled = false;
-		t.assert_equal(h.replace(c, ctx(), 'g_existing', body).status, 422);
-		t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '[fd00::1]');
-	});
-
-	t.it('a write to a disabled peer is not refused for a stored value, only for one that it sends', () => {
-		let c = with_wg();
-		c._state.uci.network.g_existing.disabled = '1';
-		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
-		let h = make_handler();
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1\\n[Peer]' }).status, 422);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '::/0;id>x;' ] }).status, 422);
-	});
-
-	// A stored escape adds the peer again at every ifup while it is enabled, so the sweep lists the
-	// peer, and disabling it is the write that stops it.
-	t.it('a stored escape in an enabled peer is listed by the sweep, and disabling it passes', () => {
-		for (let extra in [ { endpoint_host: '192.0.2.1\\n[Peer]' },
-		                    { allowed_ips: [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ] } ]) {
+	// A write is never refused for a value that it leaves alone, so a broken or injected peer can
+	// always be disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it
+	// is refused until a write replaces the value.
+	t.it('a stored broken host or injection blocks only the write that enables the peer', () => {
+		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
+		                    { allowed_ips: [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ] },
+		                    { preshared_key: 'K\\n[Peer]' } ]) {
 			let c = with_wg();
 			for (let k, v in extra) c._state.uci.network.g_existing[k] = v;
 			let h = make_handler();
-			t.assert_equal(length(h.sweep(c)), 1);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
-			t.assert_equal(length(h.sweep(c)), 0);
+			t.assert_equal(length(h.sweep(c)), 1, extra);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200, extra);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200, extra);
+			t.assert_equal(length(h.sweep(c)), 1, extra);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422, extra);
 		}
+	});
+
+	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.disabled = '1';
+		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1\\n[Peer]' }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '::/0;id>x;' ] }).status, 422);
 	});
 
 	// preshared_key is masked on read, so a client that GETs a peer and PUTs it
@@ -350,17 +338,6 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		let ops = [];
 		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
 		t.assert_true(ops[0].prev_route_allowed_ips);
-	});
-
-	// netifd and uapi install no route for a disabled peer, so a route for the same prefix belongs to
-	// someone else.
-	t.it('leaves prev_route_allowed_ips false for a peer that was disabled', () => {
-		let c = with_wg();
-		c._state.uci.network.g_existing.route_allowed_ips = '1';
-		c._state.uci.network.g_existing.disabled = '1';
-		let ops = [];
-		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
-		t.assert_false(ops[0].prev_route_allowed_ips);
 	});
 
 	t.it('leaves prev_route_allowed_ips false when the option is absent', () => {

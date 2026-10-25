@@ -55,23 +55,29 @@ function interface_exists_with_wg_proto(conn, name) {
 
 // wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a backslash in a
 // value is an escape: `\n[Peer]` in plain text in endpoint_host added a peer that no read showed,
-// at the next ifup. It also brackets every host with a colon, so a bracketed IPv6 address reaches
-// wg as `[[...]]`, and wg refuses the whole config.
+// at the next ifup, and so does a newline. It also brackets every host with a colon, so a bracketed
+// IPv6 address reaches wg as `[[...]]`, and wg refuses the whole config. No regex syntax reads a
+// bracket and a backslash in a character class the same way in ucode and in ECMAScript, so the
+// request schema carries no pattern for this.
 function endpoint_host_problem(host) {
-	if (index(host, "\\") >= 0 || values.has_control_chars(host))
-		return "must not contain a backslash or a control character: wireguard.sh expands escapes in the config that it gives wg";
+	if (index(host, "\\") >= 0 || index(host, "\n") >= 0)
+		return "must not contain a backslash or a newline: wireguard.sh expands escapes in the config that it gives wg";
 	if (match(host, /[][]/))
 		return "must not be in brackets: wireguard.sh brackets an IPv6 address itself, and wg refuses a doubled bracket";
 	return null;
 }
 
-// A rule applies to a value that the write changes, whatever the state of the peer, because
-// another writer, such as LuCI, can enable the peer later. It applies to a stored value only while
-// the peer is enabled, so disabling a broken or injected peer is not refused for these values,
-// and the sweep lists an enabled one.
-function validate(json, conn, id) {
+const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
+
+// A direct call, as from a test, checks every rule, as a create does.
+const EVERY_RULE = { sweep: false, changes: () => true, applies: () => true };
+
+// Each rule names the fields that it reads, and `write` decides whether this write checks it: see
+// write_scope() in the handler. The keys are checked here as well as by their schema pattern,
+// because the schema sees only what a PATCH sends, and a stored key reaches the same printf %b.
+function validate(json, conn, id, delta, write) {
 	let errs = [];
-	let s = (conn != null && id != null) ? conn.uci_get("network", id) : null;
+	write ??= EVERY_RULE;
 
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required",
@@ -81,6 +87,10 @@ function validate(json, conn, id) {
 		push(errs, { field: "public_key", code: "required",
 		             message: "is required" });
 
+	for (let k in [ "public_key", "preshared_key" ])
+		if (type(json[k]) == "string" && json[k] != "" && !match(json[k], WG_KEY_RE) && write.applies(json, [ k ]))
+			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
+
 	// wg accepts an IPv4 or IPv6 prefix, or a bare address of either family which
 	// it widens to /32 or /128. Requiring IPv4 CIDR rejected every IPv6 peer, so
 	// a dual-stack tunnel could not be configured through the API at all, and
@@ -89,15 +99,15 @@ function validate(json, conn, id) {
 	if (length(aips) == 0)
 		push(errs, { field: "allowed_ips", code: "required",
 		             message: "must be a non-empty list of addresses or CIDRs" });
-	let enabled = json.disabled !== true;
-	if (enabled || sprintf("%J", aips) != sprintf("%J", as_word_list_or_null(s?.allowed_ips) ?? []))
+	if (write.applies(json, [ "allowed_ips" ]))
 		for (let i = 0; i < length(aips); i++)
 			if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 				push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
 				             message: "must be an IPv4 or IPv6 address or CIDR" });
 
-	let host = json.endpoint_host;
-	if (type(host) == "string" && (enabled || host != s?.endpoint_host)) {
+	// wireguard.sh reads a list option as its words joined by spaces.
+	let host = (type(json.endpoint_host) == "array") ? join(" ", json.endpoint_host) : json.endpoint_host;
+	if (type(host) == "string" && write.applies(json, [ "endpoint_host" ])) {
 		let problem = endpoint_host_problem(host);
 		if (problem != null)
 			push(errs, { field: "endpoint_host", code: "invalid_format", message: problem });
@@ -164,10 +174,8 @@ return {
 		// `existing` is the raw uci section, so this needs the netifd-faithful read:
 		// a section written by hand or by another tool can carry `true`, and reading
 		// that as false tells the apply the old config installed no routes, so the
-		// ones it did install are never withdrawn. A disabled peer has none to withdraw, so a route
-		// that another tool installed for the same prefix stays.
-		let prev_routes = (existing != null) && shell_bool(existing.route_allowed_ips, false)
-		                  && !shell_bool(existing.disabled, false);
+		// ones it did install are never withdrawn.
+		let prev_routes = (existing != null) && shell_bool(existing.route_allowed_ips, false);
 
 		if (kind == "remove") {
 			if (existing?.public_key == null) return [];
@@ -219,7 +227,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash, a control character or a bracket is refused when a write changes the host, and while the peer is enabled. The request schema has no pattern for it, because no regex syntax reads a bracket and a backslash the same way in ucode and in ECMAScript" },
+		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write that changes it, or that enables the peer, refuses a backslash, a newline and brackets" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
