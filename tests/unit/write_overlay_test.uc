@@ -70,6 +70,9 @@ function probes(keyword, bound) {
 	case "maximum":   return { code: "out_of_range", past: [ bound + 1 ], at: [ bound ] };
 	case "maxLength": return { code: "out_of_range", past: [ chars(bound + 1) ], at: [ chars(bound) ] };
 	case "enum":      return { code: "not_in_enum", past: [ "uapi_not_listed" ], at: bound };
+	// No value can be derived from a regex that it accepts, so the module's own tests carry
+	// those. A newline is outside every pattern here, and is the byte the patterns exist for.
+	case "pattern":   return { code: "invalid_format", past: [ "\n" ], at: [] };
 	}
 	return null;
 }

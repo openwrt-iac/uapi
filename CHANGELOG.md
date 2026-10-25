@@ -38,7 +38,11 @@ All notable changes to this project will be documented in this file. Format foll
   `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
-  `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`. Only the
+  `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`. A write
+  takes only what hostapd parses. An `r0kh` entry is `<MAC>,<R0KH-ID>,<key>`, with an R0KH-ID of 1
+  to 47 printable characters and no space or comma. An `r1kh` entry is `<MAC>,<MAC>,<key>`. Each
+  key is 64 or 32 hex digits, and `nasid` takes at most 48 bytes. None of them takes a control
+  character, because wifi-scripts writes each one into hostapd's config as one line. Only the
   whole group keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped,
   wifi-scripts derives lists that the other access points do not share. `ft_psk_generate_local`
   reads null when unset, because wifi-scripts then picks it from `encryption`. Other options still
@@ -180,6 +184,12 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Fixed
 
+- **`wireless/interfaces.key` takes the lengths that wifi-scripts takes.** With `psk`, `psk2`,
+  `psk-mixed`, `sae` or `sae-mixed`, with or without a forced cipher, wifi-scripts refuses a key
+  that is not 8 to 63 bytes or 64 hex digits, with `INVALID_WPA_PSK`. The write answered 200 and
+  the SSID did not come up. Such a key now answers 422 `invalid_format`, as LuCI's `wpakey` check
+  refuses it. The tightening uses the same carve-out as the `key` entry under Security, and it
+  fails loudly. Only a key that the request sends is checked. (#246)
 - **`wireless/interfaces.encryption` accepts a forced cipher, such as `psk2+ccmp`.** LuCI appends
   the cipher when one is chosen, and wifi-scripts reads the suffix. A read of such an SSID answered
   a value outside the declared enum, and a PUT of the read answered 422 `not_in_enum`, so the SSID
@@ -429,6 +439,16 @@ All notable changes to this project will be documented in this file. Format foll
   payloads that produced a state no caller can rely on, and it fails loudly. No section type in
   the uci configs of the OpenWrt feeds holds one of these characters. The re-read was measured on
   OpenWrt 25.12.5. (#237)
+
+- **A newline in `wireless/interfaces.key` added a line to hostapd's config.** wifi-scripts writes
+  the key as `wpa_passphrase=<key>` without escaping, so each newline in it started a hostapd
+  directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd
+  directive that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in
+  `\nssid2="x"` answered 200, and hostapd broadcast `x` while every read showed the stored SSID.
+  A key that a write sends with a control character now answers 422 `invalid_format`, in every
+  encryption mode. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. A PUT that leaves the key out keeps
+  the stored one, unchecked, as before. LuCI's key field takes one line only. (#246)
 
 ## [3.1.0] - 2026-10-11
 
