@@ -43,4 +43,13 @@ for body in '{"name":"a\u0000b"}' '{"k\u0000x":"1"}' '{"name":"a\u0001b"}'; do
 	echo "$r" | tail -1 | grep -q '^400$' || fail "POST $body expected 400: $r"
 done
 
+# The 400 names the key before authentication, and the error ring keeps every message in tmpfs.
+echo "--- an unauthenticated 400 with a long key leaves a clipped message in the error ring ---"
+key=$(head -c 4000 /dev/zero | tr '\0' k)
+r=$(curl -sS -w "\n%{http_code}\n" -X POST -H 'Content-Type: application/json' \
+	"$URL/firewall/rules" -d "{\"$key\\u0001\":1}")
+echo "$r" | tail -1 | grep -q '^400$' || fail "long-key POST expected 400: $(echo "$r" | tail -1)"
+len=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq '[.recent_errors[] | .message | length] | max')
+[ "$len" -le 515 ] || fail "the error ring kept a message of $len bytes"
+
 echo "api skeleton ok"

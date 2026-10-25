@@ -215,6 +215,20 @@ t.describe('transaction, lock acquisition', () => {
 	});
 });
 
+t.describe('transaction, cursor after the lock', () => {
+	t.it('unloads the package after the lock and before fn, so fn reads what is on disk', () => {
+		let order = [];
+		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule' } } } });
+		conn.uci_unload = function(pkg) { push(order, "unload " + pkg); return true; };
+		tx.transaction(conn, build_params({
+			acquire: function() { push(order, "lock"); return {}; },
+			release: function() { push(order, "release"); },
+			fn: function(c, p) { push(order, "fn"); return { ok: true, body: {} }; },
+		}));
+		t.assert_deep_equal(order, [ "lock", "unload fw", "fn", "release" ]);
+	});
+});
+
 t.describe('transaction, happy path', () => {
 	t.it('snapshot, commit, reload, success body', () => {
 		let locks = harness_locks(true);

@@ -54,6 +54,15 @@ resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/firewall/zones/zt
 status=$(echo "$resp" | tail -1)
 [ "$status" = "200" ] || fail "expected 200 for PATCH keeping same name, got $status"
 
+echo "--- PUT by position: the zone keeps its own name, and the response names the section ---"
+pos=$(( $($SSH "uci show firewall | grep '=zone\$' | grep -n '^firewall.zt42_ok=' | cut -d: -f1") - 1 ))
+read_body=$(curl -sS -g -H "$ADMIN" "$URL/firewall/zones/@zone[$pos]")
+echo "$read_body" | jq -e '.id == "zt42_ok"' >/dev/null || fail "GET @zone[$pos] did not name zt42_ok: $read_body"
+resp=$(call -g -X PUT -H 'Content-Type: application/json' "$URL/firewall/zones/@zone[$pos]" \
+	-d "$(echo "$read_body" | jq -c 'del(.id, .managed, .runtime)')")
+[ "$(echo "$resp" | tail -1)" = "200" ] || fail "PUT by position of the zone's own read: $resp"
+echo "$resp" | sed '$d' | jq -e '.id == "zt42_ok"' >/dev/null || fail "PUT by position did not name zt42_ok: $resp"
+
 echo "--- PUT: full replace to a colliding name is rejected ---"
 resp=$(call -X PUT -H 'Content-Type: application/json' "$URL/firewall/zones/zt42_ok" \
 	-d '{"name":"zt42seed","input":"ACCEPT","output_policy":"ACCEPT","forward":"REJECT"}')

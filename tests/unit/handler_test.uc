@@ -1899,3 +1899,28 @@ t.describe('handler writes network/interfaces.ip6prefix as a list', () => {
 		t.assert_deep_equal(ifaces.sweep(seeded([ 'fd00:9::/48', 'fd00:8::/48' ])), []);
 	});
 });
+
+// uci resolves `@rule[0]` as well as a name. The stub does not, so this conn maps the position to
+// the section the way libuci would.
+t.describe('handler ids by position', () => {
+	function positional() {
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', name: 'lan' },
+			r1: { '.type': 'rule', '.anonymous': false, name: 'r', src: 'lan', target: 'ACCEPT' },
+		} } });
+		let get = c.uci_get;
+		c.uci_get = (p, s, o) => get(p, s == "@rule[0]" ? "r1" : s, o);
+		return c;
+	}
+
+	t.it('a PUT by position writes the named section and answers its name and ETag', () => {
+		let c = positional();
+		let body = { ...rules.get_one(c, ctx(), "@rule[0]").body, target: "DROP" };
+		for (let k in [ "id", "managed", "runtime" ]) delete body[k];
+		let r = rules.replace(c, ctx(), "@rule[0]", body);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, "r1");
+		t.assert_equal(c._state.uci.firewall.r1.target, "DROP");
+		t.assert_equal(r.headers.ETag, rules.get_one(c, ctx(), "r1").headers.ETag);
+	});
+});

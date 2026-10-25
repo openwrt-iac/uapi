@@ -65,6 +65,15 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-X POST "$URL/tokens" -d '{"name": "evil", "scopes": ["*:rw"]}')
 [ "$status" = "403" ] || fail "scope escalation expected 403, got $status"
 
+echo "--- a token read and revoked by position is named, and its rate-limit bucket goes with it ---"
+# api_shortlived is the last token in the file, and its request above created its bucket.
+[ "$(curl -sS -g -H "$ADMIN" "$URL/tokens/@token[-1]" | jq -r .name)" = "api_shortlived" ] \
+	|| fail "GET /tokens/@token[-1] did not name api_shortlived"
+$SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to forget"
+status=$(curl -sS -g -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/tokens/@token[-1]")
+[ "$status" = "204" ] || fail "DELETE /tokens/@token[-1] expected 204, got $status"
+$SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" && fail "the revoke by position left the bucket"
+
 echo "--- DELETE /tokens/<id> returns 204 ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	-X DELETE "$URL/tokens/api_minted")

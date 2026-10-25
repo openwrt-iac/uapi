@@ -212,4 +212,15 @@ t.describe('token_store.remove', () => {
 		let r = token_store.remove(c, "ghost", noop_tx());
 		t.assert_equal(r.kind, "not_found");
 	});
+
+	// uci resolves `@token[0]` too. The stub does not, so this conn maps the position.
+	t.it('deletes by position under the token name, which the rate-limit bucket is keyed by', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		let get = c.uci_get;
+		c.uci_get = (p, s, o) => get(p, s == "@token[0]" ? "admin" : s, o);
+		t.assert_equal(token_store.get_public(c, "@token[0]").name, "admin");
+		let r = token_store.remove(c, "@token[0]", noop_tx());
+		t.assert_deep_equal(r.body, { deleted: "admin" });
+		t.assert_equal(c._state.uci.uapi.admin, null);
+	});
 });

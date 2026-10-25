@@ -247,6 +247,34 @@ t.describe('raw writes refuse what uci cannot store', () => {
 	});
 });
 
+// uci resolves `@rule[0]` and `@[-1]` as well as a name. The stub does not, so this conn maps
+// the position to the section the way libuci would.
+t.describe('raw ids by position', () => {
+	function positional() {
+		let c = bus.stub({
+			uci: { uapi_nosuchpkg: { cfg0a1b2c: { '.type': 'rule', '.anonymous': true, a: '1' } } },
+			missing_packages: [ "uapi_nosuchpkg" ],
+		});
+		let get = c.uci_get;
+		c.uci_get = (p, s, o) => get(p, s == "@rule[0]" ? "cfg0a1b2c" : s, o);
+		return c;
+	}
+
+	t.it('a read names the section, not the position', () => {
+		let r = raw.get_one(positional(), ctx(), ["*:rw"], "uapi_nosuchpkg", "@rule[0]");
+		t.assert_equal(r.body.id, "cfg0a1b2c");
+	});
+
+	t.it('a write checks an echo against the name that the read gave', () => {
+		for (let w in [ raw.replace, raw.patch ]) {
+			let r = w(positional(), ctx(), ["*:rw"], "uapi_nosuchpkg", "@rule[0]", { id: "cfg0a1b2c" });
+			t.assert_equal(r.body.code, "config_missing");
+			r = w(positional(), ctx(), ["*:rw"], "uapi_nosuchpkg", "@rule[0]", { id: "@rule[0]" });
+			t.assert_equal(r.body.code, "validation_failed");
+		}
+	});
+});
+
 // A write that succeeds needs the real flock, so these read what the transaction would set.
 t.describe('raw.writable_options', () => {
 	t.it('turns null and "" into a removal, and keeps every other value as sent', () => {

@@ -12,11 +12,12 @@ const TYPE_RE = /^[!-~]+$/;
 // rule, which the scope check had mapped to [firewall], and a quote left the package unparseable.
 const TYPE_UNQUOTED_RE = /["#';\\]/;
 const UCI_SCALAR = { string: true, int: true, double: true, bool: true };
-// Body keys that are not options. `.type` and `id` name the section. `managed` and the reload
-// fields are derived on every response, so a read-modify-write client echoes them, and stored
-// as options they would shadow the derived values on the way back out.
-const NOT_OPTIONS = { ".type": true, "id": true, "managed": true,
-                      "reloaded": true, "reload_services": true, "reload_note": true };
+// Derived on every response, so a read-modify-write client echoes them, and stored as options
+// they would shadow the derived values on the way back out.
+const DERIVED_FIELDS = [ "managed", "reloaded", "reload_services", "reload_note" ];
+// Body keys that are not options: `.type` and `id` name the section.
+const NOT_OPTIONS = { ".type": true, "id": true };
+for (let k in DERIVED_FIELDS) NOT_OPTIONS[k] = true;
 let load_section = handler.load_section;
 
 const TYPE_DOMAIN_MAP = {
@@ -272,6 +273,7 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	let preview = load_section(conn, pkg, id);
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
+	id = preview['.name'];
 	let sec_type = preview['.type'];
 	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
 		sprintf("writing %s.%s (type %s) via /raw/", pkg, id, sec_type));
@@ -289,8 +291,10 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 		package: pkg,
 		reload_services: reload.services,
 		fn: function(c, p) {
+			// The type too: the scope check approved the type that the preview read, and
+			// a commit before the lock can have put another section under this name.
 			let existing = load_section(c, p, id);
-			if (!existing)
+			if (!existing || existing['.type'] != sec_type)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
 			let secret = SECRET_BY_TYPE[existing['.type']] ?? {};
@@ -319,6 +323,7 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	let preview = load_section(conn, pkg, id);
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
+	id = preview['.name'];
 	let sec_type = preview['.type'];
 	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
 		sprintf("writing %s.%s via /raw/", pkg, id));
@@ -337,14 +342,15 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 		reload_services: reload.services,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
-			if (!existing)
+			if (!existing || existing['.type'] != sec_type)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
-			// Sweep a stored `managed` left by a client from before raw stopped copying it.
-			// Nothing else reaches it: NOT_OPTIONS keeps the key out of every body, so even
-			// the removal idiom cannot target it, and until now only a full replace removed
-			// it. An empty array is uci's "no such option".
-			if (exists(existing, "managed")) c.uci_set(p, id, "managed", []);
+			// Sweep the derived fields that a client stored before raw stopped copying them.
+			// NOT_OPTIONS keeps these keys out of every body, so no PATCH can name them, and a
+			// stored `reload_note` would read back next to a fresh `reloaded`. An empty array
+			// is uci's "no such option".
+			for (let k in DERIVED_FIELDS)
+				if (exists(existing, k)) c.uci_set(p, id, k, []);
 			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
 			return { ok: true, body: build_response_body(load_section(c, p, id), reload) };
 		},
@@ -357,6 +363,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 	let preview = load_section(conn, pkg, id);
 	if (!preview)
 		return errors.error(ctx, "not_found", sprintf("No section %s.%s", pkg, id));
+	id = preview['.name'];
 	let sec_type = preview['.type'];
 	let denied = require_raw_scope(ctx, scopes, pkg, sec_type, "rw",
 		sprintf("deleting %s.%s via /raw/", pkg, id));
@@ -368,7 +375,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 		reload_services: reload.services,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
-			if (!existing)
+			if (!existing || existing['.type'] != sec_type)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("No section %s.%s", pkg, id) };
 			c.uci_delete(p, id);

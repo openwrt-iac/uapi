@@ -85,6 +85,9 @@ function connect(opts) {
 		uci_revert: function(pkg) {
 			return cursor.revert(pkg);
 		},
+		uci_unload: function(pkg) {
+			return cursor.unload(pkg);
+		},
 		uci_export: function(pkg) {
 			let f = fs_mod.open("/etc/config/" + pkg, "r");
 			if (!f) return "";
@@ -149,7 +152,7 @@ function stub(initial) {
 			if (!s) return null;
 			let sec = s[section];
 			if (!sec) return null;
-			if (option == null) return deepcopy(sec);
+			if (option == null) return { ...deepcopy(sec), '.name': section };
 			return sec[option];
 		},
 
@@ -206,6 +209,10 @@ function stub(initial) {
 
 		uci_revert: function(pkg) {
 			record("revert", pkg);
+			return true;
+		},
+
+		uci_unload: function(pkg) {
 			return true;
 		},
 

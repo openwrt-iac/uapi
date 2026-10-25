@@ -6,6 +6,10 @@ let fs = require('fs');
 const DIR = "/tmp/uapi-error-ring";
 const PATH = DIR + "/ring.json";
 const CAP = 20;
+// The ring outlives the request in tmpfs, and the 400 for a control character in a body
+// names the key before authentication. Unclipped, any client could park its body here 20
+// times over, and every later error re-reads and rewrites all of it.
+const MAX_MESSAGE = 512;
 
 function read() {
 	let f = fs.open(PATH, "r");
@@ -23,7 +27,9 @@ function append(entry) {
 	try {
 		try { fs.mkdir(DIR); } catch (_) {}
 		let existing = read();
-		push(existing, entry);
+		let m = entry.message;
+		push(existing, { ...entry,
+		                 message: length(m) > MAX_MESSAGE ? substr(m, 0, MAX_MESSAGE) + "..." : m });
 		while (length(existing) > CAP) shift(existing);
 		let tmp = PATH + ".tmp";
 		let f = fs.open(tmp, "w");
@@ -35,4 +41,4 @@ function append(entry) {
 	} catch (_) {}
 }
 
-return { read, append, CAP };
+return { read, append, CAP, MAX_MESSAGE };
