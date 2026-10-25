@@ -105,9 +105,9 @@ function psk_file(value) {
 // config. Keepalive and preshared key are always spelled out, with 0 and
 // /dev/null as the explicit clears, because `wg set` merges and would otherwise
 // leave a stale value behind that uci no longer has.
-// An IPv6 endpoint has to be bracketed for wg to find the port. A disabled peer, or one that LuCI's
-// RPC, /raw or a shell stored, can hold one bracketed already, and without the guard "[fd00::1]"
-// became "[[fd00::1]]" and wg refused the peer.
+// An IPv6 endpoint has to be bracketed for wg to find the port. A peer that LuCI's RPC, /raw or a
+// shell stored can hold one bracketed already, and without the guard "[fd00::1]" became
+// "[[fd00::1]]" and wg refused the peer.
 function endpoint_arg(host, port) {
 	if (index(host, ":") >= 0 && substr(host, 0, 1) != "[")
 		host = "[" + host + "]";
@@ -140,6 +140,15 @@ function remove_peer(iface, pubkey) {
 	return run([ "wg", "set", iface, "peer", pubkey, "remove" ]);
 }
 
+// A peer stored before 3.2.0 can hold an IPv6 prefix length of more than three digits, such as
+// /0064, which the check then took and `ip route` installed. Only digits reach the shell, and the
+// same text withdraws the route.
+function legacy_v6_prefix(a) {
+	let parts = split(a, "/");
+	return length(parts) == 2 && values.is_valid_ipv6(parts[0]) && match(parts[1], /^[0-9]+$/) != null
+	       && int(parts[1]) <= 128;
+}
+
 // `route_allowed_ips` asks netifd to install a route per allowed IP, which it
 // does from the proto handler, so a peer-level apply has to install them too or
 // the peer is present in the kernel with no path to it. Mirrors the mapping in
@@ -151,7 +160,7 @@ function route_prefix(allowed_ip) {
 	// a rollback would leave it in place. Both spellings are accepted on input.
 	if (allowed_ip == "default") return null;
 	let v6 = index(allowed_ip, ":") >= 0;
-	if (values.is_valid_cidr_any(allowed_ip)) return { prefix: allowed_ip, v6: v6 };
+	if (values.is_valid_cidr_any(allowed_ip) || legacy_v6_prefix(allowed_ip)) return { prefix: allowed_ip, v6: v6 };
 	if (values.is_valid_ip(allowed_ip))
 		return { prefix: allowed_ip + (v6 ? "/128" : "/32"), v6: v6 };
 	return null;
