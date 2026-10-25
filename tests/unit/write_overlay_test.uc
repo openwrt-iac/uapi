@@ -20,7 +20,9 @@ function errors_on(mod, c, o, value) {
 	let view = mod.fromUci({ '.name': c.id, '.anonymous': false, ...c.section }, conn);
 	delete view.runtime;
 	let v = o.element ? [ value ] : value;
-	return filter(mod.validate(set_path(view, o.parts, v), conn, c.id, set_path({}, o.parts, v)) ?? [],
+	let json = set_path(view, o.parts, v);
+	return filter([ ...(mod.validate(json, conn, c.id, set_path({}, o.parts, v)) ?? []),
+	                ...(mod.validate_new?.(json) ?? []) ],
 	              (e) => e.field == o.field);
 }
 

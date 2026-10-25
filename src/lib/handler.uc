@@ -286,30 +286,22 @@ check_schema_types = function(schema_properties, body, prefix) {
 // `delta` is what the request itself named, for checks that must not fire on a field the caller
 // never sent: a PATCH that switches network/interfaces away from static still carries the old
 // addresses in its merged view, and refusing them there would make the switch impossible.
-// `write` tells a resource which of its rules a write must check. A rule names the fields that it
-// reads, and a write checks it when it changes one of them from the section as it was, or when it
-// enables a disabled section: a value that the write leaves alone never blocks it, so disabling a
-// broken section always works. The sweep checks every rule against the stored section, disabled
-// ones included. `before` is the section as a read shows it, with its write-only fields as uci
-// holds them, and is null on a create.
-function write_scope(before, sweep) {
-	let changes = function(json, fields) {
-		if (before == null) return true;
-		for (let f in fields)
-			if (sprintf("%J", json[f]) != sprintf("%J", before[f])) return true;
-		return false;
-	};
-	return {
-		sweep: sweep,
-		changes: changes,
-		applies: function(json, fields) {
-			return sweep || before == null || (json.disabled !== true && before.disabled === true)
-			       || changes(json, fields);
-		},
-	};
+// A resource's validate_new() holds rules that a stored value can fail, such as a value that a
+// daemon reads as a config line. Its rules see the section as if it were enabled, because another
+// writer, such as LuCI, can enable it later. A write is refused only for an error that it adds:
+// one that the section as it was, carried write-only fields included, does not have. So a write
+// that leaves a stored value alone, disabling included, is never refused for it, while a write
+// that makes a stored value break, by turning a daemon option on for instance, is. Enabling a
+// disabled section counts every error as new. The sweep passes no `before`, so it lists all.
+function new_errors(resource, after, before) {
+	let errs = resource.validate_new(after) ?? [];
+	if (before == null || (before.disabled === true && after.disabled !== true)) return errs;
+	let had = {};
+	for (let e in resource.validate_new(before) ?? []) had[sprintf("%s|%s|%s", e.field, e.code, e.message)] = true;
+	return filter(errs, (e) => !had[sprintf("%s|%s|%s", e.field, e.code, e.message)]);
 }
 
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, write) {
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -322,7 +314,9 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta, write ?? write_scope(null, false));
+	let val_errs = resource.validate(validate_body, conn, id, delta);
+	if (resource.validate_new != null)
+		val_errs = [ ...(val_errs ?? []), ...new_errors(resource, validate_body, before) ];
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -833,16 +827,16 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
-				let found = existing != null && type_predicate(existing['.type']);
-				let existing_view = found ? resource.fromUci(existing, conn) : null;
 				let write_body = carry_write_only(resource, body, existing);
-				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body,
-				                                 write_scope(found ? carry_write_only(resource, existing_view, existing) : null, false));
+				let before = (resource.validate_new != null && existing && type_predicate(existing['.type']))
+				             ? carry_write_only(resource, resource.fromUci(existing, null), existing) : null;
+				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!found)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
+				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -900,7 +894,7 @@ function make(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 write_scope(carry_write_only(resource, existing_view, existing), false));
+				                                 carry_write_only(resource, existing_view, existing));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1033,7 +1027,7 @@ function make(resource, opts) {
 			try {
 				view = resource.fromUci(s, conn);
 				let body = carry_write_only(resource, view, s);
-				errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
+				errs = _validate_with_schema(resource, body, body, conn, id, view);
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1129,7 +1123,7 @@ function make_singleton(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 write_scope(synthesized ? null : carry_write_only(resource, existing_view, existing), false));
+				                                 synthesized ? null : carry_write_only(resource, existing_view, existing));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1161,7 +1155,7 @@ function make_singleton(resource, opts) {
 		try {
 			view = resource.fromUci(s, conn);
 			let body = carry_write_only(resource, view, s);
-			errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
+			errs = _validate_with_schema(resource, body, body, conn, id, view);
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}
