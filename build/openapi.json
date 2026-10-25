@@ -28540,7 +28540,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash or a control character is refused"
+						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. An IPv6 address can carry a %zone. A peer that is not disabled takes no other form"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28628,7 +28628,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash or a control character is refused"
+						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. An IPv6 address can carry a %zone. A peer that is not disabled takes no other form"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28668,6 +28668,24 @@
 					"interface",
 					"public_key",
 					"allowed_ips"
+				],
+				"allOf": [
+					{
+						"if": {
+							"properties": {
+								"disabled": {
+									"const": false
+								}
+							}
+						},
+						"then": {
+							"properties": {
+								"endpoint_host": {
+									"pattern": "^[A-Za-z0-9_.%:-]*$"
+								}
+							}
+						}
+					}
 				]
 			},
 			"WirelessDevicesResponse": {

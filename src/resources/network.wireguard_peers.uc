@@ -54,26 +54,29 @@ function interface_exists_with_wg_proto(conn, name) {
 }
 
 // iproute2 reads a prefix length in base 0 and wg in base 10, so `/010` is /8 to `ip route` and
-// /10 to wg, and `ip route` refuses `/08`. The route for the allowed IP then covers another
-// prefix, or none. `/00` to `/07` read the same in both.
+// /10 to wg, and `ip route` refuses `/08`. `/00` to `/07` read the same in both.
 function octal_prefix_mismatch(a) {
-	let len = match(a, /\/(0[0-9]+)$/)?.[1];
-	if (len == null) return false;
-	if (match(len, /[89]/)) return true;
-	let oct = 0;
-	for (let i = 0; i < length(len); i++) oct = oct * 8 + int(substr(len, i, 1));
-	return oct != int(len);
+	return match(a, /\/0[0-9]+$/) != null && match(a, /\/0+[0-7]?$/) == null;
 }
 
-// A rule that a stored value can fail is checked only when the request changes the value, as uci
-// holds it: a PUT sends a read back, and refusing what it does not change would refuse every write
-// of a peer that LuCI or an older uapi stored, a write that only disables it included. A backslash
-// or a control character in endpoint_host is refused whatever the request changes, because it
-// adds a peer at every ifup while it is stored.
-function validate(json, conn, id) {
+// wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a backslash in
+// the host is an escape: `\n[Peer]` in plain text added a peer that no read showed, at the next
+// ifup. It also brackets every host with a colon, and wg reads `#` as a comment, so any host that
+// is not a name or an address fails the whole tunnel. A name or an address holds only these
+// characters, and a colon only in an IPv6 address, which can carry a %zone.
+const HOST_PATTERN = "^[A-Za-z0-9_.%:-]*$";
+function endpoint_host_ok(host) {
+	if (!match(host, regexp(HOST_PATTERN))) return false;
+	if (index(host, ":") < 0) return index(host, "%") < 0;
+	let zoned = match(host, /^([^%]+)(%[^%]+)?$/);
+	return zoned != null && values.is_valid_ipv6(zoned[1]);
+}
+
+// The rules describe the peer as wg and `ip route` will read it once the write is applied, stored
+// values included. netifd builds no disabled peer and uapi removes one from the kernel, so a
+// disabled peer is not checked, and disabling a broken or injected one is always possible.
+function validate(json, conn) {
 	let errs = [];
-	let s = (conn != null && id != null) ? conn.uci_get("network", id) : null;
-	let same = (a, b) => sprintf("%J", a) == sprintf("%J", b);
 
 	if (json.interface == null || json.interface == "")
 		push(errs, { field: "interface", code: "required",
@@ -83,35 +86,30 @@ function validate(json, conn, id) {
 		push(errs, { field: "public_key", code: "required",
 		             message: "is required" });
 
-	// wg accepts an IPv4 or IPv6 prefix, or a bare address of either family which
-	// it widens to /32 or /128. Requiring IPv4 CIDR rejected every IPv6 peer, so
-	// a dual-stack tunnel could not be configured through the API at all, and
-	// refused the bare form that `wg show` itself prints back.
 	let aips = as_list(json.allowed_ips);
 	if (length(aips) == 0)
 		push(errs, { field: "allowed_ips", code: "required",
 		             message: "must be a non-empty list of addresses or CIDRs" });
-	if (!same(aips, as_word_list_or_null(s?.allowed_ips) ?? []))
+
+	if (json.disabled !== true) {
+		// wg accepts an IPv4 or IPv6 prefix, or a bare address of either family which
+		// it widens to /32 or /128. Requiring IPv4 CIDR rejected every IPv6 peer, so
+		// a dual-stack tunnel could not be configured through the API at all, and
+		// refused the bare form that `wg show` itself prints back.
 		for (let i = 0; i < length(aips); i++) {
 			if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 				push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
 				             message: "must be an IPv4 or IPv6 address or CIDR" });
-			else if (octal_prefix_mismatch(aips[i]))
+			else if (json.route_allowed_ips === true && octal_prefix_mismatch(aips[i]))
 				push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
-				             message: "must not start its prefix length with 0: ip route reads it as octal, and wg as decimal" });
+				             message: "must not start its prefix length with 0 when route_allowed_ips is on: ip route reads it as octal, and wg as decimal" });
 		}
 
-	// wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a backslash
-	// in the host is an escape: `\n[Peer]` in plain text added a peer that no read showed, at the
-	// next ifup. It also brackets every host with a colon, so a bracketed IPv6 address reaches wg
-	// as `[[...]]` and the whole tunnel fails at ifup. No host name or address holds a space.
-	let host = json.endpoint_host;
-	if (type(host) == "string" && (index(host, "\\") >= 0 || values.has_control_chars(host)))
-		push(errs, { field: "endpoint_host", code: "invalid_format",
-		             message: "must not contain a backslash or a control character: wireguard.sh expands escapes in the config it gives wg" });
-	else if (type(host) == "string" && !same(host, s?.endpoint_host) && match(host, /[][ ]/))
-		push(errs, { field: "endpoint_host", code: "invalid_format",
-		             message: "must be a hostname or an IP address, without brackets or spaces: wireguard.sh brackets an IPv6 address itself" });
+		let host = json.endpoint_host;
+		if (type(host) == "string" && host != "" && !endpoint_host_ok(host))
+			push(errs, { field: "endpoint_host", code: "invalid_format",
+			             message: "must be a host name or an IP address, with a colon or a %zone only in an IPv6 one: wireguard.sh expands escapes and brackets the host, and wg reads # as a comment" });
+	}
 
 	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
 	// as 0.
@@ -215,6 +213,10 @@ return {
 	openapi_singular: "wireguard peer",
 	merge_for_patch: merge_for_patch,
 	openapi_required: ["interface", "public_key", "allowed_ips"],
+	openapi_write_conditional: [
+		{ if:   { properties: { disabled: { const: false } } },
+		  then: { properties: { endpoint_host: { pattern: HOST_PATTERN } } } },
+	],
 	schema_properties: {
 		interface:            { type: "string",
 		                        description: "Parent WireGuard interface (network/interfaces name with proto=wireguard)" },
@@ -227,7 +229,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint hostname or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A backslash or a control character is refused" },
+		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. An IPv6 address can carry a %zone. A peer that is not disabled takes no other form" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

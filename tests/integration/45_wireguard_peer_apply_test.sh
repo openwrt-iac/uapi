@@ -131,17 +131,22 @@ $SSH "uci show network | grep -q nx.invalid" && fail "bad peer was not rolled ba
 # that never passed validate(). It has to read them as wireguard.sh does, and run nothing.
 echo "--- a restore applies a hand-written peer as wireguard.sh would, and runs nothing from it ---"
 SIB=$($SSH 'wg genkey | wg pubkey')
-$SSH "rm -f /tmp/uapi45_ran; uci set network.uapi45sib=wireguard_$IFACE; uci set network.uapi45sib.public_key='$SIB';
+SIB2=$($SSH 'wg genkey | wg pubkey')
+$SSH "rm -f /tmp/uapi45_ran /tmp/uapi45_ep; uci set network.uapi45sib=wireguard_$IFACE; uci set network.uapi45sib.public_key='$SIB';
 	uci set network.uapi45sib.allowed_ips=10.98.99.60/32; uci set network.uapi45sib.endpoint_host=198.51.100.7;
 	uci set network.uapi45sib.endpoint_port=https; uci set network.uapi45sib.persistent_keepalive='0;touch /tmp/uapi45_ran';
+	uci set network.uapi45sib2=wireguard_$IFACE; uci set network.uapi45sib2.public_key='$SIB2';
+	uci set network.uapi45sib2.allowed_ips=10.98.99.62/32; uci set network.uapi45sib2.endpoint_port=51820;
+	uci set network.uapi45sib2.endpoint_host='x\$(touch\${IFS}/tmp/uapi45_ep)y';
 	uci commit network"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
 	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$SIB" '$1 == k { print $2 }')
-$SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove"
+$SSH "uci delete network.uapi45sib; uci delete network.uapi45sib2; uci commit network; wg set $IFACE peer '$SIB' remove"
 $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
+$SSH "[ ! -e /tmp/uapi45_ep ]" || fail "a stored endpoint_host ran as a shell command"
 [ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
 
 # Rotating a key leaves the kernel holding the previous peer under the old key
@@ -185,32 +190,28 @@ $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 	&& fail "endpoint_host was interpolated into the shell and executed"
 
 # int() read "::/0;id>uapi45_route;" as ::/0, and the DELETE of a disabled peer handed the stored
-# prefix to `ip route del` through a shell, which ran `id` as root. wireguard.sh expands the
-# escapes of the config it gives `wg syncconf`, so a plain-text \n in endpoint_host added a peer.
-# The stored peer below no longer reaches `ip route`, because route_prefix drops its prefix, so
-# this step guards the check and not the quoting. The unit tests run each command through a
-# real shell for that.
-echo "--- an allowed IP with a tail, or an escape in endpoint_host, is refused, and a stored one runs nothing ---"
+# prefix to `ip route del` through a shell, which ran `id` as root. A disabled peer is not checked,
+# since nothing reads it, so the POST still stores the prefix, and the DELETE must run nothing.
+# wireguard.sh expands the escapes of the config it gives `wg syncconf`, so an enabled peer with
+# a plain-text \n in endpoint_host, or a host that breaks the config, is refused.
+echo "--- a stored allowed IP with a tail runs nothing, and an enabled peer with a broken host is refused ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"::/0;id>uapi45_route;\"],
 	    \"route_allowed_ips\":true,\"disabled\":true}")
-[ "$(status_of "$r")" = "422" ] || fail "allowed IP with a tail expected 422, got $(status_of "$r"): $(body_of "$r")"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d '{"interface":"'"$IFACE"'","public_key":"'"$PEER3"'","allowed_ips":["10.98.99.33/32"],
-	    "endpoint_host":"192.0.2.1\\0072443\\n[Peer]","endpoint_port":51820}')
-[ "$(status_of "$r")" = "422" ] || fail "endpoint_host with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.34/32\"],
-	    \"endpoint_host\":\"[fd00::1]\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "422" ] || fail "a bracketed endpoint_host expected 422, got $(status_of "$r"): $(body_of "$r")"
-ROUTE_PEER=$($SSH 'wg genkey | wg pubkey')
-$SSH "uci set network.uapi45rt=wireguard_$IFACE; uci set network.uapi45rt.public_key='$ROUTE_PEER'
-	uci add_list network.uapi45rt.allowed_ips='::/0;id>uapi45_route;'
-	uci set network.uapi45rt.route_allowed_ips=1; uci set network.uapi45rt.disabled=1; uci commit network"
-r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45rt")
-[ "$(status_of "$r")" = "204" ] || fail "DELETE of the stored peer: $(body_of "$r")"
+[ "$(status_of "$r")" = "200" ] || fail "POST of a disabled peer: $(body_of "$r")"
+rid=$(id_of "$r")
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$rid" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "enabling a peer with a prefix tail expected 422, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X DELETE "$URL/network/wireguard_peers/$rid")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of the disabled peer: $(body_of "$r")"
 ran=$($SSH "find / /tmp -xdev -name uapi45_route 2>/dev/null")
 [ -z "$ran" ] || { $SSH "rm -f $ran"; fail "a stored allowed IP ran as a shell command: $ran"; }
+for host in '192.0.2.1\\0072443\\n[Peer]' '[fd00::1]' 'vpn.example.com#1'; do
+	r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+		-d '{"interface":"'"$IFACE"'","public_key":"'"$PEER3"'","allowed_ips":["10.98.99.33/32"],
+		    "endpoint_host":"'"$host"'","endpoint_port":51820}')
+	[ "$(status_of "$r")" = "422" ] || fail "endpoint_host $host expected 422, got $(status_of "$r"): $(body_of "$r")"
+done
 
 # route_allowed_ips means "install routes for this peer's allowed IPs". netifd
 # does that from its proto handler, so without it here the peer sits in the

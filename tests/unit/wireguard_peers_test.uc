@@ -138,32 +138,46 @@ t.describe('network.wireguard_peers.validate', () => {
 		                    [ 'invalid_format' ]);
 	});
 
-	t.it('refuses a prefix length that ip route reads as octal and wg as decimal', () => {
-		function aip_codes(a) {
+	t.it('refuses a prefix length that ip route reads as octal and wg as decimal, when it routes them', () => {
+		function aip_codes(a, routed) {
 			return map(filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-			                                 allowed_ips: [a] }, null),
+			                                 allowed_ips: [a], route_allowed_ips: routed }, null),
 			                  (e) => e.field == 'allowed_ips[0]'), (e) => e.code);
 		}
-		for (let a in [ 'fd00::/012', '10.0.0.0/08', 'fd00::/010' ])
-			t.assert_deep_equal(aip_codes(a), [ 'invalid_format' ], a);
-		for (let a in [ 'fd00::/07', '10.0.0.0/00', 'fd00::/64' ])
-			t.assert_deep_equal(aip_codes(a), [], a);
+		for (let a in [ 'fd00::/012', '10.0.0.0/08', 'fd00::/010', '10.0.0.0/09' ]) {
+			t.assert_deep_equal(aip_codes(a, true), [ 'invalid_format' ], a);
+			t.assert_deep_equal(aip_codes(a, false), [], a);
+		}
+		for (let a in [ 'fd00::/07', '10.0.0.0/00', 'fd00::/007', 'fd00::/64' ])
+			t.assert_deep_equal(aip_codes(a, true), [], a);
 	});
 
 	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
 	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
-	// with a colon, so a bracketed one reaches wg as `[[...]]`. Anything else is left to wg, as
-	// before.
-	t.it('refuses an escape, a control character, brackets or a space in endpoint_host', () => {
+	// with a colon, and wg reads `#` as a comment.
+	t.it('takes a host name or an address as endpoint_host, and refuses what breaks the config', () => {
 		function host_errs(h) {
 			return filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			                             allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
-		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
+		for (let h in [ 'vpn.example.com', 'host_1', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[fd00::1]', '[vpn.example.com]' ])
+		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[fd00::1]', '[vpn.example.com]',
+		                'vpn.example.com#1', 'vpn.example.com:51820', 'vpn%wan', 'x$(id)y', 'fd00::1%' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
+	});
+
+	t.it('refuses an escape in allowed_ips, which wireguard.sh expands too', () => {
+		let errs = wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+		                          allowed_ips: [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ] }, null);
+		t.assert_deep_equal(map(filter(errs, (e) => e.field == 'allowed_ips[0]'), (e) => e.code), [ 'invalid_format' ]);
+	});
+
+	// netifd builds no disabled peer and uapi removes one from the kernel.
+	t.it('checks neither allowed_ips nor endpoint_host on a disabled peer', () => {
+		t.assert_deep_equal(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+		                                   allowed_ips: [ 'garbage' ], endpoint_host: '[fd00::1]', disabled: true }, null), []);
 	});
 
 	t.it('accepts a dual-stack peer', () => {
@@ -211,28 +225,35 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
-	// A peer stored with a value that is no longer taken must stay easy to disable or revoke, by
-	// PATCH or by a PUT of its read.
-	t.it('a write that does not change a stored host or allowed IP is not refused for it', () => {
+	// A peer that wg cannot read is broken whatever the write changes, so a write that leaves it
+	// enabled is refused, and one that disables it is not.
+	t.it('a write that leaves a broken peer enabled is refused, and one that disables it passes', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
-		c._state.uci.network.g_existing.allowed_ips = [ 'fd00::/012' ];
 		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
 		let body = h.get_one(c, ctx(), 'g_existing').body;
 		for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
-		body.disabled = false;
 		t.assert_equal(h.replace(c, ctx(), 'g_existing', body).status, 200);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '[fd00::2]' }).status, 422);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ 'fd00::/013' ] }).status, 422);
+		body.disabled = false;
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', body).status, 422);
 		t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '[fd00::1]');
 	});
 
-	// The host adds a peer at every ifup while it holds an escape, so no write may carry it.
-	t.it('a write that carries a stored escape in endpoint_host is refused', () => {
-		let c = with_wg();
-		c._state.uci.network.g_existing.endpoint_host = '192.0.2.1\\n[Peer]';
-		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: true }).status, 422);
+	// A stored escape adds the peer again at every ifup while it is enabled, so the sweep lists the
+	// peer, and disabling it is the write that stops it.
+	t.it('a stored escape in an enabled peer is listed by the sweep, and disabling it passes', () => {
+		for (let extra in [ { endpoint_host: '192.0.2.1\\n[Peer]' },
+		                    { allowed_ips: [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ] } ]) {
+			let c = with_wg();
+			for (let k, v in extra) c._state.uci.network.g_existing[k] = v;
+			let h = make_handler();
+			t.assert_equal(length(h.sweep(c)), 1);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
+			t.assert_equal(length(h.sweep(c)), 0);
+		}
 	});
 
 	// preshared_key is masked on read, so a client that GETs a peer and PUTs it
