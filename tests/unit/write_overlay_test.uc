@@ -121,6 +121,18 @@ function matches(mod, c, cond) {
 	return true;
 }
 
+// A conditional that no fixture case meets is probed on every case with its `if` applied. The
+// fixtures seed each defaulted field off its default, so none is, for example, an enabled access
+// point.
+function coerced(c, cond) {
+	let section = { ...c.section };
+	for (let k, spec in cond.if?.properties ?? {}) {
+		let v = exists(spec, "const") ? spec.const : spec.enum?.[0];
+		section[k] = (type(v) == "bool") ? (v ? "1" : "0") : v;
+	}
+	return { ...c, section };
+}
+
 t.describe('property: every request-only keyword is a refusal in validate()', () => {
 	let found = 0;
 	let files = fs.lsdir('src/resources') ?? [];
@@ -136,6 +148,7 @@ t.describe('property: every request-only keyword is a refusal in validate()', ()
 			}
 		for (let cond in mod.openapi_write_conditional ?? []) {
 			let matching = filter(cases, (c) => matches(mod, c, cond));
+			if (length(matching) == 0) matching = map(cases, (c) => coerced(c, cond));
 			for (let field, spec in cond.then?.properties ?? {})
 				for (let o in bound_keywords(spec, [ field ], false, [])) {
 					found++;

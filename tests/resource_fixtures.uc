@@ -219,8 +219,9 @@ const CASES = [
 		           r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,00112233445566778899aabbccddeeff' ] },
 	},
 	{
-		// WPA1 with ieee80211r set, which wifi-scripts ignores below WPA2, so nasid is only the
-		// RADIUS NAS-Identifier and takes more than the 48 bytes of fast transition.
+		// WPA1 with ieee80211r set, which wifi-scripts ignores below WPA2. The write-overlay test
+		// probes it as an enabled AP, where nasid is only the RADIUS NAS-Identifier and takes more
+		// than the 48 bytes of fast transition.
 		file: "wireless.interfaces.uc", id: "w2", pkg: "wireless",
 		section: { disabled: '1', hidden: '1', isolate: '1', '.type': 'wifi-iface', device: 'radio0',
 		           mode: 'sta', ssid: 'corp', encryption: 'psk', key: 'correcthorse', ieee80211r: '1',
