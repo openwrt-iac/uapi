@@ -10,6 +10,7 @@ function full_validate(r, body, conn) {
 	let out = [];
 	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
+	for (let e in (r.validate_new != null) ? r.validate_new(body) : []) push(out, e);
 	return out;
 }
 
@@ -141,10 +142,10 @@ t.describe('network.wireguard_peers.validate', () => {
 	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
 	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
 	// with a colon. Any other host is left to wg, as before.
-	t.it('refuses an escape, a control character or brackets in endpoint_host', () => {
+	t.it('refuses an escape, a newline or brackets in endpoint_host', () => {
 		function host_errs(h) {
-			return filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-			                             allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
+			return filter(full_validate(wgp, { interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+			                                  allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
 		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
@@ -153,7 +154,8 @@ t.describe('network.wireguard_peers.validate', () => {
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
 		t.assert_equal(length(host_errs('vpn.example.com\t')), 0);
 		// wireguard.sh reads a list option as its words joined by spaces.
-		t.assert_deep_equal(map(host_errs([ '192.0.2.1\\n[Peer]' ]), (e) => e.code), [ 'invalid_format' ]);
+		t.assert_deep_equal(map(wgp.validate_new({ endpoint_host: [ '192.0.2.1\\n[Peer]' ] }), (e) => [ e.field, e.code ]),
+		                    [ [ 'endpoint_host', 'invalid_format' ] ]);
 	});
 
 	t.it('refuses an escape in allowed_ips, which wireguard.sh expands too', () => {
@@ -164,8 +166,8 @@ t.describe('network.wireguard_peers.validate', () => {
 
 	// LuCI's Enable writes only disabled=0, so a value stored on a disabled peer becomes live later.
 	t.it('refuses a broken value that a write sends to a disabled peer', () => {
-		t.assert_deep_equal(map(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
-		                                       allowed_ips: [ '::/0;id>x;' ], endpoint_host: '[fd00::1]', disabled: true }, null),
+		t.assert_deep_equal(map(full_validate(wgp, { interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+		                                             allowed_ips: [ '::/0;id>x;' ], endpoint_host: '[fd00::1]', disabled: true }, null),
 		                        (e) => e.field), [ 'allowed_ips[0]', 'endpoint_host' ]);
 	});
 
@@ -214,12 +216,12 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
-	// A write is never refused for a value that it leaves alone, so a broken or injected peer can
-	// always be disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it
-	// is refused until a write replaces the value.
-	t.it('a stored broken host or injection blocks only the write that enables the peer', () => {
+	// The handler compares the errors of the peer before and after the write, so a write is never
+	// refused for a stored host or key that it leaves as it is: a broken or injected peer can always
+	// be disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it is
+	// refused until a write replaces the value.
+	t.it('a stored broken host or key blocks only the write that enables the peer', () => {
 		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
-		                    { allowed_ips: [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ] },
 		                    { preshared_key: 'K\\n[Peer]' } ]) {
 			let c = with_wg();
 			for (let k, v in extra) c._state.uci.network.g_existing[k] = v;
@@ -230,6 +232,17 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			t.assert_equal(length(h.sweep(c)), 1, extra);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422, extra);
 		}
+	});
+
+	// allowed_ips keeps the rule it had on main: every write checks it, so the peer answers 422
+	// rather than letting wg refuse it with a 500.
+	t.it('a stored invalid allowed IP blocks every write until one replaces it', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.allowed_ips = [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ];
+		let h = make_handler();
+		t.assert_equal(length(h.sweep(c)), 1);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '10.42.0.2/32' ] }).status, 200);
 	});
 
 	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {

@@ -327,7 +327,9 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta, write ?? write_scope(null, false));
+	let val_errs = resource.validate(validate_body, conn, id, delta);
+	if (resource.validate_new != null)
+		val_errs = [ ...(val_errs ?? []), ...new_errors(resource, validate_body, before) ];
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -842,17 +844,16 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
-				let found = existing != null && type_predicate(existing['.type']);
-				let existing_view = found ? resource.fromUci(existing, conn) : null;
 				let write_body = carry_write_only(resource, body, existing);
 				let before = (resource.validate_new != null && existing && type_predicate(existing['.type']))
 				             ? carry_write_only(resource, resource.fromUci(existing, conn), existing) : null;
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!found)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
+				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -1043,7 +1044,7 @@ function make(resource, opts) {
 			try {
 				view = resource.fromUci(s, conn);
 				let body = carry_write_only(resource, view, s);
-				errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
+				errs = _validate_with_schema(resource, body, body, conn, id, view);
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1139,7 +1140,7 @@ function make_singleton(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 write_scope(synthesized ? null : carry_write_only(resource, existing_view, existing), false));
+				                                 synthesized ? null : carry_write_only(resource, existing_view, existing));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1171,7 +1172,7 @@ function make_singleton(resource, opts) {
 		try {
 			view = resource.fromUci(s, conn);
 			let body = carry_write_only(resource, view, s);
-			errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
+			errs = _validate_with_schema(resource, body, body, conn, id, view);
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}

@@ -143,9 +143,9 @@ endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$SIB" '$1 == k { print $2
 $SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove"
 $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
 
-# The restore gives a hand-written endpoint_host to `wg set`, which reads it as one argument. This is
-# the only device check of that quoting, because validate() refuses such a host on every write. It
-# runs alone, because the restore stops at the first peer that wg refuses.
+# The restore gives a hand-written endpoint_host to `wg set`, which must read it as one argument, as
+# the write path above does. It runs alone, because the restore stops at the first peer that wg
+# refuses.
 echo "--- a restore gives a hand-written endpoint_host to wg as one argument, and runs nothing from it ---"
 SIB2=$($SSH 'wg genkey | wg pubkey')
 $SSH "rm -f /tmp/uapi45_ep; uci set network.uapi45sib2=wireguard_$IFACE; uci set network.uapi45sib2.public_key='$SIB2';
@@ -186,7 +186,7 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 has_peer "$PEER4" || fail "re-enabled peer was not reinstalled"
 call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 
-# endpoint_host reaches a shell command. validate() refuses only escapes, control characters and
+# endpoint_host reaches a shell command. validate_new() refuses only escapes, newlines and
 # brackets in it, so this host reaches `wg set`, which must read it as one argument and fail to
 # resolve it. A regression here is remote command execution, not a cosmetic bug.
 echo "--- a command substitution in endpoint_host does not execute ---"
