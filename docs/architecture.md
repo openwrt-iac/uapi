@@ -185,14 +185,14 @@ request, and nothing new runs in the background.
 
 `src/lib/wg.uc` makes every value safe for the shell itself, on the value as uci
 stores it, because the restore after a failed write reads the peers straight
-from uci, where a value never passed `validate()`. `wg set` takes the public
-key, the allowed IPs and the endpoint through `shellquote`, and the port and
-the keepalive through `%d`. `ip route` takes the prefix, the interface name and
-the table name through `shellquote` too. wg.uc also checks them before it runs
-the command: `route_prefix` keeps an address or a CIDR and drops anything else,
-and the interface and table names must match `^[A-Za-z0-9_-]+$`. The checks
-alone were not enough: a prefix such as `::/0;id>x;` passed `route_prefix`,
-because the IPv6 prefix length was read with `int()`. A preshared key is
+from uci, where a value never passed `validate()`. Every `wg` and `ip` command
+is an argument list, and `run()` quotes each argument with `shellquote`, so no
+caller can forget one. wg.uc also checks the values before it runs a command:
+`route_prefix` keeps an address or a CIDR and drops anything else, and the
+interface and table names must match `^[A-Za-z0-9_-]+$`. The checks alone were
+not enough: a prefix such as `::/0;id>x;` passed `route_prefix`, because the
+IPv6 prefix length was read with `int()`, and `ip route` took it unquoted. A
+preshared key is
 passed as a `0600` file on tmpfs, never as an argument, so it never appears in
 `ps`.
 

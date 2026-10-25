@@ -40,12 +40,11 @@ What uapi defends against, what it doesn't, and what the operator should do.
    before interpolating, and uses `--` to separate flags from positional
    arguments. Service names from ucitrack are validated before
    interpolating into `/etc/init.d/<svc>`. The WireGuard apply path in
-   `src/lib/wg.uc` quotes keys, allowed IPs and the endpoint with
-   `shellquote`, and formats the port and the keepalive with `%d`, because
-   the restore after a failed write reads peers straight from uci, where a
-   value never passed `validate()`. Its `ip route` commands quote the
-   prefix, the interface name and the table name in the same way, and
-   wg.uc also checks each one before it runs them.
+   `src/lib/wg.uc` builds each `wg` and `ip` command as an argument list,
+   and one function quotes every argument with `shellquote`, because the
+   restore after a failed write reads peers straight from uci, where a
+   value never passed `validate()`. wg.uc also checks the values before it
+   runs a command.
 9. **Replay attacks on POST under network flakiness.** `Idempotency-Key`
    caches the response for 24 h; a network-blipped retry returns the cached
    response, not a duplicate side effect. Same key with a different body

@@ -138,17 +138,30 @@ t.describe('network.wireguard_peers.validate', () => {
 		                    [ 'invalid_format' ]);
 	});
 
-	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text
-	// `\n` became a line break inside the config that `wg syncconf` reads.
-	t.it('takes a hostname or an address as endpoint_host, and refuses an escape', () => {
+	t.it('refuses a prefix length with a leading zero, which ip route reads as octal', () => {
+		for (let a in [ 'fd00::/012', '10.0.0.0/08' ]) {
+			let errs = wgp.validate({
+				interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
+				allowed_ips: [a],
+			}, null);
+			t.assert_deep_equal(map(filter(errs, (e) => e.field == 'allowed_ips[0]'), (e) => e.code),
+			                    [ 'invalid_format' ], a);
+		}
+	});
+
+	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
+	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
+	// with a colon, so a bracketed one reaches wg as `[[...]]`.
+	t.it('takes a hostname or an address as endpoint_host, and refuses an escape or brackets', () => {
 		function host_errs(h) {
 			return filter(wgp.validate({ interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			                             allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
-		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', '[fd00::1]', '' ])
+		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%wan', '' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[vpn.example.com]', '[fd00::1' ])
+		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', 'vpn.example.com\nx', 'a b', '[fd00::1]',
+		                '[vpn.example.com]', '1.2.3', 'fe80::1%wan;x', 'vpn%wan' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
 	});
 
@@ -196,6 +209,16 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			},
 		});
 	}
+
+	// A peer stored with a host that is no longer taken must stay easy to disable or revoke.
+	t.it('PATCH that does not name endpoint_host leaves a stored one alone', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
+		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '[fd00::2]' }).status, 422);
+		t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '[fd00::1]');
+	});
 
 	// preshared_key is masked on read, so a client that GETs a peer and PUTs it
 	// back cannot send it. PUT is full-replace, so without the carry-forward the

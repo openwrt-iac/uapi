@@ -18,16 +18,21 @@ let values = require('values');
 const SAFE_IFACE_RE = /^[A-Za-z0-9_-]+$/;
 const PUBKEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
 
-// Same idiom as LuCI's wireguard backend: single-quote and escape embedded
-// quotes. The restore after a failed write reads peers straight from uci, where
-// no validate() ran, so a peer's strings reach `wg set` through here and its numbers
-// through %d.
+// Same idiom as LuCI's wireguard backend: single-quote and escape embedded quotes.
 function shellquote(s) {
 	return "'" + replace("" + (s ?? ""), "'", "'\\''") + "'";
 }
 
-function run(cmd) {
-	let p = fs.popen(cmd + " 2>&1", "r");
+// Every command goes through here with each argument quoted, so no caller has to remember to:
+// the restore after a failed write and the route withdraw read peers straight from uci, where no
+// validate() ran. route_cmd once put a prefix that passed its check unquoted into `ip route`, and
+// `::/0;id>x;` ran `id` as root.
+function command_line(argv) {
+	return join(" ", map(argv, shellquote));
+}
+
+function run(argv) {
+	let p = fs.popen(command_line(argv) + " 2>&1", "r");
 	if (p == null) return { ok: false, output: "could not exec wg" };
 	let output = p.read("all") ?? "";
 	let code = p.close();
@@ -66,7 +71,7 @@ function peer_sections(conn, iface) {
 // The first line describes the interface, not a peer. The preshared key is in
 // there, so this output must never be logged.
 function installed_pubkeys(iface) {
-	let r = run(sprintf("wg show %s dump", iface));
+	let r = run([ "wg", "show", iface, "dump" ]);
 	if (!r.ok) return null;
 	let keys = [];
 	let lines = split(r.output, "\n");
@@ -100,43 +105,39 @@ function psk_file(value) {
 // config. Keepalive and preshared key are always spelled out, with 0 and
 // /dev/null as the explicit clears, because `wg set` merges and would otherwise
 // leave a stale value behind that uci no longer has.
-// An IPv6 endpoint has to be bracketed for wg to find the port, but the caller
-// may already have bracketed it: that is the form `wg show endpoints` prints
-// back, so it round-trips straight into a PUT. Same guard upstream's handler
-// uses. Without it "[fd00::1]" became "[[fd00::1]]" and wg refused the peer.
+// An IPv6 endpoint has to be bracketed for wg to find the port. A peer stored before 3.2.0 can
+// hold one bracketed already, and without the guard "[fd00::1]" became "[[fd00::1]]" and wg
+// refused the peer.
 function endpoint_arg(host, port) {
 	if (index(host, ":") >= 0 && substr(host, 0, 1) != "[")
 		host = "[" + host + "]";
 	return sprintf("%s:%d", host, port);
 }
 
-function set_peer(iface, peer) {
-	let args = sprintf("wg set %s peer %s", iface, shellquote(peer.public_key));
-	args += " allowed-ips " + shellquote(join(",", peer.allowed_ips));
-	args += sprintf(" persistent-keepalive %d", peer.persistent_keepalive ?? 0);
+function set_peer_argv(iface, peer, psk_path) {
+	let argv = [ "wg", "set", iface, "peer", peer.public_key,
+	             "allowed-ips", join(",", peer.allowed_ips),
+	             "persistent-keepalive", sprintf("%d", peer.persistent_keepalive ?? 0),
+	             "preshared-key", psk_path ?? "/dev/null" ];
+	if (peer.endpoint_host != null && peer.endpoint_host != "")
+		push(argv, "endpoint", endpoint_arg(peer.endpoint_host, peer.endpoint_port ?? 51820));
+	return argv;
+}
 
+function set_peer(iface, peer) {
 	let psk_path = null;
 	if (peer.preshared_key != null && peer.preshared_key != "") {
 		psk_path = psk_file(peer.preshared_key);
 		if (psk_path == null)
 			return { ok: false, output: "could not stage the preshared key" };
-		args += " preshared-key " + psk_path;
 	}
-	else
-		args += " preshared-key /dev/null";
-
-	if (peer.endpoint_host != null && peer.endpoint_host != "") {
-		args += " endpoint " + shellquote(endpoint_arg(peer.endpoint_host,
-		                                                peer.endpoint_port ?? 51820));
-	}
-
-	let r = run(args);
+	let r = run(set_peer_argv(iface, peer, psk_path));
 	if (psk_path != null) fs.unlink(psk_path);
 	return r;
 }
 
 function remove_peer(iface, pubkey) {
-	return run(sprintf("wg set %s peer %s remove", iface, shellquote(pubkey)));
+	return run([ "wg", "set", iface, "peer", pubkey, "remove" ]);
 }
 
 // `route_allowed_ips` asks netifd to install a route per allowed IP, which it
@@ -148,7 +149,7 @@ function route_prefix(allowed_ip) {
 	// The kernel prints 0.0.0.0/0 and ::/0 as "default", so a route we installed
 	// from a catch-all peer would not be recognised when reading state back, and
 	// a rollback would leave it in place. Both spellings are accepted on input.
-	if (allowed_ip == "default") return null;
+	if (allowed_ip == "default" || match(allowed_ip, values.LEADING_ZERO_LEN_RE)) return null;
 	let v6 = index(allowed_ip, ":") >= 0;
 	if (values.is_valid_cidr_any(allowed_ip)) return { prefix: allowed_ip, v6: v6 };
 	if (values.is_valid_ip(allowed_ip))
@@ -185,13 +186,11 @@ function route_table(conn, iface, v6) {
 // Spelled to match what netifd installs, verified against a real interface:
 // `<prefix> proto static scope link dev <iface>` for v4, and the same without a
 // scope for v6, where iproute2's default metric 1024 is what netifd ends up with.
-// The prefix comes from uci on the withdraw path, where no validate() ran.
 function route_cmd(verb, iface, r, table) {
-	let cmd = sprintf("ip %sroute %s %s dev %s proto static",
-	                  r.v6 ? "-6 " : "", verb, shellquote(r.prefix), shellquote(iface));
-	if (!r.v6) cmd += " scope link";
-	if (table != null) cmd += " table " + shellquote(table);
-	return cmd;
+	let argv = [ "ip", ...(r.v6 ? [ "-6" ] : []), "route", verb, r.prefix, "dev", iface, "proto", "static" ];
+	if (!r.v6) push(argv, "scope", "link");
+	if (table != null) push(argv, "table", table);
+	return argv;
 }
 
 // Routes are shared: two peers can carry overlapping allowed_ips, and a
@@ -223,9 +222,8 @@ function installed_routes(conn, iface) {
 	let out = [];
 	for (let v6 in [false, true]) {
 		let table = route_table(conn, iface, v6);
-		let cmd = sprintf("ip %sroute show dev %s proto static", v6 ? "-6 " : "", shellquote(iface));
-		if (table != null) cmd += " table " + shellquote(table);
-		let r = run(cmd);
+		let r = run([ "ip", ...(v6 ? [ "-6" ] : []), "route", "show", "dev", iface, "proto", "static",
+		              ...(table != null ? [ "table", table ] : []) ]);
 		if (!r.ok) continue;
 		for (let line in split(r.output, "\n")) {
 			let first = split(trim(line), " ")[0];
@@ -386,4 +384,4 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg,
-         route_prefixes: routes_from, route_table, route_cmd };
+         route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line };

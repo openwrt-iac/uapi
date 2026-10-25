@@ -28540,7 +28540,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, or an IPv6 address in brackets, as `wg show endpoints` prints it"
+						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, without brackets. An IPv6 address can carry a %zone, such as fe80::1%wan"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28628,7 +28628,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, or an IPv6 address in brackets, as `wg show endpoints` prints it"
+						"description": "Remote endpoint hostname or IP address, as LuCI's `host` datatype takes it, without brackets. An IPv6 address can carry a %zone, such as fe80::1%wan"
 					},
 					"endpoint_port": {
 						"type": [

@@ -172,12 +172,15 @@ has_peer "$PEER4" || fail "re-enabled peer was not reinstalled"
 call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 
 # endpoint_host reaches a shell command, so it is quoted as well as validated. A
-# regression here is remote command execution, not a cosmetic bug.
-echo "--- a command substitution in endpoint_host does not execute ---"
+# regression here is remote command execution, not a cosmetic bug. The validation now refuses it
+# before any shell runs, so the quoting itself is covered by the unit tests, which run each
+# command through a real shell.
+echo "--- a command substitution in endpoint_host is refused and does not execute ---"
 $SSH "rm -f /tmp/uapi-wg-injection" >/dev/null 2>&1
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.32/32\"],
 	    \"endpoint_host\":\"x\$(touch /tmp/uapi-wg-injection)y\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "422" ] || fail "endpoint_host with a command substitution expected 422, got $(status_of "$r")"
 $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 	&& fail "endpoint_host was interpolated into the shell and executed"
 
@@ -193,13 +196,17 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 	-d '{"interface":"'"$IFACE"'","public_key":"'"$PEER3"'","allowed_ips":["10.98.99.33/32"],
 	    "endpoint_host":"192.0.2.1\\0072443\\n[Peer]","endpoint_port":51820}')
 [ "$(status_of "$r")" = "422" ] || fail "endpoint_host with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.34/32\"],
+	    \"endpoint_host\":\"[fd00::1]\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "422" ] || fail "a bracketed endpoint_host expected 422, got $(status_of "$r"): $(body_of "$r")"
 ROUTE_PEER=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45rt=wireguard_$IFACE; uci set network.uapi45rt.public_key='$ROUTE_PEER'
 	uci add_list network.uapi45rt.allowed_ips='::/0;id>uapi45_route;'
 	uci set network.uapi45rt.route_allowed_ips=1; uci set network.uapi45rt.disabled=1; uci commit network"
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45rt")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of the stored peer: $(body_of "$r")"
-ran=$($SSH "find / -xdev -name uapi45_route 2>/dev/null")
+ran=$($SSH "find / /tmp -xdev -name uapi45_route 2>/dev/null")
 [ -z "$ran" ] || { $SSH "rm -f $ran"; fail "a stored allowed IP ran as a shell command: $ran"; }
 
 # route_allowed_ips means "install routes for this peer's allowed IPs". netifd
