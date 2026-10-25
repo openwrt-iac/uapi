@@ -50,7 +50,7 @@ The second line is not redundant. Installing from a file pins `/etc/apk/world` t
 build, and `apk upgrade` then skips uapi silently; `apk add uapi` restores feed tracking. See
 `docs/installation.md` for how to tell which state a box is in.
 
-The package's `uci-defaults` hook adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance) and restarts uhttpd. After that, `/api/v3/healthz` is reachable on the same ports as LuCI.
+The package's `uci-defaults` hook adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main` instance), and the install then restarts uhttpd if it is enabled. After that, `/api/v3/healthz` is reachable on the same ports as LuCI.
 
 ## First token
 

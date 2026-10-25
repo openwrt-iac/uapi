@@ -14,7 +14,7 @@ apk add /path/to/uapi-<version>-r1.apk
 
 The post-install hook will:
 
-1. Run `/etc/uci-defaults/99-uapi` which adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main` and restarts uhttpd.
+1. Run `/etc/uci-defaults/99-uapi`, which adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so that it loads the new code. Both the hook's reload and this restart run only when uhttpd is enabled, because on OpenWrt either one starts a stopped uhttpd, and an operator disables it when another web server owns the ports.
 2. Delete itself.
 3. Print the bootstrap message (first install only; suppressed on upgrade or reinstall).
 
@@ -127,4 +127,4 @@ uci commit uhttpd
 apk del uapi
 ```
 
-The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and reloads uhttpd. `/etc/config/uapi` (the token store) is conffile-marked and preserved across removal and upgrades. To wipe tokens: `rm /etc/config/uapi` after removal.
+The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and reloads uhttpd if it is enabled. `/etc/config/uapi` (the token store) is conffile-marked and preserved across removal and upgrades. To wipe tokens: `rm /etc/config/uapi` after removal.

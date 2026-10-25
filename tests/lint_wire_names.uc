@@ -1,7 +1,7 @@
 #!/usr/bin/ucode
 
-// An API field whose name is not the uci option it writes. Two shapes hide here and only
-// one is harmless.
+// An API field whose name is not the uci option it writes. Three shapes hide here, and only
+// the alias is a defect.
 //
 // A rename is one API name for one uci key, spelled to the wire's conventions rather than
 // uci's: `resource_limits` for uci's `resource`, `sys_location` for `sysLocation`. Those are

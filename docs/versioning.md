@@ -76,7 +76,7 @@ There is no parallel mount; we don't carry two surface areas in a single binary 
 
 ## `/raw/` stability
 
-URL structure, verbs, auth/scope behavior, and error envelope are v1-stable. Payload shape follows uci, which is OpenWrt's moving target; if OpenWrt changes the `firewall` package schema, `/raw/firewall/...` payloads change with it. Documented loudly so users don't expect curated-level stability from raw. See `docs/raw.md` for the full stability disclaimer.
+URL structure, verbs, auth/scope behavior, and error envelope are stable within a package major. Payload shape follows uci, which is OpenWrt's moving target; if OpenWrt changes the `firewall` package schema, `/raw/firewall/...` payloads change with it. Documented loudly so users don't expect curated-level stability from raw. See `docs/raw.md` for the full stability disclaimer.
 
 ## OpenAPI spec versioning
 
