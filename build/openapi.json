@@ -29105,7 +29105,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier. Unset, hostapd uses the BSSID without colons. A write takes at most 48 bytes with no control character"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write takes no control character, and with ieee80211r on at most 48 bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29205,7 +29205,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key that a write sends has no control character, and with psk, psk2, psk-mixed, sae or sae-mixed it is 8 to 63 bytes or 64 hex digits, which is what wifi-scripts accepts"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. With psk, psk2, psk-mixed, sae or sae-mixed, a key that a write sends, or that it moves to another encryption or mode, is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29413,8 +29413,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier. Unset, hostapd uses the BSSID without colons. A write takes at most 48 bytes with no control character",
-						"maxLength": 48
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write takes no control character, and with ieee80211r on at most 48 bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 printable ASCII characters and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -29449,7 +29448,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key that a write sends has no control character, and with psk, psk2, psk-mixed, sae or sae-mixed it is 8 to 63 bytes or 64 hex digits, which is what wifi-scripts accepts"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key has no control character. With psk, psk2, psk-mixed, sae or sae-mixed, a key that a write sends, or that it moves to another encryption or mode, is what the daemon takes: in mode ap, 8 to 63 bytes, or 64 hex digits except with sae and sae-mixed; in sta and adhoc, 8 to 63 bytes except with sae; in mesh, any length"
 					},
 					"r0kh": {
 						"type": "array",
@@ -29472,6 +29471,27 @@
 				},
 				"required": [
 					"device"
+				],
+				"allOf": [
+					{
+						"if": {
+							"properties": {
+								"ieee80211r": {
+									"const": true
+								}
+							},
+							"required": [
+								"ieee80211r"
+							]
+						},
+						"then": {
+							"properties": {
+								"nasid": {
+									"maxLength": 48
+								}
+							}
+						}
+					}
 				]
 			},
 			"DhcpHostsResponse": {

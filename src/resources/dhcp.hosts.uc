@@ -3,7 +3,6 @@ let shell_bool = values.shell_bool;
 let as_list_or_null = values.as_list_or_null;
 let is_valid_ip = values.is_valid_ip;
 
-const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
 const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
 const DUID_RE = /^[0-9A-Fa-f]{2}([:]?[0-9A-Fa-f]{2})+$/;
 const IPV6_HOSTID_RE = /^[0-9A-Fa-f:]+$/;
@@ -75,7 +74,7 @@ function validate(json, conn) {
 		             message: "either macs (for DHCPv4) or duid (for DHCPv6) is required" });
 
 	for (let i = 0; i < length(macs); i++) {
-		if (!match(macs[i], MAC_RE))
+		if (!match(macs[i], values.MAC_RE))
 			push(errs, { field: sprintf("macs[%d]", i), code: "invalid_format",
 			             message: "must be a MAC address like 00:11:22:33:44:55" });
 	}
