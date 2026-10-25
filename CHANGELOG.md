@@ -27,16 +27,19 @@ All notable changes to this project will be documented in this file. Format foll
   `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
   `no`. (#208)
 
-- **`wireless/devices` and `wireless/interfaces` model the options that `wifi config` and
-  LuCI store on a radio and an SSID.** A PUT replaces the section with what the resource models,
-  so a PUT of the read deleted them, and an IaC client updates with PUT. Without `path`, which
-  `wifi config` writes for every radio whose phy is named `phyN`, wifi-scripts finds no phy and
-  the radio stays down with all its SSIDs, so the first apply that changed a radio took its Wi-Fi
-  down. On an SSID, the 802.11r options were dropped, which turned fast roaming off.
-  `wireless/devices` gains `path`, `phy` and `radio`, which bind the section to its hardware, and
-  LuCI's `cell_density` and `legacy_rates`. `wireless/interfaces` gains `ieee80211r`,
-  `ft_over_ds`, `ft_psk_generate_local` and `mobility_domain`. `ft_psk_generate_local` reads null
-  when unset, because wifi-scripts then picks it from `encryption`. (#239)
+- **`wireless/devices` and `wireless/interfaces` model the options that `wifi config` and LuCI store
+  on a radio and an SSID.** A PUT replaces the section with what the resource models, so a PUT of
+  the read deleted them, and an IaC client updates with PUT. Without `path`, which `wifi config`
+  writes for every radio whose phy is named `phyN`, wifi-scripts finds no phy and the radio stays
+  down with all its SSIDs, so the first apply that changed a radio took its Wi-Fi down. On an SSID,
+  the 802.11r options were dropped, which turned fast roaming off. `wireless/devices` gains `path`,
+  `phy` and `radio`, which bind the section to its hardware, and LuCI's `cell_density` and
+  `legacy_rates`. `wireless/interfaces` gains `ieee80211r`, `ft_over_ds`, `ft_psk_generate_local`
+  and `mobility_domain`. `ft_psk_generate_local` reads null when unset, because wifi-scripts then
+  picks it from `encryption`. Every radio and SSID read gains the new fields, so its ETag changes
+  once at the upgrade, and a write with an `If-Match` from before the upgrade answers 412. A client
+  that builds its PUT body from its own model, such as terraform-provider-uapi until it models these
+  fields, still deletes them, so upgrade the provider together with uapi. (#239)
 
 - **`503 config_missing`** answers a write into a uci package whose file under `/etc/config/`
   does not exist, and names the file. `wireless` is the common case: `wifi config` writes
@@ -175,8 +178,10 @@ All notable changes to this project will be documented in this file. Format foll
   a value outside the declared enum, and a PUT of the read answered 422 `not_in_enum`, so the SSID
   could not be updated with PUT at all. The enum now lists each mode that LuCI offers a cipher for,
   followed by `+` and one of the ciphers that wifi-scripts parses, `aes` spellings included. These
-  are new enum values, so no client changes. A key is required with a forced cipher as without
-  one. (#239)
+  are new enum values. That is branch (b) of the type carve-out in `docs/versioning.md`: the server
+  broke its declared enum for every SSID whose cipher LuCI forced. No read changes, so nothing
+  fails: a client that validated such a read failed before and now passes. A key is required with a
+  forced cipher as without one. (#239)
 - **`network/interfaces.ip6hint` and `ip6ifaceid` now apply to every proto, as netifd reads
   them.** They were read and written only for proto `dhcpv6`. On a static interface, which is where
   they matter, a write answered 200 and stored nothing, so no caller could choose which /64 an
