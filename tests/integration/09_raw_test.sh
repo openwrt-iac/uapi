@@ -47,7 +47,7 @@ no_type=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/firewall" -
 echo "$no_type" | tail -1 | grep -q '^422$' || fail "missing .type expected 422"
 
 echo "--- an option that uci cannot store returns 422 instead of a 200 that stored nothing ---"
-for body in '{"bad-name":"1"}' '{"comment":null}' '{"comment":{"x":1}}'; do
+for body in '{"bad-name":"1"}' '{"comment":{"x":1}}' '{"comment":["a",null]}' '{"comment":["","x"]}'; do
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/firewall/$id" -d "$body")
 	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
 done
@@ -135,6 +135,75 @@ left=$($SSH "uci -q get firewall.uapi_legacy_mg.managed" | tr -d '\r')
 [ -z "$left" ] || fail "the stale managed option survived a patch: $left"
 echo "  read stays boolean, and the stale option is swept"
 $SSH "uci -q delete firewall.uapi_legacy_mg; uci commit firewall" >/dev/null 2>&1
+
+# A package with no daemon keeps these probes away from any reload.
+P=uapi_raw_probe
+$SSH "rm -f /etc/config/$P; touch /etc/config/$P"
+
+echo "--- null and \"\" remove an option, and the response is what uci stored, as a GET reads it ---"
+created=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/$P" \
+	-d '{".type":"thing","id":"s1","keep":"x","flag":true,"n":5,"one":[""],"gone":"","none":null,"e":[]}')
+echo "$created" | tail -1 | grep -q '^200$' || fail "probe create expected 200: $created"
+got=$(call "$URL/raw/$P/s1")
+for r in "$created" "$got"; do
+	echo "$r" | grep -q '"flag": "1"' || fail "true did not read as the stored \"1\": $r"
+	echo "$r" | grep -q '"n": "5"' || fail "5 did not read as the stored \"5\": $r"
+	echo "$r" | grep -Eq '"(gone|none|e)"' && fail "a removed option showed: $r"
+done
+$SSH "uci -q get $P.s1.one" >/dev/null || fail "a list of one empty item was not stored"
+patched=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/$P/s1" -d '{"keep":null,"flag":""}')
+echo "$patched" | tail -1 | grep -q '^200$' || fail "removal PATCH expected 200: $patched"
+echo "$patched" | grep -Eq '"(keep|flag)"' && fail "the response showed a removed option: $patched"
+[ -z "$($SSH "uci -q get $P.s1.keep; uci -q get $P.s1.flag")" ] || fail "null or \"\" did not remove the option"
+
+echo "--- a .type that uci writes unquoted as syntax answers 422, and the package still parses ---"
+for t in 'rule#x' 'a;b' "a'b" 'a\"b' 'a\\b'; do
+	r=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/$P" -d "{\".type\":\"$t\",\"id\":\"t1\"}")
+	echo "$r" | tail -1 | grep -q '^422$' || fail ".type $t expected 422: $r"
+done
+$SSH "uci show $P" >/dev/null || fail "the package no longer parses"
+
+echo "--- a PUT or PATCH refuses another .type or id, and takes an echo ---"
+for body in '{".type":"other"}' '{"id":"s2"}'; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/$P/s1" -d "$body")
+	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
+	echo "$r" | grep -q '"code": "read_only"' || fail "PATCH $body expected read_only: $r"
+done
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/$P/s1" -d '{".type":"thing","id":"s1","x":"1"}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH with an echo expected 200: $r"
+
+echo "--- a write response sent back stores none of its reload fields ---"
+r=$(echo "$r" | sed '$d' | call -X PUT -H 'Content-Type: application/json' "$URL/raw/$P/s1" --data-binary @-)
+echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of a write response expected 200: $r"
+[ -z "$($SSH "uci -q get $P.s1.reloaded; uci -q get $P.s1.reload_services; uci -q get $P.s1.reload_note")" ] \
+	|| fail "a reload field was stored as an option"
+
+echo "--- a stored option id stays out of the read, and a PUT of the read keeps it ---"
+$SSH "uci set $P.zt=network; uci set $P.zt.id=8056c2e21c000001; uci commit $P"
+got=$(call "$URL/raw/$P/zt")
+echo "$got" | grep -q '"id": "zt"' || fail "id did not read as the section name: $got"
+r=$(echo "$got" | sed '$d' | call -X PUT -H 'Content-Type: application/json' "$URL/raw/$P/zt" --data-binary @-)
+echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $r"
+[ "$($SSH "uci -q get $P.zt.id" | tr -d '\r')" = "8056c2e21c000001" ] || fail "a PUT of the read deleted option id"
+
+echo "--- a POST without id takes the lowercase first letter of the type ---"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/raw/$P" -d '{".type":"Thing"}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "POST of type Thing expected 200: $r"
+echo "$r" | grep -q '"id": "t_' || fail "the generated id did not start with t_: $r"
+
+echo "--- a NUL or a control byte answers 400 ---"
+for body in '{"v":"a\u0000b"}' '{"k\u0000x":"1"}' '{"v":"a\u0001b"}'; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/$P/s1" -d "$body")
+	echo "$r" | tail -1 | grep -q '^400$' || fail "PATCH $body expected 400: $r"
+done
+[ -z "$($SSH "uci -q get $P.s1.v; uci -q get $P.s1.k")" ] || fail "a refused body was stored"
+
+echo "--- without the config file, PUT, PATCH and DELETE answer 404 ---"
+$SSH "rm -f /etc/config/$P"
+for m in PUT PATCH DELETE; do
+	r=$(call -X $m -H 'Content-Type: application/json' "$URL/raw/$P/s1" -d '{"x":"1"}')
+	echo "$r" | tail -1 | grep -q '^404$' || fail "$m without the file expected 404: $r"
+done
 
 echo "--- POST to a package with no config file answers 503 config_missing and creates nothing ---"
 $SSH 'rm -f /etc/config/uapi_test_unknown'

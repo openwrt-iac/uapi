@@ -21,6 +21,7 @@ let metrics = require("metrics");
 let idempotency = require("idempotency");
 let error_ring = require("error_ring");
 let mgmt = require("mgmt");
+let values = require("values");
 
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
@@ -825,6 +826,13 @@ function dispatch(env) {
 				return { ctx, resp: errors.error(ctx, "bad_request",
 				                                 "Request body is not valid JSON") };
 			}
+			if (values.json_has_nul(body_text))
+				return { ctx, resp: errors.error(ctx, "bad_request",
+				                                 "Request body holds a NUL, which uci cannot store") };
+			let unstorable = values.unstorable_text_path(body);
+			if (unstorable != null)
+				return { ctx, resp: errors.error(ctx, "bad_request",
+					sprintf("Request body: %s holds a control character other than tab, newline and carriage return, which uci cannot store", unstorable)) };
 		}
 		// A replace or a patch with no body is not a no-op. It fell through with body null,
 		// answered 200, and still wrote: the merge folded the read view back in, so a PATCH

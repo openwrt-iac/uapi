@@ -29,7 +29,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 
 | HTTP | `code`                          | When                                                         |
 |------|----------------------------------|--------------------------------------------------------------|
-| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, or no body on a PUT/PATCH |
+| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, no body on a PUT/PATCH, or a key or string with a NUL or a control character other than tab, newline and carriage return, which uci cannot store |
 | 400  | `invalid_cursor`                | Malformed `?cursor=` or one referencing no current item      |
 | 401  | `unauthorized`                  | No `Authorization` header                                    |
 | 401  | `invalid_token`                 | Token not in store, expired, or source IP not in `allowed_cidrs` (either address family) |
@@ -93,7 +93,7 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `out_of_range`   | Numeric or length bound exceeded                              |
 | `not_in_enum`    | Value not in the allowed set                                  |
 | `conflict`       | References a missing or incompatible resource, two fields naming one option disagree, or the field does not apply given another field, for example `hostname` on a static interface |
-| `read_only`      | Field is computed/runtime and can't be set                    |
+| `read_only`      | Field is computed/runtime and can't be set. In `/raw/`, a `.type` or `id` that differs from the section |
 | `unknown_field`  | No such field on this resource. `id`, `managed` and `runtime` are tolerated at the top level so a read-modify-write cycle can send the response back unchanged |
 
 Two more appear only inside `invalid_sections` in `GET /diagnostics?validate=1`, never in a

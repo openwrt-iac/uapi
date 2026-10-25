@@ -21697,7 +21697,16 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/RawSection"
+								"allOf": [
+									{
+										"$ref": "#/components/schemas/RawSectionRequest"
+									},
+									{
+										"required": [
+											".type"
+										]
+									}
+								]
 							}
 						}
 					}
@@ -21841,7 +21850,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/RawSection"
+								"$ref": "#/components/schemas/RawSectionRequest"
 							}
 						}
 					}
@@ -21907,7 +21916,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"type": "object"
+								"$ref": "#/components/schemas/RawSectionRequest"
 							}
 						}
 					}
@@ -23885,6 +23894,44 @@
 					}
 				},
 				"additionalProperties": true
+			},
+			"RawSectionRequest": {
+				"type": "object",
+				"propertyNames": {
+					"pattern": "^(\\.type|[A-Za-z0-9_]+)$"
+				},
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[A-Za-z0-9_]+$",
+						"description": "The section name. Generated on create if absent or null. On PUT and PATCH, it must name the section in the path."
+					},
+					".type": {
+						"type": "string",
+						"pattern": "^[!$-&(-:<-\\[\\]-~]+$",
+						"description": "Required on create. On PUT and PATCH, it must be the type of the section."
+					}
+				},
+				"additionalProperties": {
+					"type": [
+						"string",
+						"number",
+						"boolean",
+						"null",
+						"array"
+					],
+					"items": {
+						"type": [
+							"string",
+							"number",
+							"boolean"
+						]
+					},
+					"description": "A uci option. null, an empty string and an empty array remove it. uci stores text, so a read gives back a number or a boolean as a string."
+				}
 			},
 			"RawWriteResult": {
 				"allOf": [

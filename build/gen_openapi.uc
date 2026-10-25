@@ -702,7 +702,8 @@ function build_paths() {
 		},
 		"post": {
 			"summary": "Create a raw uci section",
-			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
+			"requestBody": { "required": true, "content": { "application/json": { "schema": {
+				"allOf": [ { "$ref": "#/components/schemas/RawSectionRequest" }, { "required": [".type"] } ] } } } },
 			"responses": responses("post", { "200": make_response(200, "Created", "RawWriteResult") })
 		},
 	};
@@ -714,10 +715,10 @@ function build_paths() {
 		"get":    { "summary": "Get a raw uci section",
 		            "responses": responses("get", { "200": make_response(200, "OK", "RawSection") }) },
 		"put":    { "summary": "Replace a raw uci section",
-		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSection" } } } },
+		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSectionRequest" } } } },
 		            "responses": responses("put", { "200": make_response(200, "Replaced", "RawWriteResult") }) },
 		"patch":  { "summary": "Partially update a raw uci section",
-		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+		            "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RawSectionRequest" } } } },
 		            "responses": responses("patch", { "200": make_response(200, "Updated", "RawWriteResult") }) },
 		"delete": { "summary": "Delete a raw uci section",
 		            "responses": responses("delete", { "204": { "description": "Deleted" } }) },
@@ -1052,6 +1053,24 @@ function build_schemas() {
 				"managed": { "type": "boolean", "readOnly": true },
 			},
 			"additionalProperties": true,
+		},
+		// What raw.uc's writable_options and create take. A `.type` leaves out the five characters
+		// that uci writes unquoted, and `managed` and the reload fields of a write response are
+		// accepted so that a read-modify-write passes, and ignored.
+		"RawSectionRequest": {
+			"type": "object",
+			"propertyNames": { "pattern": "^(\\.type|[A-Za-z0-9_]+)$" },
+			"properties": {
+				"id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_]+$",
+				        "description": "The section name. Generated on create if absent or null. On PUT and PATCH, it must name the section in the path." },
+				".type": { "type": "string", "pattern": "^[!$-&(-:<-\\[\\]-~]+$",
+				           "description": "Required on create. On PUT and PATCH, it must be the type of the section." },
+			},
+			"additionalProperties": {
+				"type": ["string", "number", "boolean", "null", "array"],
+				"items": { "type": ["string", "number", "boolean"] },
+				"description": "A uci option. null, an empty string and an empty array remove it. uci stores text, so a read gives back a number or a boolean as a string.",
+			},
 		},
 		"RawWriteResult": {
 			"allOf": [
