@@ -409,7 +409,7 @@ function ipv6_words(s) {
 }
 
 function ipv6_in_cidr(addr, cidr) {
-	if (index(cidr, ":") == -1 || !is_valid_token_cidr(cidr)) return false;
+	if (!is_valid_token_cidr(cidr)) return false;
 	let parts = split(cidr, "/");
 	let a = ipv6_words(addr), n = ipv6_words(parts[0]);
 	if (a == null || n == null) return false;

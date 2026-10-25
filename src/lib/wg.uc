@@ -105,9 +105,9 @@ function psk_file(value) {
 // config. Keepalive and preshared key are always spelled out, with 0 and
 // /dev/null as the explicit clears, because `wg set` merges and would otherwise
 // leave a stale value behind that uci no longer has.
-// An IPv6 endpoint has to be bracketed for wg to find the port. A peer stored before 3.2.0 can
-// hold one bracketed already, and without the guard "[fd00::1]" became "[[fd00::1]]" and wg
-// refused the peer.
+// An IPv6 endpoint has to be bracketed for wg to find the port. A disabled peer, or one that LuCI's
+// RPC, /raw or a shell stored, can hold one bracketed already, and without the guard "[fd00::1]"
+// became "[[fd00::1]]" and wg refused the peer.
 function endpoint_arg(host, port) {
 	if (index(host, ":") >= 0 && substr(host, 0, 1) != "[")
 		host = "[" + host + "]";
