@@ -39,13 +39,14 @@ All notable changes to this project will be documented in this file. Format foll
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`. An
-  `r0kh` entry that a write sends is `<MAC>,<R0KH-ID>,<key>`, with an R0KH-ID of 1 to 47 printable
-  characters and no space or comma. An `r1kh` entry is `<MAC>,<MAC>,<key>`. Each key is 64 or 32
-  hex digits, with nothing after them, which is stricter than hostapd: it ignores what follows.
-  With `ieee80211r` on, `nasid` takes at most 48 bytes, as hostapd does. None of them takes a
-  control character, because wifi-scripts writes each one into hostapd's config as one line. Only
-  the
-  whole group keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped,
+  `r0kh` entry that a write changes is `<MAC>,<R0KH-ID>,<key>`, with an R0KH-ID of 1 to 47
+  printable characters and no space or comma. An `r1kh` entry is `<MAC>,<MAC>,<key>`. Each key is
+  64 or 32 hex digits, with nothing after them, which is stricter than hostapd: it ignores what
+  follows. The lists are also checked when a write makes them take effect. A `nasid` that a write
+  changes takes at most 1024 bytes, and at most 48 with 802.11r on, which needs `ieee80211r` and
+  WPA2 or later, as hostapd does. None of them takes a control character, because wifi-scripts
+  writes each one into hostapd's config as one line. A value that a write does not change is not
+  checked again, so a PUT of a read passes. Only the whole group keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped,
   wifi-scripts derives lists that the other access points do not share. `ft_psk_generate_local`
   reads null when unset, because wifi-scripts then picks it from `encryption`. Other options still
   go with a PUT, such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an
@@ -195,10 +196,11 @@ All notable changes to this project will be documented in this file. Format foll
   for `sae`. Such a key now answers 422 `invalid_format`. LuCI's `wpakey` check applies the mode
   `ap` rule in every mode, so this is stricter than LuCI for 64 hex digits with SAE or outside AP
   mode, and takes the short password that LuCI refuses in mesh and with `sae` outside AP mode,
-  because wpa_supplicant takes it. The tightening uses the
-  same carve-out as the `key` entry under Security, and it fails loudly. A key is checked when the
-  request sends it, or changes the encryption or the mode, so a PUT that only carries the stored
-  key does not check its form. (#246)
+  because wpa_supplicant takes it. A key of more than 1024 bytes answers 422 `out_of_range` in
+  every mode: hostapd reads its config 4096 bytes at a time, and wpa_supplicant cuts a line at
+  2000. The tightening uses the same carve-out as the `key` entry under Security, and it fails
+  loudly. A key is checked when the request changes it, or changes the encryption or the mode, as
+  uci holds them, so a PUT that only carries the stored key does not check its form. (#246)
 - **`wireless/interfaces.encryption` accepts a forced cipher, such as `psk2+ccmp`.** LuCI appends
   the cipher when one is chosen, and wifi-scripts reads the suffix. A read of such an SSID answered
   a value outside the declared enum, and a PUT of the read answered 422 `not_in_enum`, so the SSID
@@ -456,7 +458,10 @@ All notable changes to this project will be documented in this file. Format foll
   `\nssid2="x"` answered 200, and hostapd broadcast `x` while every read showed the stored SSID.
   A key with a control character now answers 422 `invalid_format`, in every encryption mode. A
   stored one answers the same when a PUT or a PATCH carries it, so a write of the section must
-  replace it, and `GET /diagnostics?validate=1` lists the section. That tightening uses the
+  replace it, and `GET /diagnostics?validate=1` lists the section. A key longer than 4095 bytes
+  did the same without a newline, because hostapd reads its config 4096 bytes at a time and takes
+  the rest of a longer line as a line of its own. That was found in the source, not on a device,
+  and a key now takes at most 1024 bytes. That tightening uses the
   carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on, and
   it fails loudly. LuCI's key field takes one line only. (#246)
 

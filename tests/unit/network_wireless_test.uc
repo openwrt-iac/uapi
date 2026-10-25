@@ -408,12 +408,9 @@ t.describe('wireless.interfaces values that reach hostapd as config lines', () =
 		for (let i = 0; i < n; i++) s += 'a';
 		return s;
 	}
-	function field_errs(body, field) {
-		return filter(full_validate(wiface, { device: 'radio0', ...body }, null),
-		              (e) => e.field == field);
-	}
 	function codes(body, field) {
-		return map(field_errs(body, field), (e) => e.code);
+		return map(filter(full_validate(wiface, { device: 'radio0', ...body }, null), (e) => e.field == field),
+		           (e) => e.code);
 	}
 
 	t.it('refuses a control character in a key, nasid or key holder entry, in any mode', () => {
@@ -456,11 +453,24 @@ t.describe('wireless.interfaces values that reach hostapd as config lines', () =
 			t.assert_deep_equal(codes({ encryption: enc, key: 'short' }, 'key'), []);
 	});
 
-	// Without 802.11r, nasid is the RADIUS NAS-Identifier, which LuCI offers for EAP.
-	t.it('caps nasid at the 48 bytes that hostapd takes, with 802.11r on only', () => {
-		t.assert_deep_equal(codes({ ieee80211r: true, nasid: bytes(48) }, 'nasid'), []);
-		t.assert_deep_equal(codes({ ieee80211r: true, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ]);
-		t.assert_deep_equal(codes({ encryption: 'wpa2', key: 'radius', nasid: bytes(60) }, 'nasid'), []);
+	// Without 802.11r, nasid is the RADIUS NAS-Identifier, which LuCI offers for EAP, and wifi-scripts
+	// turns 802.11r on only with WPA2 or later.
+	t.it('caps nasid at the 48 bytes that hostapd takes for 802.11r, and at 1024 bytes otherwise', () => {
+		for (let enc in [ 'psk2', 'sae', 'wpa2' ]) {
+			let key = { encryption: enc, key: 'correcthorse', ieee80211r: true };
+			t.assert_deep_equal(codes({ ...key, nasid: bytes(48) }, 'nasid'), [], enc);
+			t.assert_deep_equal(codes({ ...key, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ], enc);
+		}
+		t.assert_deep_equal(codes({ encryption: 'psk', key: 'correcthorse', ieee80211r: true, nasid: bytes(60) }, 'nasid'), []);
+		t.assert_deep_equal(codes({ encryption: 'wpa2', key: 'radius', nasid: bytes(1024) }, 'nasid'), []);
+		t.assert_deep_equal(codes({ encryption: 'wpa2', key: 'radius', nasid: bytes(1025) }, 'nasid'), [ 'out_of_range' ]);
+	});
+
+	// hostapd reads 4096 bytes at a time and takes the rest of a longer line as a directive.
+	t.it('caps a key with no length rule at 1024 bytes', () => {
+		t.assert_deep_equal(codes({ encryption: 'wpa2', key: bytes(1024) }, 'key'), []);
+		t.assert_deep_equal(codes({ encryption: 'wpa2', key: bytes(1025) }, 'key'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ mode: 'mesh', encryption: 'sae', key: bytes(1025) }, 'key'), [ 'out_of_range' ]);
 	});
 
 	t.it('takes the key holder entries that hostapd parses, wifi-scripts defaults included', () => {
@@ -541,6 +551,39 @@ t.describe('wireless.interfaces values that reach hostapd as config lines', () =
 		let c = stored({ key: 'correcthorse', ieee80211r: '1', nasid: bytes(49) });
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
 		t.assert_equal(h().patch(c, CTX, 'w1', { nasid: bytes(50) }).status, 422);
+		c = stored({ key: 'correcthorse', nasid: bytes(49) });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 422);
+	});
+
+	// A write that drops the mode makes the SSID an AP again, whatever form the drop takes.
+	t.it('a write that moves the SSID back to AP mode checks the stored key against the AP rule', () => {
+		let sta = { mode: 'sta', encryption: 'sae', key: 'short' };
+		t.assert_equal(h().patch(stored(sta), CTX, 'w1', { mode: null }).status, 422);
+		t.assert_equal(h().replace(stored(sta), CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'sae' }).status, 422);
+		t.assert_equal(h().patch(stored(sta), CTX, 'w1', { ssid: 'home2' }).status, 200);
+	});
+
+	t.it('a write that makes the stored key holder lists take effect checks them', () => {
+		let c = stored({ encryption: 'sae', key: 'correcthorse', ft_psk_generate_local: '0',
+		                 r0kh: [ '02:00:00:00:00:01,ap 1,secret' ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ieee80211r: true });
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'r0kh[0]' ]);
+	});
+
+	// A PUT sends the read back, so a value that it does not change is not checked again.
+	t.it('a PUT of the read that only disables an SSID keeps a long stored nasid', () => {
+		let c = stored({ key: 'correcthorse', ieee80211r: '1', nasid: bytes(49) });
+		let body = h().get_one(c, CTX, 'w1').body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_key', 'has_r0kh', 'has_r1kh' ]) delete body[k];
+		body.disabled = true;
+		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.nasid, bytes(49));
+	});
+
+	t.it('a key holder entry stored as a single option is still refused with a control character', () => {
+		let c = stored({ key: 'correcthorse', r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nx=1' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ssid: 'home2' }).body.errors, (e) => e.field), [ 'r0kh[0]' ]);
 	});
 
 	// A control character is never legitimate there, and a stored one is still injected into
