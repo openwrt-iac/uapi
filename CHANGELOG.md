@@ -40,10 +40,11 @@ All notable changes to this project will be documented in this file. Format foll
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
   wifi-scripts writes `nasid`, `r0kh` and `r1kh` into hostapd's config as lines, so a write refuses
-  a control character in them, a `nasid` or an entry over 1024 bytes, a `nasid` over 48 bytes with
-  fast transition, and a key holder entry that hostapd cannot parse. A rule applies to a value that
-  the write changes, and to a stored value only while the SSID is enabled, so disabling one always
-  works. Only the whole group keeps fast roaming working: with
+  a newline in them, a `nasid` or an entry over 1024 bytes, a `nasid` over 48 bytes with fast
+  transition, and a key holder entry that hostapd cannot parse. A write checks a rule when it
+  changes a field that the rule reads, or enables the SSID, so a write that leaves a stored value
+  alone, or disables the SSID, is never refused for it, and `GET /api/v3/diagnostics?validate=1`
+  lists every SSID that holds such a value. Only the whole group keeps fast roaming working: with
   `ieee80211r` kept and the key holder lists dropped, wifi-scripts derives lists that the other
   access points do not share. `ft_psk_generate_local`
   reads null when unset, because wifi-scripts then picks it from `encryption`. Other options still
@@ -440,13 +441,13 @@ All notable changes to this project will be documented in this file. Format foll
   directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd
   directive that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in
   `\nssid2="x"` answered 200, and hostapd broadcast `x` while every read showed the stored SSID.
-  A key with a control character now answers 422 `invalid_format` when a write changes it, in
-  every mode and encryption, because another writer can enable the SSID or change its encryption
-  later. A stored one answers the same while the SSID is enabled, and
-  `GET /api/v3/diagnostics?validate=1` lists the SSID. Disabling the SSID, which stops the
-  injection, is not refused. That tightening uses the carve-out in `docs/versioning.md` for
-  payloads that produced a state no caller can rely on, and it fails loudly. LuCI's key field
-  takes one line only. (#246)
+  A key with a newline now answers 422 `invalid_format` when a write changes it, in every mode
+  and encryption, because another writer can enable the SSID or change its encryption later. A
+  write that enables the SSID checks the stored key too. A write that leaves a stored key alone,
+  disabling the SSID included, is not refused for it, and `GET /api/v3/diagnostics?validate=1`
+  lists the SSID. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line
+  only. (#246)
 
 ## [3.1.0] - 2026-10-11
 

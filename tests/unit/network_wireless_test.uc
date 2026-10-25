@@ -417,13 +417,14 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 	}
 
 	// Another writer, such as LuCI, can switch the mode or the encryption later, so the value is
-	// refused whatever reads it now.
-	t.it('refuses a control character in a key, nasid or key holder entry that a write sends', () => {
+	// refused whatever reads it now. Only a newline ends a line in the daemons' config readers.
+	t.it('refuses a newline in a key, nasid or key holder entry that a write sends', () => {
 		for (let b in [ { encryption: 'psk2' }, { encryption: 'wpa2' }, { mode: 'sta', encryption: 'psk2' },
 		                { mode: 'mesh', encryption: 'sae' }, { encryption: 'none' } ])
 			t.assert_deep_equal(codes({ ...b, key: 'abcdefgh\nssid2="x"' }, 'key'), [ 'invalid_format' ], b);
 		t.assert_deep_equal(codes({ nasid: 'ap1\nssid2="x"' }, 'nasid'), [ 'invalid_format' ]);
-		t.assert_deep_equal(codes({ nasid: 'ap1\t' }, 'nasid'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ encryption: 'psk2', key: 'correct\thorse\r' }, 'key'), []);
+		t.assert_deep_equal(codes({ nasid: 'ap1\t' }, 'nasid'), []);
 		for (let f in [ 'r0kh', 'r1kh' ])
 			t.assert_deep_equal(codes({ [f]: [ 'ff:ff:ff:ff:ff:ff,*,' + H64 + '\nssid2="x"' ] }, f + '[0]'),
 			                    [ 'invalid_format' ], f);
@@ -438,9 +439,12 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(48) }, 'nasid'), [], enc);
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ], enc);
 		}
-		// No fast transition: WPA1, owe, a station, or no mode, where wifi-scripts sets up nothing.
+		// A section with no mode reads as mode ap, so a create without one is checked as an AP.
+		t.assert_deep_equal(codes({ encryption: 'sae', key: 'correcthorse', ieee80211r: true, nasid: bytes(49) }, 'nasid'),
+		                    [ 'out_of_range' ]);
+		// No fast transition: WPA1, owe, or a station.
 		for (let b in [ { mode: 'ap', encryption: 'psk', key: 'correcthorse' }, { mode: 'ap', encryption: 'owe' },
-		                { mode: 'sta', encryption: 'psk2', key: 'correcthorse' }, { encryption: 'psk2', key: 'correcthorse' } ])
+		                { mode: 'sta', encryption: 'psk2', key: 'correcthorse' } ])
 			t.assert_deep_equal(codes({ ...b, ieee80211r: true, nasid: bytes(60) }, 'nasid'), [], b);
 	});
 
@@ -452,6 +456,9 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		for (let e in [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32,
 		                '02:00:00:00:00:01,02:00:00:00:00:02,' + H64 ])
 			t.assert_deep_equal(codes({ ...FT, r1kh: [ e ] }, 'r1kh[0]'), [], e);
+		// hostapd's own form, with spaces, which wifi-scripts passes on as it is.
+		t.assert_deep_equal(codes({ ...FT, r0kh: [ '02:00:00:00:00:01 ap1 ' + H64 ] }, 'r0kh[0]'), []);
+		t.assert_deep_equal(codes({ ...FT, r1kh: [ '02:00:00:00:00:01 02:00:00:00:00:02 ' + H64 ] }, 'r1kh[0]'), []);
 	});
 
 	t.it('refuses a key holder entry that hostapd refuses, without naming the entry', () => {
@@ -498,6 +505,17 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(c._state.uci.wireless.w1.key, 'correcthorse');
 	});
 
+	// A write that changes a field that a rule reads checks the rule, also on a disabled SSID, so it
+	// cannot leave a stored value that hostapd refuses once LuCI enables the SSID.
+	t.it('a write to a disabled SSID that makes a stored value break the config is refused', () => {
+		let c = stored({ disabled: '1', encryption: 'psk', ieee80211r: '1', nasid: bytes(60) });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { encryption: 'sae' }).body.errors, (e) => e.field), [ 'nasid' ]);
+		c = stored({ disabled: '1', ieee80211r: '1', r0kh: [ 'bad' ] });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false }).body.errors, (e) => e.field),
+		                    [ 'r0kh[0]' ]);
+	});
+
 	// LuCI's Enable writes only disabled=0, so a value stored on a disabled SSID becomes live later.
 	t.it('a write to a disabled SSID still refuses an injection that it sends', () => {
 		let c = stored({ disabled: '1' });
@@ -506,16 +524,18 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad' ] }).status, 422);
 	});
 
-	// A stored injection is injected again at every start, so the sweep lists the SSID, a write
-	// that leaves it enabled is refused, and disabling it, the write that stops it, passes.
-	t.it('a stored injection in an enabled SSID is listed by the sweep, and disabling it passes', () => {
+	// A write is never refused for a value that it leaves alone, so disabling an injected SSID, the
+	// write that stops the injection, passes. The sweep lists the SSID whether it is enabled or not,
+	// and enabling it again is refused until a write replaces the value.
+	t.it('a stored injection is listed by the sweep and blocks only the write that enables it', () => {
 		for (let extra in [ { key: 'abcdefgh\nssid2="x"' }, { nasid: 'ap1\nx=1' },
 		                    { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] } ]) {
 			let c = stored(extra);
 			t.assert_equal(length(h().sweep(c)), 1);
-			t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
+			t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
 			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
-			t.assert_equal(length(h().sweep(c)), 0);
+			t.assert_equal(length(h().sweep(c)), 1);
+			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 		}
 	});
 
@@ -533,18 +553,10 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
 	});
 
-	// netifd splits a list held as an option on whitespace, so `option r0kh 'A B'` is two entries.
-	t.it('a key holder list stored as an option is read as netifd reads it', () => {
-		let a = 'ff:ff:ff:ff:ff:ff,*,' + H32, b = '02:00:00:00:00:02,ap2,' + H64;
-		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: a + ' ' + b,
-		                 r1kh: '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 });
-		t.assert_equal(h().replace(c, CTX, 'w1', read_back(c)).status, 200);
-		t.assert_deep_equal(c._state.uci.wireless.w1.r0kh, [ a, b ]);
-	});
-
-	t.it('a long stored nasid blocks the writes that leave fast transition on, and not the one that disables it', () => {
+	t.it('a long stored nasid blocks the writes that turn fast transition on, and no other', () => {
 		let c = stored({ ieee80211r: '1', nasid: bytes(49) });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(length(h().sweep(c)), 1);
 		let body = read_back(c);
 		body.disabled = true;
 		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);

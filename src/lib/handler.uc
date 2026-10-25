@@ -3,7 +3,6 @@ let errors = require("errors");
 let transaction = require("transaction");
 let jsonpatch = require("jsonpatch");
 let mgmt = require("mgmt");
-let values = require("values");
 
 // ETag computation. Uses sha256 from ucode-mod-digest when available (real
 // router); falls back to a non-crypto stable string hash for unit-test
@@ -287,7 +286,30 @@ check_schema_types = function(schema_properties, body, prefix) {
 // `delta` is what the request itself named, for checks that must not fire on a field the caller
 // never sent: a PATCH that switches network/interfaces away from static still carries the old
 // addresses in its merged view, and refusing them there would make the switch impossible.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta) {
+// `write` tells a resource which of its rules a write must check. A rule names the fields that it
+// reads, and a write checks it when it changes one of them from the section as it was, or when it
+// enables a disabled section: a value that the write leaves alone never blocks it, so disabling a
+// broken section always works. The sweep checks every rule against the stored section, disabled
+// ones included. `before` is the section as a read shows it, with its write-only fields as uci
+// holds them, and is null on a create.
+function write_scope(before, sweep) {
+	let changes = function(json, fields) {
+		if (before == null) return true;
+		for (let f in fields)
+			if (sprintf("%J", json[f]) != sprintf("%J", before[f])) return true;
+		return false;
+	};
+	return {
+		sweep: sweep,
+		changes: changes,
+		applies: function(json, fields) {
+			return sweep || before == null || (json.disabled !== true && before.disabled === true)
+			       || changes(json, fields);
+		},
+	};
+}
+
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, write) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -300,7 +322,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta);
+	let val_errs = resource.validate(validate_body, conn, id, delta, write ?? write_scope(null, false));
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -584,11 +606,10 @@ function carry_write_only(resource, body, existing) {
 		return body;
 
 	let out = { ...body };
-	// uci can hold a list as an option, which netifd splits on whitespace.
 	for (let k in sp)
 		if (type(sp[k]) == "object" && sp[k].writeOnly
 		    && out[k] == null && existing[k] != null)
-			out[k] = (sp[k].type == "array") ? values.as_word_list_or_null(existing[k]) : existing[k];
+			out[k] = existing[k];
 	return out;
 }
 
@@ -812,14 +833,16 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
+				let found = existing != null && type_predicate(existing['.type']);
+				let existing_view = found ? resource.fromUci(existing, conn) : null;
 				let write_body = carry_write_only(resource, body, existing);
-				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body);
+				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body,
+				                                 write_scope(found ? carry_write_only(resource, existing_view, existing) : null, false));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!existing || !type_predicate(existing['.type']))
+				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -876,7 +899,8 @@ function make(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
+				                                 write_scope(carry_write_only(resource, existing_view, existing), false));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1009,7 +1033,7 @@ function make(resource, opts) {
 			try {
 				view = resource.fromUci(s, conn);
 				let body = carry_write_only(resource, view, s);
-				errs = _validate_with_schema(resource, body, body, conn, id, view);
+				errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1104,7 +1128,8 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
+				                                 write_scope(synthesized ? null : carry_write_only(resource, existing_view, existing), false));
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1136,7 +1161,7 @@ function make_singleton(resource, opts) {
 		try {
 			view = resource.fromUci(s, conn);
 			let body = carry_write_only(resource, view, s);
-			errs = _validate_with_schema(resource, body, body, conn, id, view);
+			errs = _validate_with_schema(resource, body, body, conn, id, view, write_scope(body, true));
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}
