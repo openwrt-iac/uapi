@@ -127,7 +127,8 @@ function matches(mod, c, cond) {
 function coerced(c, cond) {
 	let section = { ...c.section };
 	for (let k, spec in cond.if?.properties ?? {}) {
-		let v = exists(spec, "const") ? spec.const : spec.enum?.[0];
+		if (!exists(spec, "const") && type(spec.enum) != "array") return null;
+		let v = exists(spec, "const") ? spec.const : spec.enum[0];
 		section[k] = (type(v) == "bool") ? (v ? "1" : "0") : v;
 	}
 	return { ...c, section };
@@ -149,6 +150,11 @@ t.describe('property: every request-only keyword is a refusal in validate()', ()
 		for (let cond in mod.openapi_write_conditional ?? []) {
 			let matching = filter(cases, (c) => matches(mod, c, cond));
 			if (length(matching) == 0) matching = map(cases, (c) => coerced(c, cond));
+			if (length(matching) == 0 || index(matching, null) >= 0) {
+				t.it(sprintf("%s has a case for %J", f, cond.if?.properties),
+				     () => t.assert_equal("a conditional that no case meets and that cannot be applied to one", "a case"));
+				continue;
+			}
 			for (let field, spec in cond.then?.properties ?? {})
 				for (let o in bound_keywords(spec, [ field ], false, [])) {
 					found++;
