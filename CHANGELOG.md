@@ -38,12 +38,12 @@ All notable changes to this project will be documented in this file. Format foll
   `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
-  `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`. These
-  values reach the daemon as lines, so in an enabled access point a write refuses what hostapd
-  refuses or would read as a directive: a control character, a `nasid` over 1024 bytes, or over
-  48 with fast transition, and, when wifi-scripts uses the key holder lists, an entry that
-  hostapd cannot parse, or a missing list with no key to derive it from. A disabled SSID is not
-  checked, so disabling one always works. Only the whole group keeps fast roaming working: with
+  `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
+  wifi-scripts writes `nasid`, `r0kh` and `r1kh` into hostapd's config as lines, so a write refuses
+  a control character in them, a `nasid` or an entry over 1024 bytes, a `nasid` over 48 bytes with
+  fast transition, and a key holder entry that hostapd cannot parse. A rule applies to a value that
+  the write changes, and to a stored value only while the SSID is enabled, so disabling one always
+  works. Only the whole group keeps fast roaming working: with
   `ieee80211r` kept and the key holder lists dropped, wifi-scripts derives lists that the other
   access points do not share. `ft_psk_generate_local`
   reads null when unset, because wifi-scripts then picks it from `encryption`. Other options still
@@ -185,21 +185,6 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Fixed
 
-- **`wireless/interfaces.key` takes what the daemon that reads it takes.** With `psk`, `psk2`,
-  `psk-mixed`, `sae` or `sae-mixed`, with or without a forced cipher, the write answered 200 and the
-  SSID did not come up for a key of another form. In mode `ap`, wifi-scripts refuses a key that is
-  not 8 to 63 bytes or 64 hex digits, with `INVALID_WPA_PSK`. With `sae` and `sae-mixed`, it passes
-  64 hex digits to hostapd as a PSK, and SAE then has no password, so no WPA3 client can join. In
-  modes `sta`, `adhoc` and `mesh`, wifi-scripts gives the key to wpa_supplicant between double
-  quotes, so a double quote breaks it, and in `sta` and `adhoc` wpa_supplicant takes it as a
-  passphrase of 8 to 63 bytes, except for `sae`. Such a key now answers 422 `invalid_format`. LuCI's
-  `wpakey` check applies the mode `ap` rule in every mode, so this is stricter than LuCI for 64 hex
-  digits with SAE or outside AP mode, and takes the short password that LuCI refuses in mesh and
-  with `sae` outside AP mode, because wpa_supplicant takes it. The key is checked as the daemon
-  will read it once the write is applied, including a stored key that the write carries, so a
-  write that moves a key to another encryption or mode checks it. A disabled SSID is not checked.
-  The tightening uses the same carve-out as the `key` entry under Security, and it fails loudly.
-  (#246)
 - **`wireless/interfaces.encryption` accepts a forced cipher, such as `psk2+ccmp`.** LuCI appends
   the cipher when one is chosen, and wifi-scripts reads the suffix. A read of such an SSID answered
   a value outside the declared enum, and a PUT of the read answered 422 `not_in_enum`, so the SSID
@@ -455,12 +440,12 @@ All notable changes to this project will be documented in this file. Format foll
   directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd
   directive that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in
   `\nssid2="x"` answered 200, and hostapd broadcast `x` while every read showed the stored SSID.
-  In an enabled SSID whose key the daemon reads, a key with a control character now answers 422
-  `invalid_format`, also when a write carries a stored one, and `GET /api/v3/diagnostics?validate=1`
-  lists the section. The same holds in modes `sta`, `adhoc` and `mesh`, where wifi-scripts writes
-  the key into wpa_supplicant's config. A write that disables the SSID is not refused, because
-  netifd starts no disabled interface. That tightening uses the carve-out in `docs/versioning.md`
-  for payloads that produced a state no caller can rely on, and it fails loudly. LuCI's key field
+  A key with a control character now answers 422 `invalid_format` when a write changes it, in
+  every mode and encryption, because another writer can enable the SSID or change its encryption
+  later. A stored one answers the same while the SSID is enabled, and
+  `GET /api/v3/diagnostics?validate=1` lists the SSID. Disabling the SSID, which stops the
+  injection, is not refused. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. LuCI's key field
   takes one line only. (#246)
 
 ## [3.1.0] - 2026-10-11

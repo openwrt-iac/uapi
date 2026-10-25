@@ -74,7 +74,7 @@ function probes(keyword, bound) {
 	// The probes are the candidates that the regex itself refuses: a newline alone would only test
 	// a control-character check, which a validate() could keep after it stopped applying the pattern.
 	case "pattern": {
-		let past = filter([ "x", "0", "", "\n" ], (v) => !match(v, regexp(bound)));
+		let past = filter([ "x", "0", "", "\n", " ", "#", "[", "\\" ], (v) => !match(v, regexp(bound)));
 		return { code: "invalid_format", past: past, at: [] };
 	}
 	}
