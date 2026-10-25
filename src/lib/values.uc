@@ -5,6 +5,8 @@
 const IPV4_RE = /^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$/;
 const IPV6_GROUP_RE = /^[0-9a-fA-F]{1,4}$/;
 const CIDR_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}\/[0-9]{1,2}$/;
+const MAC_PATTERN = "[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}";
+const MAC_RE = regexp("^" + MAC_PATTERN + "$");
 
 function normalize_bool(v, default_val) {
 	if (v == null) return default_val;
@@ -692,6 +694,7 @@ return {
 	service_port, wg_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	require_present, section_index,
+	MAC_PATTERN, MAC_RE,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,

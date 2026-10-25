@@ -412,61 +412,80 @@ t.describe('wireless.interfaces values that reach hostapd as config lines', () =
 		return filter(full_validate(wiface, { device: 'radio0', ...body }, null),
 		              (e) => e.field == field);
 	}
+	function codes(body, field) {
+		return map(field_errs(body, field), (e) => e.code);
+	}
 
 	t.it('refuses a control character in a key, nasid or key holder entry, in any mode', () => {
-		for (let enc in [ 'psk2', 'sae', 'wpa2', 'none' ]) {
-			let errs = field_errs({ encryption: enc, key: 'abcdefgh\nssid2="x"' }, 'key');
-			t.assert_deep_equal(map(errs, (e) => e.code), [ 'invalid_format' ]);
-		}
-		t.assert_deep_equal(map(field_errs({ nasid: 'ap1\nssid2="x"' }, 'nasid'), (e) => e.code),
+		for (let enc in [ 'psk2', 'sae', 'wpa2', 'none' ])
+			t.assert_deep_equal(codes({ encryption: enc, key: 'abcdefgh\nssid2="x"' }, 'key'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ nasid: 'ap1\nssid2="x"' }, 'nasid'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ nasid: 'ap1\t' }, 'nasid'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ r0kh: [ '02:00:00:00:00:01,ap1,' + H64 + '\nssid2="x"' ] }, 'r0kh[0]'),
 		                    [ 'invalid_format' ]);
-		t.assert_deep_equal(map(field_errs({ nasid: 'ap1\t' }, 'nasid'), (e) => e.code),
-		                    [ 'invalid_format' ]);
-		t.assert_deep_equal(map(field_errs({ r0kh: [ '02:00:00:00:00:01,ap1,' + H64 + '\nssid2="x"' ] }, 'r0kh[0]'),
-		                        (e) => e.code), [ 'invalid_format' ]);
 	});
 
-	t.it('takes a passphrase of 8 to 63 bytes or a PSK of 64 hex digits, as wifi-scripts does', () => {
-		for (let enc in [ 'psk', 'psk2', 'psk-mixed', 'sae', 'sae-mixed', 'psk2+ccmp' ]) {
+	t.it('in AP mode, takes a passphrase of 8 to 63 bytes, or a PSK of 64 hex digits except for SAE', () => {
+		for (let enc in [ 'psk', 'psk2', 'psk-mixed', 'psk2+ccmp' ]) {
 			for (let k in [ bytes(8), bytes(63), H64, 'café-au-lait' ])
-				t.assert_equal(length(field_errs({ encryption: enc, key: k }, 'key')), 0);
+				t.assert_deep_equal(codes({ encryption: enc, key: k }, 'key'), [], k);
 			for (let k in [ bytes(7), substr(H64, 1) + 'g', bytes(65) ])
-				t.assert_deep_equal(map(field_errs({ encryption: enc, key: k }, 'key'), (e) => e.code),
-				                    [ 'invalid_format' ]);
+				t.assert_deep_equal(codes({ encryption: enc, key: k }, 'key'), [ 'invalid_format' ], k);
 		}
+		// With only a PSK, hostapd has no SAE password, so no WPA3 client can join.
+		for (let enc in [ 'sae', 'sae-mixed' ]) {
+			t.assert_deep_equal(codes({ encryption: enc, key: bytes(8) }, 'key'), []);
+			for (let k in [ H64, bytes(7) ])
+				t.assert_deep_equal(codes({ encryption: enc, key: k }, 'key'), [ 'invalid_format' ], k);
+		}
+	});
+
+	// wpa_supplicant gets the key in quotes, as a passphrase, or for SAE and mesh as a password.
+	t.it('outside AP mode, takes what wpa_supplicant takes', () => {
+		for (let mode in [ 'sta', 'adhoc' ]) {
+			t.assert_deep_equal(codes({ mode, encryption: 'psk2', key: H64 }, 'key'), [ 'invalid_format' ]);
+			t.assert_deep_equal(codes({ mode, encryption: 'sae-mixed', key: bytes(7) }, 'key'), [ 'invalid_format' ]);
+			t.assert_deep_equal(codes({ mode, encryption: 'psk2', key: bytes(8) }, 'key'), []);
+			t.assert_deep_equal(codes({ mode, encryption: 'sae', key: 'short' }, 'key'), []);
+		}
+		t.assert_deep_equal(codes({ mode: 'mesh', encryption: 'sae', key: 'short' }, 'key'), []);
 	});
 
 	t.it('leaves the length of a RADIUS secret or a WEP key alone', () => {
 		for (let enc in [ 'wpa2', 'wpa3', 'wep', 'owe' ])
-			t.assert_equal(length(field_errs({ encryption: enc, key: 'short' }, 'key')), 0);
+			t.assert_deep_equal(codes({ encryption: enc, key: 'short' }, 'key'), []);
 	});
 
-	t.it('caps nasid at the 48 bytes that hostapd takes for 802.11r', () => {
-		t.assert_equal(length(field_errs({ nasid: bytes(48) }, 'nasid')), 0);
-		t.assert_deep_equal(map(field_errs({ nasid: bytes(49) }, 'nasid'), (e) => e.code), [ 'out_of_range' ]);
+	// Without 802.11r, nasid is the RADIUS NAS-Identifier, which LuCI offers for EAP.
+	t.it('caps nasid at the 48 bytes that hostapd takes, with 802.11r on only', () => {
+		t.assert_deep_equal(codes({ ieee80211r: true, nasid: bytes(48) }, 'nasid'), []);
+		t.assert_deep_equal(codes({ ieee80211r: true, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ encryption: 'wpa2', key: 'radius', nasid: bytes(60) }, 'nasid'), []);
 	});
 
 	t.it('takes the key holder entries that hostapd parses, wifi-scripts defaults included', () => {
 		for (let e in [ 'ff:ff:ff:ff:ff:ff,*,' + H32, '02:00:00:00:00:01,ap-1.example.com,' + H64,
 		                '02:00:00:00:00:01,' + bytes(47) + ',' + H64 ])
-			t.assert_equal(length(field_errs({ r0kh: [ e ] }, 'r0kh[0]')), 0);
+			t.assert_deep_equal(codes({ r0kh: [ e ] }, 'r0kh[0]'), []);
 		for (let e in [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32,
 		                '02:00:00:00:00:01,02:00:00:00:00:02,' + H64 ])
-			t.assert_equal(length(field_errs({ r1kh: [ e ] }, 'r1kh[0]')), 0);
+			t.assert_deep_equal(codes({ r1kh: [ e ] }, 'r1kh[0]'), []);
 	});
 
-	t.it('refuses the key holder entries that hostapd refuses, without naming the entry', () => {
+	// The last two entries are ones that hostapd takes, since it reads the first 64 or 32 digits
+	// and ignores the rest. No access point means them, so they are refused too.
+	t.it('refuses the key holder entries that hostapd refuses, and digits after the key, without naming the entry', () => {
 		let cases = [
 			[ 'r0kh', '02:00:00:00:00:01,ap1,secret' ],
 			[ 'r0kh', '02:00:00:00:00:01,ap1' ],
 			[ 'r0kh', '02:00:00:00:00:01,' + bytes(48) + ',' + H64 ],
 			[ 'r0kh', '02:00:00:00:00:01,ap 1,' + H64 ],
 			[ 'r0kh', '02:00:00:00:00:01,ap,1,' + H64 ],
-			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H32 + '0' ],
 			[ 'r0kh', '02:00:00:00:00:01,,' + H64 ],
 			[ 'r0kh', '0200.0000.0001,ap1,' + H64 ],
-			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H64 + H32 ],
 			[ 'r1kh', '02:00:00:00:00:01,ap1,' + H64 ],
+			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H32 + '0' ],
+			[ 'r0kh', '02:00:00:00:00:01,ap1,' + H64 + H32 ],
 		];
 		let valid = { r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32, r1kh: '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 };
 		for (let c in cases) {
@@ -487,24 +506,51 @@ t.describe('wireless.interfaces values that reach hostapd as config lines', () =
 			      ssid: 'home', encryption: 'psk2', key: 'short', ...extra },
 		} } });
 	}
+	function h() { return handler.make(wiface, { tx }); }
+	const CTX = { request_id: "01hx0000000000000000000000" };
 
 	t.it('a PATCH with an injected key answers 422 and leaves uci alone', () => {
 		let c = stored({ key: 'correcthorse' });
-		let r = handler.make(wiface, { tx }).patch(c, { request_id: "01hx0000000000000000000000" },
-		                                         'w1', { key: 'abcdefgh\nssid2="x"' });
+		let r = h().patch(c, CTX, 'w1', { key: 'abcdefgh\nssid2="x"' });
 		t.assert_equal(r.status, 422);
 		t.assert_equal(c._state.uci.wireless.w1.key, 'correcthorse');
 	});
 
-	// The key and the lists are never read back, so a PUT carries the stored ones. Checking those
-	// would refuse every write of a section whose stored value LuCI or a shell wrote.
-	t.it('a PUT that omits the key and the key holders keeps stored ones it would refuse', () => {
+	// The key and the lists are never read back, so a PUT carries the stored ones. Checking their
+	// form would refuse every write of a section whose stored value LuCI or a shell wrote.
+	t.it('a PUT that omits the key and the key holders keeps stored ones of another form', () => {
 		let c = stored({ r0kh: [ '02:00:00:00:00:01,ap1,secret' ] });
-		let r = handler.make(wiface, { tx }).replace(c, { request_id: "01hx0000000000000000000000" }, 'w1',
-		                                           { device: 'radio0', mode: 'ap', ssid: 'home2', encryption: 'psk2' });
+		let r = h().replace(c, CTX, 'w1', { device: 'radio0', mode: 'ap', ssid: 'home2', encryption: 'psk2' });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.ssid, 'home2');
 		t.assert_equal(c._state.uci.wireless.w1.key, 'short');
 		t.assert_deep_equal(c._state.uci.wireless.w1.r0kh, [ '02:00:00:00:00:01,ap1,secret' ]);
+	});
+
+	t.it('a PATCH that moves the stored key to another encryption or mode checks it', () => {
+		let c = stored({ encryption: 'wep', key: '1' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { encryption: 'psk2' }).body.errors, (e) => e.field), [ 'key' ]);
+		t.assert_equal(c._state.uci.wireless.w1.encryption, 'wep');
+		c = stored({ key: H64 });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'sta' }).status, 422);
+	});
+
+	// A PATCH that disables a broken SSID must not be refused for the value that broke it.
+	t.it('a PATCH that names neither nasid nor ieee80211r leaves a long stored nasid alone', () => {
+		let c = stored({ key: 'correcthorse', ieee80211r: '1', nasid: bytes(49) });
+		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { nasid: bytes(50) }).status, 422);
+	});
+
+	// A control character is never legitimate there, and a stored one is still injected into
+	// hostapd's config, so the sweep reports it and a write that carries it is refused.
+	t.it('a stored injected key or key holder entry is listed by the sweep and refused when carried', () => {
+		for (let extra in [ { key: 'abcdefgh\nssid2="x"' }, { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] },
+		                    { nasid: 'ap1\nx=1' } ]) {
+			let c = stored({ key: 'correcthorse', ...extra });
+			t.assert_equal(length(h().sweep(c)), 1);
+			t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
+		}
 	});
 });
