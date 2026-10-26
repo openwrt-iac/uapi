@@ -45,8 +45,8 @@ What uapi defends against, what it doesn't, and what the operator should do.
    restore after a failed write reads peers straight from uci, where a
    value never passed `validate()`. wg.uc also checks the values before it
    runs a command. A value that uapi stores for a daemon is a separate
-   path, because the daemon or its scripts read it later. The known gaps
-   are under [Scopes with known injection defects](#scopes-with-known-injection-defects).
+   path, because the daemon or its scripts read it later. See
+   [Values that a daemon reads later](#values-that-a-daemon-reads-later).
 9. **Replay attacks on POST under network flakiness.** `Idempotency-Key`
    caches the response for 24 h; a network-blipped retry returns the cached
    response, not a duplicate side effect. Same key with a different body
@@ -147,24 +147,17 @@ One read scope deserves the same care. `system:cron_jobs:ro`, and every scope ab
 to `*:ro`, returns each root crontab command in full, and a command can carry a credential.
 Keep secrets in a 0600 file that the command reads, rather than on the crontab line.
 
-### Scopes with known injection defects
+### Values that a daemon reads later
 
-The write scopes below take a value that uapi does not fully check, and that a daemon's config
-file or a shell command reads without quoting. Such a value can add a directive, a command or a
-command argument, which root then reads or runs. Grant each one as if it were `*:rw` until uapi
-checks these values:
+An init script copies some stored values into a daemon's config file or into a shell command
+without quoting, and root reads the result. In the curated values that an audit for 3.2.0 found,
+uapi refuses the characters that end the line or the argument, so that a value cannot add a
+directive, a command or a command argument. The check sees what a write sends, so a value that
+LuCI, `uci` or another writer stored stays until a write replaces it.
 
-- `wireless:interfaces:rw`
-- every `snmpd` write scope: `agents`, `com2secs`, `groups`, `accesses` and `system`
-- `dhcp:dnsmasq:rw` and `dhcp:servers:rw`
-- `unbound:server:rw`
-- `network:interfaces:rw`
-- `mwan3:rules:rw`
-
-A parent scope includes them, so `wireless:rw`, `dhcp:rw` and `network:rw` count the same.
-`/raw/` checks no value, so a raw write scope reaches the same paths, and every option that
-uapi does not model: `raw:<package>:rw` with a domain scope of one of these packages counts
-the same.
+`/raw/` checks no value, so a raw write scope can store any value in any option of its package.
+`raw:<package>:rw` with a domain scope of that package counts as a root scope for each package
+that a root daemon or script reads.
 
 ### Audit consequence
 

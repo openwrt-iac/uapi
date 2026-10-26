@@ -528,11 +528,13 @@ All notable changes to this project will be documented in this file. Format foll
   whitespace, `*`, `?` and `[`. `domain` of `unbound/server` takes only a DNS name, as labels of
   letters, digits, `-` and `_` separated by dots, and `clientid` of `network/interfaces` takes
   only hex digits with optional colons. In mode `monitor`, `adhoc` or `mesh`, wifi-scripts can
-  pass `ssid` to a root shell command between single quotes, so a write to `wireless/interfaces`
-  that names `ssid` or `mode` refuses a single quote in `ssid` in these modes. Each refusal
-  answers 422 `invalid_format`, under the carve-out in `docs/versioning.md` for payloads that
-  produced a state no caller can rely on. No value in the uci configs of the OpenWrt feeds is
-  refused. (#250)
+  pass `ssid` to a root shell command between single quotes, so `wireless/interfaces` refuses a
+  single quote in `ssid` in these modes. As for the key in #246, a write that leaves such an SSID
+  as it is is refused only when it enables the SSID or moves it into one of these modes, and `GET
+  /api/v3/diagnostics?validate=1` lists it. Each refusal answers 422 `invalid_format`, under the
+  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on. No
+  value in the uci configs of the OpenWrt feeds is refused. `docs/security.md` no longer lists
+  these scopes among the scopes to grant as `*:rw`. (#250)
 
 ## [3.1.0] - 2026-10-11
 
