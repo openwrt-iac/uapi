@@ -420,8 +420,9 @@ All notable changes to this project will be documented in this file. Format foll
   list, with whitespace, or not as a WireGuard key at all.** uapi refused to give such a value to
   `wg set ... remove`, so the DELETE answered 500, and so did a write that replaced the key or
   disabled the peer. uapi now removes the peer under the key that wg read from the config of
-  wireguard.sh, which joins a list with spaces and which wg reads without whitespace or comments.
-  When that is not a WireGuard key, the kernel holds no such peer, and uapi removes nothing. (#247)
+  wireguard.sh, which joins a list with spaces, and of which wg reads the first line without
+  whitespace or a comment. When that is not a WireGuard key, the kernel holds no such peer, and uapi
+  removes nothing. A key with a backslash, which wireguard.sh expands, still answers 500. (#247)
 
 ### Security
 
@@ -499,8 +500,8 @@ All notable changes to this project will be documented in this file. Format foll
   whole tunnel: on OpenWrt 25.12.5 wg refused the config with `Unable to find port of endpoint:
   '[[fd00::1]]:51820'`. The rule sees the peer as if it were enabled, because another writer such
   as LuCI can enable it later. A write that changes the host, or that enables the peer through
-  `disabled`, is refused for it. Any other write is not, a write that disables the peer included,
-  and `GET /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep
+  `disabled`, is refused for it. Any other write is not refused for the host, and `GET
+  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep
   also lists
   a stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same
   `printf %b`, and a write that enables such a peer is refused. That tightening uses the same

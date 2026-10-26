@@ -27,12 +27,16 @@ t.describe('wg.shellquote', () => {
 
 t.describe('wg.kernel_key', () => {
 	t.it('reads the key as wg reads the config of wireguard.sh', () => {
-		for (let v in [ PK, [ PK ], PK + ' ', ' ' + PK + '\t# peer B' ])
+		for (let v in [ PK, [ PK ], PK + ' ', ' ' + PK + '\t# peer B', PK + '\nAllowedIPs=10.0.0.3/32' ])
 			t.assert_equal(wg.kernel_key(v), PK, v);
 	});
 	t.it('is null when the kernel can hold no such peer', () => {
 		for (let v in [ 'not-a-key', [ PK, PK ], null, '#' + PK ])
 			t.assert_equal(wg.kernel_key(v), null, v);
+	});
+	// wireguard.sh expands an escape, so `\075` can stand for the `=` of a valid key.
+	t.it('is false for a value with a backslash, whose key is not known', () => {
+		t.assert_equal(wg.kernel_key(substr(PK, 0, 43) + '\\075'), false);
 	});
 });
 
@@ -143,6 +147,13 @@ t.describe('wg.apply', () => {
 	});
 
 	// The test has no WireGuard interface, so a remove that runs fails, which shows that it ran.
+	t.it('refuses the remove of a key with a backslash, as before', () => {
+		let c = ubus.stub();
+		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
+		let err = wg.apply(c, [ { iface: "wg1", action: "remove", public_key: substr(PK, 0, 43) + '\\075' } ]);
+		t.assert_true(index(err ?? "", "backslash") >= 0, err);
+	});
+
 	t.it('removes the peer of a key that uci holds as a list', () => {
 		let c = ubus.stub();
 		c.set_ubus_response('network.interface.wg1', 'status', { up: true });

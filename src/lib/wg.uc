@@ -255,12 +255,14 @@ function apply_routes(conn, iface, wanted, previous) {
 }
 
 // The key under which the kernel holds a peer that uci stores: wireguard.sh joins a list with
-// spaces, and wg drops the whitespace and the comment of each config line. null when the kernel
-// can hold no such peer, so there is nothing to remove.
+// spaces, and wg reads the first line without whitespace or comment. null when the kernel can hold
+// no such peer, so there is nothing to remove. false when the value holds a backslash, which
+// wireguard.sh expands with printf %b, so the key that wg read is not known here.
 function kernel_key(v) {
 	let s = (type(v) == "array") ? join(" ", v) : v;
 	if (type(s) != "string") return null;
-	s = replace(split(s, "#")[0], /\s/g, "");
+	if (index(s, "\\") >= 0) return false;
+	s = replace(split(split(s, "\n")[0], "#")[0], /\s/g, "");
 	return match(s, PUBKEY_RE) ? s : null;
 }
 
@@ -366,6 +368,8 @@ function apply(conn, ops, applied) {
 
 		if (op.action == "remove") {
 			let key = kernel_key(op.public_key);
+			if (key === false)
+				return sprintf("refusing to remove a public key with a backslash on %s", iface);
 			if (key != null) {
 				let r = remove_peer(iface, key);
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
