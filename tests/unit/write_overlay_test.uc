@@ -72,6 +72,13 @@ function probes(keyword, bound) {
 	case "maximum":   return { code: "out_of_range", past: [ bound + 1 ], at: [ bound ] };
 	case "maxLength": return { code: "out_of_range", past: [ chars(bound + 1) ], at: [ chars(bound) ] };
 	case "enum":      return { code: "not_in_enum", past: [ "uapi_not_listed" ], at: bound };
+	// No value can be derived from a regex that it accepts, so the module's own tests carry those.
+	// The probes are the candidates that the regex itself refuses: a newline alone would only test
+	// a control-character check, which a validate() could keep after it stopped applying the pattern.
+	case "pattern": {
+		let past = filter([ "x", "0", "", "\n", " ", "#", "[", "\\" ], (v) => !match(v, regexp(bound)));
+		return { code: "invalid_format", past: past, at: [] };
+	}
 	}
 	return null;
 }
@@ -80,7 +87,7 @@ function probes(keyword, bound) {
 // conflict, so the keyword's own code only has to come from one of them.
 function check(mod, cases, o) {
 	let p = probes(o.keyword, o.bound);
-	if (p == null) {
+	if (p == null || length(p.past) == 0) {
 		t.assert_equal(sprintf("no probe for %s %s", o.field, o.keyword), "a probe");
 		return;
 	}
