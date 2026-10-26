@@ -40,9 +40,9 @@ return {
 	openapi_singular: "SNMP community-to-security mapping",
 	openapi_required: ["secname", "source", "community"],
 	schema_properties: {
-		secname:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "security name this community maps to" },
-		source:    { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE,
+		secname:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE, description: "security name this community maps to" },
+		source:    { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE,
 		             description: "source network/range or 'default'" },
-		community: { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMP community string" },
+		community: { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE, description: "SNMP community string" },
 	},
 };

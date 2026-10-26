@@ -30306,14 +30306,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^[^ \t\n\r*?[]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^[^ \t\n\r*?[]*$"
 					},
 					"server": {
 						"type": [
@@ -30423,14 +30423,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^[^ \t\n\r*?[]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^[^ \t\n\r*?[]*$"
 					},
 					"server": {
 						"type": [
@@ -31579,7 +31579,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^([A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*)?$"
 					},
 					"domain_type": {
 						"type": [
@@ -31773,7 +31773,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$"
+						"pattern": "^([A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*)?$"
 					},
 					"domain_type": {
 						"type": [
@@ -32224,7 +32224,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "security name this community maps to"
 					},
 					"source": {
@@ -32232,7 +32232,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "source network/range or 'default'"
 					},
 					"community": {
@@ -32240,7 +32240,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "SNMP community string"
 					},
 					"runtime": {
@@ -32268,7 +32268,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "security name this community maps to"
 					},
 					"source": {
@@ -32276,7 +32276,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "source network/range or 'default'"
 					},
 					"community": {
@@ -32284,7 +32284,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "SNMP community string"
 					}
 				},
@@ -32312,7 +32312,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
@@ -32332,7 +32332,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Security name (community for v1/v2c, USM user for v3)"
 					},
 					"runtime": {
@@ -32358,7 +32358,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
@@ -32378,7 +32378,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Security name (community for v1/v2c, USM user for v3)"
 					}
 				},
@@ -32404,7 +32404,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
@@ -32412,7 +32412,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
@@ -32456,7 +32456,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for read access"
 					},
 					"write": {
@@ -32464,7 +32464,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for write access"
 					},
 					"notify": {
@@ -32472,7 +32472,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for notifications"
 					},
 					"runtime": {
@@ -32498,7 +32498,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
@@ -32506,7 +32506,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
@@ -32550,7 +32550,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for read access"
 					},
 					"write": {
@@ -32558,7 +32558,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for write access"
 					},
 					"notify": {
@@ -32566,7 +32566,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "View name granted for notifications"
 					}
 				},
@@ -33671,7 +33671,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"dest_ip": {
@@ -33686,7 +33686,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"sticky": {
@@ -33707,7 +33707,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Match destination against an ipset; bypasses src/dest_ip."
 					},
 					"use_policy": {
@@ -33775,7 +33775,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"dest_ip": {
@@ -33790,7 +33790,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"sticky": {
@@ -33811,7 +33811,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
+						"pattern": "^[^ \t\n\r*?[]*$",
 						"description": "Match destination against an ipset; bypasses src/dest_ip."
 					},
 					"use_policy": {
