@@ -41,9 +41,9 @@ write. The pre-flight check is part of the atomic transaction recipe;
 no partial state is left behind.
 
 The uci config file has to exist too. `wireless/devices` and
-`wireless/interfaces` need `/etc/config/wireless`, which `wifi config`
-writes only when it finds a radio, and LuCI never creates a radio
-section. On a router without one, a write answers `503 config_missing`
+`wireless/interfaces` need `/etc/config/wireless`, which only
+wifi-scripts creates, with `wifi config` when it finds a radio. LuCI
+never creates a radio section. On a router or an image without it, a write answers `503 config_missing`
 with the missing path, before any uci write. That includes a PUT or PATCH
 of an id that a GET answers 404 for, as with `init_script_missing`. A
 DELETE answers 404, because no section can exist there, and a client
@@ -64,7 +64,7 @@ packages are deliberately not pulled in.
 | Path | Wraps | Notes |
 |---|---|---|
 | `network/interfaces` | `config interface` | Protos static, dhcp, dhcpv6, pppoe, ppp, wwan, wireguard and none. Optional `id` picks the section name at create time (uci section-name charset, 32 chars, tightened to 15 for `proto=wireguard` because netifd uses it as the kernel netdev name); absent, the server emits a 14-char `wg_<rand>` for wireguard or a 28-char ULID otherwise. `runtime` block carries live ubus state (uptime, ipv4/ipv6 addresses, route table). Some fields apply only to some protos, as the `allOf` entries on `proto` in the spec say: a read omits the others, a write that names one with a value other than null, `""` or `[]` answers `422 conflict`, and a proto switch removes the old proto's options. The options that netifd reads for every proto (`metric`, `defaultroute`, `delegate`, `ip4table`, `ip6table`, `dns`, `mtu`, the `ip6assign` group) apply to all of them. netifd applies `mtu` to the interface's device only when that device has no `config device` section of its own, as `br-lan` has in the stock configuration, and to every device that joins the interface later, such as a Wi-Fi netdev. A device with its own section takes its MTU from `network/devices`. On ppp and pppoe, `mtu` goes to pppd, which takes 128 to 16384. `listen_port` reads a service name as the port that wg resolves, and -1 when the name does not resolve. A write that switches an enabled interface to wireguard, or enables a wireguard interface, answers `422 conflict` while one of its stored `network/wireguard_peers` holds a value for which a peer write refuses to enable the peer, such as one that makes wg refuse the whole interface. A PATCH that switches an enabled interface to wireguard and leaves `listen_port` out answers `422 conflict` on `listen_port` while uci holds a hand-written value that reads -1, which the read of the old proto does not show: `null` in the switch removes it, and a PUT removes it anyway. On a proto that uapi does not model, such as `6in4`, a read shows the modelled options that uci stores, a POST or PUT answers `422 not_in_enum`, and a PATCH that leaves `proto` out refuses only `broadcast_flag` and keeps the options of the proto's handler. |
-| `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. `mtu` below 68 is refused on write, because netifd ignores it; a stored one reads as it is. |
+| `network/devices` | `config device` | Bridges, VLANs (8021q/8021ad), macvlan, veth, tun/tap. `mtu` below 68 is refused on write, because netifd ignores it. A stored one reads as it is. |
 | `network/routes` | `config route` | Static routes; cross-refs interface. `table` reads a stored name as its id (253 `default`, 254 `main`, 255 `local`, or the id in `/etc/iproute2/rt_tables`), and 0 when netifd cannot resolve it and drops the route. A write takes an id from 1 to 4294967295. |
 | `network/rules` | `config rule` | Policy routing. `lookup` reads and writes like the `table` of `network/routes`. netifd parses no `lookup` or `goto` action: a rule without `action` is a goto rule when `goto` is set and a lookup rule otherwise, so a read derives `action` that way and a write stores no action for those two. A `goto` must jump forward, past `priority`, and goes only with action goto. |
 | `network/bridge_vlans` | `config bridge-vlan` | Bridge VLAN tagging (vlan 1-4094 + port spec). |
@@ -208,7 +208,7 @@ composition rules, and stability caveat.
 | `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
 | `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
 | `GET /auth/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
-| `GET /tokens`, `POST /tokens`, `DELETE /tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the requested scopes to be a strict subset of the caller's. |
+| `GET /tokens`, `POST /tokens`, `DELETE /tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the caller's scopes to cover the requested scopes, equal or narrower. |
 | `GET /metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
 | `GET /diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
 | `POST /batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |

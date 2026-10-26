@@ -11,9 +11,11 @@ const VALID_ACTIONS = { "lookup": true, "goto": true, "unreachable": true,
 
 // netifd parses `action` with system_rtn_aton, which knows `unicast` but neither `lookup` nor
 // `goto`, and drops a rule whose action it cannot read. Without one, a rule is a goto rule when
-// its goto parses and a lookup rule otherwise, and `unicast` is that same lookup.
+// its goto parses and a lookup rule otherwise. `unicast` is a lookup even beside a goto: netifd
+// then sends the goto with type unicast, which the kernel refuses.
 function rule_action(action, has_goto) {
-	if (type(action) == "string" && action != "" && action != "unicast") return action;
+	if (action == "unicast") return "lookup";
+	if (type(action) == "string" && action != "") return action;
 	return has_goto ? "goto" : "lookup";
 }
 
@@ -142,7 +144,7 @@ return {
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
 		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766 },
 		lookup:   { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
-		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule; a write of 0 answers 422." },
+		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write of 0 answers 422." },
 		goto:     { type: ["integer", "null"], minimum: 0, maximum: 2147483647, "x-uapi-write": { minimum: 1 },
 		            description: "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too." },
 		action:   { type: "string", enum: keys(VALID_ACTIONS),

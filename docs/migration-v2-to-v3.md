@@ -19,7 +19,7 @@ one, so no manual uci edit is needed.
 2. Change your base URL from `/api/v2` to `/api/v3`
 3. Regenerate any typed client. Model names change: every resource now has a separate
    `<Name>Request` and `<Name>Response` schema
-4. Verify: `GET /api/v3/healthz` returns `{"status":"ok","version":"3.0.0",...}`
+4. Verify: `GET /api/v3/healthz` returns `{"status":"ok","version":"3.x.y",...}`, with the installed 3.x version
 
 ## Removed request fields are rejected (Breaking)
 

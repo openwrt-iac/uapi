@@ -107,7 +107,7 @@ return {
 		gateway:   { type: ["string", "null"],
 		             description: "IPv4 next-hop address" },
 		table:     { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
-		             description: "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route; a write of 0 answers 422." },
+		             description: "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write of 0 answers 422." },
 		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		source:    { type: ["string", "null"],

@@ -56,7 +56,7 @@ is 1 to 3 digits: an entry such as `fd00::/0x40`, which 3.1 read as `/0`, is ref
 and a stored one admits no caller. The validation sweep does not cover tokens, so
 `uapi-token list` is where a stored entry shows.
 
-The requested scopes must be a strict subset of the caller's. Escalation
+The caller's scopes must cover the requested scopes, equal or narrower. Escalation
 returns `403 scope_escalation_blocked`. The same request with a name
 that's already in use returns `409 conflict`.
 
