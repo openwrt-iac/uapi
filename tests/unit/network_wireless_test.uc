@@ -586,6 +586,21 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		                    [ 'r1_key_holder' ]);
 	});
 
+	// ap.uc writes mobility_domain as erp_domain on an EAP SSID with fils, which uapi does not model.
+	t.it('a stored newline in mobility_domain is live on an EAP access point without 802.11r', () => {
+		let c = stored({ disabled: '1', encryption: 'wpa2', mobility_domain: 'abcd\nssid2="x"' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
+	});
+
+	// wifi-scripts joins the entries of a list that uci holds for a text option with spaces.
+	t.it('a text option that uci holds as a list is checked as its joined entries', () => {
+		let c = stored({ disabled: '1', nasid: [ 'ap1', 'x\nssid2="x"' ] });
+		t.assert_equal(length(h().sweep(c)), 1);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
+	});
+
 	// The lists are never read back, so a PUT carries the stored ones. hostapd reads them only with
 	// fast transition and ft_psk_generate_local off.
 	t.it('a stored key holder entry is checked only while hostapd reads the lists', () => {

@@ -65,6 +65,8 @@ function base_encryption(e) {
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
 // section with no mode reads as mode ap, as fromUci() reads it.
 const BELOW_WPA2 = { "none": true, "wep": true, "psk": true, "wpa": true };
+// With fils, which uapi does not model, ap.uc writes mobility_domain as erp_domain on an EAP SSID.
+const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
 const ROAMING_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !BELOW_WPA2[base_encryption(e)]);
 const FT_ENCRYPTION = filter(ROAMING_ENCRYPTION, (e) => base_encryption(e) != "owe");
@@ -212,21 +214,26 @@ function validate_new(json) {
 	let mode = json.mode ?? "ap";
 	let r = roaming(json);
 	let err = (field, code, message, live) => push(errs, { field, code, message, live: !!live });
+	// wifi-scripts writes a list that uci holds for a text option as its entries joined by spaces.
+	let text = (v) => (type(v) == "array") ? join(" ", v) : v;
+	let key = text(json.key), nasid = text(json.nasid);
+	let md = text(json.mobility_domain), r1 = text(json.r1_key_holder);
 	let line = function(field, v, live) {
 		if (length(v) > LINE_MAX) err(field, "out_of_range", TOO_LONG, live);
 		if (index(v, "\n") >= 0) err(field, "invalid_format", ONE_LINE, live);
 	};
 
-	if (type(json.key) == "string" && index(json.key, "\n") >= 0)
+	if (type(key) == "string" && index(key, "\n") >= 0)
 		err("key", "invalid_format", ONE_LINE,
 		    on && KEY_LINE_MODES[base_encryption(json.encryption)] && (mode in [ "ap", "sta", "adhoc", "mesh" ]));
 
-	if (type(json.mobility_domain) == "string") line("mobility_domain", json.mobility_domain, on && r.roams);
-	if (type(json.r1_key_holder) == "string") line("r1_key_holder", json.r1_key_holder, on && r.key_holders);
+	if (type(md) == "string")
+		line("mobility_domain", md, on && (r.roams || (mode == "ap" && EAP[base_encryption(json.encryption)])));
+	if (type(r1) == "string") line("r1_key_holder", r1, on && r.key_holders);
 
-	if (type(json.nasid) == "string") {
-		line("nasid", json.nasid, on && mode == "ap");
-		if (r.ft && length(json.nasid) > NASID_MAX)
+	if (type(nasid) == "string") {
+		line("nasid", nasid, on && mode == "ap");
+		if (r.ft && length(nasid) > NASID_MAX)
 			err("nasid", "out_of_range",
 			    sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX), on);
 	}
@@ -297,7 +304,7 @@ return {
 		              description: "SSID broadcast (or joined in sta mode)" },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
-		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is is refused for it only when it makes the daemon read the key: by enabling the SSID, or by changing its mode or encryption" },
+		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is is refused for the newline only when it enables the SSID or changes its mode or encryption" },
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
@@ -315,7 +322,7 @@ return {
 		mobility_domain: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{4}$",
 		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID" },
 		nasid:      { type: ["string", "null"], "x-uapi-write": { maxLength: LINE_MAX },
-		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, and more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. A write that leaves nasid as it is is refused for a problem that nasid already had only when it makes hostapd read nasid or apply the limit of %d: by enabling the SSID, changing its mode or encryption, or turning 802.11r on. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX, NASID_MAX) },
+		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, and more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe. A write that leaves nasid as it is is refused for a problem that nasid already had only when it enables the SSID or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], minimum: 1000, maximum: 65535,
 		              description: "802.11r reassociation deadline in time units of 1.024 ms. Unset, wifi-scripts uses 20000" },
 		r0_key_lifetime: { type: ["integer", "null"], minimum: 0,

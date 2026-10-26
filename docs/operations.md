@@ -271,9 +271,9 @@ The tunnel itself works, and a PATCH that leaves `proto` out is accepted.
 A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break either, until the
 daemon reads the value. Another writer can store a value that such a rule refuses, and
 the sweep lists it whether the daemon reads it yet or not: the section can be disabled,
-or its mode can leave the field unused. A write that leaves the value as it is, and does
-not make the daemon read it, is accepted. The sweep lists the section because another
-writer, such as LuCI, can enable it later.
+or its mode can leave the field unused. A write is refused for such a value only when it
+adds the error, for example when it changes the field or enables the section. The sweep
+lists the section because another writer, such as LuCI, can enable it later.
 
 Three things worth knowing:
 
