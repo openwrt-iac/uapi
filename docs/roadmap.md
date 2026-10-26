@@ -292,6 +292,39 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **The changelog is written in each PR and checked by CI**, on the Grafana Mimir model, and a
   ruleset on `main` requires that check and the CI jobs.
 
+## Shipped in 3.2.0
+
+- **Reads follow what netifd and the scripts read.** `network/interfaces`, `routes`, `rules`,
+  `devices`, `bridge_vlans` and `wireguard_peers` read a hex or octal integer, a scalar list as
+  its words, a table name as its id and a service name as its port, as netifd, `wireguard.sh`
+  and wg do. Before, a PUT of a read could remove the ports of a bridge, move a route into the
+  main table or change the port of a tunnel.
+- **`network/interfaces` knows which proto takes which field.** A write refuses a field that the
+  proto does not take, a read omits it, and a PATCH that changes `proto` removes the options of
+  the old one. The options that netifd reads on every proto, such as `metric`, `ip4table`,
+  `ip6hint` and `ip6ifaceid`, apply to every proto, and `sourcefilter`, `ip6class`, `ip6weight`
+  and `broadcast_flag` are new.
+- **A write that the daemon refuses or ignores no longer answers 200.** An `mtu` that netifd or
+  pppd does not apply, table 0, a `goto` that the kernel refuses and a raw option that uci cannot
+  store answer 422, and a package with no file under `/etc/config/` answers `503
+  config_missing`. The request schemas declare the bounds that a write accepts, through
+  `x-uapi-write`.
+- **A PUT of a radio or an SSID keeps its hardware binding and its 802.11r group.** Before, the
+  first apply that changed a radio removed its `path`, and the radio stayed down with all its
+  SSIDs.
+- **Raw writes answer with what uci stored**, refuse what uci cannot store, and remove an option
+  for `null` and `""`. Every write reads the package only after it takes the lock, so a commit by
+  LuCI just before it is no longer invisible to it.
+- **Audits of the values that reach a root shell or a daemon config.** A WireGuard peer's
+  `allowed_ips` and a stored `persistent_keepalive` reached a root shell, `endpoint_host` and a
+  wireless `key` added lines to a daemon config, a raw `.type` passed the scope check as another
+  type, and an IPv6 `allowed_cidrs` entry could admit every address. Each one is fixed. The values
+  that init scripts copy into the configs and commands of snmpd, dnsmasq, unbound, lldpd, mwan3,
+  netifd and wifi-scripts refuse the characters that end a line or an argument, and
+  `docs/security.md` lists the write scopes that reach root. The follow-ups are
+  [#249](https://github.com/openwrt-iac/uapi/issues/249) and
+  [#251](https://github.com/openwrt-iac/uapi/issues/251).
+
 ## Features (additive, future minor bumps in v3.x)
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
@@ -326,8 +359,8 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **Upstream: widen the interface `disabled` reader once 25.12 carries netifd `e97e36f`.**
   netifd accepts `disabled 'true'` on an interface since that commit, 2026-07-16, so
   `network/interfaces` can then read the flag with `platform_bool` like routes and rules.
-  As of 2026-10-10, OpenWrt `main` pins a netifd from 2026-09-11, which carries it, but
-  `openwrt-25.12` still pins 2026-02-26, and so does 25.12.5. The unit test that pins the
+  As of 2026-10-26, OpenWrt `main` pins a netifd from 2026-09-11, which carries it, but
+  `openwrt-25.12` still pins 2026-02-26, and so does 25.12.6. The unit test that pins the
   per-type difference is what will say when the widening is right.
 
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write

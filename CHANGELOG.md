@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-26
+
 ### Added
 
 - **`network/interfaces.sourcefilter` lets the downstream subnets of a routed `ip6prefix` reach
