@@ -387,6 +387,45 @@ t.describe('handler.replace', () => {
 	});
 });
 
+t.describe('handler error merge', () => {
+	function rules_with(hooks) {
+		return handler.make({ ...rules_mod, ...hooks }, {
+			tx: {
+				acquire: function() { return {}; },
+				release: function() {},
+				reload: function() { return null; },
+				check_services: function() { return null; },
+			},
+		});
+	}
+	let body = { target: 'DROP', match: { src_zone: 'wan' } };
+
+	t.it('reports one error per field and code of validate()', () => {
+		let h = rules_with({ validate: () => [
+			{ field: 'target', code: 'invalid_format', message: 'a' },
+			{ field: 'target', code: 'invalid_format', message: 'b' },
+		] });
+		t.assert_equal(length(h.create(with_zones(), ctx(), body).body.errors), 1);
+	});
+
+	t.it('reports every validate_new() rule on one field', () => {
+		let h = rules_with({ validate_new: () => [
+			{ field: 'target', code: 'invalid_format', message: 'a' },
+			{ field: 'target', code: 'invalid_format', message: 'b', live: false },
+		] });
+		let errs = h.create(with_zones(), ctx(), body).body.errors;
+		t.assert_deep_equal(map(errs, (e) => e.message), [ 'a', 'b' ]);
+		t.assert_equal(errs[1].live, null);
+	});
+
+	t.it('PUT reports a validation error before it reads the stored section', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT' };
+		let h = rules_with({ fromUci: () => die('unreadable') });
+		t.assert_equal(h.replace(c, ctx(), 'r_existing', { ...body, target: 'BOGUS' }).status, 422);
+	});
+});
+
 t.describe('handler.patch', () => {
 	function with_existing() {
 		let c = with_zones();

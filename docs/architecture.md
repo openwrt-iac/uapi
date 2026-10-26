@@ -293,8 +293,10 @@ uapi does not model, but GET-then-PUT-self is not (PUT discards them). Tooling
 that wants to preserve unmodeled state must use PATCH.
 
 Field errors are deduped by `(field, code)`. Schema errors win over
-validator errors for the same (field, code) tuple. The 422 body carries the
-full set; clients fix everything in one round trip.
+validator errors for the same (field, code) tuple. A `validate_new()` error is
+dropped only when one of them has its (field, code): each of its rules on a
+field is its own error, so that one cannot hide another. The 422 body carries
+the full set; clients fix everything in one round trip.
 
 ## ETag derivation
 

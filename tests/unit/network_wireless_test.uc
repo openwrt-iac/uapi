@@ -399,9 +399,9 @@ t.describe('wireless.interfaces has_key is always present and honest', () => {
 	});
 });
 
-// wifi-scripts writes key, nasid, r0kh and r1kh into the daemon's config without escaping, so a
-// newline in one added a directive, and hostapd refuses its whole config for one bad key holder
-// entry.
+// wifi-scripts writes key, nasid, the 802.11r options and the key holder lists into the daemon's
+// config without escaping, so a newline in one added a directive, and hostapd refuses its whole
+// config for one bad key holder entry.
 t.describe('wireless.interfaces values that reach the daemon as config lines', () => {
 	const H32 = '00112233445566778899aabbccddeeff';
 	const H64 = H32 + H32;
@@ -461,6 +461,14 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		// hostapd's own form, with spaces, which wifi-scripts passes on as it is.
 		t.assert_deep_equal(codes({ ...FT, r0kh: [ '02:00:00:00:00:01 ap1 ' + H64 ] }, 'r0kh[0]'), []);
 		t.assert_deep_equal(codes({ ...FT, r1kh: [ '02:00:00:00:00:01 02:00:00:00:00:02 ' + H64 ] }, 'r1kh[0]'), []);
+	});
+
+	// netifd splits a list that uci holds as an option on every whitespace, a newline included, and
+	// does not trim it.
+	t.it('reads a key holder list held as an option as netifd splits it', () => {
+		let e = 'ff:ff:ff:ff:ff:ff,*,' + H32;
+		t.assert_deep_equal(codes({ ...FT, r0kh: e + '\n' + e }, 'r0kh[0]'), []);
+		t.assert_deep_equal(codes({ ...FT, r0kh: ' ' + e }, 'r0kh[0]'), [ 'invalid_format' ]);
 	});
 
 	t.it('refuses a key holder entry that hostapd refuses, without naming the entry', () => {
@@ -563,6 +571,19 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
 		c = stored({ encryption: 'sae', r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nssid2="x"' ] });
 		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 422);
+	});
+
+	// wifi-scripts writes mobility_domain with fast roaming on, and r1_key_holder with the key
+	// holder lists too.
+	t.it('a stored newline in an 802.11r option is refused once hostapd reads it', () => {
+		let c = stored({ encryption: 'sae', mobility_domain: 'abcd\nssid2="x"' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => e.field),
+		                    [ 'mobility_domain' ]);
+		c = stored({ ieee80211r: '1', r1_key_holder: bytes(1025) });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false }).body.errors, (e) => e.field),
+		                    [ 'r1_key_holder' ]);
 	});
 
 	// The lists are never read back, so a PUT carries the stored ones. hostapd reads them only with
