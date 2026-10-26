@@ -63,8 +63,8 @@ function endpoint_host_problems(host) {
 	let out = [];
 	if (index(host, "\\") >= 0 || index(host, "\n") >= 0)
 		push(out, "must not contain a backslash or a newline: wireguard.sh expands escapes in the config that it gives wg");
-	if (match(host, /[][]/))
-		push(out, "must not be in brackets: wireguard.sh brackets an IPv6 address itself, and wg refuses a doubled bracket");
+	if (index(host, ":") >= 0 && match(host, /[][]/))
+		push(out, "must not hold a bracket with a colon: wireguard.sh brackets every host with a colon itself, and wg refuses a doubled bracket");
 	return out;
 }
 
@@ -235,7 +235,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write that changes the host, or enables the peer, refuses a backslash, a newline and brackets" },
+		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, and a bracket in a host with a colon" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

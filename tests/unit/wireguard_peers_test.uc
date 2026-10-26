@@ -141,19 +141,20 @@ t.describe('network.wireguard_peers.validate', () => {
 
 	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
 	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
-	// with a colon. Any other host is left to wg, as before.
-	t.it('refuses an escape, a newline or brackets in endpoint_host', () => {
+	// with a colon, and only those. Any other host is left to wg, as before.
+	t.it('refuses an escape, a newline, or brackets with a colon in endpoint_host', () => {
 		function host_errs(h) {
 			return filter(full_validate(wgp, { interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			                                  allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
-		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
+		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '',
+		                '[192.0.2.1]', '[vpn.example.com]' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', '[vpn.example.com]' ])
+		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', 'fd00::1]' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
 		// Each problem is its own error.
-		t.assert_deep_equal(map(host_errs('192.0.2.1\\0072443\\n[Peer]'), (e) => e.code), [ 'invalid_format', 'invalid_format' ]);
+		t.assert_deep_equal(map(host_errs('fd00::1\\n[Peer]'), (e) => e.code), [ 'invalid_format', 'invalid_format' ]);
 		t.assert_equal(length(host_errs('vpn.example.com\t')), 0);
 		// wireguard.sh reads a list option as its words joined by spaces.
 		t.assert_deep_equal(map(wgp.validate_new({ endpoint_host: [ '192.0.2.1\\nPeer' ] }), (e) => [ e.field, e.code ]),
