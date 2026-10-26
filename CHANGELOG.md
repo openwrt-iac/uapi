@@ -41,10 +41,10 @@ All notable changes to this project will be documented in this file. Format foll
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
   wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
   hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
-  bytes. With fast transition, it refuses a `nasid` over 48 bytes and, when hostapd reads the key
-  holder lists, an entry that hostapd cannot parse. A write is refused for such a value only when it
-  adds the error: when it changes the field, or makes hostapd read a stored value, for example by
-  enabling the SSID or turning fast transition on. `validate()` and the schema check run as before,
+  bytes. It refuses a `nasid` over 48 bytes with fast transition, and an entry that hostapd cannot
+  parse while hostapd reads the key holder lists, which it does with owe too. A write is refused for
+  such a value only when it adds the error, for example when it changes the field, enables the SSID
+  or turns fast transition on. `validate()` and the schema check run as before,
   so a PUT or a JSON Patch also checks a stored `mobility_domain` or `r1_key_holder` against its
   pattern. Enabling the radio of the SSID, or moving the SSID to another radio, is not checked. `GET
   /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole group
