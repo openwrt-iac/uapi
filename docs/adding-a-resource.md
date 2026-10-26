@@ -207,11 +207,14 @@ when the section must stay writable: disabling an SSID that holds an injected ke
 such rules in `validate_new(json)`, which returns errors with a `live` flag: `false` when the
 daemon does not read the value yet, because the section is disabled or its mode does not use the
 field. Report the error either way, because another writer can enable the section later, and
-report each problem of a value as its own error, so that one cannot hide another.
+report each problem of a value as its own error, so that one cannot hide another: the 422 keeps
+each of them, unless the schema check or `validate()` already reported its field and code.
 
 The handler runs `validate_new()` on the section as it was and as the write leaves it, and
 refuses the write only for an error that it adds: one in a field that the write changes, one
 that the section did not have, by field, code and message, or one that was not live and is now.
+A list and an option that holds the same words joined by spaces are the same value, as the
+daemons read them.
 So a write that leaves a field alone, disabling included, is never refused for an error that the
 field already had, and a write that makes a stored value live, by enabling the section or by
 turning a daemon option on, is. The sweep runs `validate_new()` on every stored section and lists

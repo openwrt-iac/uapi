@@ -23,10 +23,10 @@ for (let m in CIPHER_MODES)
 // Encryption) is keyless and is the stock default on 6 GHz radios.
 const NO_KEY_ENCRYPTION = { "none": true, "wep": true, "owe": true };
 const KEY_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !NO_KEY_ENCRYPTION[e]);
-// wifi-scripts copies key, nasid, r0kh and r1kh into the daemon's config without escaping, so a
-// newline in one of them starts a directive of the writer's choice. A token scoped to wireless
-// interfaces set a key that ended in `\nssid2="x"`, and hostapd broadcast x while every read still
-// showed the old SSID.
+// wifi-scripts copies key, nasid, the 802.11r options and the key holder lists into the daemon's
+// config without escaping, so a newline in one of them starts a directive of the writer's choice.
+// A token scoped to wireless interfaces set a key that ended in `\nssid2="x"`, and hostapd
+// broadcast x while every read still showed the old SSID.
 const ONE_LINE = "must not contain a newline: wifi-scripts writes it into the daemon's config as one line";
 // hostapd reads its config 4096 bytes at a time and takes the rest of a longer line as a line of
 // its own, which is the same injection without a newline.
@@ -71,7 +71,7 @@ const FT_ENCRYPTION = filter(ROAMING_ENCRYPTION, (e) => base_encryption(e) != "o
 function roaming(v) {
 	let base = base_encryption(v.encryption);
 	let on = (v.mode ?? "ap") == "ap" && v.ieee80211r === true && !BELOW_WPA2[base];
-	return { ft: on && base != "owe",
+	return { roams: on, ft: on && base != "owe",
 	         key_holders: on && !(v.ft_psk_generate_local ?? LOCAL_FT_KEYS[base] ?? false) };
 }
 
@@ -212,31 +212,36 @@ function validate_new(json) {
 	let mode = json.mode ?? "ap";
 	let r = roaming(json);
 	let err = (field, code, message, live) => push(errs, { field, code, message, live: !!live });
+	let line = function(field, v, live) {
+		if (length(v) > LINE_MAX) err(field, "out_of_range", TOO_LONG, live);
+		if (index(v, "\n") >= 0) err(field, "invalid_format", ONE_LINE, live);
+	};
 
 	if (type(json.key) == "string" && index(json.key, "\n") >= 0)
 		err("key", "invalid_format", ONE_LINE,
 		    on && KEY_LINE_MODES[base_encryption(json.encryption)] && (mode in [ "ap", "sta", "adhoc", "mesh" ]));
 
+	if (type(json.mobility_domain) == "string") line("mobility_domain", json.mobility_domain, on && r.roams);
+	if (type(json.r1_key_holder) == "string") line("r1_key_holder", json.r1_key_holder, on && r.key_holders);
+
 	if (type(json.nasid) == "string") {
-		let read = on && mode == "ap";
-		if (length(json.nasid) > LINE_MAX) err("nasid", "out_of_range", TOO_LONG, read);
-		if (index(json.nasid, "\n") >= 0) err("nasid", "invalid_format", ONE_LINE, read);
+		line("nasid", json.nasid, on && mode == "ap");
 		if (r.ft && length(json.nasid) > NASID_MAX)
 			err("nasid", "out_of_range",
 			    sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX), on);
 	}
 
 	// Each entry ends with the key that the key holders share, so no message names it. uci can
-	// hold a list as an option, which netifd splits on whitespace. hostapd reads the lists only with
-	// fast transition and ft_psk_generate_local off, so the grammar applies only then.
-	let read = on && r.key_holders;
+	// hold a list as an option, which netifd splits on every whitespace, a newline included, with
+	// no trim, so a leading space gives an empty entry. hostapd reads the lists only with fast
+	// transition and ft_psk_generate_local off, so the grammar applies only then.
 	for (let field, kh in KEY_HOLDERS) {
-		let list = values.as_word_list_or_null(json[field]) ?? [];
+		let v = json[field];
+		let list = (type(v) == "string") ? split(v, /\s+/) : (type(v) == "array") ? v : [];
 		for (let i = 0; i < length(list); i++) {
 			let e = list[i], f = sprintf("%s[%d]", field, i);
 			if (type(e) != "string") continue;
-			if (length(e) > LINE_MAX) err(f, "out_of_range", TOO_LONG, read);
-			if (index(e, "\n") >= 0) err(f, "invalid_format", ONE_LINE, read);
+			line(f, e, on && r.key_holders);
 			if (r.key_holders && !match(e, kh.re)) err(f, "invalid_format", kh.message, on);
 		}
 	}

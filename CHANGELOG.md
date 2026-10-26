@@ -39,10 +39,10 @@ All notable changes to this project will be documented in this file. Format foll
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
-  wifi-scripts writes `nasid`, `r0kh` and `r1kh` into hostapd's config as lines, so a write refuses
-  a newline in them and a `nasid` or an entry over 1024 bytes. With fast transition, it refuses a
-  `nasid` over 48 bytes and, when hostapd reads the key holder lists, an entry that hostapd cannot
-  parse. A write that leaves a field as it is, disabling the SSID included, is never refused for a
+  wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
+  hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
+  bytes. With fast transition, it refuses a `nasid` over 48 bytes and, when hostapd reads the key
+  holder lists, an entry that hostapd cannot parse. A write that leaves a field as it is, disabling the SSID included, is never refused for a
   problem that the field already had. A write that changes the field, or that makes a stored value
   read by hostapd, by enabling the SSID, changing its mode or encryption, or turning fast transition
   on, is. Enabling its radio, or moving it to another radio, is not checked. `GET
