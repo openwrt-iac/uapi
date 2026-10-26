@@ -213,8 +213,9 @@ each of them, unless the schema check or `validate()` already reported its field
 The handler runs `validate_new()` on the section as it was and as the write leaves it, and
 refuses the write only for an error that it adds: one in a field that the write changes, one
 that the section did not have, by field, code and message, or one that was not live and is now.
-A list and an option that holds the same words joined by spaces are the same value, as the
-daemons read them.
+An option and the list of its words, split on whitespace as netifd splits it, are the same
+value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
+of its own.
 So a write that leaves a field alone, disabling included, is never refused for an error that the
 field already had, and a write that makes a stored value live, by enabling the section or by
 turning a daemon option on, is. The sweep runs `validate_new()` on every stored section and lists

@@ -287,12 +287,16 @@ function new_errors(resource, after, before) {
 		let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
 		let had = {};
 		for (let e in resource.validate_new(before) ?? []) had[id(e)] = had[id(e)] || e.live !== false;
-		// uci holds the same value as a list or as an option of words, and the daemons that
-		// these rules model read both as the words joined by spaces.
-		let words = (v) => sprintf("%J", (type(v) == "array") ? join(" ", v) : v);
+		// An option is the list of its words, as netifd splits it. Two lists are the same only
+		// entry by entry, because wifi-scripts writes each entry as a line of its own.
+		let same = function(a, b) {
+			if (type(a) == "string" && type(b) == "array") a = split(a, /\s+/);
+			if (type(b) == "string" && type(a) == "array") b = split(b, /\s+/);
+			return sprintf("%J", a) == sprintf("%J", b);
+		};
 		errs = filter(errs, function(e) {
 			let f = match(e.field, /^[A-Za-z0-9_]+/)?.[0];
-			return words(after[f]) != words(before[f]) || !exists(had, id(e))
+			return !same(after[f], before[f]) || !exists(had, id(e))
 			       || (e.live !== false && !had[id(e)]);
 		});
 	}
