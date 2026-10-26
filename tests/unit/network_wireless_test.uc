@@ -600,6 +600,13 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
 	});
 
+	// netifd reads a list held as an option as its words, so a PATCH that sends those words as a
+	// list leaves the value as it is.
+	t.it('a list with the words of a stored option is the same value', () => {
+		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32 + ' bad' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ] }).status, 200);
+	});
+
 	// The handler compares the errors of the SSID before and after the write, so a stored error that
 	// the write leaves as it is never blocks it, whichever field the write names.
 	t.it('a write is not refused for a stored error that it leaves as it is', () => {
