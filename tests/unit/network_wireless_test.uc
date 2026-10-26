@@ -528,12 +528,15 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 
 	t.it('a stored ssid with a single quote blocks only a write that enables it or moves it to a shell mode', () => {
 		let c = stored({ mode: 'monitor', ssid: "Bob's" });
+		t.assert_equal(length(h().sweep(c)), 1);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: "Bob's" }).status, 200);
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'ssid' ]);
 		c = stored({ ssid: "Bob's" });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: "Bob's" }).status, 200);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'mesh' }).body.errors, (e) => e.field), [ 'ssid' ]);
 		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
+		c = stored({ mode: 'monitor', ssid: [ 'home', "Bob's" ], disabled: '1' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'ssid' ]);
 	});
 
 	// LuCI's Enable writes only disabled=0, so a value stored on a disabled SSID becomes live later.

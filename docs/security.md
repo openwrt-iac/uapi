@@ -128,8 +128,8 @@ Hierarchical, deepest-match wins. Syntax: `<segment>[:<segment>...]:(rw|ro)`.
 
 ### Scopes that grant root
 
-Some write scopes let the holder run code as root directly. Grant each one as if it were
-`*:rw`:
+Some write scopes let the holder run code as root directly, or choose a file that a root daemon
+writes. Grant each one as if it were `*:rw`:
 
 - `system:cron_jobs:rw` adds a crontab line, and crond runs its command as root.
 - `system:authorized_keys:rw` adds an SSH key that logs in as root.
@@ -138,6 +138,8 @@ Some write scopes let the holder run code as root directly. Grant each one as if
 - `uhttpd:instances:rw` sets the document root and the CGI, Lua and ucode prefixes of an
   instance, so it chooses which programs uhttpd runs as root and which files it serves.
 - `dhcp:odhcpd:rw` sets `leasetrigger`, a program that odhcpd runs as root on each lease change.
+- `dhcp:dnsmasq:rw` sets `leasefile`, a file that dnsmasq opens as root and rewrites with its
+  leases.
 
 The list is not complete: several uci options name a script that a daemon runs as root.
 A parent scope includes them, so `system:rw` grants the first three. Deepest match wins,
@@ -152,8 +154,8 @@ Keep secrets in a 0600 file that the command reads, rather than on the crontab l
 An init script copies some stored values into a daemon's config file or into a shell command
 without quoting, and root reads the result. In the curated values that an audit for 3.2.0 found,
 uapi refuses the characters that end the line or the argument, so that a value cannot add a
-directive, a command or a command argument. The check sees what a write sends, so a value that
-LuCI, `uci` or another writer stored stays until a write replaces it.
+directive, a command or a command argument. The check runs when a write goes through uapi, so a
+value that LuCI, `uci` or another writer stored stays until a write replaces it.
 
 `/raw/` checks no value, so a raw write scope can store any value in any option of its package.
 `raw:<package>:rw` with a domain scope of that package counts as a root scope for each package

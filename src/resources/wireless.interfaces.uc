@@ -231,8 +231,9 @@ function validate_new(json) {
 	};
 
 	// A single quote is valid in an SSID of the other modes, so a write that moves one into these
-	// modes is what adds the error.
-	if (SHELL_SSID_MODES[mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
+	// modes is what adds the error. Another writer can store the SSID as a list.
+	let ssid = text(json.ssid);
+	if (SHELL_SSID_MODES[mode] && type(ssid) == "string" && index(ssid, "'") >= 0)
 		err("ssid", "invalid_format", "must not hold a single quote in mode monitor, adhoc or mesh", on);
 
 	if (type(key) == "string" && index(key, "\n") >= 0)
