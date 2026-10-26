@@ -15,6 +15,10 @@ const VALID_DOMAIN_TYPE = {
 	"inform": true, "inform_deny": true,
 };
 
+// unbound.sh writes the domain into unbound.conf, in part between quotes, and odhcpd.sh hands it
+// to awk -v, which reads backslash escapes. A DNS name needs none of these characters.
+const DOMAIN_RE = "^([A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*)?$";
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -125,7 +129,7 @@ return {
 		query_minimize:    { type: "boolean", default: false },
 		rebind_protection: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
-		domain:            { type: ["string", "null"], pattern: values.ONE_WORD_RE },
+		domain:            { type: ["string", "null"], pattern: DOMAIN_RE },
 		domain_type:       { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DOMAIN_TYPE),
 		                     description: "Local-zone type for the configured domain" },
 		manual_conf:       { "x-uapi-read-nullable": true, type: "boolean",

@@ -520,15 +520,19 @@ All notable changes to this project will be documented in this file. Format foll
   directive: the string fields of every `snmpd` resource, `domain`, `local`, `server` and
   `address` of `dhcp/dnsmasq`, `domain` and `dhcp_option` of `dhcp/servers`, and
   `lldp_description` and `lldp_mgmt_ip` of `lldpd/config`. They now refuse a newline and a
-  carriage return, and the two lldpd fields refuse a double quote too. A script expands these
-  values unquoted, so whitespace added an argument: `leasefile` and `resolvfile` of
-  `dhcp/dnsmasq`, `domain` of `unbound/server`, and `src_port`, `dest_port` and `ipset` of
-  `mwan3/rules`. They now refuse whitespace, and `clientid` of `network/interfaces` takes only
-  hex digits with optional colons. In mode `monitor`, `adhoc` or `mesh`, wifi-scripts can pass
-  `ssid` to a root shell command between single quotes, so `wireless/interfaces` refuses a single
-  quote in `ssid` in these modes. Each refusal answers 422 `invalid_format`, under the carve-out in
-  `docs/versioning.md` for payloads that produced a state no caller can rely on. No value in the
-  uci configs of the OpenWrt feeds is refused. (#250)
+  carriage return, and the two lldpd fields refuse a double quote too. snmpd splits its line into
+  words, so `group`, `context`, `read`, `write` and `notify` of `snmpd/accesses`, `secname`,
+  `source` and `community` of `snmpd/com2secs`, and `group` and `secname` of `snmpd/groups` also
+  refuse whitespace. A script expands `leasefile` and `resolvfile` of `dhcp/dnsmasq`, and
+  `src_port`, `dest_port` and `ipset` of `mwan3/rules`, unquoted, so these fields now refuse
+  whitespace, `*`, `?` and `[`. `domain` of `unbound/server` takes only a DNS name, as labels of
+  letters, digits, `-` and `_` separated by dots, and `clientid` of `network/interfaces` takes
+  only hex digits with optional colons. In mode `monitor`, `adhoc` or `mesh`, wifi-scripts can
+  pass `ssid` to a root shell command between single quotes, so a write to `wireless/interfaces`
+  that names `ssid` or `mode` refuses a single quote in `ssid` in these modes. Each refusal
+  answers 422 `invalid_format`, under the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on. No value in the uci configs of the OpenWrt feeds is
+  refused. (#250)
 
 ## [3.1.0] - 2026-10-11
 

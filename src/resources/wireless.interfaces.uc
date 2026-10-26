@@ -184,7 +184,7 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	values.require_present(errs, json, "device");
@@ -193,7 +193,11 @@ function validate(json) {
 		push(errs, { field: "mode", code: "not_in_enum",
 		             message: "must be one of ap, sta, adhoc, wds, monitor, mesh" });
 
-	if (SHELL_SSID_MODES[json.mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
+	// Only a write that names ssid or mode checks the pair, as the schema checks only what a
+	// body sends, so a stored SSID does not block a write that disables its interface.
+	let named = delta ?? json;
+	if ((exists(named, "ssid") || exists(named, "mode"))
+	    && SHELL_SSID_MODES[json.mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
 		push(errs, { field: "ssid", code: "invalid_format",
 		             message: sprintf("must not hold a single quote in mode %s", json.mode) });
 
