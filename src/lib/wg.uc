@@ -254,6 +254,16 @@ function apply_routes(conn, iface, wanted, previous) {
 	return null;
 }
 
+// The key under which the kernel holds a peer that uci stores: wireguard.sh joins a list with
+// spaces, and wg drops the whitespace and the comment of each config line. null when the kernel
+// can hold no such peer, so there is nothing to remove.
+function kernel_key(v) {
+	let s = (type(v) == "array") ? join(" ", v) : v;
+	if (type(s) != "string") return null;
+	s = replace(split(s, "#")[0], /\s/g, "");
+	return match(s, PUBKEY_RE) ? s : null;
+}
+
 function apply_peer(iface, peer) {
 	if (type(peer.public_key) != "string" || !match(peer.public_key, PUBKEY_RE))
 		return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
@@ -355,10 +365,9 @@ function apply(conn, ops, applied) {
 		let previous = routes_from(op.prev_allowed_ips, op.prev_route_allowed_ips);
 
 		if (op.action == "remove") {
-			// The kernel holds no peer under a key that is not a WireGuard key, and wg
-			// refuses to name one, so there is nothing to remove.
-			if (type(op.public_key) == "string" && match(op.public_key, PUBKEY_RE)) {
-				let r = remove_peer(iface, op.public_key);
+			let key = kernel_key(op.public_key);
+			if (key != null) {
+				let r = remove_peer(iface, key);
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
 			}
 			let rerr = apply_routes(conn, iface, [], previous);
@@ -385,5 +394,5 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg,
+return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key,
          route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line };

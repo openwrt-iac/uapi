@@ -25,6 +25,17 @@ t.describe('wg.shellquote', () => {
 	});
 });
 
+t.describe('wg.kernel_key', () => {
+	t.it('reads the key as wg reads the config of wireguard.sh', () => {
+		for (let v in [ PK, [ PK ], PK + ' ', ' ' + PK + '\t# peer B' ])
+			t.assert_equal(wg.kernel_key(v), PK, v);
+	});
+	t.it('is null when the kernel can hold no such peer', () => {
+		for (let v in [ 'not-a-key', [ PK, PK ], null, '#' + PK ])
+			t.assert_equal(wg.kernel_key(v), null, v);
+	});
+});
+
 t.describe('wg.interfaces_of', () => {
 	t.it('dedups while preserving first-seen order', () => {
 		t.assert_deep_equal(wg.interfaces_of([
@@ -129,6 +140,14 @@ t.describe('wg.apply', () => {
 		t.assert_equal(wg.apply(c, [
 			{ iface: "wg1", action: "remove", public_key: "not-a-key" },
 		]), null);
+	});
+
+	// The test has no WireGuard interface, so a remove that runs fails, which shows that it ran.
+	t.it('removes the peer of a key that uci holds as a list', () => {
+		let c = ubus.stub();
+		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
+		let err = wg.apply(c, [ { iface: "wg1", action: "remove", public_key: [ PK ] } ]);
+		t.assert_true(index(err ?? "", "wg set remove on wg1 failed") == 0, err);
 	});
 
 	t.it('refuses an interface name that could escape into a command', () => {
