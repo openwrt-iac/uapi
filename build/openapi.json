@@ -29213,7 +29213,7 @@
 							"type": "string"
 						},
 						"writeOnly": true,
-						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
+						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
 					},
 					"r1kh": {
 						"type": "array",
@@ -29221,7 +29221,7 @@
 							"type": "string"
 						},
 						"writeOnly": true,
-						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
+						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses"
 					}
 				},
 				"required": [
@@ -29454,18 +29454,20 @@
 					"r0kh": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"maxLength": 1024
 						},
 						"writeOnly": true,
-						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
+						"description": "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key"
 					},
 					"r1kh": {
 						"type": "array",
 						"items": {
-							"type": "string"
+							"type": "string",
+							"maxLength": 1024
 						},
 						"writeOnly": true,
-						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out"
+						"description": "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses"
 					}
 				},
 				"required": [

@@ -533,7 +533,8 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 	// and enabling it again is refused until a write replaces the value.
 	t.it('a stored injection is listed by the sweep and blocks only the write that enables it', () => {
 		for (let extra in [ { key: 'abcdefgh\nssid2="x"' }, { nasid: 'ap1\nx=1' },
-		                    { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] } ]) {
+		                    { encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0',
+		                      r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] } ]) {
 			let c = stored(extra);
 			t.assert_equal(length(h().sweep(c)), 1);
 			t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
@@ -541,6 +542,27 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 			t.assert_equal(length(h().sweep(c)), 1);
 			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 		}
+	});
+
+	t.it('a 422 lists every problem of a field, and enabling checks a stored entry that hostapd cannot parse', () => {
+		let c = stored({ encryption: 'sae', ieee80211r: '1' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { nasid: bytes(1100) }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'nasid', 'out_of_range' ], [ 'nasid', 'out_of_range' ] ]);
+		c = stored({ disabled: '1', encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ 'bad' ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
+	});
+
+	// A value that the daemon does not read yet makes no trouble until a write makes it read: by
+	// changing the encryption, the mode, or turning the key holder lists on.
+	t.it('a write that makes a stored injection live is refused', () => {
+		let c = stored({ encryption: 'none', key: 'abcdefgh\nssid2="x"' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { encryption: 'psk2' }).status, 422);
+		c = stored({ mode: 'sta', nasid: 'ap1\nx=1' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
+		c = stored({ encryption: 'sae', r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nssid2="x"' ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 422);
 	});
 
 	// The lists are never read back, so a PUT carries the stored ones. hostapd reads them only with

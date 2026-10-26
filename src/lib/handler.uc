@@ -275,25 +275,25 @@ check_schema_types = function(schema_properties, body, prefix) {
 	return errs;
 };
 
-// A resource's validate_new() holds rules that a stored value can fail, such as a value that a
-// daemon reads as a config line. Its rules see the section as if it were enabled, because another
-// writer, such as LuCI, can enable it later. A write is refused only for an error that it adds:
-// one that the section as it was, carried write-only fields included, does not have in a field
-// that the write leaves as it is. So a write that leaves a field alone is never refused for an
-// error that the field already had, disabling included, while a write that changes the field, or
-// that makes a stored value break by turning a daemon option on, is. Enabling a disabled section
-// counts every error as new. The sweep passes no `before`, so it lists all.
+// A stored value can break a validate_new() rule, and a write that leaves it alone must stay
+// possible, or a broken section could not even be disabled. So only an error that the write adds
+// counts: one in a field that the write changes, one that the section did not have, or one that
+// was dormant and is now live. A resource marks an error `live: false` when the daemon does not
+// read the value yet, so a write that makes a stored value live, by enabling the section for
+// instance, adds an error. The sweep passes no `before`.
 function new_errors(resource, after, before) {
 	let errs = resource.validate_new(after) ?? [];
-	if (length(errs) == 0 || before == null || (before.disabled === true && after.disabled !== true))
-		return errs;
-	let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
-	let had = {};
-	for (let e in resource.validate_new(before) ?? []) had[id(e)] = true;
-	return filter(errs, function(e) {
-		let f = match(e.field, /^[A-Za-z0-9_]+/)?.[0];
-		return !had[id(e)] || sprintf("%J", after[f]) != sprintf("%J", before[f]);
-	});
+	if (length(errs) > 0 && before != null) {
+		let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
+		let had = {};
+		for (let e in resource.validate_new(before) ?? []) had[id(e)] = had[id(e)] || e.live !== false;
+		errs = filter(errs, function(e) {
+			let f = match(e.field, /^[A-Za-z0-9_]+/)?.[0];
+			return sprintf("%J", after[f]) != sprintf("%J", before[f]) || !exists(had, id(e))
+			       || (e.live !== false && !had[id(e)]);
+		});
+	}
+	return map(errs, (e) => ({ field: e.field, code: e.code, message: e.message }));
 }
 
 // schema_body: type-checked by check_schema_types (the wire delta from the
@@ -331,11 +331,15 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		seen[k] = true;
 		push(merged, e);
 	}
+	// A rule that the type check already reported is reported once, but two rules of the
+	// resource on one field are two errors, so that one does not hide the other.
 	if (val_errs != null) {
+		let seen_rule = {};
 		for (let e in val_errs) {
 			let k = (e.field ?? "") + "|" + (e.code ?? "");
-			if (seen[k]) continue;
-			seen[k] = true;
+			let rule = k + "|" + (e.message ?? "");
+			if (seen[k] || seen_rule[rule]) continue;
+			seen_rule[rule] = true;
 			push(merged, e);
 		}
 	}
@@ -834,15 +838,16 @@ function make(resource, opts) {
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
 				let write_body = carry_write_only(resource, body, existing);
-				let before = (resource.validate_new != null && existing && type_predicate(existing['.type']))
-				             ? carry_write_only(resource, resource.fromUci(existing, null), existing) : null;
-				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
+				let found = existing != null && type_predicate(existing['.type']);
+				let existing_view = found ? resource.fromUci(existing, conn) : null;
+				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body,
+				                                 (found && resource.validate_new != null)
+				                                 ? carry_write_only(resource, existing_view, existing) : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!existing || !type_predicate(existing['.type']))
+				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
