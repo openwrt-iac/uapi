@@ -508,12 +508,10 @@ All notable changes to this project will be documented in this file. Format foll
   carve-out, and it fails loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and
   from a shell, so the fix that closes it for every writer belongs upstream. (#247)
 
-- **`docs/security.md` lists more write scopes that reach root.** `uhttpd:instances:rw` and
-  `dhcp:odhcpd:rw` set a program or a document root that a root daemon uses, by design. An audit
-  found that `wireless:interfaces:rw`, the `snmpd` write scopes, `dhcp:dnsmasq:rw`,
-  `dhcp:servers:rw`, `unbound:server:rw`, `network:interfaces:rw` and `mwan3:rules:rw` take a value
-  that a daemon's config file or a shell command reads without quoting. Grant each of them as
-  `*:rw` until uapi checks those values. (#248)
+- **`docs/security.md` lists more write scopes that reach root.** `uhttpd:instances:rw`,
+  `dhcp:odhcpd:rw` and `dhcp:dnsmasq:rw` set a program, a document root or a file that a root
+  daemon uses, by design. `raw:<package>:rw` with a domain scope of that package counts as a root
+  scope for each package that a root daemon or script reads. (#248)
 
 - **Values that an init script writes into a daemon config or a shell command are checked.** An
   init script copies these values onto one line of a daemon config, so a newline added a
@@ -533,8 +531,7 @@ All notable changes to this project will be documented in this file. Format foll
   as it is is refused only when it enables the SSID or moves it into one of these modes, and `GET
   /api/v3/diagnostics?validate=1` lists it. Each refusal answers 422 `invalid_format`, under the
   carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on. No
-  value in the uci configs of the OpenWrt feeds is refused. `docs/security.md` no longer lists
-  these scopes among the scopes to grant as `*:rw`. (#250)
+  value in the uci configs of the OpenWrt feeds is refused. (#250)
 
 ## [3.1.0] - 2026-10-11
 
