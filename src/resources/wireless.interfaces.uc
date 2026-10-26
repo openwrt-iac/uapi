@@ -184,7 +184,7 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json) {
 	let errs = [];
 
 	values.require_present(errs, json, "device");
@@ -192,14 +192,6 @@ function validate(json, conn, id, delta) {
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",
 		             message: "must be one of ap, sta, adhoc, wds, monitor, mesh" });
-
-	// Only a write that names ssid or mode checks the pair, as the schema checks only what a
-	// body sends, so a stored SSID does not block a write that disables its interface.
-	let named = delta ?? json;
-	if ((exists(named, "ssid") || exists(named, "mode"))
-	    && SHELL_SSID_MODES[json.mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
-		push(errs, { field: "ssid", code: "invalid_format",
-		             message: sprintf("must not hold a single quote in mode %s", json.mode) });
 
 	if (json.encryption != null && !VALID_ENCRYPTION[json.encryption])
 		push(errs, { field: "encryption", code: "not_in_enum",
@@ -213,12 +205,12 @@ function validate(json, conn, id, delta) {
 	return errs;
 }
 
-// The rules on what wifi-scripts writes into the daemon's config as lines. Another writer, such as
-// LuCI, can enable the SSID or change its mode or encryption later, so an error is reported
-// whether the daemon reads the value now or not, and marked `live: false` when it does not: the
-// SSID is disabled, or its mode or encryption does not use the field. See new_errors() in the
-// handler. Only a newline ends a line in hostapd's and wpa_supplicant's config readers, and each
-// problem is its own error, so that one cannot hide another.
+// The rules on what wifi-scripts writes into the daemon's config as lines, or into a shell command.
+// Another writer, such as LuCI, can enable the SSID or change its mode or encryption later, so an
+// error is reported whether the daemon reads the value now or not, and marked `live: false` when it
+// does not: the SSID is disabled, or its mode or encryption does not use the field. See
+// new_errors() in the handler. Only a newline ends a line in hostapd's and wpa_supplicant's config
+// readers, and each problem is its own error, so that one cannot hide another.
 function validate_new(json) {
 	let errs = [];
 	let on = json.disabled !== true;
@@ -237,6 +229,11 @@ function validate_new(json) {
 		if (length(v) > LINE_MAX) err(field, "out_of_range", TOO_LONG, live);
 		if (index(v, "\n") >= 0) err(field, "invalid_format", ONE_LINE, live);
 	};
+
+	// A single quote is valid in an SSID of the other modes, so a write that moves one into these
+	// modes is what adds the error.
+	if (SHELL_SSID_MODES[mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
+		err("ssid", "invalid_format", "must not hold a single quote in mode monitor, adhoc or mesh", on);
 
 	if (type(key) == "string" && index(key, "\n") >= 0)
 		err("key", "invalid_format", ONE_LINE,
@@ -316,7 +313,7 @@ return {
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), default: "ap" },
 		ssid:       { type: ["string", "null"],
-		              description: "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote" },
+		              description: "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for the quote only when it enables the SSID or moves it into one of these modes" },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
 		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is is refused for the newline only when it enables the SSID or changes its mode or encryption" },

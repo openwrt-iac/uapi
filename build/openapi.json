@@ -28962,7 +28962,7 @@
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote"
+						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for the quote only when it enables the SSID or moves it into one of these modes"
 					},
 					"encryption": {
 						"type": "string",
@@ -29270,7 +29270,7 @@
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote"
+						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for the quote only when it enables the SSID or moves it into one of these modes"
 					},
 					"encryption": {
 						"type": "string",

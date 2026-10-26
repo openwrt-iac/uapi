@@ -1,11 +1,12 @@
 let t = require('harness');
 let handler = require('handler');
 
-function field_errors(file, body, field, delta) {
+function field_errors(file, body, field) {
 	let r = loadfile(`src/resources/${file}`)();
 	let out = [];
 	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
-	for (let e in r.validate(body, null, null, delta)) push(out, e);
+	for (let e in r.validate(body, null)) push(out, e);
+	for (let e in (r.validate_new != null) ? r.validate_new(body) : []) push(out, e);
 	return filter(out, (e) => e.field == field);
 }
 
@@ -99,11 +100,5 @@ t.it('take a clientid as hex digits with optional colons', () => {
 		}
 		for (let mode in [ "ap", "sta", "wds" ])
 			t.assert_equal(length(field_errors("wireless.interfaces.uc", { device: "radio0", mode: mode, ssid: "Bob's" }, "ssid")), 0, mode);
-	});
-
-	t.it('leave a stored ssid alone on a write that names neither ssid nor mode', () => {
-		let stored = { device: "radio0", mode: "monitor", ssid: "Bob's", disabled: true };
-		t.assert_equal(length(field_errors("wireless.interfaces.uc", stored, "ssid", { disabled: true })), 0);
-		t.assert_equal(length(field_errors("wireless.interfaces.uc", stored, "ssid", { mode: "monitor" })), 1);
 	});
 });
