@@ -27,15 +27,15 @@ All notable changes to this project will be documented in this file. Format foll
   `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
   `no`. (#208)
 
-- **`wireless/devices` and `wireless/interfaces` model the options that bind a radio to its hardware
-  and the 802.11r group of an SSID.** A PUT replaces the section with what the resource models, so a
-  PUT of the read deleted them, and an IaC client updates with PUT. wifi-scripts finds the phy of a
-  radio by `path`, then `macaddr`, then `phy`. `wifi config` writes `path` for every radio whose phy
-  is named `phyN`, so the first apply that changed a radio deleted it, and the radio stayed down
-  with all its SSIDs. On an SSID, the 802.11r options were dropped, which turned fast roaming off.
-  `wireless/devices` gains `path`, `macaddr`, `phy` and `radio`, and LuCI's `cell_density` and
-  `legacy_rates`. `wireless/interfaces` gains every 802.11r option of LuCI's WLAN roaming tab:
-  `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
+- **`wireless/devices` and `wireless/interfaces` model the options that bind a radio to its
+  hardware and the 802.11r group of an SSID.** A PUT replaces the section with what the resource
+  models, so a PUT of the read deleted them, and an IaC client updates with PUT. wifi-scripts finds
+  the phy of a radio by `path`, then `macaddr`, then `phy`. `wifi config` writes `path` for every
+  radio whose phy is named `phyN`, so the first apply that changed a radio deleted it, and the radio
+  stayed down with all its SSIDs. On an SSID, the 802.11r options were dropped, which turned fast
+  roaming off. `wireless/devices` gains `path`, `macaddr`, `phy` and `radio`, and LuCI's
+  `cell_density` and `legacy_rates`. `wireless/interfaces` gains every 802.11r option of LuCI's WLAN
+  roaming tab: `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
@@ -43,18 +43,18 @@ All notable changes to this project will be documented in this file. Format foll
   a newline in them and a `nasid` or an entry over 1024 bytes. With fast transition, it refuses a
   `nasid` over 48 bytes and, when hostapd reads the key holder lists, an entry that hostapd cannot
   parse. A write that leaves a field as it is, disabling the SSID included, is never refused for a
-  problem that the field already had. A write that changes the field, that turns fast transition
-  on over a stored value that breaks it, or that enables the SSID through `disabled`, is. Enabling
-  its radio, or moving it to another radio or mode, is not checked.
-  `GET /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole
-  group keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped,
-  wifi-scripts derives lists that the other access points do not share. `ft_psk_generate_local`
-  reads null when unset, because wifi-scripts then picks it from `encryption`. Other options still
-  go with a PUT, such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an
-  SSID. Every radio and SSID read gains the new fields, so its ETag changes once at the upgrade, and
-  a write with an `If-Match` from before the upgrade answers 412. A client that builds its PUT body
-  from its own model, such as terraform-provider-uapi until it models these fields, still deletes
-  them, so upgrade the provider together with uapi. (#239)
+  problem that the field already had. A write that changes the field, or that makes a stored value
+  read by hostapd, by enabling the SSID, changing its mode or encryption, or turning fast transition
+  on, is. Enabling its radio, or moving it to another radio, is not checked. `GET
+  /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole group
+  keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
+  derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
+  unset, because wifi-scripts then picks it from `encryption`. Other options still go with a PUT,
+  such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an SSID. Every
+  radio and SSID read gains the new fields, so its ETag changes once at the upgrade, and a write
+  with an `If-Match` from before the upgrade answers 412. A client that builds its PUT body from its
+  own model, such as terraform-provider-uapi until it models these fields, still deletes them, so
+  upgrade the provider together with uapi. (#239)
 
 - **`503 config_missing`** answers a write into a uci package whose file under `/etc/config/`
   does not exist, and names the file. `wireless` is the common case: `wifi config` writes
@@ -444,12 +444,13 @@ All notable changes to this project will be documented in this file. Format foll
   that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in `\nssid2="x"`
   answered 200, and hostapd broadcast `x` while every read showed the stored SSID. A key with a
   newline now answers 422 `invalid_format` in every mode and encryption, because another writer can
-  enable the SSID or change its encryption later. A write that sets the key, or that enables the
-  SSID through `disabled`, is refused for it. A write that leaves the key as it is, disabling the
-  SSID included, is not, and `GET /api/v3/diagnostics?validate=1` lists the SSID. Enabling its
-  radio, or moving it to another radio or mode, is not checked. That tightening uses the carve-out
-  in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. LuCI's key field takes one line only. (#246)
+  enable the SSID or change its encryption later. A write that sets the key, or that makes a stored
+  key read by the daemon, by enabling the SSID or changing its mode or encryption, is refused for
+  it. A write that leaves the key as it is, disabling the SSID included, is not, and `GET
+  /api/v3/diagnostics?validate=1` lists the SSID. Enabling its radio, or moving it to another radio,
+  is not checked. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line only.
+  (#246)
 
 ## [3.1.0] - 2026-10-11
 

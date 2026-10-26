@@ -204,16 +204,18 @@ goes in `openapi_write_conditional`.
 value that a rule refuses blocks every write of the section until a write replaces it. That is
 right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi can break in uci,
 when the section must stay writable: disabling an SSID that holds an injected key has to work. Put
-such rules in `validate_new(json)`. They see the section as if it were enabled, because another
-writer can enable it later. The handler runs them on the section as it was and as the write
-leaves it, and refuses the write only for an error that it adds: an error that the section had
-before, by field, code and message, in a field that the write leaves as it is, is not new. So a
-write that leaves a field alone, disabling included, is never refused for an error that the field
-already had, and a write that changes the field, or that makes a stored value break by turning a
-daemon option on, is. A resource reports each problem of a value as its own error, so that one
-error cannot hide another that a write adds.
-A write that turns a `disabled` field from true to false counts every error as new. The sweep
-runs `validate_new()` on every stored section, disabled ones included, and lists every error.
+such rules in `validate_new(json)`, which returns errors with a `live` flag: `false` when the
+daemon does not read the value yet, because the section is disabled or its mode does not use the
+field. Report the error either way, because another writer can enable the section later, and
+report each problem of a value as its own error, so that one cannot hide another.
+
+The handler runs `validate_new()` on the section as it was and as the write leaves it, and
+refuses the write only for an error that it adds: one in a field that the write changes, one
+that the section did not have, by field, code and message, or one that was not live and is now.
+So a write that leaves a field alone, disabling included, is never refused for an error that the
+field already had, and a write that makes a stored value live, by enabling the section or by
+turning a daemon option on, is. The sweep runs `validate_new()` on every stored section and lists
+every error. The schema check of a PUT or a JSON Patch still sees a carried write-only field.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

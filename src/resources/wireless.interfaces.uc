@@ -52,6 +52,10 @@ const KEY_HOLDERS = {
 // management.
 const NASID_MAX = 48;
 
+// The modes whose key wifi-scripts writes as a line: a passphrase or a PSK for hostapd, or a psk or
+// sae_password for wpa_supplicant.
+const KEY_LINE_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae": true, "sae-mixed": true };
+
 function base_encryption(e) {
 	return (type(e) == "string") ? split(e, "+")[0] : "none";
 }
@@ -196,43 +200,44 @@ function validate(json) {
 	return errs;
 }
 
-// The rules on what wifi-scripts writes into the daemon's config as lines, on the SSID as if it
-// were enabled. The handler refuses a write only for an error that it adds: see new_errors().
-// Only a newline ends a line in hostapd's and wpa_supplicant's config readers.
+// The rules on what wifi-scripts writes into the daemon's config as lines. Another writer, such as
+// LuCI, can enable the SSID or change its mode or encryption later, so an error is reported
+// whether the daemon reads the value now or not, and marked `live: false` when it does not: the
+// SSID is disabled, or its mode or encryption does not use the field. See new_errors() in the
+// handler. Only a newline ends a line in hostapd's and wpa_supplicant's config readers, and each
+// problem is its own error, so that one cannot hide another.
 function validate_new(json) {
 	let errs = [];
+	let on = json.disabled !== true;
+	let mode = json.mode ?? "ap";
+	let r = roaming(json);
+	let err = (field, code, message, live) => push(errs, { field, code, message, live: !!live });
 
 	if (type(json.key) == "string" && index(json.key, "\n") >= 0)
-		push(errs, { field: "key", code: "invalid_format", message: ONE_LINE });
+		err("key", "invalid_format", ONE_LINE,
+		    on && KEY_LINE_MODES[base_encryption(json.encryption)] && (mode in [ "ap", "sta", "adhoc", "mesh" ]));
 
-	// Each problem is its own error, because the handler compares errors: one error that hid another
-	// would let a write turn fast transition on over a nasid that already held a newline.
-	let r = roaming(json);
 	if (type(json.nasid) == "string") {
-		if (length(json.nasid) > LINE_MAX)
-			push(errs, { field: "nasid", code: "out_of_range", message: TOO_LONG });
-		if (index(json.nasid, "\n") >= 0)
-			push(errs, { field: "nasid", code: "invalid_format", message: ONE_LINE });
+		let read = on && mode == "ap";
+		if (length(json.nasid) > LINE_MAX) err("nasid", "out_of_range", TOO_LONG, read);
+		if (index(json.nasid, "\n") >= 0) err("nasid", "invalid_format", ONE_LINE, read);
 		if (r.ft && length(json.nasid) > NASID_MAX)
-			push(errs, { field: "nasid", code: "out_of_range",
-			             message: sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX) });
+			err("nasid", "out_of_range",
+			    sprintf("must be at most %d bytes with 802.11r on: hostapd refuses a longer NAS identifier for fast transition", NASID_MAX), on);
 	}
 
 	// Each entry ends with the key that the key holders share, so no message names it. uci can
 	// hold a list as an option, which netifd splits on whitespace. hostapd reads the lists only with
-	// fast transition and ft_psk_generate_local off, so the grammar applies only then, and a write
-	// that turns that on over a stored entry hostapd cannot parse adds the error.
+	// fast transition and ft_psk_generate_local off, so the grammar applies only then.
+	let read = on && r.key_holders;
 	for (let field, kh in KEY_HOLDERS) {
 		let list = values.as_word_list_or_null(json[field]) ?? [];
 		for (let i = 0; i < length(list); i++) {
 			let e = list[i], f = sprintf("%s[%d]", field, i);
 			if (type(e) != "string") continue;
-			if (length(e) > LINE_MAX)
-				push(errs, { field: f, code: "out_of_range", message: TOO_LONG });
-			if (index(e, "\n") >= 0)
-				push(errs, { field: f, code: "invalid_format", message: ONE_LINE });
-			if (r.key_holders && !match(e, kh.re))
-				push(errs, { field: f, code: "invalid_format", message: kh.message });
+			if (length(e) > LINE_MAX) err(f, "out_of_range", TOO_LONG, read);
+			if (index(e, "\n") >= 0) err(f, "invalid_format", ONE_LINE, read);
+			if (r.key_holders && !match(e, kh.re)) err(f, "invalid_format", kh.message, on);
 		}
 	}
 
@@ -314,12 +319,12 @@ return {
 		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID" },
 		pmk_r1_push: { type: "boolean", default: false,
 		              description: "Push the PMK-R1 to the other key holders instead of waiting for them to pull it" },
-		r0kh:       { type: "array", items: { type: "string" }, writeOnly: true,
-		              description: "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key" },
+		r0kh:       { type: "array", items: { type: "string", "x-uapi-write": { maxLength: LINE_MAX } }, writeOnly: true,
+		              description: "802.11r R0 key holders as `<MAC>,<NAS id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses. Unset with ft_psk_generate_local off, wifi-scripts derives one entry from the mobility domain and the key" },
 		has_r0kh:   { type: "boolean", readOnly: true,
 		              description: "True if r0kh is configured (the entries are never returned)" },
-		r1kh:       { type: "array", items: { type: "string" }, writeOnly: true,
-		              description: "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out" },
+		r1kh:       { type: "array", items: { type: "string", "x-uapi-write": { maxLength: LINE_MAX } }, writeOnly: true,
+		              description: "802.11r R1 key holders as `<MAC>,<R1KH id>,<key>` entries; accepted on write, masked on read, and kept by a PUT that leaves it out. An entry takes no newline and at most 1024 bytes, and while hostapd reads the lists, the form that hostapd parses" },
 		has_r1kh:   { type: "boolean", readOnly: true,
 		              description: "True if r1kh is configured (the entries are never returned)" },
 	},
