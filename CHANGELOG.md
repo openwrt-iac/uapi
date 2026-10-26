@@ -42,12 +42,11 @@ All notable changes to this project will be documented in this file. Format foll
   wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
   hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
   bytes. With fast transition, it refuses a `nasid` over 48 bytes and, when hostapd reads the key
-  holder lists, an entry that hostapd cannot parse. A write that changes the field is refused for
-  it. A write that leaves the field as it is is refused for a problem that the field already had
-  only when it makes hostapd read the value: by enabling the SSID, changing its mode or encryption,
-  or turning fast transition on. So a merge PATCH that disables the SSID always works. A PUT or a
-  JSON Patch also checks a stored `mobility_domain` or `r1_key_holder` against its pattern. Enabling
-  its radio, or moving it to another radio, is not checked. `GET
+  holder lists, an entry that hostapd cannot parse. A write is refused for such a value only when it
+  adds the error: when it changes the field, or makes hostapd read a stored value, for example by
+  enabling the SSID or turning fast transition on. `validate()` and the schema check run as before,
+  so a PUT or a JSON Patch also checks a stored `mobility_domain` or `r1_key_holder` against its
+  pattern. Enabling the radio of the SSID, or moving the SSID to another radio, is not checked. `GET
   /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole group
   keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
   derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
@@ -444,11 +443,11 @@ All notable changes to this project will be documented in this file. Format foll
   the key as `wpa_passphrase=<key>` without escaping, so each newline in it started a hostapd
   directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd directive
   that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in `\nssid2="x"`
-  answered 200, and hostapd broadcast `x` while every read showed the stored SSID. A key with a
-  newline now answers 422 `invalid_format` in every mode and encryption, because another writer can
-  enable the SSID or change its encryption later. A write that sets the key, or that makes a stored
-  key read by the daemon, by enabling the SSID or changing its mode or encryption, is refused for
-  it. Any other write is not, a write that disables the SSID included, and `GET
+  answered 200, and hostapd broadcast `x` while every read showed the stored SSID. A write that
+  changes the key to one with a newline now answers 422 `invalid_format` in every mode and
+  encryption, because another writer can enable the SSID or change its encryption later. A write
+  that makes the daemon read a stored key with a newline, by enabling the SSID or changing its mode
+  or encryption, is refused too. Any other write is not refused for the newline, and `GET
   /api/v3/diagnostics?validate=1` lists the SSID. Enabling its radio, or moving it to another radio,
   is not checked. That tightening uses the carve-out in `docs/versioning.md` for payloads that
   produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line only.

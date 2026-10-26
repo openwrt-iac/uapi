@@ -215,11 +215,11 @@ refuses the write only for an error that it adds: one in a field that the write 
 that the section did not have, by field, code and message, or one that was not live and is now.
 An option and the list of its words, split on whitespace as netifd splits it, are the same
 value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
-of its own.
-So a write that leaves a field alone, disabling included, is never refused for an error that the
-field already had, and a write that makes a stored value live, by enabling the section or by
-turning a daemon option on, is. The sweep runs `validate_new()` on every stored section and lists
-every error. The schema check of a PUT or a JSON Patch still sees a carried write-only field.
+of its own. So a write that leaves a field alone is refused for an error that the field already
+had only when the write makes the error live, for example by enabling the section. The sweep runs
+`validate_new()` on every stored section and lists every error. `validate()` and the schema check
+run as before: they still refuse a stored value that breaks one of their rules, and the schema
+check of a PUT or a JSON Patch sees the whole body, carried write-only fields included.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable
