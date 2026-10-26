@@ -26746,7 +26746,8 @@
 							"string",
 							"null"
 						],
-						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6"
+						"pattern": "^[0-9A-Fa-f:]*$",
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons"
 					},
 					"reqprefix": {
 						"type": [
@@ -27328,7 +27329,8 @@
 							"string",
 							"null"
 						],
-						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6"
+						"pattern": "^[0-9A-Fa-f:]*$",
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons"
 					},
 					"reqprefix": {
 						"type": [
@@ -28960,7 +28962,7 @@
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode)"
+						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote"
 					},
 					"encryption": {
 						"type": "string",
@@ -29268,7 +29270,7 @@
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode)"
+						"description": "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote"
 					},
 					"encryption": {
 						"type": "string",
@@ -30080,7 +30082,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^\n\r]*$"
 					},
 					"dhcp_option": {
 						"type": [
@@ -30088,7 +30091,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"runtime": {
@@ -30202,7 +30206,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^\n\r]*$"
 					},
 					"dhcp_option": {
 						"type": [
@@ -30210,7 +30215,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					}
 				},
@@ -30236,13 +30242,15 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^\n\r]*$"
 					},
 					"local": {
 						"type": [
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
@@ -30297,13 +30305,15 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"server": {
 						"type": [
@@ -30311,7 +30321,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"address": {
@@ -30320,7 +30331,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"nonwildcard": {
@@ -30347,13 +30359,15 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^\n\r]*$"
 					},
 					"local": {
 						"type": [
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
@@ -30408,13 +30422,15 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"server": {
 						"type": [
@@ -30422,7 +30438,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"address": {
@@ -30431,7 +30448,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"nonwildcard": {
@@ -31560,7 +31578,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"domain_type": {
 						"type": [
@@ -31753,7 +31772,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^ \t\n\r]*$"
 					},
 					"domain_type": {
 						"type": [
@@ -32155,7 +32175,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					},
 					"runtime": {
@@ -32179,7 +32200,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
 						}
 					}
 				}
@@ -32202,6 +32224,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "security name this community maps to"
 					},
 					"source": {
@@ -32209,6 +32232,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "source network/range or 'default'"
 					},
 					"community": {
@@ -32216,6 +32240,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMP community string"
 					},
 					"runtime": {
@@ -32243,6 +32268,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "security name this community maps to"
 					},
 					"source": {
@@ -32250,6 +32276,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "source network/range or 'default'"
 					},
 					"community": {
@@ -32257,6 +32284,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMP community string"
 					}
 				},
@@ -32284,6 +32312,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
@@ -32303,6 +32332,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Security name (community for v1/v2c, USM user for v3)"
 					},
 					"runtime": {
@@ -32328,6 +32358,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Group name referenced by snmpd/accesses entries"
 					},
 					"version": {
@@ -32347,6 +32378,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "Security name (community for v1/v2c, USM user for v3)"
 					}
 				},
@@ -32372,6 +32404,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
@@ -32379,6 +32412,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
@@ -32422,6 +32456,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for read access"
 					},
 					"write": {
@@ -32429,6 +32464,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for write access"
 					},
 					"notify": {
@@ -32436,6 +32472,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for notifications"
 					},
 					"runtime": {
@@ -32461,6 +32498,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "snmpd group this access entry binds to (must exist in snmpd/groups)"
 					},
 					"context": {
@@ -32468,6 +32506,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv3 context (usually empty)"
 					},
 					"version": {
@@ -32511,6 +32550,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for read access"
 					},
 					"write": {
@@ -32518,6 +32558,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for write access"
 					},
 					"notify": {
@@ -32525,6 +32566,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "View name granted for notifications"
 					}
 				},
@@ -32551,6 +32593,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysLocation"
 					},
 					"sys_contact": {
@@ -32558,6 +32601,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysContact"
 					},
 					"sys_name": {
@@ -32565,6 +32609,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysName"
 					},
 					"sys_services": {
@@ -32581,6 +32626,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysDescr"
 					},
 					"sys_object_id": {
@@ -32588,6 +32634,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysObjectID OID"
 					},
 					"runtime": {
@@ -32611,6 +32658,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysLocation"
 					},
 					"sys_contact": {
@@ -32618,6 +32666,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysContact"
 					},
 					"sys_name": {
@@ -32625,6 +32674,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysName"
 					},
 					"sys_services": {
@@ -32641,6 +32691,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysDescr"
 					},
 					"sys_object_id": {
@@ -32648,6 +32699,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r]*$",
 						"description": "SNMPv2-MIB::sysObjectID OID"
 					}
 				}
@@ -32699,6 +32751,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r\"]*$",
 						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
@@ -32711,6 +32764,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r\"]*$",
 						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
@@ -32771,6 +32825,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r\"]*$",
 						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
@@ -32783,6 +32838,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^\n\r\"]*$",
 						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
@@ -33615,6 +33671,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"dest_ip": {
@@ -33629,6 +33686,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"sticky": {
@@ -33649,6 +33707,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Match destination against an ipset; bypasses src/dest_ip."
 					},
 					"use_policy": {
@@ -33716,6 +33775,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"dest_ip": {
@@ -33730,6 +33790,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Single port or 'lo-hi' range."
 					},
 					"sticky": {
@@ -33750,6 +33811,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^[^ \t\n\r]*$",
 						"description": "Match destination against an ipset; bypasses src/dest_ip."
 					},
 					"use_policy": {

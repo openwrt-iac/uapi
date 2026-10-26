@@ -167,7 +167,7 @@ return {
 		dhcpv6:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
 		               description: "0 default, 1 deprecate prefix, 2 advertise as router" },
-		domain:      { type: ["string", "null"] },
-		dhcp_option: { type: ["array", "null"], items: { type: "string" } },
+		domain:      { type: ["string", "null"], pattern: values.ONE_LINE_RE },
+		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.ONE_LINE_RE } },
 	},
 };

@@ -32,6 +32,6 @@ return {
 	validate: validate,
 	openapi_singular: "SNMP agent",
 	schema_properties: {
-		agentaddress: { type: ["array", "null"], items: { type: "string" } },
+		agentaddress: { type: ["array", "null"], items: { type: "string", pattern: values.ONE_LINE_RE } },
 	},
 };

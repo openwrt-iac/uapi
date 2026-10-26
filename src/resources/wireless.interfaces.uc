@@ -5,6 +5,9 @@ let as_int = values.as_int;
 const VALID_MODES = {
 	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true,
 };
+// In these modes mac80211.sh can pass the SSID to wdev.uc inside a single-quoted shell
+// argument, and the JSON encoding leaves a single quote as it is.
+const SHELL_SSID_MODES = { "monitor": true, "adhoc": true, "mesh": true };
 const VALID_ENCRYPTION = {
 	"none": true, "wep": true, "owe": true,
 	"psk": true, "psk2": true, "psk-mixed": true,
@@ -190,6 +193,10 @@ function validate(json) {
 		push(errs, { field: "mode", code: "not_in_enum",
 		             message: "must be one of ap, sta, adhoc, wds, monitor, mesh" });
 
+	if (SHELL_SSID_MODES[json.mode] && type(json.ssid) == "string" && index(json.ssid, "'") >= 0)
+		push(errs, { field: "ssid", code: "invalid_format",
+		             message: sprintf("must not hold a single quote in mode %s", json.mode) });
+
 	if (json.encryption != null && !VALID_ENCRYPTION[json.encryption])
 		push(errs, { field: "encryption", code: "not_in_enum",
 		             message: "unknown encryption value" });
@@ -305,7 +312,7 @@ return {
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), default: "ap" },
 		ssid:       { type: ["string", "null"],
-		              description: "SSID broadcast (or joined in sta mode)" },
+		              description: "SSID broadcast (or joined in sta mode). In mode monitor, adhoc or mesh, it must not hold a single quote" },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
 		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. A write that leaves the key as it is is refused for the newline only when it enables the SSID or changes its mode or encryption" },
