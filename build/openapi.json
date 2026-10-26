@@ -28540,7 +28540,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets, unless the peer stored the same host already and the write does not enable it"
+						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets. A write that leaves the host as it is, and does not enable the peer, is not refused for a problem that it already had"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28628,7 +28628,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets, unless the peer stored the same host already and the write does not enable it"
+						"description": "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets. A write that leaves the host as it is, and does not enable the peer, is not refused for a problem that it already had"
 					},
 					"endpoint_port": {
 						"type": [

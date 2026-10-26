@@ -142,6 +142,7 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$SIB" '$1 == k { print $2 }')
 $SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove"
 $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
+[ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
 
 # The restore gives a hand-written endpoint_host to `wg set`, which must read it as one argument, as
 # the write path above does. It runs alone, because the restore stops at the first peer that wg
@@ -157,7 +158,6 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 $SSH "uci delete network.uapi45sib2; uci commit network"
 $SSH "[ ! -e /tmp/uapi45_ep ]" || fail "a stored endpoint_host ran as a shell command"
-[ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
 
 # Rotating a key leaves the kernel holding the previous peer under the old key
 # unless the old one is removed first, which would keep its access alive.

@@ -260,8 +260,8 @@ t.describe('wg.route_table', () => {
 	});
 });
 
-// wg needs an IPv6 endpoint bracketed to find the port. validate() refuses a bracketed host
-// since 3.2.0, but a peer stored before can hold one, and double-bracketing made wg refuse it.
+// wg needs an IPv6 endpoint bracketed to find the port. A write that sets a bracketed host is
+// refused since 3.2.0, but a peer can keep a stored one, and double-bracketing made wg refuse it.
 t.describe('wg IPv6 endpoint bracketing', () => {
 	function endpoint_arg(host) { return wg.endpoint_arg(host, 51820); }
 
