@@ -416,6 +416,10 @@ All notable changes to this project will be documented in this file. Format foll
 - **A raw PATCH removes the reload fields that a write stored as options before 3.2.0**, as it
   removes a stored `managed`. Only a PUT removed them, and a write response showed a stored
   `reload_note` next to a fresh `reloaded`. (#242)
+- **The DELETE of a WireGuard peer whose stored `public_key` is not a WireGuard key works on an up
+  interface.** uapi refused to give such a key to `wg set ... remove`, so the DELETE answered 500,
+  and so did a write that replaced the key. The kernel holds no peer under such a key, so there is
+  nothing to remove, and both now answer as for any other peer. (#247)
 
 ### Security
 
@@ -492,7 +496,7 @@ All notable changes to this project will be documented in this file. Format foll
   a bracketed IPv6 address, which uapi took before, already failed the whole tunnel: on OpenWrt
   25.12.5 wg refused the config with `Unable to find port of endpoint: '[[fd00::1]]:51820'`. The
   rule sees the peer as if it were enabled, because another writer such as LuCI can enable it later.
-  A write that sets the host, or that enables the peer through `disabled`, is refused for it. A
+  A write that changes the host, or that enables the peer through `disabled`, is refused for it. A
   write that leaves the host as it is, disabling included, is not, and `GET
   /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep also lists
   a stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same

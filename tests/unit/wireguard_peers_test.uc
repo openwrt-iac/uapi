@@ -221,8 +221,7 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	// The handler compares the errors of the peer before and after the write, so a merge PATCH that
 	// leaves a stored host or key as it is is never refused for it by validation, and the sweep lists
 	// the peer whether it is enabled or not. Enabling it is refused until a write replaces the value.
-	// A PUT still carries a stored key into the schema check, and on an up interface wg refuses to
-	// remove a peer under a malformed public key, as on main.
+	// A PUT still carries a stored key into the schema check, as on main.
 	t.it('a stored broken host or key blocks only the write that enables the peer', () => {
 		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
 		                    { preshared_key: 'K\\n[Peer]' } ]) {
@@ -275,6 +274,8 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		let enable = { ...body };
 		delete enable.disabled;
 		t.assert_equal(h.replace(c, ctx(), 'g_existing', enable).status, 422);
+		c._state.uci.network.g_existing.endpoint_host = [ '[fd00::1]', 'x' ];
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true, endpoint_host: '[fd00::1] x' }).status, 200);
 	});
 
 	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {

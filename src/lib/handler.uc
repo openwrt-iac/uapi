@@ -328,8 +328,6 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
 	let val_errs = resource.validate(validate_body, conn, id, delta);
-	if (resource.validate_new != null)
-		val_errs = [ ...(val_errs ?? []), ...new_errors(resource, validate_body, before) ];
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -338,15 +336,11 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		seen[k] = true;
 		push(merged, e);
 	}
-	// A rule that the type check already reported is reported once, but two rules of the
-	// resource on one field are two errors, so that one does not hide the other.
 	if (val_errs != null) {
-		let seen_rule = {};
 		for (let e in val_errs) {
 			let k = (e.field ?? "") + "|" + (e.code ?? "");
-			let rule = k + "|" + (e.message ?? "");
-			if (seen[k] || seen_rule[rule]) continue;
-			seen_rule[rule] = true;
+			if (seen[k]) continue;
+			seen[k] = true;
 			push(merged, e);
 		}
 	}
@@ -854,9 +848,10 @@ function make(resource, opts) {
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!found)
+				if (!existing || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
+				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -1142,9 +1137,7 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 (resource.validate_new != null && !synthesized)
-				                                 ? carry_write_only(resource, existing_view, existing) : null);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

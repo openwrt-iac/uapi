@@ -355,10 +355,12 @@ function apply(conn, ops, applied) {
 		let previous = routes_from(op.prev_allowed_ips, op.prev_route_allowed_ips);
 
 		if (op.action == "remove") {
-			if (type(op.public_key) != "string" || !match(op.public_key, PUBKEY_RE))
-				return sprintf("refusing to remove a malformed public key on %s", iface);
-			let r = remove_peer(iface, op.public_key);
-			if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
+			// The kernel holds no peer under a key that is not a WireGuard key, and wg
+			// refuses to name one, so there is nothing to remove.
+			if (type(op.public_key) == "string" && match(op.public_key, PUBKEY_RE)) {
+				let r = remove_peer(iface, op.public_key);
+				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
+			}
 			let rerr = apply_routes(conn, iface, [], previous);
 			if (rerr != null) return rerr;
 			continue;
