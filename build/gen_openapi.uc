@@ -947,7 +947,7 @@ function build_paths() {
 	paths["/diagnostics"] = {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
+			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
 			"parameters": [
 				{ "name": "validate", "in": "query", "required": false,
 				  "schema": { "type": "string", "enum": ["1"] },
@@ -1324,7 +1324,7 @@ function build_schemas() {
 				// The three sweep fields appear together, and only with ?validate=1.
 				"invalid_sections": {
 					"type": "array",
-					"description": "Sections a write would reject today. Present only with ?validate=1.",
+					"description": "Sections a write would reject today, and sections that hold a value that a write cannot add. Present only with ?validate=1.",
 					"items": {
 						"type": "object",
 						"required": ["resource", "id", "managed", "errors"],

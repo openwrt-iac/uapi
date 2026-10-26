@@ -243,7 +243,8 @@ envelopes. Scope: `uapi:diagnostics:ro`.
 
 `GET /api/v3/diagnostics?validate=1` adds a validation sweep: every section of
 every resource the token may read is run through the same path a write takes, and
-the ones that would be rejected are reported with the reason.
+the ones that would be rejected are reported with the reason, together with the
+ones that hold a value that a write cannot add.
 
 ```json
 {
@@ -266,6 +267,13 @@ One finding is not a break. An interface on a proto that uapi does not model, su
 the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`, because a PUT of
 it is refused: a PUT replaces the section and would delete the options of the tunnel.
 The tunnel itself works, and a PATCH that leaves `proto` out is accepted.
+
+A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break either, until the
+daemon reads the value. Another writer can store a value that such a rule refuses, and
+the sweep lists it whether the daemon reads it yet or not: the section can be disabled,
+or its mode can leave the field unused. A write that leaves the value as it is, and does
+not make the daemon read it, is accepted. The sweep lists the section because another
+writer, such as LuCI, can enable it later.
 
 Three things worth knowing:
 

@@ -42,10 +42,12 @@ All notable changes to this project will be documented in this file. Format foll
   wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
   hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
   bytes. With fast transition, it refuses a `nasid` over 48 bytes and, when hostapd reads the key
-  holder lists, an entry that hostapd cannot parse. A write that leaves a field as it is, disabling the SSID included, is never refused for a
-  problem that the field already had. A write that changes the field, or that makes a stored value
-  read by hostapd, by enabling the SSID, changing its mode or encryption, or turning fast transition
-  on, is. Enabling its radio, or moving it to another radio, is not checked. `GET
+  holder lists, an entry that hostapd cannot parse. A write that changes the field is refused for
+  it. A write that leaves the field as it is is refused for a problem that the field already had
+  only when it makes hostapd read the value: by enabling the SSID, changing its mode or encryption,
+  or turning fast transition on. So a merge PATCH that disables the SSID always works. A PUT or a
+  JSON Patch also checks a stored `mobility_domain` or `r1_key_holder` against its pattern. Enabling
+  its radio, or moving it to another radio, is not checked. `GET
   /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole group
   keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
   derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
@@ -446,7 +448,7 @@ All notable changes to this project will be documented in this file. Format foll
   newline now answers 422 `invalid_format` in every mode and encryption, because another writer can
   enable the SSID or change its encryption later. A write that sets the key, or that makes a stored
   key read by the daemon, by enabling the SSID or changing its mode or encryption, is refused for
-  it. A write that leaves the key as it is, disabling the SSID included, is not, and `GET
+  it. Any other write is not, a write that disables the SSID included, and `GET
   /api/v3/diagnostics?validate=1` lists the SSID. Enabling its radio, or moving it to another radio,
   is not checked. That tightening uses the carve-out in `docs/versioning.md` for payloads that
   produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line only.

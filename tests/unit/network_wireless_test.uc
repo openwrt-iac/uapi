@@ -607,6 +607,14 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ] }).status, 200);
 	});
 
+	// wifi-scripts writes each entry as a line, so joining two entries changes what hostapd reads:
+	// here the injected line, and the entry that kept hostapd from loading the config is gone.
+	t.it('two lists with the same words in other entries are not the same value', () => {
+		let inj = 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nwpa_passphrase=aaaaaaaa';
+		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ inj, 'bbbbbbbb' ] });
+		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ inj + ' bbbbbbbb' ] }).status, 422);
+	});
+
 	// The handler compares the errors of the SSID before and after the write, so a stored error that
 	// the write leaves as it is never blocks it, whichever field the write names.
 	t.it('a write is not refused for a stored error that it leaves as it is', () => {
