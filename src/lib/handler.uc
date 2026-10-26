@@ -338,11 +338,15 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		seen[k] = true;
 		push(merged, e);
 	}
+	// A rule that the type check already reported is reported once, but two rules of the
+	// resource on one field are two errors, so that one does not hide the other.
 	if (val_errs != null) {
+		let seen_rule = {};
 		for (let e in val_errs) {
 			let k = (e.field ?? "") + "|" + (e.code ?? "");
-			if (seen[k]) continue;
-			seen[k] = true;
+			let rule = k + "|" + (e.message ?? "");
+			if (seen[k] || seen_rule[rule]) continue;
+			seen_rule[rule] = true;
 			push(merged, e);
 		}
 	}
@@ -850,10 +854,9 @@ function make(resource, opts) {
 				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!existing || !type_predicate(existing['.type']))
+				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };

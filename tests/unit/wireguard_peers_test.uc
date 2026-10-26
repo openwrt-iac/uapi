@@ -150,11 +150,13 @@ t.describe('network.wireguard_peers.validate', () => {
 		}
 		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443\\n[Peer]', '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', '[vpn.example.com]' ])
+		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', '[vpn.example.com]' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
+		// Each problem is its own error.
+		t.assert_deep_equal(map(host_errs('192.0.2.1\\0072443\\n[Peer]'), (e) => e.code), [ 'invalid_format', 'invalid_format' ]);
 		t.assert_equal(length(host_errs('vpn.example.com\t')), 0);
 		// wireguard.sh reads a list option as its words joined by spaces.
-		t.assert_deep_equal(map(wgp.validate_new({ endpoint_host: [ '192.0.2.1\\n[Peer]' ] }), (e) => [ e.field, e.code ]),
+		t.assert_deep_equal(map(wgp.validate_new({ endpoint_host: [ '192.0.2.1\\nPeer' ] }), (e) => [ e.field, e.code ]),
 		                    [ [ 'endpoint_host', 'invalid_format' ] ]);
 	});
 
@@ -217,9 +219,10 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	}
 
 	// The handler compares the errors of the peer before and after the write, so a merge PATCH that
-	// leaves a stored host or key as it is is never refused for it: a broken or injected peer can be
-	// disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it is refused
-	// until a write replaces the value. A PUT still carries a stored key into the schema check.
+	// leaves a stored host or key as it is is never refused for it by validation, and the sweep lists
+	// the peer whether it is enabled or not. Enabling it is refused until a write replaces the value.
+	// A PUT still carries a stored key into the schema check, and on an up interface wg refuses to
+	// remove a peer under a malformed public key, as on main.
 	t.it('a stored broken host or key blocks only the write that enables the peer', () => {
 		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
 		                    { preshared_key: 'K\\n[Peer]' } ]) {
@@ -257,6 +260,21 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		c._state.uci.network.g_existing.preshared_key = [ 'K\n[Peer]\nPublicKey=X' ];
 		t.assert_equal(length(h.sweep(c)), 1);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422);
+	});
+
+	// A PUT sends the read back, without its write-only keys and without `disabled` when the client
+	// leaves the default out.
+	t.it('a PUT is judged like a PATCH: a stored host it resends is old, and enabling is new', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
+		let h = make_handler();
+		let body = h.get_one(c, ctx(), 'g_existing').body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, description: 'x' }).status, 200);
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true }).status, 200);
+		let enable = { ...body };
+		delete enable.disabled;
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', enable).status, 422);
 	});
 
 	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {

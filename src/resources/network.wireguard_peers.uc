@@ -59,12 +59,13 @@ function interface_exists_with_wg_proto(conn, name) {
 // IPv6 address reaches wg as `[[...]]`, and wg refuses the whole config. No regex syntax reads a
 // bracket and a backslash in a character class the same way in ucode and in ECMAScript, so the
 // request schema carries no pattern for this.
-function endpoint_host_problem(host) {
+function endpoint_host_problems(host) {
+	let out = [];
 	if (index(host, "\\") >= 0 || index(host, "\n") >= 0)
-		return "must not contain a backslash or a newline: wireguard.sh expands escapes in the config that it gives wg";
+		push(out, "must not contain a backslash or a newline: wireguard.sh expands escapes in the config that it gives wg");
 	if (match(host, /[][]/))
-		return "must not be in brackets: wireguard.sh brackets an IPv6 address itself, and wg refuses a doubled bracket";
-	return null;
+		push(out, "must not be in brackets: wireguard.sh brackets an IPv6 address itself, and wg refuses a doubled bracket");
+	return out;
 }
 
 function validate(json, conn) {
@@ -111,28 +112,27 @@ function validate(json, conn) {
 
 const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
 
-// The rules on what wireguard.sh hands to wg through printf %b, on the peer as if it were enabled.
-// The handler refuses a write only for an error that it adds: see new_errors(). The keys are
-// checked here as well as by their schema pattern, because the schema sees only what a PATCH
-// sends, and a stored key reaches the same printf %b.
+// The rules on what wireguard.sh hands to wg through printf %b. Another writer, such as LuCI, can
+// enable the peer later, so an error is reported whether the peer is enabled or not, and marked
+// `live: false` when it is not: see new_errors() in the handler. The keys are checked here as well
+// as by their schema pattern, because the schema sees only what a PATCH sends, and a stored key
+// reaches the same printf %b.
 function validate_new(json) {
 	let errs = [];
-
+	let live = json.disabled !== true;
 	// wireguard.sh reads a list option as its words joined by spaces.
 	let read = (v) => (type(v) == "array") ? join(" ", v) : v;
 
 	for (let k in [ "public_key", "preshared_key" ]) {
 		let key = read(json[k]);
 		if (type(key) == "string" && key != "" && !match(key, WG_KEY_RE))
-			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
+			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =", live });
 	}
 
 	let host = read(json.endpoint_host);
-	if (type(host) == "string") {
-		let problem = endpoint_host_problem(host);
-		if (problem != null)
-			push(errs, { field: "endpoint_host", code: "invalid_format", message: problem });
-	}
+	if (type(host) == "string")
+		for (let message in endpoint_host_problems(host))
+			push(errs, { field: "endpoint_host", code: "invalid_format", message, live });
 
 	return errs;
 }
