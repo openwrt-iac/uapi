@@ -44,7 +44,9 @@ What uapi defends against, what it doesn't, and what the operator should do.
    and one function quotes every argument with `shellquote`, because the
    restore after a failed write reads peers straight from uci, where a
    value never passed `validate()`. wg.uc also checks the values before it
-   runs a command.
+   runs a command. A value that uapi stores for a daemon is a separate
+   path, because the daemon or its scripts read it later. The known gaps
+   are under [Scopes with known injection defects](#scopes-with-known-injection-defects).
 9. **Replay attacks on POST under network flakiness.** `Idempotency-Key`
    caches the response for 24 h; a network-blipped retry returns the cached
    response, not a duplicate side effect. Same key with a different body
@@ -133,6 +135,9 @@ Some write scopes let the holder run code as root directly. Grant each one as if
 - `system:authorized_keys:rw` adds an SSH key that logs in as root.
 - `system:password:rw` sets the root password.
 - `packages:installed:rw` installs a package, and its install script runs as root.
+- `uhttpd:instances:rw` sets the document root and the CGI, Lua and ucode prefixes of an
+  instance, so it chooses which programs uhttpd runs as root and which files it serves.
+- `dhcp:odhcpd:rw` sets `leasetrigger`, a program that odhcpd runs as root on each lease change.
 
 The list is not complete: several uci options name a script that a daemon runs as root.
 A parent scope includes them, so `system:rw` grants the first three. Deepest match wins,
@@ -141,6 +146,25 @@ so `system:rw` with `system:cron_jobs:ro` keeps the system writes and denies cro
 One read scope deserves the same care. `system:cron_jobs:ro`, and every scope above it up
 to `*:ro`, returns each root crontab command in full, and a command can carry a credential.
 Keep secrets in a 0600 file that the command reads, rather than on the crontab line.
+
+### Scopes with known injection defects
+
+The write scopes below take a value that uapi does not fully check, and that a daemon's config
+file or a shell command reads without quoting. Such a value can add a directive, a command or a
+command argument, which root then reads or runs. Grant each one as if it were `*:rw` until uapi
+checks these values:
+
+- `wireless:interfaces:rw`
+- every `snmpd` write scope: `agents`, `com2secs`, `groups`, `accesses` and `system`
+- `dhcp:dnsmasq:rw` and `dhcp:servers:rw`
+- `unbound:server:rw`
+- `network:interfaces:rw`
+- `mwan3:rules:rw`
+
+A parent scope includes them, so `wireless:rw`, `dhcp:rw` and `network:rw` count the same.
+`/raw/` checks no value, so a raw write scope reaches the same paths, and every option that
+uapi does not model: `raw:<package>:rw` with a domain scope of one of these packages counts
+the same.
 
 ### Audit consequence
 
