@@ -217,9 +217,10 @@ An option and the list of its words, split on whitespace as netifd splits it, ar
 value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
 of its own. So a write that leaves a field alone is refused for an error that the field already
 had only when the write makes the error live, for example by enabling the section. The sweep runs
-`validate_new()` on every stored section and lists every error. `validate()` and the schema check
-run as before: they still refuse a stored value that breaks one of their rules, and the schema
-check of a PUT or a JSON Patch sees the whole body, carried write-only fields included.
+`validate_new()` on every stored section and lists its errors, merged with the others as in a 422.
+`validate()` and the schema check run as before: `validate()` sees the whole section, and the
+schema check sees the request body, which for a PUT or a JSON Patch is the whole body, carried
+write-only fields included.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

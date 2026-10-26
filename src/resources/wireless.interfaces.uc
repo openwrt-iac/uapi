@@ -215,8 +215,12 @@ function validate_new(json) {
 	let r = roaming(json);
 	let err = (field, code, message, live) => push(errs, { field, code, message, live: !!live });
 	// wifi-scripts writes a list that uci holds for a text option as its entries joined by spaces.
+	// A list key gets there only on an access point with 8 to 64 entries: ap.uc counts entries as
+	// bytes, and supplicant.uc writes a list as JSON, which escapes a newline.
 	let text = (v) => (type(v) == "array") ? join(" ", v) : v;
-	let key = text(json.key), nasid = text(json.nasid);
+	let n = length(json.key);
+	let key = (type(json.key) != "array") ? json.key : (mode == "ap" && n >= 8 && n <= 64) ? text(json.key) : null;
+	let nasid = text(json.nasid);
 	let md = text(json.mobility_domain), r1 = text(json.r1_key_holder);
 	let line = function(field, v, live) {
 		if (length(v) > LINE_MAX) err(field, "out_of_range", TOO_LONG, live);

@@ -599,6 +599,10 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(length(h().sweep(c)), 1);
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
+		let eight = [ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'x\nssid2="x"' ];
+		t.assert_equal(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).status, 422);
+		for (let extra in [ { key: [ 'abcdefgh', 'x\ny' ] }, { mode: 'sta', key: eight } ])
+			t.assert_equal(h().patch(stored({ disabled: '1', ...extra }), CTX, 'w1', { disabled: false }).status, 200, extra);
 	});
 
 	// The lists are never read back, so a PUT carries the stored ones. hostapd reads them only with
