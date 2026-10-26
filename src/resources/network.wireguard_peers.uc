@@ -235,7 +235,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets. A write that leaves the host as it is, and does not enable the peer, is not refused for a problem that it already had" },
+		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write that changes the host, or enables the peer, refuses a backslash, a newline and brackets" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

@@ -121,6 +121,16 @@ t.describe('wg.apply', () => {
 		t.assert_equal(length(status), 1);
 	});
 
+	// A stored key that is not a WireGuard key made the DELETE of its peer, or a write that
+	// replaced the key, answer 500 on an up interface.
+	t.it('removes nothing for a key that is not a WireGuard key', () => {
+		let c = ubus.stub();
+		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
+		t.assert_equal(wg.apply(c, [
+			{ iface: "wg1", action: "remove", public_key: "not-a-key" },
+		]), null);
+	});
+
 	t.it('refuses an interface name that could escape into a command', () => {
 		let c = ubus.stub();
 		let err = wg.apply(c, [{ iface: "wg1; reboot", action: "remove", public_key: PK }]);
