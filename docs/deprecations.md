@@ -10,7 +10,7 @@ Policy: a deprecation in a minor release means both forms (old and new) are acce
 
 | Field | Replaced by | Deprecated since | Removal target | Migration |
 |---|---|---|---|---|
-| `network/interfaces.ip6prefix` (a string on write) | an array of prefixes | 3.2.0 (targeted, not yet released) | v4 | Send an array. A space-separated string is split into words as netifd splits a stored one, so the prefixes it meant do not change. The read is not part of this deprecation but changed in 3.2.0 itself, as a fix: it is always an array, including for a section that stores one prefix as a scalar, which netifd reads the same way. So a client that reads `ip6prefix` has to accept an array from 3.2.0 on. No `deprecated: true` flag, for the reason given under "How to migrate". |
+| `network/interfaces.ip6prefix` (a string on write) | an array of prefixes | 3.2.0 | v4 | Send an array. A space-separated string is split into words as netifd splits a stored one, so the prefixes it meant do not change. The read is not part of this deprecation but changed in 3.2.0 itself, as a fix: it is always an array, including for a section that stores one prefix as a scalar, which netifd reads the same way. So a client that reads `ip6prefix` has to accept an array from 3.2.0 on. No `deprecated: true` flag, for the reason given under "How to migrate". |
 
 Every entry above must also appear in the published spec's own description, under
 "Upcoming in v4". That is checked by `make lint-doc-refs`.
