@@ -1140,7 +1140,8 @@ function make_singleton(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 synthesized ? null : carry_write_only(resource, existing_view, existing));
+				                                 (resource.validate_new != null && !synthesized)
+				                                 ? carry_write_only(resource, existing_view, existing) : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

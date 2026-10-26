@@ -491,14 +491,14 @@ All notable changes to this project will be documented in this file. Format foll
   now refuses a backslash, a newline and brackets. wireguard.sh brackets every host with a colon, so
   a bracketed IPv6 address, which uapi took before, already failed the whole tunnel: on OpenWrt
   25.12.5 wg refused the config with `Unable to find port of endpoint: '[[fd00::1]]:51820'`. The
-  rule sees the peer as if it were enabled, because another writer such as LuCI can enable it later,
-  and a write is refused only for an error that it adds, or when it enables the peer. So a write
-  that leaves a stored host alone, disabling included, is not refused for it, and `GET
-  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The same holds for a
-  stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same `printf
-  %b`. That tightening uses the same carve-out, and it fails loudly. wireguard.sh takes the same
-  host from LuCI's RPC, from `/raw` and from a shell, so the fix that closes it for every writer
-  belongs upstream. (#247)
+  rule sees the peer as if it were enabled, because another writer such as LuCI can enable it later.
+  A write that sets the host, or that enables the peer through `disabled`, is refused for it. A
+  write that leaves the host as it is, disabling included, is not, and `GET
+  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep also lists
+  a stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same
+  `printf %b`, and a write that enables such a peer is refused. That tightening uses the same
+  carve-out, and it fails loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and
+  from a shell, so the fix that closes it for every writer belongs upstream. (#247)
 
 ## [3.1.0] - 2026-10-11
 

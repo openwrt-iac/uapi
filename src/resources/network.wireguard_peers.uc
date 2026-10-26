@@ -118,12 +118,16 @@ const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
 function validate_new(json) {
 	let errs = [];
 
-	for (let k in [ "public_key", "preshared_key" ])
-		if (type(json[k]) == "string" && json[k] != "" && !match(json[k], WG_KEY_RE))
-			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
-
 	// wireguard.sh reads a list option as its words joined by spaces.
-	let host = (type(json.endpoint_host) == "array") ? join(" ", json.endpoint_host) : json.endpoint_host;
+	let read = (v) => (type(v) == "array") ? join(" ", v) : v;
+
+	for (let k in [ "public_key", "preshared_key" ]) {
+		let key = read(json[k]);
+		if (type(key) == "string" && key != "" && !match(key, WG_KEY_RE))
+			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =" });
+	}
+
+	let host = read(json.endpoint_host);
 	if (type(host) == "string") {
 		let problem = endpoint_host_problem(host);
 		if (problem != null)
@@ -231,7 +235,7 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets, unless the peer stored the same host already and the write does not enable it" },
+		                        description: "Remote endpoint host name or IP address, without brackets, because wireguard.sh brackets an IPv6 address itself. A write refuses a backslash, a newline and brackets. A write that leaves the host as it is, and does not enable the peer, is not refused for a problem that it already had" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },

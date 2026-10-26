@@ -216,10 +216,10 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
-	// The handler compares the errors of the peer before and after the write, so a write is never
-	// refused for a stored host or key that it leaves as it is: a broken or injected peer can always
-	// be disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it is
-	// refused until a write replaces the value.
+	// The handler compares the errors of the peer before and after the write, so a merge PATCH that
+	// leaves a stored host or key as it is is never refused for it: a broken or injected peer can be
+	// disabled or edited, and the sweep lists it whether it is enabled or not. Enabling it is refused
+	// until a write replaces the value. A PUT still carries a stored key into the schema check.
 	t.it('a stored broken host or key blocks only the write that enables the peer', () => {
 		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
 		                    { preshared_key: 'K\\n[Peer]' } ]) {
@@ -243,6 +243,20 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(length(h.sweep(c)), 1);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '10.42.0.2/32' ] }).status, 200);
+	});
+
+	// An error that the host already had is new when the write changes the host, so swapping one
+	// injection for another is refused. wireguard.sh reads a list option as its words joined.
+	t.it('a write that changes a broken host, or enables a peer with a list key, is refused', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.endpoint_host = 'a\nb';
+		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1\\0072443\nPublicKey=X' }).status, 422);
+		c = with_wg();
+		c._state.uci.network.g_existing.disabled = '1';
+		c._state.uci.network.g_existing.preshared_key = [ 'K\n[Peer]\nPublicKey=X' ];
+		t.assert_equal(length(h.sweep(c)), 1);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422);
 	});
 
 	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {
