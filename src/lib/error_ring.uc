@@ -29,8 +29,13 @@ function append(entry) {
 	try {
 		let existing = read();
 		let m = entry.message;
-		push(existing, { ...entry,
-		                 message: length(m) > MAX_MESSAGE ? substr(m, 0, MAX_MESSAGE) + "..." : m });
+		if (length(m) > MAX_MESSAGE) {
+			// A cut inside a UTF-8 sequence would make /diagnostics serve text that is not UTF-8.
+			let cut = MAX_MESSAGE;
+			while (cut > 0 && (ord(m, cut) & 0xC0) == 0x80) cut--;
+			m = substr(m, 0, cut) + "...";
+		}
+		push(existing, { ...entry, message: m });
 		while (length(existing) > CAP) shift(existing);
 		// One name per request process. Appends that shared one wrote through their own offsets
 		// into one file, which then held no JSON, and the ring read empty.

@@ -18,8 +18,8 @@ What uapi defends against, what it doesn't, and what the operator should do.
    on each request is acceptable: tokens are few, hashes are fast, and
    compromising the server's `/etc/config/uapi` exposes only hashes.
 4. **Privilege escalation via HTTP token-mint.** `POST /tokens` is gated by
-   `uapi:tokens:rw`, AND the requested scopes must be a strict subset of the
-   caller's own - escalation returns `403 scope_escalation_blocked`. A
+   `uapi:tokens:rw`, AND the requested scopes must be covered by the caller's
+   own, equal or narrower - escalation returns `403 scope_escalation_blocked`. A
    compromised low-privilege token cannot mint an admin token over the API.
 5. **Stolen-token reuse from elsewhere.** Optional `allowed_cidrs` on a
    token pins it to a source CIDR list; requests from outside return
@@ -157,7 +157,8 @@ uapi refuses the characters that end the line or the argument, so that a value c
 directive, a command or a command argument. The check runs when a write goes through uapi, so a
 value that LuCI, `uci` or another writer stored stays until a write replaces it.
 
-`/raw/` checks no value, so a raw write scope can store any value in any option of its package.
+`/raw/` checks a value only for what uci can store, never for what a daemon reads, so a raw write
+scope can store a newline, a quote or whitespace in any option of its package.
 `raw:<package>:rw` with a domain scope of that package counts as a root scope for each package
 that a root daemon or script reads.
 

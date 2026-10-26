@@ -26,7 +26,7 @@ let values = require("values");
 // /schema endpoint needs the raw resource modules; handler.make hides them.
 const RESOURCE_SOURCES = {};
 
-// The module filename is the key with `:` swapped for `.`, for all 45 resources.
+// The module filename is the key with `:` swapped for `.`, for all 44 resources.
 // Passing it separately meant writing the key twice per entry and left room for the
 // two to disagree.
 function load_resource(key) {

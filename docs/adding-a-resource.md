@@ -67,7 +67,7 @@ If your resource type binds the section name to something kernel- or daemon-cons
 
 ### Singletons that may be wiped (`create_if_missing`)
 
-For resources whose underlying uci package can be deleted by an operator without uapi noticing (typical pattern: an extension package whose conffile is the only source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced), set `create_if_missing: true` on the resource module. `handler.make_singleton.patch` then creates the uci section on the fly instead of returning 404. The created section's name defaults to `main`; override via `singleton_section_name` if the daemon expects a different convention.
+For resources whose underlying uci package can be deleted by an operator without uapi noticing (typical pattern: an extension package whose conffile is the only source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced), set `create_if_missing: true` on the resource module. `handler.make_singleton.patch` then creates the uci section on the fly instead of returning 404, as long as the file under `/etc/config/` exists. A write into a deleted file answers 503 `config_missing` before the hook runs, because uci stores nothing in a missing file. The created section's name defaults to `main`; override via `singleton_section_name` if the daemon expects a different convention.
 
 Most singletons (`system`, `dhcp/dnsmasq`, `firewall/defaults`, etc.) should NOT opt in: their config sections ship with the package they wrap, and a missing section there is a real problem worth surfacing as 404 so the operator notices.
 
@@ -107,7 +107,7 @@ auto: { type: "boolean", default: true,
 
 This is standard OpenAPI 3.1 / JSON Schema 2020-12 documentation. Clients (Redoc, openapi-codegen, Terraform provider) read it to understand which fields the server populates on their behalf. The runtime validator at `handler.uc:_check_value` does NOT apply `default:`; it is purely documentation. fromUci owns server-side defaults; the framework MUST NOT silently fill absent fields from the spec or PATCH-delta semantics break.
 
-Only annotate **unconditional** defaults. Conditional defaults (e.g. `network.interfaces.peerdns` defaults to true only under `proto=dhcp`) stay un-annotated because the literal value misleads under other protos.
+Only annotate **unconditional** defaults. Conditional defaults (e.g. `network.interfaces.nohostroute` reads false only under `proto=wireguard`) stay un-annotated because the literal value misleads under other protos.
 
 For a field that is **caller-owned and safe for an IaC client to clear by omitting it from config**, also add `"x-uapi-clear-on-omit": true`:
 
@@ -164,7 +164,8 @@ problem; the caller translates to a `422` response. Codes come from a
 fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
 `not_in_enum`, `conflict`, `read_only`.
 
-`json` is the post-image: the stored section with the request merged in.
+`json` is the post-image: the request body on a create, the body with the stored secrets
+carried in on a PUT, and the stored section with the request merged in on a PATCH.
 `delta` holds only what the request names: the body of a create or a PUT,
 a merge-patch body, or the paths of a JSON Patch without its `test`
 operations. Check a rule against `json` when it describes the section as

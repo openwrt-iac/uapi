@@ -54,6 +54,14 @@ t.describe('error_ring', () => {
 		t.assert_equal(v[1].message, exact + "...");
 	});
 
+	t.it('clips a long message before a character that the limit would cut', () => {
+		wipe();
+		let head = "";
+		for (let i = 0; i < er.MAX_MESSAGE - 1; i++) head += "a";
+		er.append({ ts: 1, request_id: "r1", code: "bad_request", status: 400, message: head + "é" + "b" });
+		t.assert_equal(er.read()[0].message, head + "...");
+	});
+
 	t.it('survives garbage on disk by returning empty', () => {
 		wipe();
 		try { fs.mkdir("/var/run/uapi-error-ring"); } catch (_) {}

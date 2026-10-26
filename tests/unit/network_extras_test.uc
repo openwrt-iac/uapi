@@ -358,6 +358,9 @@ t.describe('network.rules derives the action as netifd does', () => {
 		t.assert_equal(read({ 'goto': '30030' }), 'goto');
 		t.assert_equal(read({ action: 'goto', 'goto': '30030' }), 'goto');
 		t.assert_equal(read({ action: 'unicast', lookup: '100' }), 'lookup');
+		let both = rules.fromUci({ '.name': 'x', '.type': 'rule', src: '10.0.0.0/24', action: 'unicast', 'goto': '30030' });
+		t.assert_equal(both.action, 'lookup');
+		t.assert_deep_equal(map(filter(rules.validate(both), (e) => e.field == 'goto'), (e) => e.code), [ 'conflict' ]);
 		t.assert_equal(read({ 'goto': '30030 ' }), 'lookup');
 		t.assert_equal(read({ action: 'unreachable' }), 'unreachable');
 		t.assert_equal(read({}), 'lookup');

@@ -14,7 +14,7 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
 
 **No default token shipped.** Operators mint the first token via `uapi-token create` after install. Shipping a default would be a security hole.
 
-**Distribution.** v1 launch ships on the project-owned OpenWrt feed at `openwrt-iac.github.io/feed/`. Submission to the official `packages` feed is a later step, not a blocker.
+**Distribution.** v1 launch ships on the project-owned OpenWrt feed at `openwrt-iac.github.io/feed/`. Submission to the official `packages` feed is open as openwrt/packages#30752, and is not a blocker.
 
 ## What gets installed
 
@@ -110,7 +110,7 @@ The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live insta
 
 1. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
 2. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
-3. Commits the uhttpd config if either step changed something, and then reloads uhttpd if it is enabled.
+3. If either step changed something, commits the uhttpd config and, if uhttpd is enabled, reloads it.
 
 `postinst` then restarts uhttpd, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
 

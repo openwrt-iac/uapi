@@ -29,54 +29,53 @@ All notable changes to this project will be documented in this file. Format foll
   `2001:db8::/56`, as LuCI documents it and odhcp6c reads it. It accepted only a length, `auto` or
   `no`. (#208)
 
-- **`wireless/devices` and `wireless/interfaces` model the options that bind a radio to its
-  hardware and the 802.11r group of an SSID.** A PUT replaces the section with what the resource
-  models, so a PUT of the read deleted them, and an IaC client updates with PUT. wifi-scripts finds
-  the phy of a radio by `path`, then `macaddr`, then `phy`. `wifi config` writes `path` for every
-  radio whose phy is named `phyN`, so the first apply that changed a radio deleted it, and the radio
-  stayed down with all its SSIDs. On an SSID, the 802.11r options were dropped, which turned fast
-  roaming off. `wireless/devices` gains `path`, `macaddr`, `phy` and `radio`, and LuCI's
-  `cell_density` and `legacy_rates`. `wireless/interfaces` gains every 802.11r option of LuCI's WLAN
-  roaming tab: `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
+- **`wireless/devices` and `wireless/interfaces` model the options that bind a radio to its hardware
+  and the 802.11r group of an SSID.** A PUT replaces the section with what the resource models, so a
+  PUT of the read deleted them, and an IaC client updates with PUT. wifi-scripts finds the phy of a
+  radio by `path`, then `macaddr`, then `phy`. `wifi config` writes `path` for every radio whose phy
+  is named `phyN`, so the first apply that changed a radio deleted it, and the radio stayed down
+  with all its SSIDs. On an SSID, the 802.11r options were dropped, which turned fast roaming off.
+  `wireless/devices` gains `path`, `macaddr`, `phy` and `radio`, and LuCI's `cell_density` and
+  `legacy_rates`. `wireless/interfaces` gains every 802.11r option of LuCI's WLAN roaming tab:
+  `ieee80211r`, `nasid`, `mobility_domain`, `reassociation_deadline`, `ft_over_ds`,
   `ft_psk_generate_local`, `r0_key_lifetime`, `r1_key_holder`, `pmk_r1_push`, `r0kh` and `r1kh`.
   Each `r0kh` and `r1kh` entry holds a shared key, so both lists are write-only, a read reports
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
-  wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
-  hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
-  bytes. It refuses a `nasid` over 48 bytes with fast transition, and over 253 bytes, the RADIUS
-  limit of NAS-Identifier, on an EAP access point. It refuses a `mobility_domain` other than 4 hex
-  digits, an `r1_key_holder` other than 12, and an entry that hostapd cannot parse while hostapd
-  reads the key holder lists, which it does with owe too. hostapd refuses its whole config for any
-  of these three. hostapd needs the form of `mobility_domain` only with 802.11r. With `fils`, which
-  uapi does not model, wifi-scripts also gives the value to hostapd as the EAP domain of an access
-  point, which takes any form, so a newline or a length in it counts there too, and its form does
-  not (#273). It refuses `ieee80211r` with owe on an access point: owe gets no fast transition, and
-  wifi-scripts reports the setup as failed unless both key holder lists are set. wifi-scripts stops
-  the setup of the radio, with all its SSIDs, for a `reassociation_deadline` outside 1000 to 65535
-  on any enabled SSID that it sets up, so a write refuses such a value, and a negative
-  `r0_key_lifetime`. A write is refused for such a value only when it adds the error, for example
-  when it changes the field, enables the SSID or turns fast transition on. So a PUT or a JSON Patch
-  that keeps a stored value passes, as a merge PATCH does. Turning the radio of the SSID on, or
-  moving the SSID from a radio that is off or missing to an enabled one, is refused too. `GET
-  /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. The request schema
-  declares the limits of `nasid` and the form of the key holder entries only for a body that
-  names `mode` `ap`, because a merge PATCH that leaves `mode`
-  out keeps the stored one. `reassociation_deadline` and `r0_key_lifetime` read the number that
-  wifi-scripts reads from the stored text, as ucode converts it: ` 500` is 500, `0x10` is 16, a
-  fraction is cut, and other text is 0, as hostapd reads it. Only the whole group keeps fast roaming
-  working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts derives lists that
-  the other access points do not share. `ft_psk_generate_local` reads null when unset, because
-  wifi-scripts then picks it from `encryption`. A stored value other than `1`, `true`, `0` or
-  `false` reads false, as wifi-scripts takes it. Other options still go with a PUT,
+  wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into hostapd's
+  config as lines, so a write refuses a newline in them and a value or an entry over 1024 bytes. It
+  refuses a `nasid` over 48 bytes with fast transition, and over 253 bytes, the RADIUS limit of
+  NAS-Identifier, on an EAP access point. It refuses a `mobility_domain` other than 4 hex digits, an
+  `r1_key_holder` other than 12, and an entry that hostapd cannot parse while hostapd reads the key
+  holder lists, which it does with owe too. hostapd refuses its whole config for any of these three.
+  hostapd needs the form of `mobility_domain` only with 802.11r. With `fils`, which uapi does not
+  model, wifi-scripts also gives the value to hostapd as the EAP domain of an access point, which
+  takes any form, so a newline or a length in it counts there too, and its form does not (#273). It
+  refuses `ieee80211r` with owe on an access point: owe gets no fast transition, and wifi-scripts
+  reports the setup as failed unless both key holder lists are set. wifi-scripts stops the setup of
+  the radio, with all its SSIDs, for a `reassociation_deadline` outside 1000 to 65535 on any enabled
+  SSID that it sets up, so a write refuses such a value, and a negative `r0_key_lifetime`. A write
+  is refused for such a value only when it adds the error, for example when it changes the field,
+  enables the SSID or turns fast transition on. So a PUT or a JSON Patch that keeps a stored value
+  passes, as a merge PATCH does. Turning the radio of the SSID on, or moving the SSID from a radio
+  that is off or missing to an enabled one, is refused too. `GET /api/v3/diagnostics?validate=1`
+  lists every SSID that holds such a value. The request schema declares the limits of `nasid` and
+  the form of the key holder entries only for a body that names `mode` `ap`, because a merge PATCH
+  that leaves `mode` out keeps the stored one. `reassociation_deadline` and `r0_key_lifetime` read
+  the number that wifi-scripts reads from the stored text, as ucode converts it: ` 500` is 500,
+  `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. Only the whole group
+  keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
+  derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
+  unset, because wifi-scripts then picks it from `encryption`. A stored value other than `1`,
+  `true`, `0` or `false` reads false, as wifi-scripts takes it. Other options still go with a PUT,
   such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an SSID. Every
   radio and SSID read gains the new fields, so its ETag changes once at the upgrade, and a write
   with an `If-Match` from before the upgrade answers 412. A client that builds its PUT body from its
-  own model, such as terraform-provider-uapi until it models these fields, still deletes them, so
-  upgrade the provider together with uapi. (#239)
+  own model, such as terraform-provider-uapi 3.1.0, still deletes them. Upgrade the provider to a
+  release that models these fields together with uapi. (#239)
 
-- **`503 config_missing`** answers a write into a uci package whose file under `/etc/config/`
-  does not exist, and names the file. `wireless` is the common case: `wifi config` writes
-  `/etc/config/wireless` only when it finds a radio. (#235)
+- **`503 config_missing`** answers a curated write, or a raw POST, into a uci package whose file
+  under `/etc/config/` does not exist, and names the file. `wireless` is the common case: only
+  wifi-scripts creates `/etc/config/wireless`, so an image without it has no such file. (#235)
 
 - **A sweep error of a `validate_new()` rule has `live`.** `GET /api/v3/diagnostics?validate=1`
   lists a stored value that such a rule refuses, whether the daemon reads it yet or not.
@@ -97,12 +96,13 @@ All notable changes to this project will be documented in this file. Format foll
   that changes only `proto` succeeds, unless the section fails a check of the new proto: static
   requires an address, wireguard a private key and addresses, and ppp and pppoe take an `mtu` from
   128 to 16384 only. That PATCH now removes the options of the old proto and keeps the options that
-  apply to every proto. Before, it kept the static address fields when it left proto static. With
-  terraform-provider-uapi before 3.2.0, a proto switch fails with 422 when the state holds a field
-  that the new proto does not take. That is always the case away from static or wireguard, and away
-  from a proto that uapi does not model unless the new proto is wireguard: static requires its
-  addresses, a read of the other two answers `nohostroute: false`, and only wireguard takes
-  `nohostroute`. Upgrade the provider together with uapi. (#208)
+  apply to every proto, except a stored `private_key`, which a read masks and a PUT removes. Before,
+  it kept the static address fields when it left proto static. With terraform-provider-uapi 3.1.0
+  and earlier, a proto switch fails with 422 when the state holds a field that the new proto does
+  not take. That is always the case away from static or wireguard, and away from a proto that uapi
+  does not model unless the new proto is wireguard: static requires its addresses, a read of the
+  other two answers `nohostroute: false`, and only wireguard takes `nohostroute`. Upgrade the
+  provider to a release that supports 3.2.0 together with uapi. (#208)
 - **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
@@ -119,11 +119,12 @@ All notable changes to this project will be documented in this file. Format foll
   absent on dhcp. That is silent for a script: `jq .broadcast` prints null, so grep scripts for
   `.broadcast` on dhcp interfaces. (#208)
 - **`network/routes.table` and `network/rules.lookup` refuse 0.** netifd cannot resolve table 0
-  and drops the route or rule, so such a write answered 200 with no effect. It now answers 422
-  `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for payloads that
-  produced a state no caller can rely on, and it fails loudly. A stored table that netifd cannot
-  resolve, such as a name missing from `/etc/iproute2/rt_tables`, reads as 0 too, and the
-  validation sweep reports it. Every write to that section answers 422 until the table is fixed,
+  and drops the route or rule. A route with table 0, or a rule with lookup 0 beside another action,
+  answered 200 with no effect, and a lookup rule with lookup 0 answered 422 `required`. Each now
+  answers 422 `out_of_range`. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. A stored table that
+  netifd cannot resolve, such as a name missing from `/etc/iproute2/rt_tables`, reads as 0 too, and
+  the validation sweep reports it. Every write to that section answers 422 until the table is fixed,
   where a PUT of the read used to remove the option and move the route into the main table.
   `table` and `lookup` also declare `maximum: 4294967295`, and a larger write answers 422
   `out_of_range`. netifd keeps a table id in 32 bits, so a larger number named another table or
@@ -205,10 +206,11 @@ All notable changes to this project will be documented in this file. Format foll
   `read_only`.** Before, it answered 200 and changed neither. An echo of the values of the section
   still passes. That tightening uses the carve-out in `docs/versioning.md` for payloads that
   produced a state no caller can rely on, and it fails loudly. (#237)
-- **`/diagnostics` keeps the first 512 bytes of each error message**, and ends a cut message with
-  `...`. The 400 for a control character in a request body names the key, and it answers before
-  authentication, so without a limit any client could store a body of any size in the error ring,
-  which lives in RAM. The response itself still carries the whole message. (#242)
+- **`/diagnostics` keeps the first 512 bytes of each error message**, cuts before a character that
+  the limit would split, and ends a cut message with `...`. The 400 for a control character in a
+  request body names the key, and it answers before authentication, so without a limit any client
+  could store a body of any size in the error ring, which lives in RAM. The response itself still
+  carries the whole message. (#242)
 - **The response schemas of the curated resources declare no `pattern`.** A read returns a value as
   uci holds it, and uci, LuCI or uapi 3.1.0 can store a value that breaks a pattern, so a GET
   answered a body that failed its own schema. For example, a section with
@@ -448,9 +450,9 @@ All notable changes to this project will be documented in this file. Format foll
   `docs/versioning.md`: the server broke its declared enum for every SSID whose cipher LuCI forced.
   No read changes, so nothing fails: a client that validated such a read failed before and now
   passes. A key is required with a forced cipher as without one. That fixes a PSK or SAE SSID. An
-  EAP SSID, with `wpa`, `wpa2`, `wpa3` or `wpa3-mixed`, still cannot be updated with PUT: LuCI
-  removes its `key`, and uapi requires one. LuCI's `wpa-mixed` and `wpa3-192` are not in the enum
-  yet, with or without a cipher. (#239)
+  EAP SSID, with `wpa`, `wpa2`, `wpa3` or `wpa3-mixed`, still cannot be updated with PUT or PATCH
+  unless the request sends a `key`: LuCI removes its `key`, and uapi requires one. LuCI's
+  `wpa-mixed` and `wpa3-192` are not in the enum yet, with or without a cipher. (#239)
 - **`network/interfaces.ip6hint` and `ip6ifaceid` now apply to every proto, as netifd reads
   them.** They were read and written only for proto `dhcpv6`. On a static interface, which is where
   they matter, a write answered 200 and stored nothing, so no caller could choose which /64 an
@@ -481,13 +483,15 @@ All notable changes to this project will be documented in this file. Format foll
   integer option through `strtol` with base 0. uapi read decimals only, so `metric '0x10'`, which
   netifd applies as 16, read null, and `ip6assign '010'`, which netifd takes as 8, read 10. A
   scalar `dns`, `ipaddr`, `ip6addr` or wireguard `addresses` with several words read as one entry,
-  while netifd, and the wireguard script for `addresses`, use each word. For example, `option dns '192.0.2.1 192.0.2.2'` is two servers, and
-  a PUT of the old read of a scalar `ipaddr` with two addresses answered 422. `metric`,
-  `ip6assign`, `ip6weight` and `mtu` now read hex and octal, and the lists read as their words.
-  An empty string reads null, as before. A value past int32 now reads null too, because netifd
-  truncates it differently on 32- and 64-bit targets. Measured on OpenWrt 25.12.5:
-  `metric '0x10'` gives routes with metric 16, `mtu '0x578'` on wireguard gives mtu 1400, and
-  `metric '16 '` gives routes without a metric, which uapi reads as null. (#209)
+  while netifd, and the wireguard script for `addresses`, use each word. For example,
+  `option dns '192.0.2.1 192.0.2.2'` is two servers, and a PUT of the old read of a scalar `ipaddr`
+  with two addresses answered 422. `metric`, `ip6assign`, `ip6weight` and `mtu` now read hex and
+  octal, and the lists read as their words. An empty string reads null. It already did for the
+  integers and `ipaddr`, while `dns`, `ip6addr` and `addresses` read `[""]`. A value past int32
+  now reads null too, because netifd truncates it differently on 32- and 64-bit targets. Measured
+  on OpenWrt 25.12.5: `metric '0x10'` gives routes with metric 16, `mtu '0x578'` on wireguard
+  gives mtu 1400, and `metric '16 '` gives routes without a metric, which uapi reads as null.
+  (#209)
 - **`network/routes` and `network/rules` read a table name as its id.** netifd resolves `table`
   and `lookup` as a number, as one of the aliases `default`, `main` and `local`, or as a name in
   `/etc/iproute2/rt_tables`, and LuCI writes the name. uapi read decimals only, so a name read
@@ -519,7 +523,7 @@ All notable changes to this project will be documented in this file. Format foll
   violated its own declared `["string", "null"]` for every section that stores
   `list ip6prefix`.** A static section, which LuCI writes as a scalar, read back correctly, so
   branch (a) is not claimed. The change fails loudly for a typed reader: every interface with
-  `ip6prefix` now reads an array, which terraform-provider-uapi before 3.2.0 stores as text, so
+  `ip6prefix` now reads an array, which terraform-provider-uapi 3.1.0 and earlier store as text, so
   every plan shows a change for such an interface and the apply fails with an inconsistent
   result. It is silent for a script: `jq -r .ip6prefix` now prints a JSON array, so grep
   scripts for `.ip6prefix`. Writers keep working, because a string is still accepted and split
@@ -538,7 +542,7 @@ All notable changes to this project will be documented in this file. Format foll
   read LuCI's goto rule as action `lookup`, so every write to it answered 422. A read now
   derives the action as netifd does, with `unicast` read as `lookup`. A write stores no action
   for lookup and goto, and clears a stored one. A rule that uapi stored before stays
-  uninstalled until its next write; `uci show network | grep "action='goto'"` lists them.
+  uninstalled until its next write, and `uci show network | grep "action='goto'"` lists them.
   Measured on OpenWrt 25.12.5: a rule with only `goto` is installed, the same rule with
   `action 'goto'` is not, and a PATCH of it through uapi installs it. (#218)
 - **The published `network/rules` conditional accepts a rule whose only selector is `mark`**, as
@@ -570,17 +574,16 @@ All notable changes to this project will be documented in this file. Format foll
   interface's `mtu '1400'` left the bridge at 1500, a device added to the interface got 1400 and
   the bridge then dropped to 1400 with it, and a dotted VLAN without a section got the
   interface's value. (#224)
-- **`network/interfaces.listen_port` reads a service name as wg resolves it.** `wireguard.sh`
-  writes `ListenPort` for `wg`, which resolves a name through `/etc/services`, so
-  `option listen_port 'openvpn'` makes the tunnel listen on 1194. uapi read such a name as null,
-  and a PUT of the read removed the option, so the tunnel then listened on a random port. A read
-  now gives the port that wg uses. A PUT of the read writes the number, which netifd sees as a
-  change, so it restarts the interface once and drops the tunnel briefly. A PATCH keeps the
-  stored name and restarts nothing, also for a name that does not resolve, which reads -1. A write
-  that sends -1 answers 422, so a PUT of such a read is refused. netifd itself reads the option as
-  an integer and does not restart the interface when it changes to a name, so a name takes effect
-  at the next ifup. Measured on OpenWrt
-  25.12.5: `listen_port 'openvpn'` listens on 1194 and reads 1194, and
+- **`network/interfaces.listen_port` reads a service name as wg resolves it.** `wireguard.sh` writes
+  `ListenPort` for `wg`, which resolves a name through `/etc/services`, so
+  `option listen_port 'openvpn'` makes the tunnel listen on 1194. uapi read such a name as null, and
+  a PUT of the read removed the option, so the tunnel then listened on a random port. A read now
+  gives the port that wg uses. A PUT of the read writes the number, which netifd sees as a change,
+  so it restarts the interface once and drops the tunnel briefly. A PATCH keeps the stored name and
+  restarts nothing, also for a name that does not resolve, which reads -1. A write that sends -1
+  answers 422, so a PUT of such a read is refused. netifd itself reads the option as an integer and
+  does not restart the interface when it changes to a name, so a name takes effect at the next ifup.
+  Measured on OpenWrt 25.12.5: `listen_port 'openvpn'` listens on 1194 and reads 1194, and
   `listen_port 'nosuchservice'` leaves the interface down and reads -1. (#225)
 - **A `network/interfaces` read of a proto that uapi does not model conforms to the Response
   schema.** LuCI writes `6in4`, `gre`, `6rd` and other tunnel protos, and a read answers them as
@@ -602,20 +605,21 @@ All notable changes to this project will be documented in this file. Format foll
 
 - **A write into a uci package without a config file answered 200 and stored nothing.** The uci
   cursor stores nothing in a missing file and reports it only through a null return, which uapi
-  ignored. On a router without a radio, `POST /wireless/devices` and `POST /wireless/interfaces`
-  answered 200 with an `id` that a GET then answered 404 for, and a raw POST to a package without a
-  file did the same. Such a write now answers `503 config_missing` before any uci write. That
-  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
-  can rely on, and it fails loudly. A PUT or PATCH of a curated id there answers the same 503 where
-  it answered 404, as with `init_script_missing`. A DELETE still answers 404, because no section can
-  exist there, and a client reads a 404 on DELETE as already gone, as terraform-provider-uapi does
-  at destroy after the package was removed (#277). A DELETE in a `POST /batch` answers the 503,
-  because the batch commits as one write. The raw PUT, PATCH and DELETE still answer 404, because
-  they look up the section first. A uci set, rename or commit that the cursor refuses now answers
-  500 instead of 200. In a `POST /batch` that refusal restores the packages that the batch committed
-  before it and runs no reload and no kernel apply, where 3.1.0 answered 207 and gave the kernel the
-  WireGuard peers that the batch set (#277). A raw write whose reload service is not installed
-  answers `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
+  ignored. On a router without a radio, or an image without wifi-scripts, `POST /wireless/devices`
+  and `POST /wireless/interfaces` answered 200 with an `id` that a GET then answered 404 for, and a
+  raw POST to a package without a file did the same. Such a write now answers `503 config_missing`
+  before any uci write. That tightening uses the carve-out in `docs/versioning.md` for payloads that
+  produced a state no caller can rely on, and it fails loudly. A PUT or PATCH of a curated id there
+  answers the same 503 where it answered 404, as with `init_script_missing`. A DELETE still answers
+  404, because no section can exist there, and a client reads a 404 on DELETE as already gone, as
+  terraform-provider-uapi does at destroy after the package was removed (#277). A DELETE in a
+  `POST /batch` answers the 503, because the batch commits as one write. The raw PUT, PATCH and
+  DELETE still answer 404, because they look up the section first. A uci set, rename or commit that
+  the cursor refuses now answers 500 instead of 200. In a `POST /batch` that refusal restores the
+  packages that the batch committed before it and runs no reload and no kernel apply, where 3.1.0
+  answered 207 and gave the kernel the WireGuard peers that the batch set (#277). A raw write whose
+  reload service is not installed answers `503 init_script_missing` instead of a 500 that named an
+  unknown kind. (#235)
 
 - **A raw write of an option that uci cannot store answered 200 and stored nothing, or only part of
   it.** The cursor drops an option name outside letters, digits and `_` and still returns true. It
@@ -667,8 +671,9 @@ All notable changes to this project will be documented in this file. Format foll
   it wrote its body into that section. (#242)
 - **A path that names a section by position, such as `@zone[0]` or `@[-1]`, answered with the
   position as its `id`.** uci resolves the position, and uapi put the text of the path in place of
-  the section name, on raw, on the curated resources and on `/tokens`. `id` is now the section
-  name, and a write by position acts on that section. A curated PUT by position no longer refuses
+  the section name, on raw, on the curated resources, and in the `name` of a token on `/tokens`.
+  `id`, and the `name` of a token, is now the section name, and a write by position acts on that
+  section. A curated PUT by position no longer refuses
   a unique field, such as the `name` of a firewall zone or the `ip` of a DHCP host, as taken by the
   section itself, and a token revoked by position no longer leaves its rate-limit bucket. (#242)
 - **A raw PATCH removes the reload fields that a write stored as options before 3.2.0**, as it
@@ -1028,10 +1033,9 @@ All notable changes to this project will be documented in this file. Format foll
   after a failed peer write reapplies the interface's peers from uci, and that path read the raw
   option, which never passed `validate()`. So a value such as `0;touch /tmp/x` ran as root on
   the next failed peer write on that interface. It could be written by hand, or through
-  `/raw/network/...` by a token with `raw:network:rw` and `network:rw`, which `docs/security.md`
-  does not grant a shell. The value is now read as a number, after removing whitespace as wg
-  does, and formatted with `%d`. Measured on OpenWrt 25.12.5: the value ran before this change
-  and does not after it. (#219)
+  `/raw/network/...` by a token with `raw:network:rw` and `network:rw`. The value is now read as a
+  number, after removing whitespace as wg does, and formatted with `%d`. Measured on OpenWrt
+  25.12.5: the value ran before this change and does not after it. (#219)
 
 - **A raw `.type` with `#` or `;` created a section of another type past the scope check.** uci
   writes the type unquoted, so `config rule#x` re-reads as an anonymous `rule`. The scope check had
@@ -1065,8 +1069,8 @@ All notable changes to this project will be documented in this file. Format foll
   the DELETE of that peer ran `id` as root. Measured on OpenWrt 25.12.5: the file that the command
   wrote held `uid=0(root)`. Every release since 2.4.1 has this. wg.uc now builds every `wg` and
   `ip` command as an argument list and quotes each argument, and an IPv6 prefix length must be 1 to
-  3 digits. The check is shared, so `network/interfaces` (`addresses`, `ip6addrs`, `ip6prefix`,
-  `reqprefix`), `mwan3/rules` and the address fields of `firewall/rules`, `firewall/nat` and
+  3 digits. The check is shared, so `network/interfaces` (`addresses`, `ip6addrs`, `ip6prefix`),
+  `mwan3/rules` and the address fields of `firewall/rules`, `firewall/nat` and
   `firewall/redirects` now refuse an IPv6 prefix with anything after its length too: netifd, fw4
   and `ip route` refuse or misread one, and fw4 drops the rule. That tightening uses the carve-out
   in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
@@ -1099,8 +1103,7 @@ All notable changes to this project will be documented in this file. Format foll
   '[[fd00::1]]:51820'`. The rule sees the peer as if it were enabled, because another writer such
   as LuCI can enable it later. A write that changes the host, or that enables the peer through
   `disabled`, is refused for it. Any other write is not refused for the host, and `GET
-  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep
-  also lists
+  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep also lists
   a stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same
   `printf %b`, and a write that enables such a peer is refused. That tightening uses the same
   carve-out, and it fails loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and
