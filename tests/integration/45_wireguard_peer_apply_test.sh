@@ -186,8 +186,8 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 has_peer "$PEER4" || fail "re-enabled peer was not reinstalled"
 call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 
-# endpoint_host reaches a shell command. validate_new() refuses only escapes, newlines and
-# brackets in it, so this host reaches `wg set`, which must read it as one argument and fail to
+# endpoint_host reaches a shell command. validate_new() refuses only escapes, newlines, and
+# brackets with a colon in it, so this host reaches `wg set`, which must read it as one argument and fail to
 # resolve it. A regression here is remote command execution, not a cosmetic bug.
 echo "--- a command substitution in endpoint_host does not execute ---"
 $SSH "rm -f /tmp/uapi-wg-injection" >/dev/null 2>&1
@@ -203,8 +203,8 @@ $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 # also on a disabled peer, because another writer can enable it later. A peer written by hand
 # with the prefix must run nothing when the API deletes it. wireguard.sh expands the escapes of the
 # config it gives `wg syncconf`, so an escape in endpoint_host is refused too, with or without a
-# bracket, and so are brackets.
-echo "--- an allowed IP with a tail, an escape or brackets in endpoint_host is refused, and a stored one runs nothing ---"
+# bracket, and so is a bracketed IPv6 address, which wireguard.sh brackets again.
+echo "--- an allowed IP with a tail, an escape or a bracketed IPv6 address in endpoint_host is refused, and a stored one runs nothing ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"::/0;id>uapi45_route;\"],
 	    \"route_allowed_ips\":true,\"disabled\":true}")
