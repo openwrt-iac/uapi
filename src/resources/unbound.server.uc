@@ -125,7 +125,7 @@ return {
 		query_minimize:    { type: "boolean", default: false },
 		rebind_protection: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
-		domain:            { type: ["string", "null"] },
+		domain:            { type: ["string", "null"], pattern: values.ONE_WORD_RE },
 		domain_type:       { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DOMAIN_TYPE),
 		                     description: "Local-zone type for the configured domain" },
 		manual_conf:       { "x-uapi-read-nullable": true, type: "boolean",

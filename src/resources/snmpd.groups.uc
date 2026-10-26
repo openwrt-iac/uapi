@@ -38,10 +38,10 @@ return {
 	openapi_singular: "SNMP group",
 	openapi_required: ["group"],
 	schema_properties: {
-		group:   { "x-uapi-read-nullable": true, type: "string",
+		group:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE,
 		           description: "Group name referenced by snmpd/accesses entries" },
 		version: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_VERSIONS) },
-		secname: { type: ["string", "null"],
+		secname: { type: ["string", "null"], pattern: values.ONE_LINE_RE,
 		           description: "Security name (community for v1/v2c, USM user for v3)" },
 	},
 };

@@ -166,6 +166,12 @@ function check_lines(field, value, errs) {
 	}
 }
 
+// An init script copies these values onto one line of a daemon config, and uci keeps a
+// newline, so a newline adds a directive.
+const ONE_LINE_RE = "^[^\n\r]*$";
+// An init script expands these values unquoted, so whitespace adds an argument.
+const ONE_WORD_RE = "^[^ \t\n\r]*$";
+
 // uci stores everything as strings; the curated layer wants real numeric
 // values for fields declared `type: "integer"`. Returns null on missing or
 // non-numeric input to avoid the silent int("abc") = 0 trap.
@@ -705,5 +711,5 @@ return {
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
 	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
-	LINE_RE, MAX_LINE_LEN, check_lines,
+	LINE_RE, MAX_LINE_LEN, check_lines, ONE_LINE_RE, ONE_WORD_RE,
 };

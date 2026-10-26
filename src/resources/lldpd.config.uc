@@ -3,6 +3,10 @@ let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list_or_null = values.as_list_or_null;
 
+// lldpd.init writes each value between double quotes on one lldpcli command line, so a
+// newline adds a command and a quote ends the argument.
+const LLDP_TEXT_RE = "^[^\n\r\"]*$";
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -68,11 +72,11 @@ return {
 		// Free text, not a flag: lldpd.init reads it with config_get and emits it
 		// verbatim as the system description. Typed boolean, a write replaced the
 		// operator's string with "1".
-		lldp_description:  { type: ["string", "null"],
+		lldp_description:  { type: ["string", "null"], pattern: LLDP_TEXT_RE,
 		                     description: "System description advertised in LLDP frames" },
 		lldp_capabilities: { type: "boolean", default: true,
 		                     description: "Advertise the system capabilities TLV" },
-		lldp_mgmt_ip:      { type: ["string", "null"],
+		lldp_mgmt_ip:      { type: ["string", "null"], pattern: LLDP_TEXT_RE,
 		                     description: "Management IP advertised in LLDP frames" },
 		interface:         { type: ["array", "null"], items: { type: "string" } },
 	},

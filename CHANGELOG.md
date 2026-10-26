@@ -515,6 +515,21 @@ All notable changes to this project will be documented in this file. Format foll
   that a daemon's config file or a shell command reads without quoting. Grant each of them as
   `*:rw` until uapi checks those values. (#248)
 
+- **Values that an init script writes into a daemon config or a shell command are checked.** An
+  init script copies these values onto one line of a daemon config, so a newline added a
+  directive: the string fields of every `snmpd` resource, `domain`, `local`, `server` and
+  `address` of `dhcp/dnsmasq`, `domain` and `dhcp_option` of `dhcp/servers`, and
+  `lldp_description` and `lldp_mgmt_ip` of `lldpd/config`. They now refuse a newline and a
+  carriage return, and the two lldpd fields refuse a double quote too. A script expands these
+  values unquoted, so whitespace added an argument: `leasefile` and `resolvfile` of
+  `dhcp/dnsmasq`, `domain` of `unbound/server`, and `src_port`, `dest_port` and `ipset` of
+  `mwan3/rules`. They now refuse whitespace, and `clientid` of `network/interfaces` takes only
+  hex digits with optional colons. In mode `monitor`, `adhoc` or `mesh`, wifi-scripts can pass
+  `ssid` to a root shell command between single quotes, so `wireless/interfaces` refuses a single
+  quote in `ssid` in these modes. Each refusal answers 422 `invalid_format`, under the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on. No value in the
+  uci configs of the OpenWrt feeds is refused. (#250)
+
 ## [3.1.0] - 2026-10-11
 
 ### Added
