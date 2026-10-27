@@ -1,8 +1,8 @@
 # A strict client validates a request body before it sends it, so the PATCH schema has to take
-# what the server takes. The server merges a merge-patch body into the stored section and
-# validates the result, so a body that names one field, or none, is valid. lint-openapi-shape
-# checks the shape of each schema. This asks a real JSON Schema implementation what a client
-# concludes from it.
+# what the server takes. The server type-checks a merge-patch body, and checks the required
+# fields on the stored section that the body merges into, so a body that names one field, or
+# none, is valid. lint-openapi-shape checks the shape of each schema. This asks a real JSON
+# Schema implementation what a client concludes from it.
 import json
 import sys
 from urllib.parse import quote

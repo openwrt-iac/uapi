@@ -134,16 +134,25 @@ a value that breaks the pattern, such as a `clientid` with dashes, so a pattern 
 would be a promise that a GET breaks. The request half keeps every pattern, and the sweep of
 `/diagnostics?validate=1` lists a stored value that breaks one.
 
-The merge-patch body of a PATCH requires nothing, since 3.2.0. The server merges that body into the
-stored section and validates the result, so a body can leave out a field that a create requires.
-The `application/json` body of a CRUD PATCH is `<Name>Patch`, which has the properties of
-`<Name>Request` with the same types and patterns, and no `required` and no conditionals. It
-leaves the descriptions to `<Name>Request`, because the document ships on the router. A nested
-object, such as the `match` of `firewall/redirects`, has no `required` either, because the server
-merges it into the stored object. A singleton has no create, so its PATCH body is `<Name>Request`,
-and that schema has no `required` and no conditionals. The `application/json-patch+json` body is
-`JsonPatch`. Before 3.2.0 the merge-patch body was an `allOf` of the Request, so a strict client
-refused a partial body that the server accepts.
+The merge-patch body of a PATCH requires nothing, since 3.2.0. The server type-checks that body
+and merges it into the stored section. It checks the required fields on the result, so a body can
+leave out a field that a create requires.
+
+- The `application/json` body of a CRUD PATCH is `<Name>Patch`. It has the properties of
+  `<Name>Request` with the same types, enums, patterns and bounds. It has no `required` and no
+  conditionals.
+- A nested object, such as the `match` of `firewall/redirects`, has no `required` either. The
+  server merges it into the stored object.
+- `<Name>Patch` has no defaults. A merge-patch body has none, and a client that fills defaults
+  would overwrite stored values on every PATCH.
+- `<Name>Patch` leaves descriptions and examples to `<Name>Request`, because the document ships
+  on the router. A deprecated field keeps its description, which says why.
+- A singleton has no create, so its PATCH body is `<Name>Request`. That schema has no `required`
+  and no conditionals.
+- The `application/json-patch+json` body is `JsonPatch`.
+
+Before 3.2.0 the merge-patch body was an `allOf` of the Request. So a strict client refused a
+partial body that the server accepts.
 
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token

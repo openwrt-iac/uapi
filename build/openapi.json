@@ -25066,8 +25066,7 @@
 						]
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"set_mark": {
 						"type": [
@@ -25159,8 +25158,7 @@
 									"any",
 									"ipv4",
 									"ipv6"
-								],
-								"default": "any"
+								]
 							},
 							"mark": {
 								"type": [
@@ -25363,8 +25361,7 @@
 							"ACCEPT",
 							"REJECT",
 							"DROP"
-						],
-						"default": "REJECT"
+						]
 					},
 					"output_policy": {
 						"type": "string",
@@ -25372,8 +25369,7 @@
 							"ACCEPT",
 							"REJECT",
 							"DROP"
-						],
-						"default": "REJECT"
+						]
 					},
 					"forward": {
 						"type": "string",
@@ -25381,8 +25377,7 @@
 							"ACCEPT",
 							"REJECT",
 							"DROP"
-						],
-						"default": "REJECT"
+						]
 					},
 					"network": {
 						"type": [
@@ -25394,12 +25389,10 @@
 						}
 					},
 					"masq": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"mtu_fix": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"family": {
 						"type": "string",
@@ -25407,8 +25400,7 @@
 							"any",
 							"ipv4",
 							"ipv6"
-						],
-						"default": "any"
+						]
 					}
 				}
 			},
@@ -25839,12 +25831,10 @@
 						"enum": [
 							"DNAT",
 							"SNAT"
-						],
-						"default": "DNAT"
+						]
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"match": {
 						"type": "object",
@@ -25916,8 +25906,7 @@
 									"any",
 									"ipv4",
 									"ipv6"
-								],
-								"default": "any"
+								]
 							},
 							"mark": {
 								"type": [
@@ -26292,12 +26281,10 @@
 							"SNAT",
 							"MASQUERADE",
 							"ACCEPT"
-						],
-						"default": "MASQUERADE"
+						]
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"snat_ip": {
 						"type": [
@@ -26503,12 +26490,10 @@
 							"any",
 							"ipv4",
 							"ipv6"
-						],
-						"default": "any"
+						]
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					}
 				}
 			},
@@ -27956,7 +27941,6 @@
 					},
 					"proto": {
 						"type": "string",
-						"default": "none",
 						"enum": [
 							"static",
 							"dhcp",
@@ -28023,12 +28007,10 @@
 						"maximum": 65535
 					},
 					"auto": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"ip4table": {
 						"type": [
@@ -28475,8 +28457,7 @@
 						"pattern": "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
 					},
 					"ipv6": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					}
 				}
 			},
@@ -28743,12 +28724,10 @@
 							"multicast",
 							"local",
 							"broadcast"
-						],
-						"default": "unicast"
+						]
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -29145,8 +29124,7 @@
 						]
 					},
 					"invert": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"mark": {
 						"type": [
@@ -29155,8 +29133,7 @@
 						]
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -29519,12 +29496,10 @@
 						"maximum": 65535
 					},
 					"route_allowed_ips": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"preshared_key": {
 						"type": "string",
@@ -29864,12 +29839,10 @@
 						"maximum": 3
 					},
 					"legacy_rates": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -30727,8 +30700,7 @@
 							"adhoc",
 							"monitor",
 							"mesh"
-						],
-						"default": "ap"
+						]
 					},
 					"ssid": {
 						"type": [
@@ -30832,28 +30804,22 @@
 							"wpa3-mixed+tkip+aes",
 							"wpa3-mixed+aes+tkip",
 							"wpa3-mixed+ccmp+tkip"
-						],
-						"default": "none"
+						]
 					},
 					"disabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"hidden": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"isolate": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"ieee80211r": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"ft_over_ds": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"ft_psk_generate_local": {
 						"type": [
@@ -30898,8 +30864,7 @@
 						"pattern": "^[0-9A-Fa-f]{12}$"
 					},
 					"pmk_r1_push": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"key": {
 						"type": "string",
@@ -31218,8 +31183,7 @@
 						}
 					},
 					"dns": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"broadcast": {
 						"type": [
@@ -31587,16 +31551,13 @@
 						"pattern": "^[0-9]+[smhdwMY]?$"
 					},
 					"ignore": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"force": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"dynamicdhcp": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"ra": {
 						"type": [
@@ -32272,12 +32233,10 @@
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"enable_server": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"interface": {
 						"type": [
@@ -32295,8 +32254,7 @@
 						}
 					},
 					"use_dhcp": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					}
 				}
 			},
@@ -32422,8 +32380,7 @@
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"enable": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"port": {
 						"type": [
@@ -32434,16 +32391,13 @@
 						"maximum": 65535
 					},
 					"password_auth": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"root_password_auth": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"root_login": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"banner_file": {
 						"type": [
@@ -32458,8 +32412,7 @@
 						]
 					},
 					"gateway_ports": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -32896,16 +32849,13 @@
 						]
 					},
 					"no_dirlists": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"no_symlinks": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"rfc1918_filter": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -33856,8 +33806,7 @@
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": "boolean"
 					},
 					"interface": {
 						"type": [
@@ -35377,8 +35326,7 @@
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"family": {
 						"type": [
@@ -35446,8 +35394,7 @@
 						"maximum": 255
 					},
 					"check_quality": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"failure_latency": {
 						"type": [
@@ -35512,8 +35459,7 @@
 						"maximum": 3600
 					},
 					"keep_failure_interval": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"down": {
 						"type": [
@@ -36039,8 +35985,7 @@
 						"pattern": "^[^ \t\n\r*?[]*$"
 					},
 					"sticky": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"timeout": {
 						"type": [
@@ -36064,8 +36009,7 @@
 						]
 					},
 					"logging": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					}
 				}
 			},
@@ -37319,12 +37263,10 @@
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"client": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"dev": {
 						"type": [
@@ -37404,12 +37346,10 @@
 						]
 					},
 					"nobind": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"float": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"topology": {
 						"type": [
@@ -37472,12 +37412,10 @@
 						]
 					},
 					"client_to_client": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"duplicate_cn": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"keepalive": {
 						"type": [
@@ -37502,12 +37440,10 @@
 						"maximum": 86400
 					},
 					"persist_key": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"persist_tun": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"comp_lzo": {
 						"type": [
@@ -37554,16 +37490,13 @@
 						]
 					},
 					"ncp_disable": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"tls_server": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"tls_client": {
-						"type": "boolean",
-						"default": false
+						"type": "boolean"
 					},
 					"tls_crypt": {
 						"type": [

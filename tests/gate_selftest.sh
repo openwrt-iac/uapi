@@ -340,6 +340,27 @@ probe() {
 	( cd "$WT" && git checkout -q -- . )
 }
 
+# accept <gate> <label> <mutation-function>
+#
+# The reverse of a probe: a well-formed change that the gate has to let through. A probe only
+# proves that a gate fails, so it cannot show a gate that refuses the next correct commit. The
+# deprecation rule did that to the first correct deprecation of a CRUD field, on its copy in
+# <Base>Patch, which had lost the description.
+accept() {
+	gate=$1; label=$2; mutate=$3
+	( cd "$WT" && git checkout -q -- . && $mutate ) >/dev/null 2>&1
+	if ( cd "$WT" && git diff --quiet ); then
+		printf '  %-38s CHANGED NOTHING (broken check)\n' "$label"
+		failures=$((failures + 1))
+	elif out=$( cd "$WT" && make "$gate" 2>&1 ); then
+		printf '  %-38s passes as designed\n' "$label"
+	else
+		printf '  %-38s REFUSED by %s: %s\n' "$label" "$gate" "$(printf '%s' "$out" | head -1 | cut -c1-88)"
+		failures=$((failures + 1))
+	fi
+	( cd "$WT" && git checkout -q -- . )
+}
+
 echo "=== each gate, broken on purpose ==="
 probe lint-emdash        "em-dash in a tracked file"           "em-dash found in tracked files"    mut_emdash
 probe lint-syntax        "ucode that does not parse"           "Syntax error"                      mut_syntax
@@ -405,6 +426,20 @@ p = 'build/openapi.json'; d = json.load(open(p))
 d['components']['schemas']['FirewallRedirectsPatch']['properties']['match']['required'] = ['src_zone']
 json.dump(d, open(p, 'w'))
 EOF
+}
+
+# In the module and regenerated, because the copy in <Base>Patch is the generator's work: a
+# deprecation planted in the spec alone would not show what the generator drops.
+mut_wellformed_deprecation() {
+	python3 - <<'EOF'
+import pathlib, re
+p = pathlib.Path('src/resources/dhcp.hosts.uc'); s = p.read_text()
+s, n = re.subn(r'(\n\t\tip:\s*\{[^\n]*?)description: "[^"]*"',
+               r'\1deprecated: true, description: "Deprecated in 3.2.0: planted by the gate self-test"', s, count=1)
+assert n == 1, 'ip property not found'
+p.write_text(s)
+EOF
+	make -s openapi
 }
 
 mut_deprecated_no_reason() {
@@ -507,6 +542,10 @@ probe coverage           "a module import nothing reads"    "DEAD MODULE IMPORTS
 probe coverage           "a lib export nothing uses"           "DEAD LIB EXPORTS"                  mut_dead_export
 
 echo
+echo "=== a well-formed change, let through ==="
+accept lint-openapi-shape "a CRUD field deprecated with a reason" mut_wellformed_deprecation
+
+echo
 echo "=== every gate has a probe ==="
 # Derived from the Makefile, not hand-listed, so a new gate cannot slip in unprobed.
 chain=$(sed -n 's/^lint:[[:space:]]*//p' Makefile)
@@ -529,7 +568,7 @@ fi
 
 echo
 if [ "$failures" -gt 0 ]; then
-	echo "FAIL: $failures gate(s) did not demonstrate a failure"
+	echo "FAIL: $failures check(s) did not behave as designed"
 	exit 1
 fi
-echo "OK: every gate fails when the thing it checks is broken"
+echo "OK: every gate fails when the thing it checks is broken, and lets a well-formed change through"
