@@ -88,8 +88,9 @@ function fromUci(section, conn) {
 		ra: section.ra ?? null,
 		dhcpv6: section.dhcpv6 ?? null,
 		ra_default: as_int(section.ra_default),
-		// LuCI writes a list. dnsmasq.init reads it with config_get and odhcpd through uci_blob, and
-		// both take the words of the value, so the words joined with spaces are what they use.
+		// LuCI writes a list, with no space in an entry. dnsmasq.init joins the entries with
+		// config_get and splits the words, and odhcpd takes the entries, or the words of an option,
+		// so the entries joined with spaces read the same to both.
 		domain: values.config_get(section.domain) ?? null,
 		dhcp_option: as_list_or_null(section.dhcp_option),
 		runtime: runtime,
