@@ -142,16 +142,19 @@ t.describe('network.wireguard_peers.validate', () => {
 	// wireguard.sh expands the escapes of the whole config with `printf %b`, so plain-text `\n`
 	// became a line break inside the config that `wg syncconf` reads. It also brackets every host
 	// with a colon, and only those. Any other host is left to wg, as before.
-	t.it('refuses an escape, a newline, or brackets with a colon in endpoint_host', () => {
+	// wg cuts its config line at `#`, and finds a port after a bracketed host only when that host is
+	// an IPv6 address.
+	t.it('refuses an escape, a newline, a #, or a colon outside an IPv6 address in endpoint_host', () => {
 		function host_errs(h) {
 			return filter(full_validate(wgp, { interface: 'wg1', public_key: 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=',
 			                                  allowed_ips: ['10.0.0.2/32'], endpoint_host: h }, null),
 			              (e) => e.field == 'endpoint_host');
 		}
 		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '',
-		                '[192.0.2.1]', '[vpn.example.com]' ])
+		                '[192.0.2.1]', '[vpn.example.com]', ' fd00::1 ' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', 'fd00::1]' ])
+		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', 'fd00::1]', 'vpn.example.com#x',
+		                '192.0.2.1:51820', 'vpn:1', 'fd00::1x%eth1' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
 		// Each problem is its own error.
 		t.assert_deep_equal(map(host_errs('fd00::1\\n[Peer]'), (e) => e.code), [ 'invalid_format', 'invalid_format' ]);
@@ -159,6 +162,25 @@ t.describe('network.wireguard_peers.validate', () => {
 		// wireguard.sh reads a list option as its words joined by spaces.
 		t.assert_deep_equal(map(wgp.validate_new({ endpoint_host: [ '192.0.2.1\\nPeer' ] }), (e) => [ e.field, e.code ]),
 		                    [ [ 'endpoint_host', 'invalid_format' ] ]);
+	});
+
+	// netifd and `ip route` read a prefix length in base 0, and wg in base 10.
+	t.it('reports a prefix length with a leading zero, live when the peer is enabled and routes it', () => {
+		let errs = (extra) => map(filter(wgp.validate_new({ allowed_ips: [ 'fd00::/010', '10.0.0.0/07', 'fd00::/0', '10.0.0.0/08', 'fd00::/007' ],
+		                                                     ...extra }),
+		                                 (e) => substr(e.field, 0, 11) == 'allowed_ips'),
+		                          (e) => [ e.field, e.live ]);
+		t.assert_deep_equal(errs({ route_allowed_ips: true }), [ [ 'allowed_ips[0]', true ], [ 'allowed_ips[3]', true ] ]);
+		t.assert_deep_equal(errs({ route_allowed_ips: false }), [ [ 'allowed_ips[0]', false ], [ 'allowed_ips[3]', false ] ]);
+		t.assert_deep_equal(errs({ route_allowed_ips: true, disabled: true }), [ [ 'allowed_ips[0]', false ], [ 'allowed_ips[3]', false ] ]);
+	});
+
+	t.it('reads a key as wg does, without whitespace, and refuses one that wg refuses', () => {
+		let errs = (k) => map(wgp.validate_new({ public_key: k }), (e) => e.field);
+		for (let k in [ PK, ' ' + PK + '\t', [ PK ] ])
+			t.assert_deep_equal(errs(k), [], k);
+		for (let k in [ substr(PK, 0, 42) + '5=', PK + '\n[Peer]', substr(PK, 0, 43) + '\\075', 'not-a-key' ])
+			t.assert_deep_equal(errs(k), [ 'public_key' ], k);
 	});
 
 	t.it('refuses an escape in allowed_ips, which wireguard.sh expands too', () => {
@@ -235,6 +257,44 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			t.assert_equal(length(h.sweep(c)), 1, extra);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422, extra);
 		}
+	});
+
+	// The read shows the stored value as one that a write refuses, so a PUT of the read cannot store
+	// it as that number, and a write that sends a real value fixes it.
+	t.it('a stored port or keepalive that wg cannot use blocks every write until one replaces it', () => {
+		for (let c in [ [ { endpoint_host: '192.0.2.1', endpoint_port: 'nosuchservice' }, { endpoint_port: 51820 } ],
+		                [ { persistent_keepalive: '25x' }, { persistent_keepalive: 25 } ] ]) {
+			let conn = with_wg();
+			for (let k, v in { ...c[0], disabled: '1' }) conn._state.uci.network.g_existing[k] = v;
+			let h = make_handler();
+			t.assert_equal(length(h.sweep(conn)), 1, c[0]);
+			t.assert_equal(h.patch(conn, ctx(), 'g_existing', { description: 'x' }).status, 422, c[0]);
+			let body = h.get_one(conn, ctx(), 'g_existing').body;
+			for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
+			t.assert_equal(h.replace(conn, ctx(), 'g_existing', body).status, 422, c[0]);
+			t.assert_equal(h.patch(conn, ctx(), 'g_existing', c[1]).status, 200, c[1]);
+		}
+	});
+
+	t.it('a stored prefix length with a leading zero blocks only the write that routes it', () => {
+		let conn = with_wg();
+		conn._state.uci.network.g_existing.allowed_ips = [ 'fd00::/010' ];
+		let h = make_handler();
+		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { route_allowed_ips: true }).status, 422);
+	});
+
+	t.it('a stored key with whitespace, which wg reads, does not block enabling the peer', () => {
+		let c = with_wg();
+		c._state.uci.network.g_existing.public_key = PK + ' ';
+		c._state.uci.network.g_existing.disabled = '1';
+		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
+	});
+
+	t.it('refuses a key whose unused bits are not zero, which wg refuses', () => {
+		let r = make_handler().create(with_wg(), ctx(), { interface: 'wg1', public_key: substr(PK, 0, 42) + '5=',
+		                                                  allowed_ips: [ '10.42.0.9/32' ] });
+		t.assert_equal(r.status, 422);
 	});
 
 	// allowed_ips keeps the rule it had on main: every write checks it, so the peer answers 422
@@ -446,6 +506,20 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		t.assert_equal(ops[1].public_key, PK2);
 	});
 
+	// A remove and a set of one key cut the tunnel of the peer.
+	t.it('a key that uci holds as a list or with whitespace is no rotation', () => {
+		for (let stored in [ [ PK ], PK + ' ' ]) {
+			let c = with_wg();
+			c._state.uci.network.g_existing.public_key = stored;
+			let ops = [];
+			let r = op_tracking_handler(ops).replace(c, ctx(), 'g_existing', {
+				interface: 'wg1', public_key: PK, allowed_ips: ['10.42.0.5/32'],
+			});
+			t.assert_equal(r.status, 200, stored);
+			t.assert_deep_equal(map(ops, (o) => o.action), [ 'set' ], stored);
+		}
+	});
+
 	t.it('an unchanged public key emits only the set', () => {
 		let ops = [];
 		op_tracking_handler(ops).replace(with_wg(), ctx(), 'g_existing', {
@@ -558,6 +632,15 @@ t.describe('network.wireguard_peers boolean spellings match config_get_bool', ()
 		sec.route_allowed_ips = 'yes';
 		t.assert_true(wgp.fromUci(sec, null).route_allowed_ips);
 	});
+	// config_get joins a list with spaces before config_get_bool reads it.
+	t.it('reads a list as config_get gives it to config_get_bool', () => {
+		let sec = peer([ '1' ]);
+		sec.route_allowed_ips = [ '1' ];
+		let view = wgp.fromUci(sec, null);
+		t.assert_true(view.disabled);
+		t.assert_true(view.route_allowed_ips);
+		t.assert_true(wgp.kernel_ops('remove', null, 'wireguard_wg0', sec)[0].prev_route_allowed_ips);
+	});
 });
 
 // wireguard.sh reads allowed_ips with config_get, so a scalar holds one prefix per word, and a
@@ -592,5 +675,19 @@ t.describe('network.wireguard_peers reads endpoint_port as wg does', () => {
 		                                       allowed_ips: ['10.0.0.2/32'], endpoint_port: 0 }, null),
 		                  (e) => e.field == 'endpoint_port');
 		t.assert_deep_equal(map(errs, (e) => e.code), [ 'out_of_range' ]);
+	});
+});
+
+// wireguard.sh reads each option with config_get and writes it on a line of the config for wg.
+t.describe('network.wireguard_peers reads endpoint_host and persistent_keepalive as wg does', () => {
+	let read = (k, v) => wgp.fromUci({ '.name': 'p1', '.type': 'wireguard_wg0', [k]: v }, null)[k];
+	t.it('reads a list endpoint_host as one string', () => {
+		t.assert_equal(read('endpoint_host', [ 'vpn.example.com' ]), 'vpn.example.com');
+	});
+	t.it('reads a keepalive that wg refuses as -1, and off as 0', () => {
+		t.assert_equal(read('persistent_keepalive', '25x'), -1);
+		t.assert_equal(read('persistent_keepalive', '65536'), -1);
+		t.assert_equal(read('persistent_keepalive', 'off'), 0);
+		t.assert_equal(read('persistent_keepalive', ' 25 '), 25);
 	});
 });

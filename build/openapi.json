@@ -28521,7 +28521,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[A-Za-z0-9+/]{43}=$"
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+						"description": "WireGuard public key of the peer, as wg pubkey prints it"
 					},
 					"has_preshared_key": {
 						"type": "boolean",
@@ -28542,7 +28543,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, and a bracket in a host with a colon"
+						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28558,8 +28559,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 65535
+						"minimum": -1,
+						"maximum": 65535,
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write of -1 answers 422."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",
@@ -28578,8 +28580,8 @@
 					"preshared_key": {
 						"type": "string",
 						"writeOnly": true,
-						"pattern": "^[A-Za-z0-9+/]{43}=$",
-						"description": "Optional preshared key; accepted on write, masked on read"
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+						"description": "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it."
 					}
 				},
 				"required": [
@@ -28613,7 +28615,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[A-Za-z0-9+/]{43}=$"
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+						"description": "WireGuard public key of the peer, as wg pubkey prints it"
 					},
 					"allowed_ips": {
 						"type": [
@@ -28630,7 +28633,7 @@
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, and a bracket in a host with a colon"
+						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone"
 					},
 					"endpoint_port": {
 						"type": [
@@ -28647,7 +28650,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write of -1 answers 422."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",
@@ -28662,8 +28666,8 @@
 					"preshared_key": {
 						"type": "string",
 						"writeOnly": true,
-						"pattern": "^[A-Za-z0-9+/]{43}=$",
-						"description": "Optional preshared key; accepted on write, masked on read"
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+						"description": "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it."
 					}
 				},
 				"required": [

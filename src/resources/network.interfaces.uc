@@ -24,7 +24,7 @@ const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
 	"none": true, "ppp": true, "wwan": true, "wireguard": true,
 };
-const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
+const WG_KEY_RE = regexp("^" + values.WG_KEY_PATTERN + "$");
 const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
 // Fields that apply only to some protos, after the proto scripts that read them and LuCI's
 // forms. Every other field applies to every proto, because netifd reads it as a core interface
@@ -331,9 +331,10 @@ function validate(json, conn, id, delta) {
 		if (json.private_key == null || json.private_key == "")
 			push(errs, { field: "private_key", code: "required",
 			             message: "is required when proto is wireguard" });
+		// A write carries the stored key forward, so the message has to say how to replace one.
 		else if (!match(json.private_key, WG_KEY_RE))
 			push(errs, { field: "private_key", code: "invalid_format",
-			             message: "must be a 44-char base64 WireGuard private key" });
+			             message: "must be a 44-char base64 WireGuard private key as wg genkey prints it: send a new one to replace a stored key that wg refuses" });
 		let addrs = as_list(json.addresses);
 		if (length(addrs) == 0)
 			push(errs, { field: "addresses", code: "required",

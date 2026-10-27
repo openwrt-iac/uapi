@@ -261,14 +261,53 @@ t.describe('values.netifd_int', () => {
 	});
 });
 
-t.describe('values.wg_int', () => {
-	t.it('reads a decimal after stripping whitespace, as wg does, and null for anything else', () => {
-		t.assert_equal(v.wg_int(' 25 '), 25);
-		t.assert_equal(v.wg_int('25'), 25);
-		t.assert_equal(v.wg_int('off'), null);
-		t.assert_equal(v.wg_int('0;touch /tmp/x'), null);
-		t.assert_equal(v.wg_int(''), null);
-		t.assert_equal(v.wg_int(null), null);
+t.describe('values.config_get', () => {
+	t.it('joins a list with spaces and leaves a scalar alone', () => {
+		t.assert_equal(v.config_get([ 'a', 'b c' ]), 'a b c');
+		t.assert_equal(v.config_get('1'), '1');
+		t.assert_equal(v.config_get(null), null);
+	});
+});
+
+t.describe('values.wg_line', () => {
+	t.it('cuts at the first # and removes every whitespace character, as wg does', () => {
+		t.assert_equal(v.wg_line(' a b\t# c # d'), 'ab');
+		t.assert_equal(v.wg_line('#x'), '');
+	});
+});
+
+t.describe('values.ipv4_to_int', () => {
+	t.it('reads the octets as one number', () => {
+		t.assert_equal(v.ipv4_to_int('10.0.0.1'), 167772161);
+		t.assert_equal(v.ipv4_to_int('255.255.255.255'), 4294967295);
+	});
+});
+
+t.describe('values.wg_keepalive', () => {
+	t.it('reads the value as wg reads its config line', () => {
+		for (let c in [ [ ' 25 ', 25 ], [ '0025', 25 ], [ '25 # nat', 25 ], [ '25\n# nat', 25 ], [ [ '2', '5' ], 25 ],
+		                [ 'off', 0 ], [ 'OFF', 0 ], [ '0', 0 ], [ '65535', 65535 ] ])
+			t.assert_equal(v.wg_keepalive(c[0]), c[1], c[0]);
+		t.assert_equal(v.wg_keepalive(''), null);
+		t.assert_equal(v.wg_keepalive(null), null);
+	});
+	t.it('reads -1 for what wg refuses', () => {
+		for (let s in [ '25x', '-1', '+25', '65536', '999999999999999999999', ' ', '#25', '0;touch /tmp/x', '2\\x35',
+		                '25\nPublicKey=x', '25 #\n[Peer]' ])
+			t.assert_equal(v.wg_keepalive(s), -1, s);
+	});
+});
+
+t.describe('values.WG_KEY_PATTERN', () => {
+	let re = regexp("^" + v.WG_KEY_PATTERN + "$");
+	t.it('takes a key whose two unused bits are zero, as wg does', () => {
+		t.assert_true(match('QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=', re));
+		t.assert_true(match('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAw=', re));
+	});
+	t.it('refuses another 43rd character, and any other length', () => {
+		for (let k in [ 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB5=', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=',
+		                'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4', 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDr4=' ])
+			t.assert_false(match(k, re), k);
 	});
 });
 

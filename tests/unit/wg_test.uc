@@ -4,6 +4,33 @@ let wg = require('wg');
 let fs = require('fs');
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
+const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
+
+// `wg` and `ip` are scripts here that log each command with its arguments joined by `|`, and print
+// the file named after the command when a test wrote one, so a test reads what an apply runs
+// without a WireGuard interface. The call runs in a child, whose PATH finds the scripts first.
+function run_wg(uci, call, outputs) {
+	let mk = fs.popen("mktemp -d /tmp/uapi-wg-apply.XXXXXX");
+	let dir = trim(mk.read("all") ?? "");
+	mk.close();
+	for (let name in [ "wg", "ip" ]) {
+		fs.writefile(dir + "/" + name, sprintf("#!/bin/sh\nIFS='|'\necho \"%s|$*\" >> %s/log\ncat \"%s/%s|$*\" 2>/dev/null\nexit 0\n",
+		                                       name, dir, dir, name));
+		fs.chmod(dir + "/" + name, 0o755);
+	}
+	for (let cmd, text in outputs ?? {}) fs.writefile(dir + "/" + cmd, text);
+	let script = sprintf("let wg = require('wg'); let c = require('bus').stub({ uci: %J }); c.set_ubus_response('network.interface.wg1', 'status', { up: true }); print(%s ?? 'ok');",
+	                     uci, call);
+	let p = fs.popen(sprintf("PATH=%s:\"$PATH\" ucode -L tests -L src/lib -e %s 2>&1", dir, wg.shellquote(script)));
+	let result = trim(p.read("all") ?? "");
+	p.close();
+	let log = fs.readfile(dir + "/log") ?? "";
+	system([ "rm", "-rf", dir ]);
+	return { result, commands: filter(split(log, "\n"), (l) => l != "") };
+}
+const WG1 = { '.type': 'interface', '.anonymous': false, proto: 'wireguard' };
+let peer = (extra) => ({ '.type': 'wireguard_wg1', '.anonymous': false, ...extra });
+let set_of = (key, ips) => sprintf("wg|set|wg1|peer|%s|allowed-ips|%s|persistent-keepalive|0|preshared-key|/dev/null", key, ips);
 
 // Every wg and ip argument goes through shellquote, and the restore reads values from uci that
 // no validate() saw. Same idiom as LuCI's wireguard backend.
@@ -31,12 +58,24 @@ t.describe('wg.kernel_key', () => {
 			t.assert_equal(wg.kernel_key(v), PK, v);
 	});
 	t.it('is null when the kernel can hold no such peer', () => {
-		for (let v in [ 'not-a-key', [ PK, PK ], null, '#' + PK ])
+		for (let v in [ 'not-a-key', [ PK, PK ], null, '#' + PK, substr(PK, 0, 42) + '5=' ])
 			t.assert_equal(wg.kernel_key(v), null, v);
 	});
 	// wireguard.sh expands an escape, so `\075` can stand for the `=` of a valid key.
 	t.it('is false for a value with a backslash, whose key is not known', () => {
 		t.assert_equal(wg.kernel_key(substr(PK, 0, 43) + '\\075'), false);
+	});
+});
+
+t.describe('wg.kernel_keys', () => {
+	t.it('reads the first line and each later PublicKey line, as wg reads them', () => {
+		t.assert_deep_equal(wg.kernel_keys(PK + '\n[Peer]\n publicKey = ' + PK2 + ' # b\nAllowedIPs=0.0.0.0/0'), [ PK, PK2 ]);
+		t.assert_deep_equal(wg.kernel_keys('not-a-key\nPublicKey=' + PK2), [ PK2 ]);
+		t.assert_deep_equal(wg.kernel_keys([ PK ]), [ PK ]);
+		t.assert_deep_equal(wg.kernel_keys(null), []);
+	});
+	t.it('is false for a value with a backslash', () => {
+		t.assert_equal(wg.kernel_keys(PK + '\nPublicKey=' + substr(PK2, 0, 43) + '\\075'), false);
 	});
 });
 
@@ -83,8 +122,11 @@ t.describe('wg.to_peer', () => {
 		                     persistent_keepalive: ' 25 ' });
 		t.assert_equal(p.endpoint_port, 51820);
 		t.assert_equal(p.persistent_keepalive, 25);
-		t.assert_equal(wg.to_peer({ persistent_keepalive: '0;touch /tmp/x' }).persistent_keepalive, null);
-		t.assert_equal(wg.to_peer({ persistent_keepalive: 'off' }).persistent_keepalive, null);
+		t.assert_equal(wg.to_peer({ persistent_keepalive: '0;touch /tmp/x' }).persistent_keepalive, -1);
+		t.assert_equal(wg.to_peer({ persistent_keepalive: 'off' }).persistent_keepalive, 0);
+	});
+	t.it('reads a list endpoint_host as config_get gives it to wireguard.sh', () => {
+		t.assert_equal(wg.to_peer({ endpoint_host: [ 'vpn.example.org' ] }).endpoint_host, 'vpn.example.org');
 	});
 	t.it('yields an empty list when allowed_ips is absent', () => {
 		t.assert_deep_equal(wg.to_peer({}).allowed_ips, []);
@@ -169,6 +211,109 @@ t.describe('wg.apply', () => {
 	});
 });
 
+t.describe('wg.apply against logging wg and ip', () => {
+	let apply = (uci, ops, outputs) => run_wg(uci, sprintf("wg.apply(c, %J)", ops), outputs);
+
+	t.it('removes every key that a multi-line public_key gives the kernel', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK + '\n[Peer]\nPublicKey=' + PK2 } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(r.commands, [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
+	});
+
+	// ifup sets the sections in uci order, so the last one with the key wins.
+	t.it('a remove sets again each other enabled section with the key, in uci order', () => {
+		let r = apply({ network: { wg1: WG1,
+		                           a: peer({ public_key: PK, allowed_ips: [ '10.0.0.2/32' ] }),
+		                           b: peer({ public_key: PK, allowed_ips: [ '10.0.0.3/32' ], disabled: [ '1' ] }),
+		                           c: peer({ public_key: PK2, allowed_ips: [ '10.0.0.5/32' ] }),
+		                           d: peer({ public_key: PK + ' ', allowed_ips: '10.0.0.4/32' }) } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
+		                    [ set_of(PK, '10.0.0.2/32'), set_of(PK, '10.0.0.4/32') ]);
+	});
+
+	t.it('gives wg the key and the host without the whitespace that wg strips from the config', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'set', public_key: ' ' + PK, allowed_ips: [ '10.0.0.2/32' ],
+		                  endpoint_host: ' fd00::1 ', endpoint_port: 51820 } ]);
+		t.assert_deep_equal(r.commands, [ set_of(PK, '10.0.0.2/32') + '|endpoint|[fd00::1]:51820' ]);
+	});
+
+	t.it('refuses a preshared key that wg cannot read, and runs nothing', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ], preshared_key: 'not-a-key' } ]);
+		t.assert_true(index(r.result, 'refusing to apply') == 0, r.result);
+		t.assert_deep_equal(r.commands, []);
+	});
+
+	t.it('sets a peer whose keepalive wg cannot read without a keepalive', () => {
+		t.assert_deep_equal(wg.set_peer_argv('wg1', { public_key: PK, allowed_ips: [ '10.0.0.2/32' ], persistent_keepalive: -1 }, null),
+		                    [ 'wg', 'set', 'wg1', 'peer', PK, 'allowed-ips', '10.0.0.2/32', 'preshared-key', '/dev/null' ]);
+	});
+
+	t.it('installs the masked prefix, which netifd installs and ip route takes', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.1/24' ], route_allowed_ips: true } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_equal(r.commands[2], 'ip|route|replace|10.0.0.0/24|dev|wg1|proto|static|scope|link');
+	});
+
+	t.it('keeps the route of a prefix that a write respells', () => {
+		let r = apply({ network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: [ 'fd00::/64' ], route_allowed_ips: '1' }) } },
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ 'fd00::/64' ], route_allowed_ips: true,
+		                  prev_allowed_ips: [ 'FD00:0::/64' ], prev_route_allowed_ips: true } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'),
+		                    [ 'ip|-6|route|replace|fd00:0:0:0:0:0:0:0/64|dev|wg1|proto|static' ]);
+	});
+
+	// netifd reads 0064 in octal, so the route that ifup installed is /52.
+	t.it('withdraws the route of a stored prefix length with 3 or more digits', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK, prev_allowed_ips: [ 'fd00::/0064', '10.0.0.0/024' ],
+		                  prev_route_allowed_ips: true } ]);
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'),
+		                    [ 'ip|-6|route|del|fd00:0:0:0:0:0:0:0/52|dev|wg1|proto|static',
+		                      'ip|route|del|10.0.0.0/20|dev|wg1|proto|static|scope|link' ]);
+	});
+
+	t.it('keeps a route that a config route section names in another spelling', () => {
+		let r = apply({ network: { wg1: WG1, rt: { '.type': 'route6', interface: 'wg1', target: 'FD00:0::/64' } } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK, prev_allowed_ips: [ 'fd00::/64' ],
+		                  prev_route_allowed_ips: true } ]);
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'), []);
+	});
+});
+
+t.describe('wg.reconcile against logging wg and ip', () => {
+	let reconcile = (uci, outputs) => run_wg(uci, "wg.reconcile(c, [ 'wg1' ])", outputs);
+
+	// The kernel prints ::/0 as default.
+	t.it('keeps a peer whose key uci holds as a list, and a route that the kernel spells another way', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: [ PK ], allowed_ips: [ 'FD00:0::/64', '::/0' ], route_allowed_ips: [ '1' ],
+		                                         endpoint_host: '192.0.2.1', endpoint_port: '51820' }) } },
+		                  { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t192.0.2.1:51820\tfd00::/64\t0\t0\t0\toff\n", PK),
+		                    'ip|-6|route|show|dev|wg1|proto|static': "fd00::/64 metric 1024 pref medium\ndefault metric 1024 pref medium\n" });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|remove') >= 0 || index(l, '|del|') >= 0), []);
+	});
+
+	// ifup refuses the whole config for such a keepalive, but the restore must still set the peers
+	// that follow it in uci.
+	t.it('sets the peers after a hand-written peer whose keepalive wg cannot read', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', persistent_keepalive: '0;touch /tmp/x' }),
+		                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32', endpoint_host: '192.0.2.1', endpoint_port: '51820' }) } });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
+		                    [ 'wg|set|wg1|peer|' + PK + '|allowed-ips|10.0.0.2/32|preshared-key|/dev/null',
+		                      set_of(PK2, '10.0.0.3/32') + '|endpoint|192.0.2.1:51820' ]);
+	});
+});
+
 t.describe('wg.reconcile', () => {
 	t.it('does nothing for an empty interface list', () => {
 		let c = ubus.stub();
@@ -193,7 +338,7 @@ t.describe('wg.reconcile', () => {
 // handler, so a peer-level apply has to install them or the peer sits in the
 // kernel with no path to it. The mapping mirrors wireguard.sh.
 t.describe('wg route prefixes', () => {
-	t.it('keeps a prefix as written and turns a bare address into a host route', () => {
+	t.it('turns a bare address into a host route', () => {
 		t.assert_deep_equal(wg.route_prefixes(['10.0.0.0/24', '10.0.1.5'], true),
 		                    [{ prefix: '10.0.0.0/24', v6: false },
 		                     { prefix: '10.0.1.5/32', v6: false }]);
@@ -201,7 +346,7 @@ t.describe('wg route prefixes', () => {
 
 	t.it('uses /128 for a bare IPv6 address', () => {
 		t.assert_deep_equal(wg.route_prefixes(['fd00::1'], true),
-		                    [{ prefix: 'fd00::1/128', v6: true }]);
+		                    [{ prefix: 'fd00:0:0:0:0:0:0:1/128', v6: true }]);
 	});
 
 	t.it('marks an IPv6 prefix so the apply uses ip -6', () => {
@@ -230,7 +375,7 @@ t.describe('wg route prefixes', () => {
 		t.assert_deep_equal(wg.route_prefixes(['0.0.0.0/0'], true),
 		                    [{ prefix: '0.0.0.0/0', v6: false }]);
 		t.assert_deep_equal(wg.route_prefixes(['::/0'], true),
-		                    [{ prefix: '::/0', v6: true }]);
+		                    [{ prefix: '0:0:0:0:0:0:0:0/0', v6: true }]);
 	});
 
 	t.it('rejects an out-of-range prefix length', () => {
@@ -242,8 +387,16 @@ t.describe('wg route prefixes', () => {
 		t.assert_deep_equal(wg.route_prefixes(['::/0;id>x;'], true), []);
 	});
 
-	t.it('keeps a stored prefix length with a leading zero, which the check takes', () => {
-		t.assert_deep_equal(wg.route_prefixes(['fd00::/012'], true), [ { prefix: 'fd00::/012', v6: true } ]);
+	t.it('spells one prefix one way, with the address masked', () => {
+		t.assert_deep_equal(map(wg.route_prefixes(['FD00:0::1/64', 'fd00::/64', '10.0.0.1/24'], true), (r) => r.prefix),
+		                    [ 'fd00:0:0:0:0:0:0:0/64', 'fd00:0:0:0:0:0:0:0/64', '10.0.0.0/24' ]);
+	});
+
+	// netifd installs no route for a length that base 0 cannot read, such as 08.
+	t.it('reads a stored prefix length in base 0, as netifd does for the route', () => {
+		t.assert_deep_equal(map(wg.route_prefixes(['fd00::/012', 'fd00::/0064', '10.0.0.0/024', 'fd00::/08',
+		                                           'fd00::/0128', '10.0.0.0/100'], true), (r) => r.prefix),
+		                    [ 'fd00:0:0:0:0:0:0:0/10', 'fd00:0:0:0:0:0:0:0/52', '10.0.0.0/20' ]);
 	});
 });
 

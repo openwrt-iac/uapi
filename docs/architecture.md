@@ -200,9 +200,12 @@ the proto handler, so the apply installs them too: without that the peer is in
 the kernel with no path to it and the flag only half works. They are spelled to
 match netifd exactly (`proto static`, `scope link` on v4) and go into `ip4table`
 / `ip6table` when the interface sets one, since netifd puts them there rather
-than in main. A prefix is only withdrawn when no remaining peer and no `config
-route` section still wants it, because two peers can carry overlapping
-`allowed_ips`. The kernel is never scanned for strays on the request path, only
+than in main. A route is the prefix as netifd installs it: the length read in
+base 0, as netifd and `ip` read it, and the address masked to that length. Routes
+are compared in that one spelling, so a respelled prefix, or the spelling that
+the kernel prints, is the same route. A prefix is only withdrawn when no
+remaining peer and no `config route` section still wants it, because two peers
+can carry overlapping `allowed_ips`. The kernel is never scanned for strays on the request path, only
 on the reconcile that follows a rollback, so a route uapi did not install is not
 at risk.
 
@@ -217,7 +220,10 @@ off the section type because it is not stored as an option, so a `DELETE` can
 only learn it from the section it is about to remove. A rotated public key emits
 a remove for the old key before the set, or the kernel would keep the previous
 peer and its access. A disabled peer is removed, matching what netifd omits when
-it builds the config.
+it builds the config. A remove takes every key that wg can read from the stored
+`public_key`, not only the key on its first line. The kernel holds one peer per
+key, so a remove then sets again each other enabled section of the interface
+that holds one of these keys, in uci order, as ifup does.
 
 An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also

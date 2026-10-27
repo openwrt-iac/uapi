@@ -1,6 +1,8 @@
 let fs = require('fs');
 let values = require('values');
+let wg = require('wg');
 let shell_bool = values.shell_bool;
+let config_get = values.config_get;
 let as_list = values.as_list;
 let as_word_list_or_null = values.as_word_list_or_null;
 let is_valid_cidr_any = values.is_valid_cidr_any;
@@ -23,11 +25,11 @@ function fromUci(section) {
 		public_key: section.public_key ?? null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
 		allowed_ips: as_word_list_or_null(section.allowed_ips),
-		endpoint_host: section.endpoint_host ?? null,
+		endpoint_host: config_get(section.endpoint_host) ?? null,
 		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
-		persistent_keepalive: values.wg_int(section.persistent_keepalive),
-		route_allowed_ips: shell_bool(section.route_allowed_ips, false),
-		disabled: shell_bool(section.disabled, false),
+		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
+		route_allowed_ips: shell_bool(config_get(section.route_allowed_ips), false),
+		disabled: shell_bool(config_get(section.disabled), false),
 		runtime: {},
 	};
 }
@@ -55,16 +57,19 @@ function interface_exists_with_wg_proto(conn, name) {
 
 // wireguard.sh builds the config that it gives `wg syncconf` with `printf %b`, so a backslash in a
 // value is an escape: `\n[Peer]` in plain text in endpoint_host added a peer that no read showed,
-// at the next ifup, and so does a newline. It also brackets every host with a colon, so a bracketed
-// IPv6 address reaches wg as `[[...]]`, and wg refuses the whole config. No regex syntax reads a
-// bracket and a backslash in a character class the same way in ucode and in ECMAScript, so the
-// request schema carries no pattern for this.
+// at the next ifup, and so does a newline. It also brackets every host with a colon, so wg finds
+// the port only after an IPv6 address, which can end in a %zone, and wg cuts the line at `#`. No
+// regex syntax reads a bracket and a backslash in a character class the same way in ucode and in
+// ECMAScript, so the request schema carries no pattern for this.
 function endpoint_host_problems(host) {
 	let out = [];
 	if (index(host, "\\") >= 0 || index(host, "\n") >= 0)
 		push(out, "must not contain a backslash or a newline: wireguard.sh expands escapes in the config that it gives wg");
-	if (index(host, ":") >= 0 && match(host, /[][]/))
-		push(out, "must not hold a bracket with a colon: wireguard.sh brackets every host with a colon itself, and wg refuses a doubled bracket");
+	if (index(host, "#") >= 0)
+		push(out, "must not contain #: wg reads the rest of the line as a comment, and then finds no port");
+	let h = replace(host, /[[:space:]]/g, "");
+	if (index(h, ":") >= 0 && !values.is_valid_ipv6(split(h, "%")[0]))
+		push(out, "must hold a colon only in an IPv6 address, which can end in a %zone: wireguard.sh brackets every host with a colon, and wg cannot read another host in brackets");
 	return out;
 }
 
@@ -93,11 +98,14 @@ function validate(json, conn) {
 			             message: "must be an IPv4 or IPv6 address or CIDR" });
 	}
 
-	// The schema allows 0 because a read reports a port name that /etc/services does not resolve
-	// as 0.
+	// The schema allows 0 and -1 because a read reports a port name that /etc/services does not
+	// resolve as 0, and a keepalive that wg refuses as -1.
 	if (json.endpoint_port === 0)
 		push(errs, { field: "endpoint_port", code: "out_of_range",
 		             message: "must be from 1 to 65535: wg cannot use port 0, which is also how a port name that /etc/services does not resolve reads" });
+	if (json.persistent_keepalive === -1)
+		push(errs, { field: "persistent_keepalive", code: "out_of_range",
+		             message: "must be from 0 to 65535: -1 is how a stored value that wg cannot read reads, and wg cannot bring the interface up with it" });
 
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists_with_wg_proto(conn, json.interface))
@@ -110,26 +118,35 @@ function validate(json, conn) {
 	return errs;
 }
 
-const WG_KEY_RE = /^[A-Za-z0-9+\/]{43}=$/;
-
-// The rules on what wireguard.sh hands to wg through printf %b. Another writer, such as LuCI, can
-// enable the peer later, so an error is reported whether the peer is enabled or not, and marked
+// The rules on what wireguard.sh hands to wg through printf %b, and on values that wg or the routes
+// of route_allowed_ips read in another way than the read. Another writer, such as LuCI, can enable
+// the peer later, so an error is reported whether the peer is enabled or not, and marked
 // `live: false` when it is not: see new_errors() in the handler. The keys are checked here as well
 // as by their schema pattern, because the schema sees only what a PATCH sends, and a stored key
 // reaches the same printf %b.
 function validate_new(json) {
 	let errs = [];
 	let live = json.disabled !== true;
-	// wireguard.sh reads a list option as its words joined by spaces.
-	let read = (v) => (type(v) == "array") ? join(" ", v) : v;
 
+	// wg reads a key without its whitespace and comment, as kernel_key does, and a newline adds a
+	// line to the config.
 	for (let k in [ "public_key", "preshared_key" ]) {
-		let key = read(json[k]);
-		if (type(key) == "string" && key != "" && !match(key, WG_KEY_RE))
-			push(errs, { field: k, code: "invalid_format", message: "must be a WireGuard key: 43 base64 characters and =", live });
+		let key = config_get(json[k]);
+		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || !wg.kernel_key(key)))
+			push(errs, { field: k, code: "invalid_format", live,
+			             message: "must be a WireGuard key as wg genkey prints it, on one line and without a backslash" });
 	}
 
-	let host = read(json.endpoint_host);
+	// netifd and `ip route` read a prefix length in base 0 and wg in base 10, so `/010` routes /8 to
+	// a peer that wg gives /10, and netifd installs no route for `/08`.
+	let aips = as_list(json.allowed_ips);
+	for (let i = 0; i < length(aips); i++)
+		if (type(aips[i]) == "string" && match(aips[i], /\/0[0-9]+$/) && !match(aips[i], /\/0+[0-7]?$/))
+			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
+			             live: live && json.route_allowed_ips === true,
+			             message: "must not start its prefix length with 0, unless the length is 0 to 7: the route of route_allowed_ips reads it as octal, and wg as decimal" });
+
+	let host = config_get(json.endpoint_host);
 	if (type(host) == "string")
 		for (let message in endpoint_host_problems(host))
 			push(errs, { field: "endpoint_host", code: "invalid_format", message, live });
@@ -167,8 +184,9 @@ return {
 	// not stored as an option. A rotated public key means the kernel still holds
 	// the old peer under its old key, so the old one is removed first: without
 	// that, a PUT that changes the key leaves the previous peer installed and its
-	// access intact. A disabled peer is one netifd omits when it builds the
-	// config, so it is removed rather than set.
+	// access intact. The keys are compared as wg reads them, because a remove and a
+	// set of the same peer cut its tunnel. A disabled peer is one netifd omits when
+	// it builds the config, so it is removed rather than set.
 	// `opts` is always toUci output, so its booleans are "1"/"0" and can be
 	// compared literally. `existing` is a raw uci section and cannot.
 	kernel_ops: function(kind, opts, sec_type, existing) {
@@ -182,7 +200,7 @@ return {
 		// a section written by hand or by another tool can carry `true`, and reading
 		// that as false tells the apply the old config installed no routes, so the
 		// ones it did install are never withdrawn.
-		let prev_routes = (existing != null) && shell_bool(existing.route_allowed_ips, false);
+		let prev_routes = (existing != null) && shell_bool(config_get(existing.route_allowed_ips), false);
 
 		if (kind == "remove") {
 			if (existing?.public_key == null) return [];
@@ -191,7 +209,7 @@ return {
 		}
 
 		let out = [];
-		if (existing?.public_key != null && existing.public_key != opts.public_key)
+		if (existing?.public_key != null && wg.kernel_key(existing.public_key) !== wg.kernel_key(opts.public_key))
 			push(out, { iface: iface, action: "remove", public_key: existing.public_key });
 
 		if (opts.disabled == "1") {
@@ -228,17 +246,19 @@ return {
 		                        description: "Parent WireGuard interface (network/interfaces name with proto=wireguard)" },
 		description:          { type: ["string", "null"],
 		                        description: "Human-readable label for this peer" },
-		public_key:           { "x-uapi-read-nullable": true, type: "string", pattern: "^[A-Za-z0-9+/]{43}=$" },
-		preshared_key:        { type: "string", writeOnly: true, pattern: "^[A-Za-z0-9+/]{43}=$",
-		                        description: "Optional preshared key; accepted on write, masked on read" },
+		public_key:           { "x-uapi-read-nullable": true, type: "string", pattern: "^" + values.WG_KEY_PATTERN + "$",
+		                        description: "WireGuard public key of the peer, as wg pubkey prints it" },
+		preshared_key:        { type: "string", writeOnly: true, pattern: "^" + values.WG_KEY_PATTERN + "$",
+		                        description: "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it." },
 		has_preshared_key:    { type: "boolean", readOnly: true },
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, and a bracket in a host with a colon" },
+		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
 		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up; a write of 0 answers 422." },
-		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535 },
+		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
+		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write of -1 answers 422." },
 		route_allowed_ips:    { type: "boolean", default: false,
 		                        description: "Auto-install routes for allowed_ips" },
 		disabled:             { type: "boolean", default: false,
