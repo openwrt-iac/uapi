@@ -123,17 +123,23 @@ function matches(mod, c, cond) {
 	return true;
 }
 
-// A conditional that no fixture case meets is probed on every case with its `if` applied. The
-// fixtures seed each defaulted field off its default, so none is, for example, an enabled access
-// point.
+// A conditional that no fixture case meets is probed on every case with its `if` applied, once for
+// each value of an enum, because a rule can miss one of them. The fixtures seed each defaulted
+// field off its default, so none is, for example, an enabled access point.
 function coerced(c, cond) {
-	let section = { ...c.section };
+	let out = [ c ];
 	for (let k, spec in cond.if?.properties ?? {}) {
 		if (!exists(spec, "const") && type(spec.enum) != "array") return null;
-		let v = exists(spec, "const") ? spec.const : spec.enum[0];
-		section[k] = (type(v) == "bool") ? (v ? "1" : "0") : v;
+		let next = [];
+		for (let o in out)
+			for (let v in exists(spec, "const") ? [ spec.const ] : spec.enum) {
+				let section = { ...o.section };
+				section[k] = (type(v) == "bool") ? (v ? "1" : "0") : v;
+				push(next, { ...o, section });
+			}
+		out = next;
 	}
-	return { ...c, section };
+	return out;
 }
 
 t.describe('property: every request-only keyword is a refusal in validate()', () => {
@@ -150,8 +156,13 @@ t.describe('property: every request-only keyword is a refusal in validate()', ()
 				t.it(sprintf("%s %s %s", f, o.field, o.keyword), () => check(mod, cases, o));
 			}
 		for (let cond in mod.openapi_write_conditional ?? []) {
+			// The server reads a field that a merge PATCH leaves out from the stored section, so an
+			// `if` that does not require each field it names refuses a PATCH that the server takes.
+			t.it(sprintf("%s requires every field of the if %J", f, cond.if?.properties), () =>
+				t.assert_deep_equal(filter(keys(cond.if?.properties ?? {}), (k) => index(cond.if?.required ?? [], k) == -1), []));
 			let matching = filter(cases, (c) => matches(mod, c, cond));
-			if (length(matching) == 0) matching = map(cases, (c) => coerced(c, cond));
+			if (length(matching) == 0)
+				for (let c in cases) push(matching, ...(coerced(c, cond) ?? [ null ]));
 			if (length(matching) == 0 || index(matching, null) >= 0) {
 				t.it(sprintf("%s has a case for %J", f, cond.if?.properties),
 				     () => t.assert_equal("a conditional that no case meets and that cannot be applied to one", "a case"));

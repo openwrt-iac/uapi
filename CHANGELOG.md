@@ -41,16 +41,27 @@ All notable changes to this project will be documented in this file. Format foll
   `has_r0kh` and `has_r1kh`, and a PUT that leaves them out keeps them, as it keeps `key`.
   wifi-scripts writes `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into
   hostapd's config as lines, so a write refuses a newline in them and a value or an entry over 1024
-  bytes. It refuses a `nasid` over 48 bytes with fast transition, and an entry that hostapd cannot
-  parse while hostapd reads the key holder lists, which it does with owe too. A write is refused for
-  such a value only when it adds the error, for example when it changes the field, enables the SSID
-  or turns fast transition on. `validate()` and the schema check run as before,
-  so a PUT or a JSON Patch also checks a stored `mobility_domain` or `r1_key_holder` against its
-  pattern. Enabling the radio of the SSID, or moving the SSID to another radio, is not checked. `GET
-  /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. Only the whole group
-  keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
-  derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
-  unset, because wifi-scripts then picks it from `encryption`. Other options still go with a PUT,
+  bytes. It refuses a `nasid` over 48 bytes with fast transition, and over 253 bytes, the RADIUS
+  limit of NAS-Identifier, on an EAP access point. It refuses a `mobility_domain` other than 4 hex
+  digits, an `r1_key_holder` other than 12, and an entry that hostapd cannot parse while hostapd
+  reads the key holder lists, which it does with owe too. hostapd refuses its whole config for any
+  of these three. It refuses `ieee80211r` with owe on an access point: owe gets no fast transition, and
+  wifi-scripts reports the setup as failed unless both key holder lists are set. wifi-scripts stops
+  the setup of the radio, with all its SSIDs, for a `reassociation_deadline` outside 1000 to 65535
+  on any enabled SSID that it sets up, so a write refuses such a value, and a negative
+  `r0_key_lifetime`. A write is refused for such a value only when it adds the error, for example
+  when it changes the field, enables the SSID or turns fast transition on. So a PUT or a JSON Patch
+  that keeps a stored value passes, as a merge PATCH does. Enabling the radio of the SSID, or moving
+  the SSID to another radio, is not checked. `GET /api/v3/diagnostics?validate=1` lists every SSID
+  that holds such a value. The request schema declares the limits of `nasid` and the form of the key
+  holder entries only for a body that names `mode` `ap`, because a merge PATCH that leaves `mode`
+  out keeps the stored one. `reassociation_deadline` and `r0_key_lifetime` read the number that
+  wifi-scripts reads from the stored text, as ucode converts it: ` 500` is 500, `0x10` is 16, a
+  fraction is cut, and other text is 0, as hostapd reads it. Only the whole group keeps fast roaming
+  working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts derives lists that
+  the other access points do not share. `ft_psk_generate_local` reads null when unset, because
+  wifi-scripts then picks it from `encryption`. A stored value other than `1`, `true`, `0` or
+  `false` reads false, as wifi-scripts takes it. Other options still go with a PUT,
   such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an SSID. Every
   radio and SSID read gains the new fields, so its ETag changes once at the upgrade, and a write
   with an `If-Match` from before the upgrade answers 412. A client that builds its PUT body from its
@@ -265,6 +276,40 @@ All notable changes to this project will be documented in this file. Format foll
   empty, as for the key in #246. `GET /api/v3/diagnostics?validate=1` lists the access. That
   tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
   caller can rely on, and it fails loudly. The stock snmpd config sets all eight fields. (#254)
+- **`wireless/interfaces.ssid` takes at most 32 bytes.** hostapd and wpa_supplicant refuse a
+  longer SSID in their config, so such a write answered 200, and the SSID did not come up in mode
+  ap, sta or adhoc. A write that sends one now answers 422 `out_of_range` in every mode, as LuCI
+  refuses it. uapi counts bytes, so a non-ASCII character counts for more than one. The
+  `maxLength` of `WirelessInterfacesRequest.ssid` counts characters, so it is exact only for an
+  ASCII SSID. A write that leaves a stored SSID as it is is refused for its length only when it
+  enables the SSID or moves it into mode ap, sta or adhoc, and `GET
+  /api/v3/diagnostics?validate=1` lists it. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. (#255)
+- **`wireless/interfaces.key` refuses a key that the daemons refuse or misread.** This applies
+  with `psk`, `psk2`, `psk-mixed`, `sae` and `sae-mixed`, with or without a forced cipher. In mode
+  ap, wifi-scripts gives hostapd a key of 8 to 63 bytes as a passphrase and one of 64 bytes as a
+  PSK, which hostapd takes only as hex digits, and no key for another length. With plain `sae`, a
+  PSK leaves SAE without a password. In mode sta and adhoc, wifi-scripts gives wpa_supplicant every
+  key as a passphrase between double quotes. wpa_supplicant refuses a passphrase that is not 8 to
+  63 bytes or that holds a control character, except with plain `sae`, so a key of 64 hex digits
+  fails there. The shell variant of wifi-scripts gave such a key as a PSK. In mode sta, adhoc and
+  mesh, wpa_supplicant reads a `#` after an odd number of double quotes as the start of a comment.
+  A write that sends such a key now answers 422 `out_of_range`, `invalid_format` or `conflict`, and
+  no message quotes the key. A write that leaves a stored key as it is is refused for it only when
+  it enables the SSID or changes its mode or encryption, and `GET /api/v3/diagnostics?validate=1`
+  lists it. LuCI takes 8 to 63 characters or 64 hex digits in every mode, and counts characters,
+  where uapi counts bytes as the daemons do. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. (#255)
+- **`wireless/interfaces` refuses mode `wds` on write.** wifi-scripts sets up no interface in mode
+  wds on OpenWrt 25.12, so such a write answered 200, and the SSID never came up. LuCI writes a WDS
+  access point or station as mode `ap` or `sta` with option `wds`, which uapi does not model. A
+  write that sends `wds` now answers 422 `not_in_enum`. A read still reports a stored `wds`, and a
+  write that leaves it as it is is refused for it only when it enables the SSID.
+  `WirelessInterfacesRequest.mode` drops `wds` from its enum, and the Response keeps it. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. (#255)
 
 ### Deprecated
 
@@ -538,6 +583,12 @@ All notable changes to this project will be documented in this file. Format foll
   section removed the peer that another enabled section of the interface also set, and that
   section stayed out of the kernel until the next ifup. uapi now sets each such section again, in
   uci order, so the last one wins, as at ifup. (#253)
+- **A create or a PUT of `wireless/interfaces` that sends no `mode` stores mode `ap`.** A read
+  reports `ap` for a section with no mode, but a create stored no mode, and a PUT removed the
+  stored one. wifi-scripts sets up no interface for a section with no mode, so the SSID never came
+  up while every read showed an access point. A PATCH writes only what it changes, so a section
+  that a hand edit left without a mode keeps none until a write sends `mode`, and its read still
+  reports `ap`. (#255)
 
 ### Security
 
