@@ -366,6 +366,31 @@ t.describe('network.interfaces', () => {
 			'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
 	});
 
+	// wg refuses a key whose 2 unused bits are not zero. A PUT carries the stored key forward, so
+	// it is refused for a stored one until it sends a new key.
+	t.it('refuses a private_key that wg refuses, also a stored one that a PUT carries', () => {
+		const BAD = 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVB=';
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { network: {
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+			       private_key: BAD, addresses: ['10.42.0.1/16'] },
+		} } });
+		let body = { proto: 'wireguard', addresses: ['10.42.0.1/16'], listen_port: 51999 };
+		let r = ifh.replace(c, ctx, 'wg1', body);
+		t.assert_equal(r.status, 422);
+		let pk = filter(r.body.errors, (e) => e.field == 'private_key');
+		t.assert_true(length(pk) == 1 && index(pk[0].message, 'send a new one') >= 0, pk);
+		t.assert_equal(ifh.replace(c, ctx, 'wg1', { ...body, private_key: BAD }).status, 422);
+		t.assert_equal(ifh.replace(c, ctx, 'wg1',
+			{ ...body, private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=' }).status, 200);
+	});
+
 	t.it('toUci stringifies numeric ip6assign', () => {
 		let u = interfaces.toUci({ proto: 'dhcp', ip6assign: 64 });
 		t.assert_equal(u.ip6assign, '64');

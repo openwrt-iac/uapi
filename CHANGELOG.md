@@ -181,6 +181,54 @@ All notable changes to this project will be documented in this file. Format foll
   authentication, so without a limit any client could store a body of any size in the error ring,
   which lives in RAM. The response itself still carries the whole message. (#242)
 
+- **WireGuard keys must be keys that wg accepts.** A key is 32 bytes, so the last base64 character
+  before `=` carries 2 bits that must be zero, and wg refuses a key in which they are not. uapi took
+  any 43 base64 characters and `=`. So such a peer key answered 500 from `wg set` on an up
+  interface, and any such key answered 200 otherwise, and then the tunnel did not come up at the
+  next ifup. `public_key` and `preshared_key` of `network/wireguard_peers`, and `private_key` of
+  `network/interfaces`, now answer 422 `invalid_format` for such a key. That tightening uses the
+  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on, and
+  it fails loudly. The two peer keys declare the pattern `^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$`.
+  A key from `wg genkey`, `wg pubkey` or `wg genpsk` always matches it. LuCI's form takes the other
+  keys too, and wg then refuses them. A write carries a stored `private_key` forward, so an
+  interface that stores such a key answers 422 to every write until a write sends a new key, as it
+  did in 3.1.0 for a key outside the old pattern, and `GET /api/v3/diagnostics?validate=1` lists
+  it. The same holds for a PUT of a peer that stores such a `preshared_key`. (#253)
+- **`network/wireguard_peers.endpoint_host` refuses a `#`, and a colon outside an IPv6 address.**
+  wg cuts its config line at `#`, so it finds no port. wireguard.sh puts brackets around every
+  host with a colon, and wg reads a host in brackets only as an IPv6 address. Such a host made wg
+  refuse the whole config at ifup, and `wg set` refuse the peer on an up interface, which answered
+  500. An IPv6 address can end in a `%zone`, and whitespace around the host is ignored, as wg
+  ignores it. As for the escapes of #247, a write is refused for such a host when it changes the
+  host or enables the peer, and `GET /api/v3/diagnostics?validate=1` lists a peer that stores one.
+  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. LuCI takes only a host name or an address without a
+  zone. (#253)
+- **A WireGuard peer that routes its allowed IPs refuses a prefix length with a leading zero, such
+  as `/010`.** netifd and `ip route` read the length in base 0, and wg reads it in base 10. So
+  `fd00::/010` gave a route for `/8` to a peer that wg gave `/10`, and netifd installed no route for
+  `/08`. `/00` to `/07` read the same in both and stay accepted. A write that sets such a prefix is
+  refused, also when `route_allowed_ips` is off, because another writer can turn it on. A write
+  that leaves a stored one as it is is refused only when it turns `route_allowed_ips` on or enables
+  the peer, and the validation sweep lists the peer. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. LuCI takes such a length. (#253)
+- **`network/wireguard_peers.persistent_keepalive` reads -1 when wg cannot read the stored value,
+  and `NetworkWireguardPeersResponse.persistent_keepalive` declares minimum -1.** wireguard.sh gives
+  the stored text to wg, which cuts it at `#`, removes whitespace, and takes `off` or a decimal from
+  0 to 65535. uapi read `off` and `25x` as null, and the apply then gave the kernel 0, while wg
+  refused `25x` at ifup and failed the whole tunnel. Such a value now reads -1, and `off` reads 0.
+  The old minimum of 0 did not describe the read: a hand-written `'-1'` already read -1, and
+  `'65536'` read 65536 above the maximum. That is branch (b) of the type carve-out in
+  `docs/versioning.md`. A stored `'off'` now reads 0 instead of null, which is silent for a script.
+  The Request keeps minimum 0, so a write of -1 answers 422. As for
+  `network/interfaces.listen_port`, a peer that stores such a value answers 422 to every write
+  until a write sends a real value, and `GET /api/v3/diagnostics?validate=1` lists it. That uses the
+  carve-out for payloads that produced a state no caller can rely on, and it fails loudly. The
+  restore after a failed write still sets such a peer, and leaves its keepalive as the kernel holds
+  it, so the peers after it in uci are set too. LuCI's form takes a decimal such as `25.5`, which wg
+  refuses. (#253)
+
 ### Deprecated
 
 - **`network/interfaces.ip6prefix` as a string on write.** v4 removes it, so send an array. The
@@ -423,6 +471,36 @@ All notable changes to this project will be documented in this file. Format foll
   wireguard.sh, which joins a list with spaces, and of which wg reads the first line without
   whitespace or a comment. When that is not a WireGuard key, the kernel holds no such peer, and uapi
   removes nothing. A key with a backslash, which wireguard.sh expands, still answers 500. (#247)
+- **A stored WireGuard key with whitespace or a comment, which wg reads, no longer blocks its
+  peer.** wireguard.sh writes the key on a line of the config for wg, and wg removes whitespace and
+  a `#` comment from the line. uapi checked the text as uci holds it, so a write that enabled such
+  a peer answered 422, and on an up interface every write of the peer answered 500. uapi now reads
+  a stored key as wg does in each place: the check, the apply, the restore after a failed write,
+  and the test that tells whether a write changes the key. So the restore no longer removes a peer
+  whose key uci holds as a list, and a PUT that sends the same key no longer removes and sets the
+  peer again, which cut its tunnel. (#253)
+- **A WireGuard peer reads `endpoint_host`, `disabled` and `route_allowed_ips` that uci holds as a
+  list as wireguard.sh reads them**, as one value of its items joined with spaces. A list `disabled`
+  or `route_allowed_ips` read as unset, so a peer that wireguard.sh skips read as enabled, and a
+  write put it into the kernel. Such a value now reads as wireguard.sh reads it, which is silent for
+  a script. A list `endpoint_host` read as an array, outside the declared type, and reached `wg set`
+  as JSON text, so every write of the peer on an up interface answered 500. It now reads as a
+  string, which is branch (b) of the type carve-out in `docs/versioning.md`. A typed reader failed
+  on the old read and passes now. uapi also removes whitespace from the host before it runs `wg
+  set`, as wg does with the config of wireguard.sh. (#253)
+- **The routes of `route_allowed_ips` are compared as netifd installs them.** uapi compared
+  prefixes as text. A PUT that changed the spelling of a prefix, such as `FD00::/64` to
+  `fd00::/64`, deleted the route that it had just installed, and the restore after a failed write
+  deleted each route that uci spells in another way than the kernel prints it. A stored prefix
+  length of 3 or more digits, such as `/0064`, was not read, so a DELETE left its route. An IPv4
+  prefix with host bits, such as `10.0.0.1/24`, answered 500 on an up interface, because `ip
+  route` refuses it. uapi now reads the length in base 0 and masks the address, as netifd does,
+  compares routes in that spelling, and gives `ip route` the masked prefix. (#253)
+- **Removing a WireGuard peer no longer drops another peer section with the same key from the
+  kernel.** The kernel holds one peer per key. The DELETE, the disable or the key change of one
+  section removed the peer that another enabled section of the interface also set, and that
+  section stayed out of the kernel until the next ifup. uapi now sets each such section again, in
+  uci order, so the last one wins, as at ifup. (#253)
 
 ### Security
 
@@ -532,6 +610,13 @@ All notable changes to this project will be documented in this file. Format foll
   /api/v3/diagnostics?validate=1` lists it. Each refusal answers 422 `invalid_format`, under the
   carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on. No
   value in the uci configs of the OpenWrt feeds is refused. (#250)
+
+- **The removal of a WireGuard peer revokes every kernel peer that its stored `public_key` gives.**
+  A `public_key` that a hand edit, `/raw` or LuCI's RPC stores can make the kernel hold more than
+  one peer for one section at ifup. The DELETE of the section, a write that disabled it and a write
+  that changed its key removed only one of them, so the others kept their access to the tunnel.
+  They now remove each key that wg can read from the stored value. A write through
+  `network/wireguard_peers` cannot store such a key. (#253)
 
 ## [3.1.0] - 2026-10-11
 

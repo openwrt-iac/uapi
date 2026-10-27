@@ -259,6 +259,45 @@ call -X DELETE "$URL/network/wireguard_peers/$shared" >/dev/null
 $SSH "ip route show dev $IFACE" | grep -q '10.98.98.0/30' \
 	|| fail "the interface's own kernel route was removed"
 
+# wireguard.sh reads allowed_ips with config_get, so an option holds one prefix per word, and ifup
+# installs a route for each word. The DELETE has to withdraw every one.
+echo "--- the DELETE of a hand-written peer withdraws the route of each word of its allowed_ips ---"
+WORDS_PEER=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45words=wireguard_$IFACE; uci set network.uapi45words.public_key='$WORDS_PEER'
+	uci set network.uapi45words.allowed_ips='10.98.140.0/24 10.98.141.7'; uci set network.uapi45words.route_allowed_ips=1
+	uci commit network; ifup $IFACE"
+sleep 5
+static_routes | grep -q '^10.98.140.0/24 ' || fail "ifup installed no route for the first word: $(static_routes)"
+static_routes | grep -q '^10.98.141.7 ' || fail "ifup installed no route for the second word: $(static_routes)"
+r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45words")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of the hand-written peer: $(body_of "$r")"
+has_peer "$WORDS_PEER" && fail "the hand-written peer is still in the kernel after its DELETE"
+[ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
+
+# Routes were compared as written, so a PUT that respelled a prefix deleted the route that it had
+# just installed, and the restore after a failed write deleted a route that the kernel prints in
+# another spelling than uci holds.
+echo "--- a respelled prefix keeps its route, through a PUT and through a restore ---"
+static6() { $SSH "ip -6 route show dev $IFACE proto static 2>/dev/null" || true; }
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"fd00:98:cc::/64\"],\"route_allowed_ips\":true}")
+[ "$(status_of "$r")" = "200" ] || fail "POST routed v6 peer: $(body_of "$r")"
+respelled=$(id_of "$r")
+static6 | grep -q '^fd00:98:cc::/64 ' || fail "no route for the v6 prefix: $(static6)"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$respelled" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"FD00:98:CC:0::/64\"],\"route_allowed_ips\":true}")
+[ "$(status_of "$r")" = "200" ] || fail "PUT respelled prefix: $(body_of "$r")"
+static6 | grep -q '^fd00:98:cc::/64 ' || fail "the PUT that respelled the prefix withdrew its route: $(static6)"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER4\",
+	    \"allowed_ips\":[\"10.98.99.34/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 for the restore, got $(status_of "$r"): $(body_of "$r")"
+static6 | grep -q '^fd00:98:cc::/64 ' || fail "the restore withdrew the route of the respelled prefix: $(static6)"
+has_peer "$PEER3" || fail "the restore dropped the peer of the respelled prefix"
+r=$(call -X DELETE "$URL/network/wireguard_peers/$respelled")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE respelled peer: $(body_of "$r")"
+[ -z "$(static6)" ] || fail "v6 routes left behind: $(static6)"
+
 # wg takes an IPv4 or IPv6 prefix or a bare address of either family. Requiring
 # an IPv4 CIDR meant no IPv6 peer could be created through the API at all, so a
 # dual-stack tunnel was unconfigurable.

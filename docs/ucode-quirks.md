@@ -183,7 +183,9 @@ A proto script that loops `for a in ${addresses}` splits a scalar the same way a
 an ARRAY option. A shell reader that goes through `config_get`, as `wireguard.sh`
 does for a peer's `allowed_ips`, also joins a list with spaces, so it splits a
 list entry that holds several words, where `as_word_list_or_null` keeps that
-entry whole and validation then refuses it.
+entry whole and validation then refuses it. `config_get_bool` gets a list joined
+the same way, so `list disabled '1'` disables a wireguard peer: read such a value
+with `config_get` before `shell_bool`.
 
 The reverse also holds: blob.c drops a `list` given to an attribute that is not an ARRAY, so
 6rd, map and 464xlat, which declare `ip6prefix` as a string, lose a listed value. That is why

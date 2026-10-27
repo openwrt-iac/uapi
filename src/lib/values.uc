@@ -7,6 +7,9 @@ const IPV6_GROUP_RE = /^[0-9a-fA-F]{1,4}$/;
 const CIDR_RE = /^[0-9]{1,3}(\.[0-9]{1,3}){3}\/[0-9]{1,2}$/;
 const MAC_PATTERN = "[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}";
 const MAC_RE = regexp("^" + MAC_PATTERN + "$");
+// A key is 32 bytes, so the last of its 43 base64 characters holds 2 unused bits, and wg refuses a
+// key in which they are not zero.
+const WG_KEY_PATTERN = "[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=";
 
 function normalize_bool(v, default_val) {
 	if (v == null) return default_val;
@@ -55,6 +58,11 @@ function shell_bool(v, default_val) {
 // reader, so there is no default to pass: absence and `yes` are the same answer.
 function strict_bool(v) {
 	return v === "1" || v === 1 || v === true;
+}
+
+// config_get in /lib/functions.sh gives a script a list option as its items joined by spaces.
+function config_get(v) {
+	return (type(v) == "array") ? join(" ", v) : v;
 }
 
 // A value that reaches a line-oriented config file, a shell argument or a stdin prompt cannot
@@ -221,9 +229,25 @@ function service_port(v, read_services, unresolved) {
 	return none;
 }
 
-// wg's config parser strips every whitespace character before it reads a number, so `25 ` is 25.
-function wg_int(v) {
-	return as_int((type(v) == "string") ? replace(v, /[[:space:]]/g, "") : v);
+// wg cuts a line of its config at `#` and strips every whitespace character from it.
+function wg_line(l) {
+	return replace(split(l, "#")[0], /[[:space:]]/g, "");
+}
+
+// wireguard.sh leaves an empty value out of the config for wg, and writes any other after
+// `PersistentKeepalive=`. wg takes `off` in any case or a decimal up to 65535. Anything else, or a
+// later line that holds more than a comment, makes wg refuse the config, so it reads -1, which a
+// write cannot set.
+function wg_keepalive(v) {
+	v = config_get(v);
+	if (type(v) != "string" || v == "") return null;
+	let lines = map(split(v, "\n"), (l) => lc(wg_line(l)));
+	let s = shift(lines);
+	if (length(filter(lines, (l) => l != "")) > 0) return -1;
+	if (s == "off") return 0;
+	if (!match(s, /^[0-9]+$/) || length(ltrim(s, "0")) > 5) return -1;
+	let n = int(s);
+	return (n <= 65535) ? n : -1;
 }
 
 const RT_TABLE_ALIASES = { default: 253, main: 254, local: 255 };
@@ -703,17 +727,17 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
-	service_port, wg_int,
+	config_get, service_port, wg_line, wg_keepalive,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	require_present, section_index,
-	MAC_PATTERN, MAC_RE,
+	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,
-	ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
+	ipv4_to_int, ipv4_in_cidr, ipv6_in_cidr, ipv6_words, addr_in_any_cidr, normalize_addr,
 	constant_time_equals,
 	LINE_RE, MAX_LINE_LEN, check_lines, ONE_LINE_RE, ONE_WORD_RE, SHELL_WORD_RE,
 };
