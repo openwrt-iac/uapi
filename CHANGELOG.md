@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
-## [3.2.0] - 2026-10-26
+## [3.2.0] - 2026-10-28
 
 ### Added
 

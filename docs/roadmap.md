@@ -321,9 +321,33 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   type, and an IPv6 `allowed_cidrs` entry could admit every address. Each one is fixed. The values
   that init scripts copy into the configs and commands of snmpd, dnsmasq, unbound, lldpd, mwan3,
   netifd and wifi-scripts refuse the characters that end a line or an argument, and
-  `docs/security.md` lists the write scopes that reach root. The follow-ups are
-  [#249](https://github.com/openwrt-iac/uapi/issues/249) and
-  [#251](https://github.com/openwrt-iac/uapi/issues/251).
+  `docs/security.md` lists the write scopes that reach root.
+- **Values that a daemon refuses or misreads answer 422.** A wireless `ssid` over 32 bytes, a
+  `key` in a form that hostapd or wpa_supplicant refuses, mode `wds`, a dnsmasq value with a
+  double quote, an lldpcli value with a backslash and an snmpd access without a `context` no
+  longer answer 200 while the daemon fails. A WireGuard peer reads its keys, prefixes, host,
+  keepalive and list options as wg, netifd and wireguard.sh do, so the apply, the restore and
+  the route withdraw act on the peer that the kernel holds. The response schemas of the curated
+  resources declare no `pattern`. The items of
+  [#249](https://github.com/openwrt-iac/uapi/issues/249) that 3.2.0 does not fix stay open
+  there, and the newline rule moves to [#276](https://github.com/openwrt-iac/uapi/issues/276).
+- **A write that makes a daemon read stored values checks them.** Turning a radio on, giving it
+  a type, moving an SSID onto an enabled radio, switching an interface to wireguard and enabling
+  a wireguard interface check the stored values of its SSIDs or peers that the daemon would
+  refuse, and a write after which unbound stops answers an error instead of 200 (#259 to #262,
+  #272). The restore of the peers of an interface no longer stops at a peer without a key or
+  without allowed IPs (#272).
+- **A merge PATCH has its own schema.** Each `<Name>Patch` has the properties of `<Name>Request`
+  without `required`, conditionals or defaults, and takes null where the server removes the
+  field, so a strict client sends what the server takes (#258, #263).
+- **A write answers what uci then holds.** The body and the ETag of a write come from the
+  section that it staged, and a PATCH that changes nothing writes nothing and keeps the comments
+  of the package (#272, #275). An option that a daemon splits into words, such as an lldpd
+  `interface` or a dnsmasq `dhcp_option` or `mac`, reads as its words (#274), and
+  `wireless/devices` reads its numbers as netifd does (#257).
+- **The state that uapi keeps in tmpfs is private.** The idempotency cache, the metrics, the
+  rate-limit buckets, the error ring and the last-used markers of the tokens keep their files
+  under `/var/run`, in directories of mode 0700 with files of mode 0600 (#266, #270).
 
 ## Features (additive, future minor bumps in v3.x)
 
@@ -359,7 +383,7 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **Upstream: widen the interface `disabled` reader once 25.12 carries netifd `e97e36f`.**
   netifd accepts `disabled 'true'` on an interface since that commit, 2026-07-16, so
   `network/interfaces` can then read the flag with `platform_bool` like routes and rules.
-  As of 2026-10-26, OpenWrt `main` pins a netifd from 2026-09-11, which carries it, but
+  As of 2026-10-28, OpenWrt `main` pins a netifd from 2026-10-28, which carries it, but
   `openwrt-25.12` still pins 2026-02-26, and so does 25.12.6. The unit test that pins the
   per-type difference is what will say when the widening is right.
 
@@ -519,6 +543,7 @@ stale enough to be misleading:
   uhttpd kills no longer leaves its lock to the children it started, a mint or a revoke
   reaps the files in tmpfs of the tokens that no longer authenticate, a path that no
   route serves adds no metric files, and `uapi-token` takes the uapi lock (#269).
+  Two idempotency stores of one key no longer share a temp file (#270).
 
 ## Objectives for the next major
 
@@ -544,7 +569,7 @@ stale enough to be misleading:
   both in `check_schema_types`, with an opt-out annotation for `system.notes`, ends the audits.
   It is breaking for the free-text fields, such as descriptions, where no daemon gives the
   evidence that the tightening carve-out needs
-  ([#251](https://github.com/openwrt-iac/uapi/issues/251)).
+  ([#276](https://github.com/openwrt-iac/uapi/issues/276)).
 
 - **`mwan3/interfaces.family` is required, or an unset one reads as `ipv4`.** mwan3 reads an
   unset family as ipv4 (`mwan3.sh` and `mwan3track` both default it), and a read gives null. The
