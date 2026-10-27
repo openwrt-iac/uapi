@@ -134,7 +134,12 @@ echo "$nomode" | tail -1 | grep -q '^200$' || fail "POST with no mode expected 2
 nid=$(echo "$nomode" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ "$($SSH "uci -q get wireless.$nid.mode")" = ap ] || fail "a POST with no mode did not store mode ap"
 up_ifname() { $SSH 'ubus call network.wireless status' | jq -r --arg s "$1" '[.[].interfaces[]? | select(.section == $s) | .ifname // empty][0] // empty'; }
-wait_for "wifi-scripts set up no interface for $nid" '[ -n "$(up_ifname "$nid")" ]'
+# The CI image has no network.wireless object, so wifi-scripts sets up nothing there. The checks of
+# what wifi-scripts and hostapd do run only where it does, such as the test VM.
+daemon=0
+$SSH 'ubus call network.wireless status' >/dev/null 2>&1 && daemon=1
+[ "$daemon" = 1 ] || echo "skip: no network.wireless object, so the wifi-scripts and hostapd checks do not run"
+[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for $nid" '[ -n "$(up_ifname "$nid")" ]'
 
 echo "--- a mode, ssid or key that the daemons refuse answers 422 ---"
 for body in '{"mode":"wds"}' '{"ssid":"'"$(printf '%033d' 0)"'"}' \
@@ -155,9 +160,9 @@ echo "$r" | jq -e '.reassociation_deadline == 500' >/dev/null || fail "' 500' di
 sweep=$(call "$URL/diagnostics?validate=1" | sed '$d')
 echo "$sweep" | jq -e --arg s "$nid" '.invalid_sections | tostring | contains($s)' >/dev/null \
 	|| fail "the sweep did not list reassociation_deadline ' 500': $sweep"
-wait_for "validate.uc did not refuse reassociation_deadline 500" '[ "$(refused)" -gt "$before" ]'
+[ "$daemon" = 0 ] || wait_for "validate.uc did not refuse reassociation_deadline 500" '[ "$(refused)" -gt "$before" ]'
 $SSH "uci delete wireless.$nid.reassociation_deadline; uci commit wireless; ubus call network reload"
-wait_for "the radio did not come back after reassociation_deadline went" '[ -n "$(up_ifname "$nid")" ]'
+[ "$daemon" = 0 ] || wait_for "the radio did not come back after reassociation_deadline went" '[ -n "$(up_ifname "$nid")" ]'
 
 # netifd reads `yes` as null, and validate.uc turns that into false, so wifi-scripts writes the
 # key holder lists that it derives, where the default for psk2 is to generate the keys locally.
@@ -169,7 +174,7 @@ $SSH "uci set wireless.$nid.encryption=psk2; uci set wireless.$nid.key=correctho
       uci commit wireless; ubus call network reload"
 r=$(call "$URL/wireless/interfaces/$nid" | sed '$d')
 echo "$r" | jq -e '.ft_psk_generate_local == false' >/dev/null || fail "ft_psk_generate_local 'yes' did not read false: $r"
-wait_for "hostapd did not get the key holders that wifi-scripts derives" \
+[ "$daemon" = 0 ] || wait_for "hostapd did not get the key holders that wifi-scripts derives" \
 	"$SSH 'cat /var/run/hostapd-*.conf' | grep -q '^r0kh=ff:ff:ff:ff:ff:ff \*'"
 
 echo "--- DELETE all three ---"
