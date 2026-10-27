@@ -623,17 +623,20 @@ All notable changes to this project will be documented in this file. Format foll
   the type carve-out in `docs/versioning.md`: the server broke its declared type for every
   interface whose search domains LuCI set. (#257)
 - **`wireless/devices` reads `radio`, `channel`, `txpower` and `cell_density` as wifi-scripts reads
-  them.** netifd converts these options with ucode's `+v`, which takes whitespace, a `0x` prefix
-  and a fraction, and reads other text as 0. uapi read only plain decimal digits, so a stored ` 6`
+  them.** netifd converts `radio`, `txpower` and `cell_density` with ucode's `+v`, and mac80211.sh
+  converts `channel` the same way. `+v` takes whitespace, a `0x` prefix and a fraction, and gives
+  NaN for other text, which uapi reads as 0. uapi read only plain decimal digits, so a stored ` 6`
   read null, and a PUT of the read removed the channel that the radio used. A write still refuses
   a value outside the range, but the Response no longer declares the range, because a read can
   give a stored value outside it, such as `txpower '0x40'`. That is branch (b) of the type
-  carve-out in `docs/versioning.md`. A write that leaves such a stored value as it is now passes.
-  (#257)
+  carve-out in `docs/versioning.md`. A write that leaves such a stored value as it is now passes,
+  and so does a write that enables the radio, except for a `cell_density` outside 0 to 3, for
+  which wifi-scripts stops the radio. A write takes a channel up to 233, where it refused one above
+  196, so the 6 GHz channels that LuCI offers can be written. (#257)
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
-  `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines only when
-  unbound-uci-ext restarts it, and a line that it cannot parse makes it refuse its whole config and
-  stay down, while the write answers 200. (#257)
+  `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
+  restarts, and a line that it cannot parse makes it refuse its whole config and stay down, while
+  the write answers 200. (#257)
 
 ### Security
 

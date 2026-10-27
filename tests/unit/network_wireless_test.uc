@@ -901,4 +901,17 @@ t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
 		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 41 }).status, 422);
 		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 20 }).status, 200);
 	});
+
+	// A 6 GHz radio on channel 233 comes up, and so does a radio with a power above 30, which iw
+	// clamps. Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc.
+	t.it('enables a radio that stores a value outside the write range, unless wifi-scripts stops it', () => {
+		for (let opts in [ { band: '6g', channel: '233', disabled: '1' }, { txpower: '40', disabled: '1' } ])
+			t.assert_equal(h.patch(radio(opts), ctx, 'radio0', { disabled: false }).status, 200, sprintf("%J", opts));
+		t.assert_equal(h.patch(radio({ cell_density: '4', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 422);
+	});
+
+	t.it('takes a 6 GHz channel up to 233', () => {
+		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', band: '6g', channel: 233 }).status, 200);
+		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', band: '6g', channel: 234 }).status, 422);
+	});
 });

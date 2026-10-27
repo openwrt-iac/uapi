@@ -65,7 +65,11 @@ function validate(json) {
 	return errs;
 }
 
-const RANGES = { radio: [ 0, null ], channel: [ 0, 196 ], txpower: [ 0, 30 ], cell_density: [ 0, 3 ] };
+// 6 GHz channels go up to 233. Only cell_density has bounds in the wifi-scripts schema, and
+// validate.uc stops the radio for a value outside them, so only its error is live: a radio with a
+// stored radio index, channel or power outside the range that a write takes still comes up.
+const RANGES = { radio: [ 0, null, false ], channel: [ 0, 233, false ], txpower: [ 0, 30, false ],
+                 cell_density: [ 0, 3, true ] };
 
 // A read gives what wifi-scripts reads from the stored text, which can be outside the range that a
 // write takes, so a write that leaves such a value as it is passes.
@@ -74,7 +78,7 @@ function validate_new(json) {
 	for (let f, r in RANGES) {
 		let v = json[f];
 		if (type(v) == "int" && (v < r[0] || (r[1] != null && v > r[1])))
-			push(errs, { field: f, code: "out_of_range", live: json.disabled !== true,
+			push(errs, { field: f, code: "out_of_range", live: r[2] && json.disabled !== true,
 			             message: (r[1] != null) ? sprintf("must be from %d to %d", r[0], r[1])
 			                                      : sprintf("must be at least %d", r[0]) });
 	}
@@ -102,9 +106,9 @@ return {
 		radio:    { type: ["integer", "null"], "x-uapi-write": { minimum: 0 },
 		            description: "Index of the radio on a phy that has several, as `wifi config` writes it" },
 		band:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_BANDS) },
-		channel:  { "x-uapi-read-nullable": true, type: ["integer", "string"], "x-uapi-write": { minimum: 0, maximum: 196 },
+		channel:  { "x-uapi-read-nullable": true, type: ["integer", "string"], "x-uapi-write": { minimum: 0, maximum: 233 },
 		            pattern: "^auto$",
-		            description: "Channel number (0-196) or the string \"auto\". A stored value reads as the number that wifi-scripts takes from it: ` 6` and `0x6` are 6, a fraction is cut, and other text is 0, which is auto. A write refuses a number outside 0 to 196" },
+		            description: "Channel number (0-233, where 6 GHz uses up to 233) or the string \"auto\". A stored value reads as the number that wifi-scripts takes from it: ` 6` and `0x6` are 6, a fraction is cut, and other text is 0, which is auto. A write refuses a number outside 0 to 233" },
 		htmode:   { type: ["string", "null"],
 		            description: "HT/VHT/HE mode label (e.g. HT20, VHT80, HE160)" },
 		country:  { type: ["string", "null"], pattern: "^([A-Za-z]{2}|00)$",
