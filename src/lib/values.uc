@@ -133,6 +133,9 @@ const DNSMASQ_TEXT_RE = "^#*(" + DNSMASQ_PLAIN + ")*$";
 // reads a quote right after a closing one as text.
 const DNSMASQ_STRING = "\"([^\"\\\\\n\r]|\\\\[^\n\r])*\"";
 const DNSMASQ_OPTION_RE = sprintf("^#*((%s)?(%s))*(%s)?$", DNSMASQ_STRING, DNSMASQ_PLAIN, DNSMASQ_STRING);
+// dnsmasq.init splits the `domain` of a dhcp section into words without quotes, so the shell also
+// expands a glob in it to file names.
+const DNSMASQ_WORDS_RE = "^#*([^\"\n\r \t#*?[]#*|[ \t])*$";
 
 function as_list(v) {
 	if (v == null) return [];
@@ -751,7 +754,7 @@ return {
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
 	config_get, service_port, wg_line, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
-	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE,
+	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,

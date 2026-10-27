@@ -94,3 +94,23 @@ t.describe('dhcp.odhcpd contract', () => {
 		t.assert_equal(le[0].code, "out_of_range");
 	});
 });
+
+// LuCI writes `list domain`, which the read answered as an array where the schema declares a
+// string, so a PUT of the read answered 422.
+t.describe('dhcp.servers domain', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(servers, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+
+	t.it('reads a list as its words joined with spaces, and a PUT of the read keeps them', () => {
+		let c = ubus.stub({ uci: {
+			dhcp: { lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', domain: [ 'lan', 'home.arpa' ] } },
+			network: { lan: { '.type': 'interface' } },
+		} });
+		let body = h.get_one(c, ctx, 'lan').body;
+		t.assert_equal(body.domain, 'lan home.arpa');
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx, 'lan', body).status, 200);
+		t.assert_equal(c._state.uci.dhcp.lan.domain, 'lan home.arpa');
+	});
+});

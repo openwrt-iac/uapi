@@ -323,6 +323,12 @@ All notable changes to this project will be documented in this file. Format foll
   `WirelessInterfacesRequest.mode` drops `wds` from its enum, and the Response keeps it. That
   tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
   caller can rely on, and it fails loudly. (#255)
+- **`dhcp/servers.domain` refuses `*`, `?` and `[`, with 422 `invalid_format`.** dnsmasq.init
+  splits the value into words without quotes when dnsmasq serves DHCPv6, so the shell expanded such
+  a word to the names of the files in its working directory, and dnsmasq announced those as search
+  domains. A domain name cannot hold these characters. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. (#257)
 
 ### Deprecated
 
@@ -610,6 +616,24 @@ All notable changes to this project will be documented in this file. Format foll
   as one key. The schema check refused it with 422 `invalid_type`, so a PUT of the read failed.
   The schema check now covers what the caller sent, and the validation sweep no longer reports the
   shape. `validate()` still checks each secret, and refuses one that the daemon cannot use. (#256)
+- **`dhcp/servers.domain` reads a list as one string, its entries joined with spaces.** LuCI stores
+  the search domains as a list. A read answered an array where the schema declares a string, so a
+  PUT of the read answered 422 `invalid_type`. dnsmasq.init and odhcpd both take the words of the
+  value, so the joined string is what they use, and a PUT of it keeps them. That is branch (b) of
+  the type carve-out in `docs/versioning.md`: the server broke its declared type for every
+  interface whose search domains LuCI set. (#257)
+- **`wireless/devices` reads `radio`, `channel`, `txpower` and `cell_density` as wifi-scripts reads
+  them.** netifd converts these options with ucode's `+v`, which takes whitespace, a `0x` prefix
+  and a fraction, and reads other text as 0. uapi read only plain decimal digits, so a stored ` 6`
+  read null, and a PUT of the read removed the channel that the radio used. A write still refuses
+  a value outside the range, but the Response no longer declares the range, because a read can
+  give a stored value outside it, such as `txpower '0x40'`. That is branch (b) of the type
+  carve-out in `docs/versioning.md`. A write that leaves such a stored value as it is now passes.
+  (#257)
+- **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
+  `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines only when
+  unbound-uci-ext restarts it, and a line that it cannot parse makes it refuse its whole config and
+  stay down, while the write answers 200. (#257)
 
 ### Security
 

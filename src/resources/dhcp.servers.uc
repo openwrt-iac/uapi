@@ -88,7 +88,9 @@ function fromUci(section, conn) {
 		ra: section.ra ?? null,
 		dhcpv6: section.dhcpv6 ?? null,
 		ra_default: as_int(section.ra_default),
-		domain: section.domain ?? null,
+		// LuCI writes a list. dnsmasq.init reads it with config_get and odhcpd through uci_blob, and
+		// both take the words of the value, so the words joined with spaces are what they use.
+		domain: values.config_get(section.domain) ?? null,
 		dhcp_option: as_list_or_null(section.dhcp_option),
 		runtime: runtime,
 	};
@@ -167,7 +169,8 @@ return {
 		dhcpv6:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
 		               description: "0 default, 1 deprecate prefix, 2 advertise as router" },
-		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE },
+		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_WORDS_RE,
+		               description: "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces." },
 		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_OPTION_RE } },
 	},
 };
