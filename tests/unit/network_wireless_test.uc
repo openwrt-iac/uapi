@@ -200,9 +200,9 @@ t.describe('wireless.interfaces', () => {
 	t.it('PATCH that supplies a key overrides the stored one', () => {
 		let c = seeded_wiface();
 		let r = wiface_handler().patch(c, { request_id: "01hx0000000000000000000000" },
-		                               'w1', { key: 'new' });
+		                               'w1', { key: 'newsecret' });
 		t.assert_equal(r.status, 200);
-		t.assert_equal(c._state.uci.wireless.w1.key, 'new');
+		t.assert_equal(c._state.uci.wireless.w1.key, 'newsecret');
 	});
 });
 
@@ -342,11 +342,15 @@ t.describe('wireless.interfaces 802.11r', () => {
 		t.assert_equal(r.mobility_domain, null);
 	});
 
-	t.it('fromUci reads the booleans as netifd parse_bool does', () => {
+	// parse_bool reads `yes` as null, and validate.uc turns null into false, so wifi-scripts does
+	// not pick ft_psk_generate_local from the encryption and reads the key holder lists.
+	t.it('fromUci reads the booleans as wifi-scripts takes them', () => {
 		let r = wiface.fromUci({ '.name': 'w1', '.anonymous': false, device: 'radio0',
 		                         ieee80211r: 'yes', ft_psk_generate_local: 'on' }, null);
 		t.assert_equal(r.ieee80211r, false);
-		t.assert_equal(r.ft_psk_generate_local, null);
+		t.assert_equal(r.ft_psk_generate_local, false);
+		t.assert_equal(wiface.fromUci({ '.name': 'w1', '.anonymous': false, ft_psk_generate_local: [ '1' ] }, null)
+		                     .ft_psk_generate_local, false);
 	});
 
 	t.it('schema refuses a mobility_domain that is not 4 hex digits', () => {
@@ -401,8 +405,9 @@ t.describe('wireless.interfaces has_key is always present and honest', () => {
 
 // wifi-scripts writes key, nasid, the 802.11r options and the key holder lists into the daemon's
 // config without escaping, so a newline in one added a directive, and hostapd refuses its whole
-// config for one bad key holder entry.
-t.describe('wireless.interfaces values that reach the daemon as config lines', () => {
+// config for one bad key holder entry. The daemons also refuse or misread other forms of these
+// values, of ssid and of reassociation_deadline.
+t.describe('wireless.interfaces values that reach the daemons', () => {
 	const H32 = '00112233445566778899aabbccddeeff';
 	const H64 = H32 + H32;
 	// 802.11r with key holders, as wifi-scripts runs it: an AP from WPA2 up, the lists in use.
@@ -412,9 +417,14 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		for (let i = 0; i < n; i++) s += 'a';
 		return s;
 	}
+	function errs(body, field) {
+		return filter(full_validate(wiface, { device: 'radio0', ...body }, null), (e) => e.field == field);
+	}
 	function codes(body, field) {
-		return map(filter(full_validate(wiface, { device: 'radio0', ...body }, null), (e) => e.field == field),
-		           (e) => e.code);
+		return map(errs(body, field), (e) => e.code);
+	}
+	function live(body, field) {
+		return map(filter(wiface.validate_new(body), (e) => e.field == field), (e) => e.live);
 	}
 
 	// Another writer, such as LuCI, can switch the mode or the encryption later, so the value is
@@ -435,11 +445,13 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 	t.it('caps nasid at 1024 bytes, and at 48 with fast transition', () => {
 		t.assert_deep_equal(codes({ nasid: bytes(1024) }, 'nasid'), []);
 		t.assert_deep_equal(codes({ nasid: bytes(1025) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ nasid: 'é' + bytes(1023) }, 'nasid'), [ 'out_of_range' ]);
 		t.assert_deep_equal(codes({ nasid: bytes(1025) + '\n' }, 'nasid'), [ 'out_of_range', 'invalid_format' ]);
 		for (let enc in [ 'psk2', 'sae', 'wpa2' ]) {
 			let ft = { mode: 'ap', encryption: enc, key: 'correcthorse', ieee80211r: true };
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(48) }, 'nasid'), [], enc);
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ], enc);
+			t.assert_deep_equal(codes({ ...ft, nasid: 'é' + bytes(47) }, 'nasid'), [ 'out_of_range' ], enc);
 		}
 		// A section with no mode reads as mode ap, so a create without one is checked as an AP.
 		t.assert_deep_equal(codes({ encryption: 'sae', key: 'correcthorse', ieee80211r: true, nasid: bytes(49) }, 'nasid'),
@@ -591,12 +603,12 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 	t.it('a stored newline in an 802.11r option is refused once hostapd reads it', () => {
 		let c = stored({ encryption: 'sae', mobility_domain: 'abcd\nssid2="x"' });
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => e.field),
-		                    [ 'mobility_domain' ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'mobility_domain', 'invalid_format' ] ]);
 		c = stored({ ieee80211r: '1', r1_key_holder: bytes(1025) });
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false }).body.errors, (e) => e.field),
-		                    [ 'r1_key_holder' ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'r1_key_holder', 'out_of_range' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 	});
 
 	// ap.uc writes mobility_domain as erp_domain on an EAP SSID with fils, which uapi does not model.
@@ -613,9 +625,12 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
 		let eight = [ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'x\nssid2="x"' ];
-		t.assert_equal(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).status, 422);
-		for (let extra in [ { key: [ 'abcdefgh', 'x\ny' ] }, { mode: 'sta', key: eight } ])
-			t.assert_equal(h().patch(stored({ disabled: '1', ...extra }), CTX, 'w1', { disabled: false }).status, 200, extra);
+		t.assert_deep_equal(map(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).body.errors,
+		                        (e) => [ e.field, e.code ]), [ [ 'key', 'invalid_format' ] ]);
+		t.assert_equal(h().patch(stored({ disabled: '1', mode: 'sta', key: eight }), CTX, 'w1', { disabled: false }).status, 200);
+		// ap.uc counts two entries, and stops the setup for that length before it writes a line.
+		t.assert_deep_equal(map(h().patch(stored({ disabled: '1', key: [ 'abcdefgh', 'x\ny' ] }), CTX, 'w1', { disabled: false }).body.errors,
+		                        (e) => [ e.field, e.code ]), [ [ 'key', 'out_of_range' ] ]);
 	});
 
 	// The lists are never read back, so a PUT carries the stored ones. hostapd reads them only with
@@ -681,5 +696,172 @@ t.describe('wireless.interfaces values that reach the daemon as config lines', (
 		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.nasid, bytes(49));
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
+	});
+
+	// netifd and hostapd skip a section with no mode, which a read reports as ap.
+	t.it('a create or a PUT that sends no mode stores mode ap', () => {
+		let c = ubus.stub({ uci: { wireless: {} } });
+		t.assert_equal(h().create(c, CTX, { id: 'w2', device: 'radio0', ssid: 'home', encryption: 'none' }).status, 200);
+		t.assert_equal(c._state.uci.wireless.w2.mode, 'ap');
+		c = stored({ mode: 'sta' });
+		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'psk2' }).status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
+	});
+
+	t.it('refuses mode wds on write, and reads a stored one', () => {
+		t.assert_deep_equal(codes({ mode: 'wds' }, 'mode'), [ 'not_in_enum' ]);
+		t.assert_deep_equal(live({ mode: 'wds', disabled: true }, 'mode'), [ false ]);
+		let c = stored({ mode: 'wds', disabled: '1' });
+		t.assert_equal(read_back(c).mode, 'wds');
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'mode' ]);
+		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap', disabled: false }).status, 200);
+	});
+
+	t.it('refuses an SSID over 32 bytes in every mode, live where a daemon reads it', () => {
+		t.assert_deep_equal(codes({ ssid: bytes(32) }, 'ssid'), []);
+		t.assert_deep_equal(codes({ ssid: 'é' + bytes(30) }, 'ssid'), []);
+		t.assert_deep_equal(codes({ ssid: 'é' + bytes(31) }, 'ssid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(live({ ssid: [ bytes(16), bytes(16) ] }, 'ssid'), [ true ]);
+		for (let m in [ 'ap', 'sta', 'adhoc' ])
+			t.assert_deep_equal(live({ mode: m, ssid: bytes(33) }, 'ssid'), [ true ], m);
+		for (let b in [ { mode: 'monitor' }, { mode: 'mesh' }, { mode: 'ap', disabled: true } ])
+			t.assert_deep_equal(live({ ...b, ssid: bytes(33) }, 'ssid'), [ false ], b);
+		let c = stored({ mode: 'mesh', ssid: bytes(40) });
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: bytes(40) }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'ap' }).body.errors, (e) => e.field), [ 'ssid' ]);
+	});
+
+	t.it('takes an access point key of 8 to 63 bytes, or of 64 hex digits but with plain sae', () => {
+		for (let enc in [ 'psk', 'psk2', 'psk-mixed+ccmp', 'sae', 'sae-mixed' ])
+			for (let k in [ bytes(8), bytes(63), 'é' + bytes(61) ])
+				t.assert_deep_equal(codes({ encryption: enc, key: k }, 'key'), [], [ enc, k ]);
+		for (let enc in [ 'psk2', 'sae-mixed' ])
+			t.assert_deep_equal(codes({ encryption: enc, key: H64 }, 'key'), [], enc);
+		for (let enc in [ 'wpa2', 'none' ])
+			t.assert_deep_equal(codes({ encryption: enc, key: 'x' }, 'key'), [], enc);
+	});
+
+	t.it('refuses an access point key that wifi-scripts or hostapd refuses, without naming it', () => {
+		let cases = [
+			[ { encryption: 'psk2', key: bytes(7) }, 'out_of_range' ],
+			[ { encryption: 'psk2', key: bytes(65) }, 'out_of_range' ],
+			[ { encryption: 'psk2', key: 'é' + bytes(62) }, 'invalid_format' ],
+			[ { encryption: 'psk2', key: substr(H64, 1) + 'g' }, 'invalid_format' ],
+			[ { encryption: 'sae', key: H64 }, 'conflict' ],
+			[ { encryption: 'sae+ccmp', key: H64 }, 'conflict' ],
+		];
+		for (let c in cases) {
+			let e = errs(c[0], 'key');
+			t.assert_deep_equal(map(e, (x) => x.code), [ c[1] ], c[0]);
+			t.assert_equal(index(e[0].message, c[0].key), -1, c[0]);
+		}
+		// ap.uc counts the entries of a list, two here.
+		t.assert_deep_equal(map(filter(wiface.validate_new({ encryption: 'psk2', key: [ 'abcdefgh', 'ijklmnop' ] }),
+		                               (e) => e.field == 'key'), (e) => e.code), [ 'out_of_range' ]);
+		t.assert_deep_equal(live({ encryption: 'psk2', key: bytes(7), disabled: true }, 'key'), [ false ]);
+		t.assert_deep_equal(codes({ mode: 'monitor', encryption: 'psk2', key: bytes(7) }, 'key'), []);
+	});
+
+	// supplicant.uc quotes every key, so wpa_supplicant reads it as a passphrase, a key of 64 hex digits
+	// too. It checks a passphrase given as psk, and not one given as sae_password, which plain sae and
+	// mesh get.
+	t.it('refuses a station key that wpa_supplicant refuses as a passphrase', () => {
+		for (let m in [ 'sta', 'adhoc' ]) {
+			for (let enc in [ 'psk2', 'sae-mixed' ]) {
+				for (let k in [ bytes(7), bytes(64), H64 ])
+					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'out_of_range' ], [ m, enc, k ]);
+				for (let k in [ bytes(8) + '\t', bytes(8) + '\r', bytes(8) + '\x7f' ])
+					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'invalid_format' ], [ m, enc, k ]);
+				for (let k in [ bytes(8), bytes(63), 'pässwörd', 'a b c d e' ])
+					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [], [ m, enc, k ]);
+			}
+			for (let k in [ 'abc', H64, 'ab\tc' ])
+				t.assert_deep_equal(codes({ mode: m, encryption: 'sae', key: k }, 'key'), [], [ m, k ]);
+		}
+		t.assert_deep_equal(codes({ mode: 'sta', encryption: 'psk2', key: bytes(8) + '\n' }, 'key'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ mode: 'mesh', encryption: 'psk2', key: 'abc' }, 'key'), []);
+	});
+
+	t.it('refuses a station key that wpa_supplicant cuts at a comment, without naming it', () => {
+		for (let m in [ 'sta', 'adhoc', 'mesh' ])
+			for (let k in [ 'ab"cdef#gh', '"a"b"c#defgh', 'abc"de"f"#gh"' ]) {
+				let e = errs({ mode: m, encryption: 'sae', key: k }, 'key');
+				t.assert_deep_equal(map(e, (x) => x.code), [ 'invalid_format' ], [ m, k ]);
+				t.assert_equal(index(e[0].message, k), -1);
+			}
+		for (let k in [ 'abcdef#gh', 'a"bc"def#gh', '#"abcdefgh', 'ab"cdefgh' ])
+			t.assert_deep_equal(codes({ mode: 'sta', encryption: 'psk2', key: k }, 'key'), [], k);
+		t.assert_deep_equal(codes({ mode: 'ap', encryption: 'psk2', key: 'ab"cdef#gh' }, 'key'), []);
+	});
+
+	t.it('refuses a nasid over 253 bytes on an EAP access point', () => {
+		let eap = { encryption: 'wpa2', key: 'x' };
+		t.assert_deep_equal(codes({ ...eap, nasid: bytes(253) }, 'nasid'), []);
+		t.assert_deep_equal(codes({ ...eap, nasid: bytes(254) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ ...eap, nasid: 'é' + bytes(252) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes({ encryption: 'wpa3-mixed+ccmp', key: 'x', nasid: bytes(254) }, 'nasid'), [ 'out_of_range' ]);
+		t.assert_deep_equal(live({ ...eap, disabled: true, nasid: bytes(254) }, 'nasid'), [ false ]);
+		for (let b in [ { mode: 'sta', ...eap }, { encryption: 'psk2', key: 'correcthorse' } ])
+			t.assert_deep_equal(codes({ ...b, nasid: bytes(254) }, 'nasid'), [], b);
+	});
+
+	t.it('refuses 802.11r with owe on an access point', () => {
+		t.assert_deep_equal(codes({ encryption: 'owe', ieee80211r: true }, 'ieee80211r'), [ 'conflict' ]);
+		t.assert_deep_equal(live({ encryption: 'owe', ieee80211r: true, disabled: true }, 'ieee80211r'), [ false ]);
+		for (let b in [ { encryption: 'owe' }, { mode: 'sta', encryption: 'owe', ieee80211r: true },
+		                { encryption: 'sae', key: 'correcthorse', ieee80211r: true } ])
+			t.assert_deep_equal(codes(b, 'ieee80211r'), [], b);
+	});
+
+	t.it('reads reassociation_deadline and r0_key_lifetime as wifi-scripts converts them', () => {
+		for (let c in [ [ ' 500', 500 ], [ '0x10', 16 ], [ '010', 10 ], [ '1000.9', 1000 ], [ '1e4', 10000 ],
+		                [ '500x', 0 ], [ [ '20000' ], 0 ], [ null, null ] ]) {
+			let r = wiface.fromUci({ '.name': 'w1', '.anonymous': false, reassociation_deadline: c[0], r0_key_lifetime: c[0] }, null);
+			t.assert_equal(r.reassociation_deadline, c[1], c[0]);
+			t.assert_equal(r.r0_key_lifetime, c[1], c[0]);
+		}
+	});
+
+	t.it('refuses a reassociation_deadline outside 1000 to 65535, live on an SSID that wifi-scripts sets up', () => {
+		for (let v in [ 1000, 65535 ])
+			t.assert_deep_equal(codes({ reassociation_deadline: v }, 'reassociation_deadline'), [], v);
+		for (let v in [ 999, 65536 ])
+			t.assert_deep_equal(codes({ reassociation_deadline: v }, 'reassociation_deadline'), [ 'out_of_range' ], v);
+		for (let m in [ 'ap', 'sta', 'adhoc', 'mesh' ])
+			t.assert_deep_equal(live({ mode: m, reassociation_deadline: 0 }, 'reassociation_deadline'), [ true ], m);
+		for (let b in [ { mode: 'monitor' }, { mode: 'ap', disabled: true } ])
+			t.assert_deep_equal(live({ ...b, reassociation_deadline: 0 }, 'reassociation_deadline'), [ false ], b);
+		let c = stored({ disabled: '1', reassociation_deadline: ' 500' });
+		t.assert_equal(length(h().sweep(c)), 1);
+		let body = read_back(c);
+		body.ssid = 'home2';
+		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'reassociation_deadline' ]);
+	});
+
+	t.it('refuses a negative r0_key_lifetime, live while hostapd reads the key holder lists', () => {
+		t.assert_deep_equal(codes({ r0_key_lifetime: 0 }, 'r0_key_lifetime'), []);
+		t.assert_deep_equal(codes({ r0_key_lifetime: -1 }, 'r0_key_lifetime'), [ 'out_of_range' ]);
+		t.assert_deep_equal(live({ ...FT, r0_key_lifetime: -1 }, 'r0_key_lifetime'), [ true ]);
+		t.assert_deep_equal(live({ ...FT, ft_psk_generate_local: true, r0_key_lifetime: -1 }, 'r0_key_lifetime'), [ false ]);
+	});
+
+	// The form of mobility_domain and r1_key_holder was a schema pattern, which a PUT or a JSON Patch
+	// checked on a stored value that it kept, and which hid a newline in the sweep.
+	t.it('a write keeps a stored mobility_domain or r1_key_holder in another form until hostapd reads it', () => {
+		let c = stored({ encryption: 'sae', mobility_domain: 'xyz', r1_key_holder: 'xyz', disabled: '1' });
+		let body = read_back(c);
+		body.ssid = 'home2';
+		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
+		t.assert_equal(h().patch(c, { ...CTX, json_patch: true }, 'w1', [ { op: 'replace', path: '/ssid', value: 'home3' } ]).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 200);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false, disabled: false }).body.errors,
+		                        (e) => [ e.field, e.code ]),
+		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
+		c = stored({ mobility_domain: '4f5\n', r1_key_holder: '02aabbccdde\n' });
+		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'mobility_domain', 'invalid_format' ],
+		                      [ 'r1_key_holder', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 	});
 });

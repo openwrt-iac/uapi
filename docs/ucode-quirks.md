@@ -176,6 +176,13 @@ uci's `blob.c` is also how netifd reads every INT32 and ARRAY option
 | ARRAY: `ipaddr`, `ip6addr`, `ip6prefix`, `ip6class`, `dns`, device and bridge-vlan `ports` | a list as it is, and a scalar split on spaces and tabs | `option dns '192.0.2.1 192.0.2.2'` is two servers | `as_word_list_or_null` |
 | Routing table: route `table`, rule `lookup` | `system_resolve_rt_table`: a number through `strtoul` base 0 above 0, then `default`, `main`, `local`, then a name in `/etc/iproute2/rt_tables`; netifd drops the route or rule when nothing resolves | `main` is 254, `0` drops the route | `rt_table_id`, which reads 0 for what does not resolve |
 
+The wireless options do not go through blob.c. netifd's ucode side reads them from uci
+itself, and `/lib/netifd/utils.uc` converts an option of type number with `+v`. That takes
+whitespace around the number, `0x`, `0o` and `0b`, a fraction and an exponent. It reads
+`010` as 10, and any other text as NaN. wifi-scripts writes the number into hostapd's
+config, where `atoi()` reads NaN as 0. `ucode_int` reads `reassociation_deadline` and
+`r0_key_lifetime` of `wireless/interfaces` that way.
+
 `as_int` reads decimal only, which is right for a reader that parses base 10 and
 wrong for netifd. `netifd_int` reads `""` and a value past int32 as null, where
 blob.c gives 0 and a truncated number that differs between 32- and 64-bit targets.

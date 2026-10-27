@@ -261,6 +261,17 @@ function wg_keepalive(v) {
 	return (n <= 65535) ? n : -1;
 }
 
+// netifd's ucode side converts a wireless option of type number with `+v` (/lib/netifd/utils.uc):
+// it takes whitespace around the number, a 0x, 0o or 0b prefix, a fraction and an exponent, reads
+// `010` as 10, and reads any other text, a list included, as NaN. wifi-scripts writes the number
+// into hostapd's config as text, and atoi() cuts the fraction and reads NaN as 0.
+function ucode_int(v) {
+	if (v == null) return null;
+	let n = +v;
+	if (type(n) == "double") n = int(n);
+	return (type(n) == "int") ? n : 0;
+}
+
 const RT_TABLE_ALIASES = { default: 253, main: 254, local: 255 };
 
 // netifd resolves a route `table` or a rule `lookup` with system_resolve_rt_table: a number
@@ -738,7 +749,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
-	config_get, service_port, wg_line, wg_keepalive,
+	config_get, service_port, wg_line, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE,
 	require_present, section_index,

@@ -311,6 +311,16 @@ t.describe('values.WG_KEY_PATTERN', () => {
 	});
 });
 
+t.describe('values.ucode_int', () => {
+	t.it('reads a number as `+v` does, with what is not a number as 0, as hostapd reads it', () => {
+		for (let c in [ [ '20000', 20000 ], [ ' 500\t', 500 ], [ '0x10', 16 ], [ '0o17', 15 ], [ '0b11', 3 ],
+		                [ '010', 10 ], [ '-5', -5 ], [ '1000.9', 1000 ], [ '1e4', 10000 ],
+		                [ '500x', 0 ], [ 'abc', 0 ], [ [ '1' ], 0 ] ])
+			t.assert_equal(v.ucode_int(c[0]), c[1], c[0]);
+		t.assert_equal(v.ucode_int(null), null);
+	});
+});
+
 t.describe('values.service_port', () => {
 	let file = (text) => () => text;
 	let untouched = () => die("the reader ran for a value that needs no file");
