@@ -28694,7 +28694,6 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
 						"description": "Index of the radio on a phy that has several, as `wifi config` writes it"
 					},
 					"band": {
@@ -28716,9 +28715,7 @@
 							"string",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 196,
-						"description": "Channel number (0-196) or the string \"auto\""
+						"description": "Channel number (0-196) or the string \"auto\". A stored value reads as the number that wifi-scripts takes from it: ` 6` and `0x6` are 6, a fraction is cut, and other text is 0, which is auto. A write refuses a number outside 0 to 196"
 					},
 					"htmode": {
 						"type": [
@@ -28739,14 +28736,10 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 30,
-						"description": "TX power in dBm"
+						"description": "TX power in dBm, from 0 to 30 on write. A stored value reads as wifi-scripts reads it, as for `channel`"
 					},
 					"cell_density": {
 						"type": "integer",
-						"minimum": 0,
-						"maximum": 3,
 						"default": 0,
 						"description": "Basic rates by coverage cell density: 0 disabled, 1 normal, 2 high, 3 very high"
 					},
@@ -28815,8 +28808,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"description": "Index of the radio on a phy that has several, as `wifi config` writes it"
+						"description": "Index of the radio on a phy that has several, as `wifi config` writes it",
+						"minimum": 0
 					},
 					"band": {
 						"type": [
@@ -28837,10 +28830,10 @@
 							"string",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 196,
 						"pattern": "^auto$",
-						"description": "Channel number (0-196) or the string \"auto\""
+						"description": "Channel number (0-196) or the string \"auto\". A stored value reads as the number that wifi-scripts takes from it: ` 6` and `0x6` are 6, a fraction is cut, and other text is 0, which is auto. A write refuses a number outside 0 to 196",
+						"minimum": 0,
+						"maximum": 196
 					},
 					"htmode": {
 						"type": [
@@ -28862,16 +28855,16 @@
 							"integer",
 							"null"
 						],
+						"description": "TX power in dBm, from 0 to 30 on write. A stored value reads as wifi-scripts reads it, as for `channel`",
 						"minimum": 0,
-						"maximum": 30,
-						"description": "TX power in dBm"
+						"maximum": 30
 					},
 					"cell_density": {
 						"type": "integer",
-						"minimum": 0,
-						"maximum": 3,
 						"default": 0,
-						"description": "Basic rates by coverage cell density: 0 disabled, 1 normal, 2 high, 3 very high"
+						"description": "Basic rates by coverage cell density: 0 disabled, 1 normal, 2 high, 3 very high",
+						"minimum": 0,
+						"maximum": 3
 					},
 					"legacy_rates": {
 						"type": "boolean",
@@ -30115,7 +30108,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces."
 					},
 					"dhcp_option": {
 						"type": [
@@ -30238,7 +30232,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
+						"pattern": "^#*([^\"\n\r \t#*?[]#*|[ \t])*$",
+						"description": "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces."
 					},
 					"dhcp_option": {
 						"type": [
@@ -31865,7 +31860,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line; `unbound-checkconf` validates grammar after restart."
+						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines only when the generator restarts it, and a line that it cannot parse makes it refuse its whole config and stay down. The generator only logs that, so the write still answers 200."
 					},
 					"runtime": {
 						"type": "object",
@@ -31925,7 +31920,7 @@
 							"type": "string",
 							"pattern": "^[^\n]+$"
 						},
-						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line; `unbound-checkconf` validates grammar after restart."
+						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines only when the generator restarts it, and a line that it cannot parse makes it refuse its whole config and stay down. The generator only logs that, so the write still answers 200."
 					}
 				}
 			},
@@ -31955,7 +31950,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line; build whole `forward-zone:`, `view:`, `stub:`, or `remote-control:` clauses by listing them in order. `unbound-checkconf` validates grammar after restart."
+						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines only when the generator restarts it, and a line that it cannot parse makes it refuse its whole config and stay down. The generator only logs that, so the write still answers 200."
 					},
 					"runtime": {
 						"type": "object",
@@ -31986,7 +31981,7 @@
 							"type": "string",
 							"pattern": "^[^\n]+$"
 						},
-						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line; build whole `forward-zone:`, `view:`, `stub:`, or `remote-control:` clauses by listing them in order. `unbound-checkconf` validates grammar after restart."
+						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines only when the generator restarts it, and a line that it cannot parse makes it refuse its whole config and stay down. The generator only logs that, so the write still answers 200."
 					}
 				}
 			},

@@ -865,3 +865,40 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                      [ 'r1_key_holder', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 	});
 });
+
+// netifd converts these with `+v`, so as_int read a stored ` 6` as nothing, and a PUT of the read
+// removed the channel that wifi-scripts used.
+t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(widev, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	function radio(opts) {
+		return ubus.stub({ uci: { wireless: {
+			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211', ...opts },
+		} } });
+	}
+
+	t.it('reads whitespace, hex and a fraction as +v does, and other text as 0', () => {
+		for (let p in [ [ ' 6', 6 ], [ '0x6', 6 ], [ '6.5', 6 ], [ 'six', 0 ] ])
+			t.assert_equal(h.get_one(radio({ channel: p[0] }), ctx, 'radio0').body.channel, p[1], p[0]);
+		t.assert_equal(h.get_one(radio({ channel: 'auto' }), ctx, 'radio0').body.channel, 'auto');
+		t.assert_equal(h.get_one(radio({ txpower: ' 20' }), ctx, 'radio0').body.txpower, 20);
+	});
+
+	t.it('a PUT of the read keeps a stored channel that wifi-scripts reads', () => {
+		let c = radio({ channel: ' 6' });
+		let body = h.get_one(c, ctx, 'radio0').body;
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx, 'radio0', body).status, 200);
+		t.assert_equal(c._state.uci.wireless.radio0.channel, '6');
+	});
+
+	t.it('refuses a number outside its range on write, and keeps a stored one that a write leaves alone', () => {
+		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', txpower: 40 }).status, 422);
+		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', radio: -1 }).status, 422);
+		let c = radio({ txpower: '40' });
+		t.assert_equal(h.patch(c, ctx, 'radio0', { disabled: true }).status, 200);
+		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 41 }).status, 422);
+		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 20 }).status, 200);
+	});
+});

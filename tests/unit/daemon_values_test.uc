@@ -81,6 +81,14 @@ t.describe('values that an init script copies onto a daemon config line', () => 
 		}
 	});
 
+	t.it('refuse *, ? and [ in the domain of a dhcp section, which dnsmasq.init splits into words unquoted', () => {
+		let c = [ "dhcp.servers.uc", "domain" ];
+		for (let v in [ "*", "lan a?", "a[b" ])
+			t.assert_equal(length(probe(c, v)), 1, v);
+		t.assert_equal(length(probe(c, "lan home.arpa")), 0);
+		t.assert_equal(length(probe([ "dhcp.dnsmasq.uc", "domain" ], "a*")), 0);
+	});
+
 	t.it('take the unbound domain as a DNS name', () => {
 		for (let v in [ "lan", "home.arpa", "my-lan_1", "" ])
 			t.assert_equal(length(field_errors("unbound.server.uc", { domain: v }, "domain")), 0, v);
