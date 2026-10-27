@@ -72,6 +72,12 @@ All notable changes to this project will be documented in this file. Format foll
   does not exist, and names the file. `wireless` is the common case: `wifi config` writes
   `/etc/config/wireless` only when it finds a radio. (#235)
 
+- **A sweep error of a `validate_new()` rule has `live`.** `GET /api/v3/diagnostics?validate=1`
+  lists a stored value that such a rule refuses, whether the daemon reads it yet or not.
+  `live: false` says that the daemon does not read it yet, for example because the section is
+  disabled, so the value breaks nothing until a write or another writer enables the section. A 422
+  does not have the field. (#256)
+
 ### Changed
 
 - **`network/interfaces` refuses a field that the proto of the interface does not take, with 422
@@ -191,6 +197,13 @@ All notable changes to this project will be documented in this file. Format foll
   `...`. The 400 for a control character in a request body names the key, and it answers before
   authentication, so without a limit any client could store a body of any size in the error ring,
   which lives in RAM. The response itself still carries the whole message. (#242)
+- **The response schemas of the curated resources declare no `pattern`.** A read returns a value as
+  uci holds it, and uci, LuCI or uapi 3.1.0 can store a value that breaks a pattern, so a GET
+  answered a body that failed its own schema. For example, a section with
+  `option clientid '01-23-45'` read back a `clientid` outside the declared `^[0-9A-Fa-f:]*$`. The
+  request schemas keep every pattern, and the server checks a write as before. That is branch (b)
+  of the type carve-out in `docs/versioning.md`. It only widens the response schemas, so no read
+  that passed before fails now. (#256)
 
 - **WireGuard keys must be keys that wg accepts.** A key is 32 bytes, so the last base64 character
   before `=` carries 2 bits that must be zero, and wg refuses a key in which they are not. uapi took
@@ -589,6 +602,14 @@ All notable changes to this project will be documented in this file. Format foll
   up while every read showed an access point. A PATCH writes only what it changes, so a section
   that a hand edit left without a mode keeps none until a write sends `mode`, and its read still
   reports `ap`. (#255)
+- **`network/interfaces` answers 422 for an `ipaddrs` or `ip6addrs` sent as a string.** It
+  answered 500, because `validate()` read the string as a list. (#256)
+- **A PUT or a JSON Patch no longer type-checks a write-only value that the caller did not send.**
+  A write keeps a masked secret from uci, and uci can hold it in a shape that the schema does not
+  declare, such as a WireGuard `preshared_key` that uci holds as a list, which wireguard.sh reads
+  as one key. The schema check refused it with 422 `invalid_type`, so a PUT of the read failed.
+  The schema check now covers what the caller sent, and the validation sweep no longer reports the
+  shape. `validate()` still checks each secret, and refuses one that the daemon cannot use. (#256)
 
 ### Security
 

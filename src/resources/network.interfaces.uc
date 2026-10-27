@@ -301,12 +301,12 @@ function validate(json, conn, id, delta) {
 		if (type(ip6prefix[i]) == "string" && !is_valid_ipv6_cidr(ip6prefix[i]) && !is_valid_ipv6(ip6prefix[i]))
 			push(errs, { field: sprintf("ip6prefix[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv6 address or prefix" });
-	for (let i = 0; ok("ipaddrs") && i < length(json.ipaddrs); i++) {
+	for (let i = 0; ok("ipaddrs") && type(json.ipaddrs) == "array" && i < length(json.ipaddrs); i++) {
 		if (!is_valid_ipv4(json.ipaddrs[i]) && !is_valid_cidr(json.ipaddrs[i]))
 			push(errs, { field: sprintf("ipaddrs[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv4 address or CIDR" });
 	}
-	for (let i = 0; ok("ip6addrs") && i < length(json.ip6addrs); i++) {
+	for (let i = 0; ok("ip6addrs") && type(json.ip6addrs) == "array" && i < length(json.ip6addrs); i++) {
 		if (!is_valid_ipv6(json.ip6addrs[i]) && !is_valid_ipv6_cidr(json.ip6addrs[i]))
 			push(errs, { field: sprintf("ip6addrs[%d]", i), code: "invalid_format",
 			             message: "must be a valid IPv6 address or CIDR" });

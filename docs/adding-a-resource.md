@@ -213,14 +213,19 @@ each of them, unless the schema check or `validate()` already reported its field
 The handler runs `validate_new()` on the section as it was and as the write leaves it, and
 refuses the write only for an error that it adds: one in a field that the write changes, one
 that the section did not have, by field, code and message, or one that was not live and is now.
+So a message names its rule and quotes no value: a message that quotes another field changes when
+that field changes, and the old error then reads as a new one.
 An option and the list of its words, split on whitespace as netifd splits it, are the same
 value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
 of its own. So a write that leaves a field alone is refused for an error that the field already
 had only when the write makes the error live, for example by enabling the section. The sweep runs
-`validate_new()` on every stored section and lists its errors, merged with the others as in a 422.
-`validate()` and the schema check run as before: `validate()` sees the whole section, and the
-schema check sees the request body, which for a PUT or a JSON Patch is the whole body, carried
-write-only fields included.
+`validate_new()` on every stored section and lists its errors with their `live` flag, merged with
+the others as in a 422. `validate()` and the schema check run as before: `validate()` sees the
+whole section, and the schema check sees what the caller sent, which for a JSON Patch is the read
+with the operations applied. The schema check does not see a write-only field that the handler
+carries from uci, because uci can hold it in a shape that the schema does not declare, such as an
+option where the schema says list, and the caller can neither see it nor send it. `validate()`
+sees it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

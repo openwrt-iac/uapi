@@ -128,6 +128,12 @@ server. A module declares the difference with `x-uapi-write`, and
 `tests/unit/write_overlay_test.uc` checks each such keyword against the refusal in
 `validate()`.
 
+The response half of a curated resource declares no `pattern`, since 3.2.0. A pattern says what a
+write may send, and a read returns a value as uci holds it. uci, LuCI or an older uapi can store
+a value that breaks the pattern, such as a `clientid` with dashes, so a pattern in the response
+would be a promise that a GET breaks. The request half keeps every pattern, and the sweep of
+`/diagnostics?validate=1` lists a stored value that breaks one.
+
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token
 create sends scopes and gets back a token. They are outside the rule, and outside the lint.

@@ -398,6 +398,23 @@ for (let name in schemas) {
 	                    sprintf("/components/schemas/%s/properties", name), base);
 }
 
+// A read returns a value as uci holds it, and uci holds values that a write may not send, so a
+// pattern in a generated Response promises a match that a GET breaks. The generator keeps
+// patterns in the request half, and this keeps them there.
+function patterns_in(node, path) {
+	if (type(node) == "array") {
+		for (let i = 0; i < length(node); i++) patterns_in(node[i], sprintf("%s/%d", path, i));
+		return;
+	}
+	if (type(node) != "object") return;
+	if (exists(node, "pattern"))
+		note(path, "declares a pattern in a response schema, which a stored value can break");
+	for (let k, v in node)
+		if (k != "pattern") patterns_in(v, path + "/" + k);
+}
+for (let name in generated_responses)
+	patterns_in(schemas[name], "/components/schemas/" + name);
+
 
 // ETag comes from set_etag_header, which the curated CRUD and singleton handlers call and
 // nothing else does. make_collection.get_one returns errors.ok bare, so a collection-kind

@@ -211,6 +211,13 @@ t.describe('network.interfaces wireguard addresses accept both families', () => 
 		for (let e in errs) if (e.field == "ipaddrs[0]" && e.code == "invalid_format") found = true;
 		t.assert_true(found);
 	});
+
+	// validate() indexed the string, which faults, so the write answered 500 instead of the
+	// invalid_type that the schema check had found.
+	t.it('takes an address list sent as a string without faulting', () => {
+		t.assert_true(length(ifaces.validate({ proto: 'static', ipaddrs: '10.0.0.1/24' }, null)) > 0);
+		t.assert_true(length(ifaces.validate({ proto: 'static', ip6addrs: 'fd00::1/64' }, null)) > 0);
+	});
 });
 
 // The resource-level dns guard was deleted because its condition

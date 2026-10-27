@@ -424,6 +424,68 @@ t.describe('handler error merge', () => {
 		let h = rules_with({ fromUci: () => die('unreadable') });
 		t.assert_equal(h.replace(c, ctx(), 'r_existing', { ...body, target: 'BOGUS' }).status, 422);
 	});
+
+	// wireless/interfaces reads its runtime state with three ubus calls, inside the lock.
+	t.it('PUT reads the stored section once for validate_new() and the rest of the write', () => {
+		let c = with_zones();
+		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
+		let reads = 0;
+		let h = rules_with({ validate_new: () => [],
+		                     fromUci: (s, conn) => { reads++; return rules_mod.fromUci(s, conn); } });
+		t.assert_equal(h.replace(c, ctx(), 'r_existing', body).status, 200);
+		// The second read builds the response from what the write stored.
+		t.assert_equal(reads, 2);
+	});
+});
+
+// A write-only field is carried from uci into a PUT, and uci can hold it in a shape the schema
+// does not declare, such as an option where the schema says list. The caller cannot see the
+// value, so a schema error on it refused every write of the section.
+t.describe('handler schema check of a carried secret', () => {
+	let secret_rules = handler.make({
+		...rules_mod,
+		schema_properties: { ...rules_mod.schema_properties,
+		                     secret: { type: "array", items: { type: "string" }, writeOnly: true } },
+		toUci: (j) => ({ ...rules_mod.toUci(j), ...((j.secret != null) ? { secret: j.secret } : {}) }),
+	}, {
+		tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		},
+	});
+	function stored() {
+		let c = with_zones();
+		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false,
+		                                     target: 'ACCEPT', src: 'wan', secret: 'one' };
+		return c;
+	}
+
+	t.it('a PUT of the read keeps a secret that uci holds as an option', () => {
+		let c = stored();
+		let r = secret_rules.replace(c, ctx(), 'r_existing', { target: 'DROP', match: { src_zone: 'wan' } });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.secret, 'one');
+	});
+
+	t.it('a JSON Patch keeps it too', () => {
+		let c = stored();
+		let r = secret_rules.patch(c, { ...ctx(), json_patch: true }, 'r_existing',
+		                           [ { op: "replace", path: "/target", value: "DROP" } ]);
+		t.assert_equal(r.status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.secret, 'one');
+	});
+
+	t.it('the sweep does not report it', () => {
+		t.assert_deep_equal(secret_rules.sweep(stored()), []);
+	});
+
+	t.it('a secret that the caller sends is still checked', () => {
+		let r = secret_rules.replace(stored(), ctx(), 'r_existing',
+		                             { target: 'DROP', match: { src_zone: 'wan' }, secret: 'two' });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'secret');
+		t.assert_equal(r.body.errors[0].code, 'invalid_type');
+	});
 });
 
 t.describe('handler.patch', () => {
@@ -1639,6 +1701,24 @@ t.describe('handler.sweep', () => {
 		t.assert_equal(length(found), 1);
 		t.assert_false(found[0].managed);
 	});
+
+	// Without it the sweep cannot tell a value that the daemon reads today from one that it
+	// reads only once the section is enabled.
+	t.it('says whether the daemon reads a value that a validate_new() rule refuses', () => {
+		let h = handler.make({ ...rules_mod, validate_new: () => [
+			{ field: 'target', code: 'invalid_format', message: 'a' },
+			{ field: 'name', code: 'invalid_format', message: 'b', live: false },
+		] }, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let c = with_zones();
+		c._state.uci.firewall.r1 = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
+		let errs = h.sweep(c)[0].errors;
+		t.assert_deep_equal(map(errs, (e) => [ e.field, e.live ]), [ [ 'target', true ], [ 'name', false ] ]);
+	});
 });
 
 // The singleton sweep is a separate code path from the CRUD one and was, at one
@@ -1678,6 +1758,23 @@ t.describe('handler.make_singleton object guard', () => {
 		let r = sg.patch(c, ctx(), null);
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.forward, 'REJECT');
+	});
+
+	// Without the stored view, every error that validate_new() finds in the stored section
+	// counts as new, so a singleton that adopted it would refuse every write.
+	t.it('refuses only a validate_new() error that the PATCH adds', () => {
+		let strict = handler.make_singleton({ ...defaults_mod, validate_new: (b) =>
+			(b.forward == 'REJECT') ? [ { field: 'forward', code: 'invalid_format', message: 'x' } ] : [],
+		}, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		t.assert_equal(strict.patch(seeded(), ctx(), { input: 'DROP' }).status, 200);
+		let c = seeded();
+		c._state.uci.firewall.defaults.forward = 'DROP';
+		t.assert_equal(strict.patch(c, ctx(), { forward: 'REJECT' }).status, 422);
 	});
 });
 

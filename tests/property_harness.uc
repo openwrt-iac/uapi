@@ -19,10 +19,10 @@ const TYPABLE = "abc 123 !@#$%^&*()_+-=[]{}|;:'\",.<>/?`~\n\r\t\0";
 
 function rstring(rng, min, max, alphabet) {
 	let n = rint(rng, min, max);
-	let s = "";
+	let out = [];
 	let abc = alphabet ?? ALPHA;
-	for (let i = 0; i < n; i++) s = s + substr(abc, rng() % length(abc), 1);
-	return s;
+	for (let i = 0; i < n; i++) push(out, substr(abc, rng() % length(abc), 1));
+	return join("", out);
 }
 
 function rmac(rng) {
@@ -65,12 +65,19 @@ function fuzz_any(rng) {
 	return null;
 }
 
-function fuzz_object(rng) {
-	// Force the top-level to be an object the way our validates expect.
+// Random names alone almost never name a field, so a validate() that faults on a wrong type
+// went unseen: half the keys come from the resource's own properties, nested ones included.
+// The LCG's low bits cycle, hence the shift.
+function fuzz_object(rng, props) {
+	let names = (type(props) == "object") ? keys(props) : [];
 	let o = {};
 	let n = 1 + rng() % 12;
-	for (let i = 0; i < n; i++)
-		o[rstring(rng, 1, 12, ALPHA)] = fuzz_any(rng);
+	for (let i = 0; i < n; i++) {
+		let k = (length(names) > 0 && (rng() >> 16) & 1) ? names[rng() % length(names)]
+		                                                 : rstring(rng, 1, 12, ALPHA);
+		let sub = (type(props?.[k]) == "object") ? props[k].properties : null;
+		o[k] = (sub != null && (rng() >> 16) & 1) ? fuzz_object(rng, sub) : fuzz_any(rng);
+	}
 	return o;
 }
 
@@ -78,10 +85,14 @@ function check_validate_total(resource, n_iterations, seed) {
 	let rng = lcg(seed);
 	let surprises = [];
 	for (let i = 0; i < n_iterations; i++) {
-		let body = fuzz_object(rng);
+		let body = fuzz_object(rng, resource.schema_properties);
 		let errs = null;
 		let threw = null;
-		try { errs = resource.validate(body, null, null); }
+		try {
+			errs = resource.validate(body, null, null);
+			if (resource.validate_new != null && type(resource.validate_new(body)) != "array")
+				threw = "validate_new did not return an array";
+		}
 		catch (e) { threw = "" + e; }
 		if (threw != null) {
 			push(surprises, { iter: i, body: body, threw: threw });
