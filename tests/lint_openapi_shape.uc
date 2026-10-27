@@ -358,25 +358,26 @@ for (let p in paths_for_body) {
 	}
 }
 
-function without_prose(v) {
-	if (type(v) == "array") return map(v, (e) => without_prose(e));
+function without_annotations(v) {
+	if (type(v) == "array") return map(v, (e) => without_annotations(e));
 	if (type(v) != "object") return v;
 	let out = {};
 	for (let k, s in v) {
-		if (k == "description" || k == "example") continue;
+		if (k == "description" || k == "example" || k == "default") continue;
 		if (k == "properties" && type(s) == "object") {
 			out[k] = {};
-			for (let name, p in s) out[k][name] = without_prose(p);
+			for (let name, p in s) out[k][name] = without_annotations(p);
 		}
-		else out[k] = without_prose(s);
+		else out[k] = without_annotations(s);
 	}
 	return out;
 }
 
-// A merge PATCH (RFC 7396) is merged into the stored section and only the result is validated,
-// so a body that names one field is valid. The body schema used to be an allOf of the Request,
-// which carried the create's `required` and its conditionals: a strict client refused
-// `{"ssid": "x"}` on a wireless interface for want of `device`, a body the server takes.
+// The server type-checks a merge PATCH (RFC 7396) body, merges it into the stored section, and
+// checks the required fields on the result, so a body that names one field is valid. The body
+// schema used to be an allOf of the Request, which carried the create's `required` and its
+// conditionals: a strict client refused `{"ssid": "x"}` on a wireless interface for want of
+// `device`, a body the server takes.
 let merge_bodies = 0;
 for (let p in paths) {
 	let body = paths[p].patch?.requestBody?.content?.["application/json"]?.schema;
@@ -390,8 +391,9 @@ for (let p in paths) {
 			note(where, sprintf("is the merge-patch body of PATCH %s and declares %s, which refuses a partial body that the server merges and accepts", p, kw));
 
 	// A Patch is its Request with the requirements taken out, at the top level and on a nested
-	// object, which default_merge_for_patch merges into the stored one too. Prose is left to the
-	// Request. Any other difference is a value that PATCH and PUT disagree about.
+	// object, which default_merge_for_patch merges into the stored one too. Descriptions, examples
+	// and defaults are left to the Request. Any other difference is a value that PATCH and PUT
+	// disagree about.
 	if (name == null || substr(name, -5) != "Patch") continue;
 	let request = substr(name, 0, length(name) - 5) + "Request";
 	let req = schemas[request] ?? {};
@@ -409,7 +411,7 @@ for (let p in paths) {
 			want = { ...want };
 			delete want.required;
 		}
-		if (sprintf("%J", without_prose(want)) != sprintf("%J", without_prose(pp[k])))
+		if (sprintf("%J", without_annotations(want)) != sprintf("%J", without_annotations(pp[k])))
 			note(where + "/properties/" + k,
 			     sprintf("differs from %s/properties/%s with its `required` removed", request, k));
 	}

@@ -282,19 +282,22 @@ function project_conditional(conditional, props, where, declared) {
 // of `ipaddrs`, while the server took both. default_merge_for_patch merges a nested object such
 // as a redirect's `match` into the stored one too, so a nested `required` goes as well.
 //
-// The copy keeps what a validator reads and leaves the prose to the Request: the document ships
-// on the router, and copied descriptions made it 10% larger.
-function without_prose(v) {
-	if (type(v) == "array") return map(v, (e) => without_prose(e));
+// The server type-checks the body itself, so the copy keeps the types, enums, patterns and
+// bounds. Descriptions and examples stay in the Request, because the document ships on the
+// router. A deprecated node keeps its description, which is the only place that says why. A
+// default goes: a merge-patch body has none, and a client that fills defaults would send them on
+// every PATCH and overwrite what is stored.
+function patch_copy(v) {
+	if (type(v) == "array") return map(v, (e) => patch_copy(e));
 	if (type(v) != "object") return v;
 	let out = {};
 	for (let k, s in v) {
-		if (k == "description" || k == "example") continue;
+		if (k == "default" || k == "example" || (k == "description" && v.deprecated !== true)) continue;
 		if (k == "properties" && type(s) == "object") {
 			out[k] = {};
-			for (let name, p in s) out[k][name] = without_prose(p);
+			for (let name, p in s) out[k][name] = patch_copy(p);
 		}
-		else out[k] = without_prose(s);
+		else out[k] = patch_copy(s);
 	}
 	return out;
 }
@@ -302,7 +305,7 @@ function without_prose(v) {
 function patch_schema(req, request_ref) {
 	let props = {};
 	for (let k, v in req.properties) {
-		props[k] = without_prose(v);
+		props[k] = patch_copy(v);
 		if (type(v) == "object") delete props[k].required;
 	}
 	let out = { ...req, properties: props,
@@ -585,7 +588,9 @@ function build_singleton_paths(ep) {
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
 			           // A singleton has no POST or PUT, so its Request already is the merge-patch
-			           // body, and lint-openapi-shape keeps it free of anything a partial body breaks.
+			           // body. lint-openapi-shape refuses a top-level `required` or `allOf` on it. A
+			           // nested `required` would hold, because a singleton PATCH replaces a nested
+			           // object whole.
 			           "requestBody": { "required": true, "content": {
 			             "application/json":            { "schema": { "$ref": "#/components/schemas/" + request_ref } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
