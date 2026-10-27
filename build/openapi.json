@@ -756,12 +756,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallRulesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallRulesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -1398,12 +1393,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallZonesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallZonesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -2040,12 +2030,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallRedirectsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallRedirectsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -2682,12 +2667,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallNatRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallNatPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -3324,12 +3304,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallForwardingsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallForwardingsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -3688,12 +3663,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/FirewallDefaultsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/FirewallDefaultsRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -4156,12 +4126,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkInterfacesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkInterfacesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -4810,12 +4775,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkDevicesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkDevicesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -5458,12 +5418,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkRoutesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkRoutesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -6100,12 +6055,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkRulesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkRulesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -6748,12 +6698,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkBridgeVlansRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkBridgeVlansPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -7396,12 +7341,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/NetworkWireguardPeersRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/NetworkWireguardPeersPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -8038,12 +7978,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/WirelessDevicesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/WirelessDevicesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -8680,12 +8615,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/WirelessInterfacesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/WirelessInterfacesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -9322,12 +9252,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/DhcpHostsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/DhcpHostsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -10174,12 +10099,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/DhcpServersRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/DhcpServersPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -10538,12 +10458,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/DhcpDnsmasqRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/DhcpDnsmasqRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -10722,12 +10637,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/DhcpOdhcpdRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/DhcpOdhcpdRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -10906,12 +10816,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SystemRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SystemRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -11368,12 +11273,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SystemTimeserversRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SystemTimeserversPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -12010,12 +11910,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/DropbearInstancesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/DropbearInstancesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -12652,12 +12547,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UhttpdInstancesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UhttpdInstancesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -13294,12 +13184,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UhttpdCertsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UhttpdCertsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -13658,12 +13543,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UnboundServerRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UnboundServerRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -13842,12 +13722,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UnboundSrvRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UnboundSrvRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -14026,12 +13901,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UnboundExtRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UnboundExtRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -14488,12 +14358,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SqmQueuesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SqmQueuesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -15130,12 +14995,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SnmpdAgentsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SnmpdAgentsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -15772,12 +15632,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SnmpdCom2secsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SnmpdCom2secsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -16414,12 +16269,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SnmpdGroupsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SnmpdGroupsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17056,12 +16906,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SnmpdAccessesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SnmpdAccessesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17420,12 +17265,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/SnmpdSystemRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/SnmpdSystemRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -17604,12 +17444,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/LldpdConfigRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/LldpdConfigRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -17788,12 +17623,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfigRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfigRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -17972,12 +17802,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/VnstatConfigRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/VnstatConfigRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -18156,12 +17981,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/Mwan3GlobalsRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/Mwan3GlobalsRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -18618,12 +18438,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/Mwan3InterfacesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/Mwan3InterfacesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -19260,12 +19075,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/Mwan3MembersRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/Mwan3MembersPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -19902,12 +19712,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/Mwan3PoliciesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/Mwan3PoliciesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -20544,12 +20349,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/Mwan3RulesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/Mwan3RulesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -20908,12 +20708,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/UsteerConfigRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/UsteerConfigRequest"
 							}
 						},
 						"application/json-patch+json": {
@@ -21370,12 +21165,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"allOf": [
-									{
-										"$ref": "#/components/schemas/OpenvpnInstancesRequest"
-									}
-								],
-								"description": "merge-patch partial body: any subset of the request schema"
+								"$ref": "#/components/schemas/OpenvpnInstancesPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -25245,6 +25035,151 @@
 					}
 				]
 			},
+			"FirewallRulesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallRulesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"maxLength": 122
+					},
+					"target": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP",
+							"NOTRACK",
+							"MARK",
+							"DSCP",
+							null
+						]
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					},
+					"set_mark": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+					},
+					"set_xmark": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+					},
+					"set_dscp": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$"
+					},
+					"match": {
+						"type": "object",
+						"properties": {
+							"src_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_ip": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string"
+								}
+							},
+							"dest_ip": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string"
+								}
+							},
+							"src_port": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								}
+							},
+							"dest_port": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string",
+									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								}
+							},
+							"proto": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string",
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
+								}
+							},
+							"family": {
+								"type": "string",
+								"enum": [
+									"any",
+									"ipv4",
+									"ipv6"
+								],
+								"default": "any"
+							},
+							"mark": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+							},
+							"dscp": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$"
+							}
+						}
+					}
+				}
+			},
 			"FirewallZonesResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci firewall.zone",
@@ -25406,6 +25341,76 @@
 				"required": [
 					"name"
 				]
+			},
+			"FirewallZonesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallZonesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[a-zA-Z0-9_-]+$"
+					},
+					"input": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						],
+						"default": "REJECT"
+					},
+					"output_policy": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						],
+						"default": "REJECT"
+					},
+					"forward": {
+						"type": "string",
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP"
+						],
+						"default": "REJECT"
+					},
+					"network": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"masq": {
+						"type": "boolean",
+						"default": false
+					},
+					"mtu_fix": {
+						"type": "boolean",
+						"default": false
+					},
+					"family": {
+						"type": "string",
+						"enum": [
+							"any",
+							"ipv4",
+							"ipv6"
+						],
+						"default": "any"
+					}
+				}
 			},
 			"FirewallRedirectsResponse": {
 				"type": "object",
@@ -25814,6 +25819,143 @@
 					}
 				]
 			},
+			"FirewallRedirectsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallRedirectsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"maxLength": 122
+					},
+					"target": {
+						"type": "string",
+						"enum": [
+							"DNAT",
+							"SNAT"
+						],
+						"default": "DNAT"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					},
+					"match": {
+						"type": "object",
+						"properties": {
+							"src_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_ip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_port": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+							},
+							"src_dport": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+							},
+							"src_dip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_ip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_port": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+							},
+							"proto": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string",
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
+								}
+							},
+							"family": {
+								"type": "string",
+								"enum": [
+									"any",
+									"ipv4",
+									"ipv6"
+								],
+								"default": "any"
+							},
+							"mark": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+							}
+						}
+					},
+					"reflection": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"reflection_src": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"internal",
+							"external",
+							null
+						]
+					},
+					"reflection_zone": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					}
+				}
+			},
 			"FirewallNatResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci firewall.nat",
@@ -26129,6 +26271,121 @@
 					}
 				]
 			},
+			"FirewallNatPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallNatRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"maxLength": 122
+					},
+					"target": {
+						"type": "string",
+						"enum": [
+							"SNAT",
+							"MASQUERADE",
+							"ACCEPT"
+						],
+						"default": "MASQUERADE"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					},
+					"snat_ip": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"snat_port": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"match": {
+						"type": "object",
+						"properties": {
+							"src_zone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"device": {
+								"type": [
+									"string",
+									"null"
+								],
+								"maxLength": 15
+							},
+							"src_ip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"src_port": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+							},
+							"dest_ip": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"dest_port": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+							},
+							"proto": {
+								"type": [
+									"array",
+									"null"
+								],
+								"items": {
+									"type": "string",
+									"pattern": "^!?[A-Za-z0-9*][A-Za-z0-9-]{0,31}$"
+								}
+							},
+							"mark": {
+								"type": [
+									"string",
+									"null"
+								],
+								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+							},
+							"family": {
+								"type": [
+									"string",
+									"null"
+								],
+								"enum": [
+									"any",
+									"ipv4",
+									"ipv6",
+									null
+								]
+							}
+						}
+					}
+				}
+			},
 			"FirewallForwardingsResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci firewall.forwarding",
@@ -26219,6 +26476,41 @@
 					"src",
 					"dest"
 				]
+			},
+			"FirewallForwardingsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallForwardingsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"src": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"dest": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"family": {
+						"type": "string",
+						"enum": [
+							"any",
+							"ipv4",
+							"ipv6"
+						],
+						"default": "any"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					}
+				}
 			},
 			"FirewallDefaultsResponse": {
 				"type": "object",
@@ -27648,6 +27940,260 @@
 					}
 				]
 			},
+			"NetworkInterfacesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkInterfacesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"device": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"proto": {
+						"type": "string",
+						"default": "none",
+						"enum": [
+							"static",
+							"dhcp",
+							"dhcpv6",
+							"pppoe",
+							"none",
+							"ppp",
+							"wwan",
+							"wireguard"
+						]
+					},
+					"dns": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"ip6assign": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 128
+					},
+					"ip6hint": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ip6ifaceid": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ip6class": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"ip6weight": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 2147483647
+					},
+					"mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 68,
+						"maximum": 65535
+					},
+					"auto": {
+						"type": "boolean",
+						"default": true
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					},
+					"ip4table": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ip6table": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"defaultroute": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"delegate": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"ipaddrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"ip6addrs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"netmask": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"broadcast": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ip6gw": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ip6prefix": {
+						"type": [
+							"array",
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"addresses": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"private_key": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"listen_port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 65535
+					},
+					"nohostroute": {
+						"type": "boolean"
+					},
+					"peerdns": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"broadcast_flag": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"hostname": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"clientid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f:]*$"
+					},
+					"reqprefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$"
+					},
+					"reqaddress": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"try",
+							"force",
+							"none",
+							null
+						]
+					},
+					"sourcefilter": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					}
+				}
+			},
 			"NetworkDevicesResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci network.device",
@@ -27860,6 +28406,80 @@
 					}
 				]
 			},
+			"NetworkDevicesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkDevicesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"bridge",
+							"8021q",
+							"8021ad",
+							"macvlan",
+							"veth",
+							"tun",
+							"tap",
+							null
+						]
+					},
+					"ports": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"vid": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 4094
+					},
+					"ifname": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 68,
+						"maximum": 65535
+					},
+					"macaddr": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
+					},
+					"ipv6": {
+						"type": "boolean",
+						"default": true
+					}
+				}
+			},
 			"NetworkRoutesResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci network.route",
@@ -28050,6 +28670,87 @@
 				"required": [
 					"target"
 				]
+			},
+			"NetworkRoutesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkRoutesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"target": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"netmask": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"gateway": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"table": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 4294967295
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"source": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"unicast",
+							"blackhole",
+							"unreachable",
+							"prohibit",
+							"throw",
+							"anycast",
+							"multicast",
+							"local",
+							"broadcast"
+						],
+						"default": "unicast"
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					}
+				}
 			},
 			"NetworkRulesResponse": {
 				"type": "object",
@@ -28376,6 +29077,89 @@
 					}
 				]
 			},
+			"NetworkRulesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkRulesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"in": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"out": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"src": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"dest": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"priority": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 32766
+					},
+					"lookup": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 4294967295
+					},
+					"goto": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 2147483647
+					},
+					"action": {
+						"type": "string",
+						"enum": [
+							"lookup",
+							"goto",
+							"unreachable",
+							"prohibit",
+							"blackhole",
+							"throw"
+						]
+					},
+					"invert": {
+						"type": "boolean",
+						"default": false
+					},
+					"mark": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					}
+				}
+			},
 			"NetworkBridgeVlansResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci network.bridge-vlan",
@@ -28463,6 +29247,40 @@
 					"device",
 					"vlan"
 				]
+			},
+			"NetworkBridgeVlansPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkBridgeVlansRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"device": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"vlan": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 4094
+					},
+					"ports": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9._-]+(:[tu*]+)?$"
+						}
+					}
+				}
 			},
 			"NetworkWireguardPeersResponse": {
 				"type": "object",
@@ -28644,6 +29462,76 @@
 					"public_key",
 					"allowed_ips"
 				]
+			},
+			"NetworkWireguardPeersPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of NetworkWireguardPeersRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"interface": {
+						"type": "string"
+					},
+					"description": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"public_key": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+					},
+					"allowed_ips": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"endpoint_host": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"endpoint_port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"persistent_keepalive": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 65535
+					},
+					"route_allowed_ips": {
+						"type": "boolean",
+						"default": false
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					},
+					"preshared_key": {
+						"type": "string",
+						"writeOnly": true,
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+					}
+				}
 			},
 			"WirelessDevicesResponse": {
 				"type": "object",
@@ -28880,6 +29768,110 @@
 				"required": [
 					"type"
 				]
+			},
+			"WirelessDevicesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of WirelessDevicesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"mac80211",
+							"broadcom",
+							null
+						]
+					},
+					"path": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"phy": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"macaddr": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"radio": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"band": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"2g",
+							"5g",
+							"6g",
+							"60g",
+							null
+						]
+					},
+					"channel": {
+						"type": [
+							"integer",
+							"string",
+							"null"
+						],
+						"pattern": "^auto$",
+						"minimum": 0,
+						"maximum": 233
+					},
+					"htmode": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"country": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^([A-Za-z]{2}|00)$"
+					},
+					"txpower": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 30
+					},
+					"cell_density": {
+						"type": "integer",
+						"default": 0,
+						"minimum": 0,
+						"maximum": 3
+					},
+					"legacy_rates": {
+						"type": "boolean",
+						"default": false
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					}
+				}
 			},
 			"WirelessInterfacesResponse": {
 				"type": "object",
@@ -29707,6 +30699,230 @@
 					}
 				]
 			},
+			"WirelessInterfacesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of WirelessInterfacesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"device": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"network": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"mode": {
+						"type": "string",
+						"enum": [
+							"ap",
+							"sta",
+							"adhoc",
+							"monitor",
+							"mesh"
+						],
+						"default": "ap"
+					},
+					"ssid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"maxLength": 32
+					},
+					"encryption": {
+						"type": "string",
+						"enum": [
+							"none",
+							"wep",
+							"owe",
+							"psk",
+							"psk2",
+							"psk-mixed",
+							"sae",
+							"sae-mixed",
+							"wpa",
+							"wpa2",
+							"wpa3",
+							"wpa3-mixed",
+							"psk+ccmp",
+							"psk+ccmp256",
+							"psk+gcmp",
+							"psk+gcmp256",
+							"psk+tkip",
+							"psk+tkip+ccmp",
+							"psk+aes",
+							"psk+tkip+aes",
+							"psk+aes+tkip",
+							"psk+ccmp+tkip",
+							"psk2+ccmp",
+							"psk2+ccmp256",
+							"psk2+gcmp",
+							"psk2+gcmp256",
+							"psk2+tkip",
+							"psk2+tkip+ccmp",
+							"psk2+aes",
+							"psk2+tkip+aes",
+							"psk2+aes+tkip",
+							"psk2+ccmp+tkip",
+							"psk-mixed+ccmp",
+							"psk-mixed+ccmp256",
+							"psk-mixed+gcmp",
+							"psk-mixed+gcmp256",
+							"psk-mixed+tkip",
+							"psk-mixed+tkip+ccmp",
+							"psk-mixed+aes",
+							"psk-mixed+tkip+aes",
+							"psk-mixed+aes+tkip",
+							"psk-mixed+ccmp+tkip",
+							"sae+ccmp",
+							"sae+ccmp256",
+							"sae+gcmp",
+							"sae+gcmp256",
+							"sae+tkip",
+							"sae+tkip+ccmp",
+							"sae+aes",
+							"sae+tkip+aes",
+							"sae+aes+tkip",
+							"sae+ccmp+tkip",
+							"wpa+ccmp",
+							"wpa+ccmp256",
+							"wpa+gcmp",
+							"wpa+gcmp256",
+							"wpa+tkip",
+							"wpa+tkip+ccmp",
+							"wpa+aes",
+							"wpa+tkip+aes",
+							"wpa+aes+tkip",
+							"wpa+ccmp+tkip",
+							"wpa2+ccmp",
+							"wpa2+ccmp256",
+							"wpa2+gcmp",
+							"wpa2+gcmp256",
+							"wpa2+tkip",
+							"wpa2+tkip+ccmp",
+							"wpa2+aes",
+							"wpa2+tkip+aes",
+							"wpa2+aes+tkip",
+							"wpa2+ccmp+tkip",
+							"wpa3+ccmp",
+							"wpa3+ccmp256",
+							"wpa3+gcmp",
+							"wpa3+gcmp256",
+							"wpa3+tkip",
+							"wpa3+tkip+ccmp",
+							"wpa3+aes",
+							"wpa3+tkip+aes",
+							"wpa3+aes+tkip",
+							"wpa3+ccmp+tkip",
+							"wpa3-mixed+ccmp",
+							"wpa3-mixed+ccmp256",
+							"wpa3-mixed+gcmp",
+							"wpa3-mixed+gcmp256",
+							"wpa3-mixed+tkip",
+							"wpa3-mixed+tkip+ccmp",
+							"wpa3-mixed+aes",
+							"wpa3-mixed+tkip+aes",
+							"wpa3-mixed+aes+tkip",
+							"wpa3-mixed+ccmp+tkip"
+						],
+						"default": "none"
+					},
+					"disabled": {
+						"type": "boolean",
+						"default": false
+					},
+					"hidden": {
+						"type": "boolean",
+						"default": false
+					},
+					"isolate": {
+						"type": "boolean",
+						"default": false
+					},
+					"ieee80211r": {
+						"type": "boolean",
+						"default": false
+					},
+					"ft_over_ds": {
+						"type": "boolean",
+						"default": false
+					},
+					"ft_psk_generate_local": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"mobility_domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{4}$"
+					},
+					"nasid": {
+						"type": [
+							"string",
+							"null"
+						],
+						"maxLength": 1024
+					},
+					"reassociation_deadline": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1000,
+						"maximum": 65535
+					},
+					"r0_key_lifetime": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"r1_key_holder": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9A-Fa-f]{12}$"
+					},
+					"pmk_r1_push": {
+						"type": "boolean",
+						"default": false
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"r0kh": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"maxLength": 1024
+						},
+						"writeOnly": true
+					},
+					"r1kh": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"maxLength": 1024
+						},
+						"writeOnly": true
+					}
+				}
+			},
 			"DhcpHostsResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci dhcp.host",
@@ -29935,6 +31151,89 @@
 						]
 					}
 				]
+			},
+			"DhcpHostsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DhcpHostsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"macs": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"duid": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"hostid": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ip": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"leasetime": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"tag": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"match_tag": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"dns": {
+						"type": "boolean",
+						"default": false
+					},
+					"broadcast": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"instance": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
 			},
 			"DhcpLeasesResponse": {
 				"type": "object",
@@ -30249,6 +31548,108 @@
 				"required": [
 					"interface"
 				]
+			},
+			"DhcpServersPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DhcpServersRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"start": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 254
+					},
+					"limit": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 254
+					},
+					"leasetime": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9]+[smhdwMY]?$"
+					},
+					"ignore": {
+						"type": "boolean",
+						"default": false
+					},
+					"force": {
+						"type": "boolean",
+						"default": false
+					},
+					"dynamicdhcp": {
+						"type": "boolean",
+						"default": true
+					},
+					"ra": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"disabled",
+							"server",
+							"relay",
+							"hybrid",
+							null
+						]
+					},
+					"dhcpv6": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"disabled",
+							"server",
+							"relay",
+							"hybrid",
+							null
+						]
+					},
+					"ra_default": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 2
+					},
+					"domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^#*([^\"\n\r \t#*?[]#*|[ \t])*$"
+					},
+					"dhcp_option": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^#*((\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?([^\"\n\r \t#]#*|[ \t]))*(\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?$"
+						}
+					}
+				}
 			},
 			"DhcpDnsmasqResponse": {
 				"type": "object",
@@ -30862,6 +32263,43 @@
 					}
 				]
 			},
+			"SystemTimeserversPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SystemTimeserversRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					},
+					"enable_server": {
+						"type": "boolean",
+						"default": false
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"server": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"use_dhcp": {
+						"type": "boolean",
+						"default": true
+					}
+				}
+			},
 			"DropbearInstancesResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci dropbear.dropbear",
@@ -30972,6 +32410,56 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Allow remote port forwarding"
+					}
+				}
+			},
+			"DropbearInstancesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DropbearInstancesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"enable": {
+						"type": "boolean",
+						"default": true
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"password_auth": {
+						"type": "boolean",
+						"default": true
+					},
+					"root_password_auth": {
+						"type": "boolean",
+						"default": true
+					},
+					"root_login": {
+						"type": "boolean",
+						"default": true
+					},
+					"banner_file": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"gateway_ports": {
+						"type": "boolean",
+						"default": false
 					}
 				}
 			},
@@ -31280,6 +32768,147 @@
 					}
 				}
 			},
+			"UhttpdInstancesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UhttpdInstancesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"listen_http": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+						}
+					},
+					"listen_https": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+						}
+					},
+					"home": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"key": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"cgi_prefix": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"lua_prefix": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"ucode_prefix": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"max_requests": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"max_connections": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"script_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"network_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"http_keepalive": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"tcp_keepalive": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"index_page": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"error_page": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"no_dirlists": {
+						"type": "boolean",
+						"default": false
+					},
+					"no_symlinks": {
+						"type": "boolean",
+						"default": false
+					},
+					"rfc1918_filter": {
+						"type": "boolean",
+						"default": false
+					}
+				}
+			},
 			"UhttpdCertsResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci uhttpd.cert",
@@ -31419,6 +33048,62 @@
 				"required": [
 					"commonname"
 				]
+			},
+			"UhttpdCertsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UhttpdCertsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"days": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 36500
+					},
+					"bits": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1024
+					},
+					"commonname": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"organization": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"location": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"state": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"country": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[A-Za-z]{2}$"
+					}
+				}
 			},
 			"UnboundServerResponse": {
 				"type": "object",
@@ -32162,6 +33847,84 @@
 					"interface"
 				]
 			},
+			"SqmQueuesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SqmQueuesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": true
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"download": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"upload": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"qdisc": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"cake",
+							"fq_codel",
+							"pie",
+							"htb",
+							null
+						]
+					},
+					"script": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"piece_of_cake.qos",
+							"simple.qos",
+							"simplest.qos",
+							"layer_cake.qos",
+							null
+						]
+					},
+					"linklayer": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"none",
+							"ethernet",
+							"atm",
+							null
+						]
+					},
+					"overhead": {
+						"type": [
+							"integer",
+							"null"
+						]
+					}
+				}
+			},
 			"SnmpdAgentsResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci snmpd.agent",
@@ -32197,6 +33960,26 @@
 						"type": "string",
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"agentaddress": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^\n\r]*$"
+						}
+					}
+				}
+			},
+			"SnmpdAgentsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SnmpdAgentsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
 					},
 					"agentaddress": {
 						"type": [
@@ -32294,6 +34077,37 @@
 					"community"
 				]
 			},
+			"SnmpdCom2secsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SnmpdCom2secsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"secname": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"source": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"community": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					}
+				}
+			},
 			"SnmpdGroupsResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci snmpd.group",
@@ -32382,6 +34196,42 @@
 				"required": [
 					"group"
 				]
+			},
+			"SnmpdGroupsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SnmpdGroupsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"version": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"v1",
+							"v2c",
+							"usm",
+							null
+						]
+					},
+					"secname": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					}
+				}
 			},
 			"SnmpdAccessesResponse": {
 				"type": "object",
@@ -32564,6 +34414,87 @@
 				"required": [
 					"group"
 				]
+			},
+			"SnmpdAccessesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SnmpdAccessesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"context": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r*?[]*$"
+					},
+					"version": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"any",
+							"v1",
+							"v2c",
+							"usm",
+							null
+						]
+					},
+					"level": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"noauth",
+							"auth",
+							"priv",
+							null
+						]
+					},
+					"prefix": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"exact",
+							"prefix",
+							null
+						]
+					},
+					"read": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"write": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					},
+					"notify": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r]*$"
+					}
+				}
 			},
 			"SnmpdSystemResponse": {
 				"type": "object",
@@ -33437,6 +35368,185 @@
 					"family"
 				]
 			},
+			"Mwan3InterfacesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of Mwan3InterfacesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": false
+					},
+					"family": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ipv4",
+							"ipv6",
+							null
+						]
+					},
+					"track_ip": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"track_method": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ping",
+							"arping",
+							"httping",
+							"nping-tcp",
+							"nping-udp",
+							null
+						]
+					},
+					"reliability": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"probe_count": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 10
+					},
+					"size": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65507
+					},
+					"max_ttl": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 255
+					},
+					"check_quality": {
+						"type": "boolean",
+						"default": false
+					},
+					"failure_latency": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"failure_loss": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 100
+					},
+					"recovery_latency": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"recovery_loss": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 100
+					},
+					"timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 60
+					},
+					"interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"failure_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"recovery_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"keep_failure_interval": {
+						"type": "boolean",
+						"default": false
+					},
+					"down": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"up": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1
+					},
+					"flush_conntrack": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"enum": [
+								"ifup",
+								"ifdown",
+								"connected",
+								"disconnected",
+								"never"
+							]
+						}
+					}
+				}
+			},
 			"Mwan3MembersResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci mwan3.member",
@@ -33522,6 +35632,38 @@
 					"interface"
 				]
 			},
+			"Mwan3MembersPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of Mwan3MembersRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"metric": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000
+					},
+					"weight": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000
+					}
+				}
+			},
 			"Mwan3PoliciesResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci mwan3.policy",
@@ -33602,6 +35744,37 @@
 				"required": [
 					"use_members"
 				]
+			},
+			"Mwan3PoliciesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of Mwan3PoliciesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"last_resort": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"unreachable",
+							"blackhole",
+							null
+						]
+					},
+					"use_members": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					}
+				}
 			},
 			"Mwan3RulesResponse": {
 				"type": "object",
@@ -33806,6 +35979,95 @@
 				"required": [
 					"use_policy"
 				]
+			},
+			"Mwan3RulesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of Mwan3RulesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"family": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ipv4",
+							"ipv6",
+							null
+						]
+					},
+					"proto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"tcp",
+							"udp",
+							"icmp",
+							"all",
+							null
+						]
+					},
+					"src_ip": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"src_port": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r*?[]*$"
+					},
+					"dest_ip": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"dest_port": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r*?[]*$"
+					},
+					"sticky": {
+						"type": "boolean",
+						"default": false
+					},
+					"timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 86400
+					},
+					"ipset": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r*?[]*$"
+					},
+					"use_policy": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"logging": {
+						"type": "boolean",
+						"default": false
+					}
+				}
 			},
 			"UsteerConfigResponse": {
 				"type": "object",
@@ -35045,6 +37307,367 @@
 						"type": "string",
 						"writeOnly": true,
 						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12."
+					}
+				}
+			},
+			"OpenvpnInstancesPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of OpenvpnInstancesRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"enabled": {
+						"type": "boolean",
+						"default": false
+					},
+					"client": {
+						"type": "boolean",
+						"default": false
+					},
+					"dev": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"dev_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"tun",
+							"tap",
+							null
+						]
+					},
+					"proto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"udp",
+							"tcp",
+							"tcp-client",
+							"tcp-server",
+							"udp4",
+							"tcp4",
+							"tcp4-client",
+							"tcp4-server",
+							"udp6",
+							"tcp6",
+							"tcp6-client",
+							"tcp6-server",
+							null
+						]
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"lport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 65535
+					},
+					"rport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"remote": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"nobind": {
+						"type": "boolean",
+						"default": false
+					},
+					"float": {
+						"type": "boolean",
+						"default": false
+					},
+					"topology": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"net30",
+							"p2p",
+							"subnet",
+							null
+						]
+					},
+					"server": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"server_bridge": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"push": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"route": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"route_gateway": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ifconfig": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ifconfig_pool": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"client_to_client": {
+						"type": "boolean",
+						"default": false
+					},
+					"duplicate_cn": {
+						"type": "boolean",
+						"default": false
+					},
+					"keepalive": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ping": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 3600
+					},
+					"ping_restart": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 86400
+					},
+					"persist_key": {
+						"type": "boolean",
+						"default": false
+					},
+					"persist_tun": {
+						"type": "boolean",
+						"default": false
+					},
+					"comp_lzo": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"yes",
+							"no",
+							"adaptive",
+							null
+						]
+					},
+					"compress": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"lzo",
+							"lz4",
+							"lz4-v2",
+							"stub",
+							"stub-v2",
+							null
+						]
+					},
+					"cipher": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"auth": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ncp_ciphers": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ncp_disable": {
+						"type": "boolean",
+						"default": false
+					},
+					"tls_server": {
+						"type": "boolean",
+						"default": false
+					},
+					"tls_client": {
+						"type": "boolean",
+						"default": false
+					},
+					"tls_crypt": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"ca": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"dh": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"crl_verify": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"remote_cert_tls": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"client",
+							"server",
+							null
+						]
+					},
+					"verify_x509_name": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"user": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"status": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log_append": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"verb": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 11
+					},
+					"mute": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"tls_auth": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"pkcs12": {
+						"type": "string",
+						"writeOnly": true
 					}
 				}
 			}

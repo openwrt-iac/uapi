@@ -134,6 +134,17 @@ a value that breaks the pattern, such as a `clientid` with dashes, so a pattern 
 would be a promise that a GET breaks. The request half keeps every pattern, and the sweep of
 `/diagnostics?validate=1` lists a stored value that breaks one.
 
+The merge-patch body of a PATCH requires nothing, since 3.2.0. The server merges that body into the
+stored section and validates the result, so a body can leave out a field that a create requires.
+The `application/json` body of a CRUD PATCH is `<Name>Patch`, which has the properties of
+`<Name>Request` with the same types and patterns, and no `required` and no conditionals. It
+leaves the descriptions to `<Name>Request`, because the document ships on the router. A nested
+object, such as the `match` of `firewall/redirects`, has no `required` either, because the server
+merges it into the stored object. A singleton has no create, so its PATCH body is `<Name>Request`,
+and that schema has no `required` and no conditionals. The `application/json-patch+json` body is
+`JsonPatch`. Before 3.2.0 the merge-patch body was an `allOf` of the Request, so a strict client
+refused a partial body that the server accepts.
+
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token
 create sends scopes and gets back a token. They are outside the rule, and outside the lint.

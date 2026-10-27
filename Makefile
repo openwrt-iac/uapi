@@ -71,6 +71,7 @@ openapi-validate:
 	@python3 -c 'import json; from openapi_spec_validator import validate; \
 		validate(json.load(open("build/openapi.json"))); \
 		print("OK: build/openapi.json is a valid OpenAPI 3.1 document")'
+	@python3 tests/merge_patch_bodies.py
 
 stage:
 	@rm -rf build/openwrt/uapi/files
