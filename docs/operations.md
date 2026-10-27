@@ -273,7 +273,8 @@ daemon reads the value. Another writer can store a value that such a rule refuse
 the sweep lists it whether the daemon reads it yet or not: the section can be disabled,
 or its mode can leave the field unused. A write is refused for such a value only when it
 adds the error, for example when it changes the field or enables the section. The sweep
-lists the section because another writer, such as LuCI, can enable it later.
+lists the section because another writer, such as LuCI, can enable it later. Each error of such
+a rule has `live`, which is `false` when the daemon does not read the value yet.
 
 Three things worth knowing:
 

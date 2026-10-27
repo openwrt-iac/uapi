@@ -158,11 +158,19 @@ function widen_null(v) {
 // A module nests a schema under `properties` and `items`, as `firewall/nat` keeps `device` under
 // `match`, so the markers of a property apply there too. A marker anywhere else leaks into the
 // document, and lint-openapi-shape stops the build on it.
+//
+// A pattern describes what a write may send. A read returns a value as uci holds it, and uci,
+// LuCI or an older uapi can hold one that breaks the pattern, such as a `clientid` with dashes,
+// so only the request half declares it. The sweep still reports such a value.
 function response_schema(v) {
 	if (type(v) != "object") return v;
 	let w = (v[READ_NULLABLE] === true) ? widen_null(v) : strip_marker(v);
 	if (v[WRITE_STRING] === true)
 		w = { ...w, type: filter(w.type, (t) => t != "string") };
+	if (exists(w, "pattern")) {
+		w = { ...w };
+		delete w.pattern;
+	}
 	if (type(w.properties) == "object") {
 		let p = {};
 		for (let k, s in w.properties) p[k] = response_schema(s);
@@ -1343,6 +1351,8 @@ function build_schemas() {
 									                      "out_of_range", "not_in_enum", "conflict",
 									                      "read_only", "unreadable", "sweep_failed"] },
 									"message": { "type": "string" },
+									"live":    { "type": "boolean",
+									             "description": "Present on an error of a rule that a write applies only when it adds the error. false means that the daemon does not read the value yet, for example because the section is disabled." },
 								},
 							} },
 						},

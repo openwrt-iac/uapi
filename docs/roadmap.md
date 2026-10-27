@@ -477,6 +477,15 @@ stale enough to be misleading:
   field description, the row in `docs/deprecations.md` and the `ip6prefix` example in
   `docs/versioning.md`, and it adds a row to the v3-to-v4 migration document.
 
+- **One rule for newlines in curated strings.** 3.2.0 refuses a newline field by field, after an
+  audit of the daemon that reads each field, and each new field that a daemon reads as one line
+  needs the same audit. About a third of the writable string fields still take a newline or a
+  carriage return, and only `system.notes` holds several lines on purpose. A default refusal of
+  both in `check_schema_types`, with an opt-out annotation for `system.notes`, ends the audits.
+  It is breaking for the free-text fields, such as descriptions, where no daemon gives the
+  evidence that the tightening carve-out needs
+  ([#251](https://github.com/openwrt-iac/uapi/issues/251)).
+
 ## Out of scope by design
 
 - **Localization of error `message` strings.** English-only; codes are

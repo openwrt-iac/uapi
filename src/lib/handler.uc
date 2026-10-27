@@ -300,7 +300,8 @@ function new_errors(resource, after, before) {
 			       || (e.live !== false && !had[id(e)]);
 		});
 	}
-	return map(errs, (e) => ({ field: e.field, code: e.code, message: e.message }));
+	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
+	return map(errs, (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
 }
 
 // schema_body: type-checked by check_schema_types (the wire delta from the
@@ -668,8 +669,9 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		if (touched != null)
 			post = carry_write_only(resource,
 			                        resource.merge_for_patch(post, touched), existing);
-		// From jp.value, not post: post carries the write-only secret back in from uci.
-		return { ok: true, merged: post, schema_body: post,
+		// From jp.value, not post: post carries the write-only secret back in from uci, which
+		// the caller did not send.
+		return { ok: true, merged: post, schema_body: jp.value,
 		         delta: patch_touched_fields(body, jp.value) ?? jp.value };
 	}
 	// A merge patch is a partial object. Anything else used to be folded into the read
@@ -842,16 +844,22 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
+				let found = existing != null && type_predicate(existing['.type']);
+				let existing_view = (resource.validate_new != null && found) ? resource.fromUci(existing, conn) : null;
 				let write_body = carry_write_only(resource, body, existing);
-				let before = (resource.validate_new != null && existing && type_predicate(existing['.type']))
-				             ? carry_write_only(resource, resource.fromUci(existing, conn), existing) : null;
-				let errs = _validate_with_schema(resource, write_body, write_body, c, id, body, before);
+				let before = (existing_view != null) ? carry_write_only(resource, existing_view, existing) : null;
+				// The schema checks only what the caller sent. A carried secret is whatever uci
+				// holds, an option where the schema says list for instance, and the caller can
+				// neither see it nor send it.
+				let errs = _validate_with_schema(resource, body, write_body, c, id, body, before);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!existing || !type_predicate(existing['.type']))
+				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
+				// wireless/interfaces reads with three ubus calls under the lock, so a view that
+				// validate_new() needed is read once.
+				if (existing_view == null) existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -1029,6 +1037,9 @@ function make(resource, opts) {
 	// schema_properties rather than in validate(), so skipping it would miss a
 	// whole class of tightening while looking thorough.
 	//
+	// The schema check runs over the read view and not over the carried secrets, as on a write:
+	// a stored secret is whatever uci holds, and validate() is what judges it.
+	//
 	// carry_write_only makes this the only path that puts a real secret into a body
 	// whose error messages are returned to a caller holding just `:ro`, which the
 	// masked read view never exposes. So no validate() message may interpolate a
@@ -1041,8 +1052,8 @@ function make(resource, opts) {
 			let view, errs;
 			try {
 				view = resource.fromUci(s, conn);
-				let body = carry_write_only(resource, view, s);
-				errs = _validate_with_schema(resource, body, body, conn, id, view);
+				errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
+				                             conn, id, view);
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1137,7 +1148,8 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
+				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1168,8 +1180,8 @@ function make_singleton(resource, opts) {
 		let view, errs;
 		try {
 			view = resource.fromUci(s, conn);
-			let body = carry_write_only(resource, view, s);
-			errs = _validate_with_schema(resource, body, body, conn, id, view);
+			errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
+			                             conn, id, view);
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}
