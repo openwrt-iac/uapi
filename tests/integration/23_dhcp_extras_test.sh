@@ -44,6 +44,32 @@ patched=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" 
 echo "$patched"
 echo "$patched" | tail -1 | grep -q '^200$' || fail "dnsmasq PATCH expected 200"
 echo "$patched" | grep -q '"noresolv": true' || fail "PATCH did not update noresolv"
+# dnsmasq reads a # as a comment only after whitespace, so the port stays part of the value.
+assert_dnsmasq_emits "server=127.0.0.1#5353"
+assert_dnsmasq_loads
+
+echo "--- dhcp/dnsmasq: a double quote or a # after whitespace answers 422 ---"
+for body in '{"domain":"lan\"x"}' '{"server":["1.2.3.4 #x"]}' '{"leasefile":"/tmp/dhcp\"leases"}'; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" -d "$body")
+	echo "$r" | tail -1 | grep -q '^422$' || fail "expected 422 for $body: $r"
+done
+assert_dnsmasq_loads
+
+echo "--- dhcp/servers: dnsmasq parses the dhcp_option strings that the pattern takes ---"
+# This image gives lan no static address, so dnsmasq compiles no dhcp section, and the check runs
+# dnsmasq on the line that the init script writes for a dhcp_option.
+$SSH 'cat > /tmp/uapi_dhcp_option.conf' <<'EOF'
+dhcp-option=lan,66,"1.2.3.4"
+dhcp-option=lan,252,"\n"
+dhcp-option=lan,67,"a b, #c"
+dhcp-option=lan,12,"a\"b"
+dhcp-option=lan,114,http://x/#y
+EOF
+err=$($SSH 'dnsmasq --test -C /tmp/uapi_dhcp_option.conf 2>&1' | grep -v 'syntax check OK' || true)
+[ -z "$err" ] || fail "dnsmasq refused a dhcp_option that the pattern takes: $err"
+$SSH 'printf "dhcp-option=lan,66,\"1.2.3.4\n" > /tmp/uapi_dhcp_option.conf; dnsmasq --test -C /tmp/uapi_dhcp_option.conf 2>&1' \
+	| grep -q 'missing "' || fail "dnsmasq took an unclosed dhcp_option string, which the pattern refuses"
+$SSH 'rm -f /tmp/uapi_dhcp_option.conf'
 
 echo "--- dhcp/dnsmasq: PATCH reset (restore) ---"
 call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" -d '{

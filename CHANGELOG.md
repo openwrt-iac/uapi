@@ -228,6 +228,43 @@ All notable changes to this project will be documented in this file. Format foll
   restore after a failed write still sets such a peer, and leaves its keepalive as the kernel holds
   it, so the peers after it in uci are set too. LuCI's form takes a decimal such as `25.5`, which wg
   refuses. (#253)
+- **`dhcp/dnsmasq` and `dhcp/servers` refuse a double quote and a `#` after whitespace, with 422
+  `invalid_format`.** The init script copies these values into dnsmasq's config without quotes.
+  There, a double quote opens a string. When the string does not close, dnsmasq refuses to start,
+  so DHCP and DNS stopped on the whole router after a write that answered 200. A `#` after
+  whitespace starts a comment, so dnsmasq used only the start of the value. `domain`, `local`,
+  `server` and `address` of `dhcp/dnsmasq`, and `domain` of `dhcp/servers`, now refuse both. A
+  `#` after another character stays valid, as in `/#/` or `1.2.3.4#53`. `leasefile` and
+  `resolvfile` refuse a double quote too. `dhcp_option` of `dhcp/servers` takes a quoted string
+  with backslash escapes, as dnsmasq does. It refuses a string that does not close, a string
+  right after another string, and a `#` after whitespace or right after a string. That tightening
+  uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller can
+  rely on, and it fails loudly. No value in the uci configs of the OpenWrt feeds is refused.
+  (#254)
+- **`lldpd/config` refuses a backslash in `lldp_description` and `lldp_mgmt_ip`, and a quote,
+  whitespace, a backslash or a `#` in an `interface` entry, with 422 `invalid_format`.**
+  lldpd.init writes these values on lldpcli command lines. lldpcli reads a backslash as an escape,
+  also between quotes, so it removed a backslash from the value. After a final backslash, the
+  quote stays open, and lldpcli skips the line. lldpd then used its default description or
+  management address, while a read showed the stored value. The init writes `interface` without
+  quotes, where lldpcli also reads a quote and a `#` as syntax. The shell splits an entry at
+  whitespace into two entries. When lldpcli skips that line, lldpd listens on every interface. A
+  single quote and a `#` stay valid in the two quoted fields. This reading of lldpcli comes from
+  the lldpd 1.0.20 source, which OpenWrt 25.12 ships. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. No value in the uci configs of the OpenWrt feeds is refused. (#254)
+- **`snmpd/accesses` refuses an access without `context`, `version`, `level`, `prefix`, `read`,
+  `write` or `notify`, with 422 `required`.** snmpd.init skips an access that does not set each
+  of these, so such a write answered 200 and snmpd did not use the access. The init tests
+  `context` without quotes, so an empty `context` passes the test. The init then writes an
+  access line with a word missing, which snmpd drops. The 422 for `context` says to use `none`,
+  which the init writes as the empty context. `context` also refuses `*`, `?` and `[`, because
+  the same test expands them to file names, and fails when several names match. LuCI writes no
+  `context` unless the operator types one, and uapi 3.1.0 required only `group`. A write to an
+  access that lacks one of these fields is refused only when it changes that field and leaves it
+  empty, as for the key in #246. `GET /api/v3/diagnostics?validate=1` lists the access. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. The stock snmpd config sets all eight fields. (#254)
 
 ### Deprecated
 

@@ -30087,7 +30087,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$"
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 					},
 					"dhcp_option": {
 						"type": [
@@ -30096,7 +30096,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*((\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?([^\"\n\r \t#]#*|[ \t]))*(\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?$"
 						}
 					},
 					"runtime": {
@@ -30211,7 +30211,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$"
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 					},
 					"dhcp_option": {
 						"type": [
@@ -30220,7 +30220,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*((\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?([^\"\n\r \t#]#*|[ \t]))*(\"([^\"\\\\\n\r]|\\\\[^\n\r])*\")?$"
 						}
 					}
 				},
@@ -30247,14 +30247,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$"
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 					},
 					"local": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$",
 						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
@@ -30310,14 +30310,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r*?[]*$"
+						"pattern": "^[^ \t\n\r\"*?[]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r*?[]*$"
+						"pattern": "^[^ \t\n\r\"*?[]*$"
 					},
 					"server": {
 						"type": [
@@ -30326,7 +30326,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 						}
 					},
 					"address": {
@@ -30336,7 +30336,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 						}
 					},
 					"nonwildcard": {
@@ -30364,14 +30364,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$"
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 					},
 					"local": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r]*$",
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$",
 						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
@@ -30427,14 +30427,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r*?[]*$"
+						"pattern": "^[^ \t\n\r\"*?[]*$"
 					},
 					"resolvfile": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r*?[]*$"
+						"pattern": "^[^ \t\n\r\"*?[]*$"
 					},
 					"server": {
 						"type": [
@@ -30443,7 +30443,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 						}
 					},
 					"address": {
@@ -30453,7 +30453,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[^\n\r]*$"
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
 						}
 					},
 					"nonwildcard": {
@@ -32416,8 +32416,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
-						"description": "SNMPv3 context (usually empty)"
+						"pattern": "^[^ \t\n\r*?[]*$",
+						"description": "SNMPv3 context. `none` is the empty context, which is the usual value: snmpd.init writes it as \"\""
 					},
 					"version": {
 						"type": [
@@ -32510,8 +32510,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^ \t\n\r]*$",
-						"description": "SNMPv3 context (usually empty)"
+						"pattern": "^[^ \t\n\r*?[]*$",
+						"description": "SNMPv3 context. `none` is the empty context, which is the usual value: snmpd.init writes it as \"\""
 					},
 					"version": {
 						"type": [
@@ -32755,7 +32755,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r\"]*$",
+						"pattern": "^[^\n\r\"\\\\]*$",
 						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
@@ -32768,7 +32768,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r\"]*$",
+						"pattern": "^[^\n\r\"\\\\]*$",
 						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
@@ -32777,7 +32777,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^ \t\n\r\"'\\\\#]*$"
 						}
 					},
 					"runtime": {
@@ -32829,7 +32830,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r\"]*$",
+						"pattern": "^[^\n\r\"\\\\]*$",
 						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
@@ -32842,7 +32843,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[^\n\r\"]*$",
+						"pattern": "^[^\n\r\"\\\\]*$",
 						"description": "Management IP advertised in LLDP frames"
 					},
 					"interface": {
@@ -32851,7 +32852,8 @@
 							"null"
 						],
 						"items": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[^ \t\n\r\"'\\\\#]*$"
 						}
 					}
 				}

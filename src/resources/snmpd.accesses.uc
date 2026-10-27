@@ -45,6 +45,21 @@ function validate(json, conn) {
 	return errs;
 }
 
+// snmpd.init skips an access that does not set each of these. It tests `context` unquoted, so an
+// empty one passes the test and writes an access line with a word missing, which snmpd drops.
+// LuCI leaves `context` optional and uapi required only `group`, so a stored access can lack one:
+// see new_errors() in the handler.
+function validate_new(json) {
+	let errs = [];
+	for (let f in [ "context", "version", "level", "prefix", "read", "write", "notify" ])
+		if (json[f] == null || json[f] == "")
+			push(errs, { field: f, code: "required",
+			             message: (f == "context")
+			                 ? "is required: snmpd drops an access without a context. Use \"none\" for the empty context"
+			                 : "is required: snmpd.init skips an access without it" });
+	return errs;
+}
+
 return {
 	package: "snmpd",
 	type: "access",
@@ -52,13 +67,14 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	validate_new: validate_new,
 	openapi_singular: "SNMP access ACL",
 	openapi_required: ["group"],
 	schema_properties: {
 		group:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE,
 		           description: "snmpd group this access entry binds to (must exist in snmpd/groups)" },
-		context: { type: ["string", "null"], pattern: values.ONE_WORD_RE,
-		           description: "SNMPv3 context (usually empty)" },
+		context: { type: ["string", "null"], pattern: values.SHELL_WORD_RE,
+		           description: "SNMPv3 context. `none` is the empty context, which is the usual value: snmpd.init writes it as \"\"" },
 		version: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_VERSIONS) },
 		level:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_LEVELS) },
 		prefix:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_PREFIXES) },

@@ -123,6 +123,17 @@ function dnsmasq_value_problem(v) {
 	return null;
 }
 
+// The same syntax for a value that needs its comma, such as `server` or a dhcp-option. A `#` is a
+// comment only after whitespace, so `/#/` and `1.2.3.4#53` stay valid, and so does a `#` at the
+// start, because each value follows `=` or `,` on its line.
+const DNSMASQ_PLAIN = "[^\"\n\r \t#]#*|[ \t]";
+const DNSMASQ_TEXT_RE = "^#*(" + DNSMASQ_PLAIN + ")*$";
+// A dhcp-option can quote a string, with backslash escapes, to hold a comma. Neither a `#` nor a
+// quote can follow the string: dnsmasq keeps the whitespace state from before the string, and
+// reads a quote right after a closing one as text.
+const DNSMASQ_STRING = "\"([^\"\\\\\n\r]|\\\\[^\n\r])*\"";
+const DNSMASQ_OPTION_RE = sprintf("^#*((%s)?(%s))*(%s)?$", DNSMASQ_STRING, DNSMASQ_PLAIN, DNSMASQ_STRING);
+
 function as_list(v) {
 	if (v == null) return [];
 	if (type(v) == "array") return v;
@@ -729,6 +740,7 @@ return {
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
 	config_get, service_port, wg_line, wg_keepalive,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
+	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,

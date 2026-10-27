@@ -788,6 +788,33 @@ t.describe('values.dnsmasq_value_problem', () => {
 	});
 });
 
+t.describe('values.DNSMASQ_TEXT_RE and DNSMASQ_OPTION_RE', () => {
+	let text = regexp(v.DNSMASQ_TEXT_RE), option = regexp(v.DNSMASQ_OPTION_RE);
+
+	t.it('take a comma, and a # that follows no whitespace', () => {
+		for (let s in [ "/#/", "1.2.3.4#53", "/example.com/#", "#", "lan,192.168.1.0/24,local", "a b", "" ]) {
+			t.assert_true(match(s, text) != null, s);
+			t.assert_true(match(s, option) != null, s);
+		}
+	});
+
+	t.it('refuse a double quote outside a dhcp-option, a # after whitespace and a newline', () => {
+		for (let s in [ 'a"b', '"lan"', "a #b", "a\t#b", " #", "a\nb", "a\rb" ])
+			t.assert_true(match(s, text) == null, s);
+		for (let s in [ "a #b", "a\t#b", " #", "a\nb", "a\rb" ])
+			t.assert_true(match(s, option) == null, s);
+	});
+
+	t.it('take a quoted string in a dhcp-option only where dnsmasq closes it', () => {
+		for (let s in [ '66,"1.2.3.4"', '252,"\\n"', '67,"a b, #c"', '12,"a\\"b"', '12,"a\\\\"',
+		                '12,"x"y', '12,"" ', '114,http://x/#y', '6,192.168.2.1,192.168.2.2' ])
+			t.assert_true(match(s, option) != null, s);
+		for (let s in [ '66,"1.2.3.4', '12,a"b', '12,"a\\"', '12,"\\', '12,"a\nb"',
+		                '12,"a""b"', '12,a #b', '12, "a"#b' ])
+			t.assert_true(match(s, option) == null, s);
+	});
+});
+
 t.describe('values.unstorable_text_path', () => {
 	t.it('names the first key or string that holds a control byte uci drops', () => {
 		t.assert_equal(v.unstorable_text_path({ a: "x", b: "y\u0001z" }), "b");
