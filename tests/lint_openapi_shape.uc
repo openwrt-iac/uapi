@@ -336,7 +336,7 @@ for (let name in schemas) {
 // reading writability off the schema set sees a writable resource as read-only. Scoped to
 // curated paths, since /raw/ and the auth and package endpoints have their own hand-written
 // bodies, and only to verbs that actually take a body: `adopt` is a POST with none, which is
-// correct rather than a gap.
+// correct rather than a gap. A CRUD merge PATCH names the Patch built from its Request instead.
 let writable_bodies = 0;
 for (let p in paths_for_body) {
 	if (!is_curated(p)) continue;
@@ -347,10 +347,71 @@ for (let p in paths_for_body) {
 		writable_bodies++;
 		let r = {}; collect_refs(op.requestBody, r);
 		let named = false;
-		for (let n in r) if (substr(n, -7) == "Request") named = true;
+		for (let n in r)
+			if (substr(n, -7) == "Request"
+			    || (verb == "patch" && substr(n, -5) == "Patch"
+			        && exists(schemas, substr(n, 0, length(n) - 5) + "Request")))
+				named = true;
 		if (!named)
 			note(sprintf("/paths%s/%s/requestBody", p, verb),
-			     "is a curated write body that references no *Request schema");
+			     "is a curated write body that references no *Request schema, nor a *Patch built from one");
+	}
+}
+
+function without_prose(v) {
+	if (type(v) == "array") return map(v, (e) => without_prose(e));
+	if (type(v) != "object") return v;
+	let out = {};
+	for (let k, s in v) {
+		if (k == "description" || k == "example") continue;
+		if (k == "properties" && type(s) == "object") {
+			out[k] = {};
+			for (let name, p in s) out[k][name] = without_prose(p);
+		}
+		else out[k] = without_prose(s);
+	}
+	return out;
+}
+
+// A merge PATCH (RFC 7396) is merged into the stored section and only the result is validated,
+// so a body that names one field is valid. The body schema used to be an allOf of the Request,
+// which carried the create's `required` and its conditionals: a strict client refused
+// `{"ssid": "x"}` on a wireless interface for want of `device`, a body the server takes.
+let merge_bodies = 0;
+for (let p in paths) {
+	let body = paths[p].patch?.requestBody?.content?.["application/json"]?.schema;
+	if (type(body) != "object") continue;
+	merge_bodies++;
+	let name = match(body["$ref"] ?? "", /^#\/components\/schemas\/(.+)$/)?.[1];
+	let target = (name != null) ? schemas[name] : body;
+	let where = (name != null) ? "/components/schemas/" + name : sprintf("/paths%s/patch/requestBody", p);
+	for (let kw in [ "required", "allOf" ])
+		if (exists(target, kw))
+			note(where, sprintf("is the merge-patch body of PATCH %s and declares %s, which refuses a partial body that the server merges and accepts", p, kw));
+
+	// A Patch is its Request with the requirements taken out, at the top level and on a nested
+	// object, which default_merge_for_patch merges into the stored one too. Prose is left to the
+	// Request. Any other difference is a value that PATCH and PUT disagree about.
+	if (name == null || substr(name, -5) != "Patch") continue;
+	let request = substr(name, 0, length(name) - 5) + "Request";
+	let req = schemas[request] ?? {};
+	let rest = function(s) {
+		let o = { ...s };
+		for (let kw in [ "required", "allOf", "description", "properties" ]) delete o[kw];
+		return sprintf("%J", o);
+	};
+	if (rest(req) != rest(target))
+		note(where, sprintf("differs from %s outside its properties", request));
+	let rp = req.properties ?? {}, pp = target.properties ?? {};
+	for (let k in { ...rp, ...pp }) {
+		let want = rp[k];
+		if (type(want) == "object") {
+			want = { ...want };
+			delete want.required;
+		}
+		if (sprintf("%J", without_prose(want)) != sprintf("%J", without_prose(pp[k])))
+			note(where + "/properties/" + k,
+			     sprintf("differs from %s/properties/%s with its `required` removed", request, k));
 	}
 }
 
@@ -538,5 +599,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d request/response pairs, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, managed_seen, halves, deprecated_seen, collections, tx_responses, etag_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d request/response pairs, %d merge-patch bodies, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, managed_seen, halves, merge_bodies, deprecated_seen, collections, tx_responses, etag_responses);

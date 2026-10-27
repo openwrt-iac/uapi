@@ -389,6 +389,24 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_merge_patch_requires() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['WirelessInterfacesPatch']['required'] = ['device']
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_merge_patch_nested_required() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['FirewallRedirectsPatch']['properties']['match']['required'] = ['src_zone']
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 mut_deprecated_no_reason() {
 	python3 - <<'EOF'
 import json
@@ -465,6 +483,8 @@ probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header 
 probe lint-openapi-shape "a writable managed property"        "must be readOnly"                 mut_managed_writable
 probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
 probe lint-openapi-shape "a derived field in a request schema"  "must not appear in a request schema" mut_request_regrows_managed
+probe lint-openapi-shape "a merge-patch body that requires a field" "refuses a partial body"       mut_merge_patch_requires
+probe lint-openapi-shape "a Patch that keeps a nested required" "with its \`required\` removed"    mut_merge_patch_nested_required
 probe lint-wire-names    "an unaccounted alias name"            "is read by toUci but never written" mut_unaccounted_wire_name
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
 probe lint-openapi-shape "an emitted header declared nowhere"  "path(s) should declare the header" mut_mgmt_header_undeclared

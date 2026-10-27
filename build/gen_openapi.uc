@@ -96,6 +96,7 @@ function schema_name(endpoint) {
 
 function request_name(endpoint) { return schema_name(endpoint) + "Request"; }
 function response_name(endpoint) { return schema_name(endpoint) + "Response"; }
+function patch_name(endpoint) { return schema_name(endpoint) + "Patch"; }
 
 // A property a caller cannot write. Derived from uci or from ubus, ignored by every toUci, and
 // present only so a reader can see it. `id` is deliberately not here: it is the section name at
@@ -272,6 +273,42 @@ function project_conditional(conditional, props, where, declared) {
 		else die(sprintf("%s openapi_conditional: unsupported `then` shape %J", where, t));
 		push(out, { ...c, then: kept });
 	}
+	return out;
+}
+
+// A merge PATCH is merged into the stored section and validate() checks the result, so a body
+// may leave out anything. As an allOf of the Request, the body inherited its `required` and its
+// conditionals: `{"ssid": "x"}` failed for want of `device`, and `{"proto": "static"}` for want
+// of `ipaddrs`, while the server took both. default_merge_for_patch merges a nested object such
+// as a redirect's `match` into the stored one too, so a nested `required` goes as well.
+//
+// The copy keeps what a validator reads and leaves the prose to the Request: the document ships
+// on the router, and copied descriptions made it 10% larger.
+function without_prose(v) {
+	if (type(v) == "array") return map(v, (e) => without_prose(e));
+	if (type(v) != "object") return v;
+	let out = {};
+	for (let k, s in v) {
+		if (k == "description" || k == "example") continue;
+		if (k == "properties" && type(s) == "object") {
+			out[k] = {};
+			for (let name, p in s) out[k][name] = without_prose(p);
+		}
+		else out[k] = without_prose(s);
+	}
+	return out;
+}
+
+function patch_schema(req, request_ref) {
+	let props = {};
+	for (let k, v in req.properties) {
+		props[k] = without_prose(v);
+		if (type(v) == "object") delete props[k].required;
+	}
+	let out = { ...req, properties: props,
+	            description: sprintf("Merge-patch body (RFC 7396): any subset of %s, which describes the fields.", request_ref) };
+	delete out.required;
+	delete out.allOf;
 	return out;
 }
 
@@ -502,8 +539,7 @@ function build_crud_paths(ep) {
 		            "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
 		            "description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
 		            "requestBody": { "required": true, "content": {
-		              "application/json":            { "schema": { "allOf": [ { "$ref": "#/components/schemas/" + request_ref } ],
-		                                                            "description": "merge-patch partial body: any subset of the request schema" } },
+		              "application/json":            { "schema": { "$ref": "#/components/schemas/" + patch_name(ep) } },
 		              "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 		            } },
 		            "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) },
@@ -548,9 +584,10 @@ function build_singleton_paths(ep) {
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
+			           // A singleton has no POST or PUT, so its Request already is the merge-patch
+			           // body, and lint-openapi-shape keeps it free of anything a partial body breaks.
 			           "requestBody": { "required": true, "content": {
-			             "application/json":            { "schema": { "allOf": [ { "$ref": "#/components/schemas/" + request_ref } ],
-			                                                           "description": "merge-patch partial body: any subset of the request schema" } },
+			             "application/json":            { "schema": { "$ref": "#/components/schemas/" + request_ref } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
 			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }, UCI_TX) },
@@ -1580,6 +1617,8 @@ function build_schemas() {
 		// for a read-only endpoint would blunt it.
 		if (ep.kind != "collection")
 			schemas[request_name(ep)] = req;
+		if (ep.kind == "crud")
+			schemas[patch_name(ep)] = patch_schema(req, request_name(ep));
 	}
 
 	return schemas;

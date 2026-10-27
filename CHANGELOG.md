@@ -637,6 +637,15 @@ All notable changes to this project will be documented in this file. Format foll
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
   restarts, and a line that it cannot parse makes it refuse its whole config and stay down, while
   the write answers 200. (#257)
+- **A PATCH body no longer has to carry the fields that a create requires.** The spec declared the
+  `application/json` body of each PATCH as an `allOf` of the Request schema, with its `required`
+  list and its conditionals. The server merges that body into the stored section and validates
+  the result. So a strict client refused partial bodies that the server accepts, such as a
+  `wireless/interfaces` PATCH without `device`. The body of a CRUD PATCH is now `<Name>Patch`. It
+  has the properties of `<Name>Request` with the same types and patterns, and no `required` and no
+  conditionals, also on a nested object such as `match`. A singleton PATCH body is `<Name>Request`
+  itself, which has neither. This only widens the request schemas of PATCH, so it is not breaking
+  under `docs/versioning.md`. (#258)
 
 ### Security
 
