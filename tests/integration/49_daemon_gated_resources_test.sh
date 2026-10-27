@@ -38,6 +38,33 @@ stored=$($SSH "uci get lldpd.config.lldp_description" 2>/dev/null || true)
 $SSH "grep -q 'configure system description \"$DESC\"' /tmp/lldpd.conf" \
 	|| fail "lldpd.conf does not carry the description: $($SSH 'grep "system description" /tmp/lldpd.conf' 2>&1 || echo '<no such line>')"
 
+echo "--- lldpd/config: lldpcli reads a single quote and a # between the quotes as text ---"
+DESC2="uapi 'probe' #2"
+code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+	-H 'Content-Type: application/json' \
+	-d "{\"lldp_description\":\"$DESC2\"}" "$URL/lldpd/config")
+[ "$code" = "200" ] || fail "lldp_description PATCH returned $code: $(cat /tmp/lldpd_patch.json)"
+$SSH 'lldpcli show chassis' | grep -qF "$DESC2" \
+	|| fail "lldpd does not advertise '$DESC2': $($SSH 'lldpcli show chassis' 2>&1 | grep -i descr)"
+
+echo "--- lldpd/config: an interface entry reaches lldpd as one pattern ---"
+orig=$(curl -sS -H "$ADMIN" "$URL/lldpd/config" | jq -c '.interface')
+code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+	-H 'Content-Type: application/json' -d '{"interface":["lan","!eth9"]}' "$URL/lldpd/config")
+[ "$code" = "200" ] || fail "interface PATCH returned $code: $(cat /tmp/lldpd_patch.json)"
+$SSH 'lldpcli show configuration' | grep -qF ',!eth9' \
+	|| fail "lldpd does not use the pattern: $($SSH 'lldpcli show configuration' 2>&1 | grep -i pattern)"
+
+echo "--- lldpd/config: a backslash or a quote that lldpcli reads as syntax answers 422 ---"
+for body in '{"lldp_description":"a\\"}' '{"lldp_mgmt_ip":"a\\b"}' '{"interface":["lan\"x"]}' '{"interface":["eth#0"]}'; do
+	code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+		-H 'Content-Type: application/json' -d "$body" "$URL/lldpd/config")
+	[ "$code" = "422" ] || fail "expected 422 for $body, got $code: $(cat /tmp/lldpd_patch.json)"
+done
+code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+	-H 'Content-Type: application/json' -d "{\"interface\":$orig}" "$URL/lldpd/config")
+[ "$code" = "200" ] || fail "interface restore returned $code: $(cat /tmp/lldpd_patch.json)"
+
 echo "--- vnstat/config: interfaces reaches the list vnstat reads ---"
 
 # Device names as the kernel shows them, not uci interface names, so take one the box

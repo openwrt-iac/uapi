@@ -3,6 +3,10 @@ let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 let as_list_or_null = values.as_list_or_null;
 
+// values.SHELL_WORD_RE, because the init script expands these unquoted, plus a double quote,
+// which opens a string in dnsmasq's config.
+const FILE_RE = "^[^ \t\n\r\"*?[]*$";
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -66,8 +70,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		domain:            { type: ["string", "null"], pattern: values.ONE_LINE_RE },
-		local:             { type: ["string", "null"], pattern: values.ONE_LINE_RE,
+		domain:            { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE },
+		local:             { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE,
 		                     description: "Local domain pattern (e.g. /lan/) resolved authoritatively" },
 		noresolv:          { type: "boolean", default: false },
 		rebind_protection: { type: "boolean", default: true },
@@ -79,10 +83,10 @@ return {
 		filterwin2k:       { type: "boolean", default: false },
 		authoritative:     { type: "boolean", default: true },
 		readethers:        { type: "boolean", default: true },
-		leasefile:         { type: ["string", "null"], pattern: values.SHELL_WORD_RE },
-		resolvfile:        { type: ["string", "null"], pattern: values.SHELL_WORD_RE },
-		server:            { type: ["array", "null"], items: { type: "string", pattern: values.ONE_LINE_RE } },
-		address:           { type: ["array", "null"], items: { type: "string", pattern: values.ONE_LINE_RE } },
+		leasefile:         { type: ["string", "null"], pattern: FILE_RE },
+		resolvfile:        { type: ["string", "null"], pattern: FILE_RE },
+		server:            { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE } },
+		address:           { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE } },
 		nonwildcard:       { type: "boolean", default: true },
 	},
 };
