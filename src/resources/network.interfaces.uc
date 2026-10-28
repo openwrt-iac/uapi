@@ -390,8 +390,8 @@ function validate(json, conn, id, delta) {
 	}
 	// The schema allows -1 because a read reports a port name that /etc/services does not resolve
 	// as -1. A request that sends it is refused, so a PUT of the read is refused rather than store
-	// -1, and so is a write that brings up the interface with it. A PATCH that leaves the stored name
-	// on a live or disabled interface passes.
+	// -1, and so is a write that brings up the interface with a value that its read shows. A PATCH
+	// that leaves the stored name on a live or disabled interface passes.
 	if (ok("listen_port") && (named.listen_port === -1 || (goes_live && json.listen_port === -1)))
 		push(errs, { field: "listen_port", code: "out_of_range",
 		             message: "must be from 0 to 65535: -1 is how a port name that /etc/services does not resolve reads, and wg cannot bring the interface up with it" });

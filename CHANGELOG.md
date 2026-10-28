@@ -133,14 +133,14 @@ All notable changes to this project will be documented in this file. Format foll
   before. The schema no longer declares `default: "lookup"` on `action`, because the default
   depends on `goto`, and `goto` gets `maximum: 2147483647`. (#218)
 - **`NetworkWireguardPeersResponse.endpoint_port` declares minimum 0.** A read of 0 means a port
-  name that does not resolve, a number above 65535, or a stored `'0'`, which LuCI's form allows,
-  so the old minimum of 1 did not describe the read. That is branch (b) of the type carve-out in
+  name that does not resolve, a number above 65535, or a stored `'0'`, which LuCI's form allows, so
+  the old minimum of 1 did not describe the read. That is branch (b) of the type carve-out in
   `docs/versioning.md`. The Request keeps minimum 1, as in 3.1.0, so a write that changes the port
-  to 0 still answers 422. A write that leaves a stored 0 as it is passes, unless it enables the peer
-  or sets its host, because the peer then uses port 0. That tightening uses the carve-out in
-  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. A write that passes sets the rest of the peer in the kernel, which keeps its endpoint,
-  where 3.1.0 gave the kernel port 0. (#219)
+  to 0 still answers 422. A write that leaves a stored 0 as it is passes, unless it enables the
+  peer, or changes the host or the key of an enabled peer, because the peer then uses port 0. That
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
+  can rely on, and it fails loudly. A write that passes sets the rest of the peer in the kernel,
+  which keeps its endpoint, where 3.1.0 gave the kernel port 0. (#219)
 - **`network/interfaces.mtu` and `network/devices.mtu` refuse a value below 68, with 422
   `out_of_range`.** netifd applies a device mtu only from 68 up and ignores a smaller one
   without a log, so such a write answered 200 with no effect. On proto wireguard,
@@ -170,7 +170,8 @@ All notable changes to this project will be documented in this file. Format foll
   tool reaches -1. A write that brings up an interface that stores such a value, by a switch to
   wireguard or by enabling it, also answers 422, which uses the tightening carve-out for payloads
   that produced a state no caller can rely on, and fails loudly. A PATCH that leaves the value as it
-  is passes. (#225)
+  is passes. A switch from a proto whose read does not show `listen_port`, such as static, does not
+  check an option that a hand edit left there. (#225)
 - **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
   of a read.** A request inherited the read bounds, so it declared values that every write
   refuses. `NetworkInterfacesRequest.mtu` now starts at 68, or takes 128 to 16384 on proto `ppp`
@@ -502,12 +503,12 @@ All notable changes to this project will be documented in this file. Format foll
   write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg uses, and both
   apply paths push it. A name that does not resolve reads 0, which wg cannot use either, and so does
   a number above 65535, which read above the declared maximum. A peer that stores such a name read
-  null in 3.1.0, and a write that leaves it as it is still passes. A write that enables the peer or
-  sets its host answers 422 for it, and so does a PUT of the read, with `conflict`, because it would
-  store port 0, which wg takes where it cannot resolve the name. That tightening uses the carve-out
-  in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. `persistent_keepalive` now reads with whitespace removed, as wg reads it, so `'25 '` reads
-  25 where it read null. (#219)
+  null in 3.1.0, and a write that leaves it as it is still passes. A write that enables the peer, or
+  changes the host or the key of an enabled peer, answers 422 for it, and so does a PUT of the read,
+  with `conflict`, because it would store port 0, which wg takes where it cannot resolve the name.
+  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. `persistent_keepalive` now reads with whitespace removed,
+  as wg reads it, so `'25 '` reads 25 where it read null. (#219)
 - **The `network/interfaces.mtu` description says where netifd applies it.** netifd applies an
   interface's `mtu` to its device only when that device has no `config device` section of its
   own, as `br-lan` has in the stock configuration, and to every device that joins the interface

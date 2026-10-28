@@ -295,14 +295,16 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_deep_equal(map(wgp.validate_new({ persistent_keepalive: -1, public_key: PK }), (e) => e.live), [ true ]);
 	});
 
-	// The kernel apply sends a host only with a port, so the kernel would keep the old endpoint.
-	t.it('a write that changes the host of an enabled peer whose port reads 0 is refused', () => {
+	// The kernel apply sends an endpoint only with a port.
+	t.it('a write that changes the host or the key of an enabled peer whose port reads 0 is refused', () => {
 		for (let port in [ '0', 'nosuchservice' ]) {
 			let c = with_wg();
 			for (let k, v in { endpoint_host: '192.0.2.1', endpoint_port: port }) c._state.uci.network.g_existing[k] = v;
 			let h = make_handler();
 			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' })), [ [ 'endpoint_port', 'out_of_range' ] ], port);
-			t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '192.0.2.1', port);
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { public_key: PK2 })), [ [ 'endpoint_port', 'out_of_range' ] ], port);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: ' 192.0.2.1 ' }).status, 200, port);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { public_key: PK2, endpoint_port: 51820 }).status, 200, port);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2', endpoint_port: 51820 }).status, 200, port);
 		}
 		let c = with_wg();
@@ -544,7 +546,7 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_equal(h.patch(world(off, BAD), ctx(), 'wg1', { mtu: 1400 }).status, 200);
 	});
 
-	t.it('a create checks the stored peers of the name that it sends, and a generated name has none', () => {
+	t.it('a create checks the stored peers of the name that it sends', () => {
 		let c = world(STATIC, BAD, 'lan');
 		t.assert_deep_equal(errs(h.create(c, ctx(), { id: 'wg1', ...WG })), [ [ 'proto', 'conflict' ] ]);
 	});
