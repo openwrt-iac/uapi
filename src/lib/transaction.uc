@@ -214,11 +214,12 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 		return result ?? { ok: false, kind: "unknown" };
 	}
 
-	conn.uci_commit(pkg);
+	// A package that the write left as it was gets no restore, which would put the snapshot over
+	// what another writer committed since.
+	let committed = conn.uci_commit(pkg);
 
 	return _finalize_after_reload(apply(), function() {
-		conn.uci_import(pkg, snapshot);
-		conn.uci_commit(pkg);
+		if (committed) conn.uci_import(pkg, snapshot);
 		return restore();
 	}, result.body, services, ops, applied);
 }
@@ -318,9 +319,10 @@ function transaction(conn, params) {
 // multi_transaction snapshots, EX-locks, and on-failure restores N packages
 // atomically. Caller passes a sorted-deduped package list and an fn that
 // performs all uci writes inside the locked region. On success all packages
-// commit and the union of reload services runs once; on any failure all
-// packages are restored from their snapshots in reverse order. Per-package
-// EX locks are acquired in sorted order to avoid deadlocks vs other writers.
+// commit and the union of reload services runs once. On a failure after the
+// commits, every package that the batch committed is restored from its
+// snapshot. Per-package EX locks are acquired in sorted order to avoid
+// deadlocks vs other writers.
 function multi_transaction(conn, params) {
 	let packages = params.packages ?? [];
 	let services = params.reload_services ?? [];
@@ -397,26 +399,29 @@ function multi_transaction(conn, params) {
 			for (let pkg in sorted) conn.uci_revert(pkg);
 			result = inner ?? { ok: false, kind: "unknown" };
 		} else {
-			// Commit each package, but capture the first failure so we can
-			// still attempt a restore on every package (committed or not).
-			// Without this, a mid-loop commit throw leaves earlier packages
-			// committed and breaks the across-packages atomicity contract.
+			// Commit each package, but capture the first failure so the
+			// packages committed before it are still restored. Without this, a
+			// mid-loop commit throw leaves earlier packages committed and
+			// breaks the across-packages atomicity contract. Only those are
+			// restored: the snapshot of a package that this batch did not write
+			// would undo what another writer committed since, such as LuCI's
+			// delete of the section that made this batch's commit fail.
+			let committed = [];
 			let commit_err = null;
 			for (let pkg in sorted) {
 				let caught_commit = null;
-				try { conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
+				let wrote = false;
+				try { wrote = conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
 				if (caught_commit != null) {
 					commit_err = sprintf("uci_commit(%s) failed: %s",
 					                     pkg, caught_commit);
 					break;
 				}
+				if (wrote) push(committed, pkg);
 			}
 			let reload_err = (commit_err == null) ? apply() : commit_err;
 			result = _finalize_after_reload(reload_err, function() {
-				for (let pkg in sorted) {
-					conn.uci_import(pkg, snapshots[pkg]);
-					conn.uci_commit(pkg);
-				}
+				for (let pkg in committed) conn.uci_import(pkg, snapshots[pkg]);
 				return restore_apply();
 			}, inner.body, services, wg_ops, wg_applied);
 		}

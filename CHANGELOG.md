@@ -782,11 +782,15 @@ All notable changes to this project will be documented in this file. Format foll
   power cut between the truncation and the write left the package empty, a full overlay left it cut
   short while the write answered `500 reload_failed_restored`, and a `uci commit` by LuCI or a shell
   during the restore could read the half-written file. The restore now writes the snapshot to a
-  temp file beside the package, reads it back, and renames it over the package under libuci's
-  flock on the file, as libuci commits. A restore that cannot write or rename the file answers
-  `500 reload_failed_unrecovered`, and its `restore_error` names the file. Measured with the ucode
-  of the OpenWrt 25.12 SDK on a full tmpfs: the old restore kept 4096 of 10600 bytes and reported
-  nothing. (#268)
+  temp file beside the package, reads it back, and renames it over the package. Before it writes,
+  it waits up to 5 s for libuci's flock on the package file, so it does not write while a `uci
+  commit` reads and writes the package. A LuCI or shell commit that already held the lock, or
+  waited on it, can still rename its own file over the restored one, as one libuci commit can over
+  another. A restore that cannot take the lock, write or rename the file answers `500
+  reload_failed_unrecovered`, and its `restore_error` names the file. A restore also writes back
+  only the packages that the write changed: the snapshot of another one would undo a commit that
+  another writer made since. Measured with the ucode of the OpenWrt 25.12 SDK on a full tmpfs: the
+  old restore kept 4096 of 10600 bytes and reported nothing. (#268)
 - **A read no longer shows a change that another writer staged and did not commit, and a write no
   longer commits or deletes it.** `uci set` in a shell stages a change in `/tmp/.uci`, and libuci
   applies that directory to every cursor that loads a package by name, uapi's included. So a GET
@@ -794,9 +798,16 @@ All notable changes to this project will be documented in this file. Format foll
   next uapi write of the package committed the change, and a write that uapi refused deleted every
   staged change of the package. uapi now loads each package by its path, which reads the file
   alone, and its commit reloads the file and replays the writes of the request, so a commit by
-  LuCI or a shell during the request is still kept. LuCI was not affected, because rpcd keeps a
-  delta directory per session. A read changes only on a router where a shell staged a change and
-  did not commit it, and no field, type or status changes. (#268)
+  LuCI or a shell during the request is still kept. When another writer deleted a section that the
+  request wrote into, the commit fails with a 500 that names the package. LuCI was not affected,
+  because rpcd keeps a delta directory per session. A response changes only on a router where a
+  shell staged a change and did not commit it, and no field or type changes. The staged change now
+  takes effect when the shell commits it, and not before, which applies to the `uapi` package too:
+  a token that `uci delete uapi.<name>` removes without a commit keeps authenticating, where it
+  answered 401 at once, a token that `uci set` adds without a commit does not authenticate yet, and
+  a staged change to `uapi.logging` or `uapi.ratelimit` applies once committed. uapi also reads,
+  writes and restores `/etc/config/<package>` only, and ignores an override that libuci reads in
+  its place from `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
 
 ### Security
 

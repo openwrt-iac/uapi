@@ -311,6 +311,43 @@ t.describe('transaction, reload failure with successful restore', () => {
 	});
 });
 
+t.describe('transaction, the restore writes back only what the request committed', () => {
+	let imports = (conn) => map(filter(conn._state.uci_ops, (o) => o[0] == "import"), (o) => o[1]);
+
+	t.it('a write that changed nothing gets no restore', () => {
+		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } } });
+		conn.uci_commit = (pkg) => false;
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			reload: reload_flaky(1),
+		}));
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_deep_equal(imports(conn), []);
+	});
+
+	// LuCI deletes and commits a section that the batch wrote into while the batch runs, so the
+	// replay of the batch's writes to that package fails. The snapshot of that package predates
+	// LuCI's delete, and writing it back brought the section back.
+	t.it('a batch whose commit fails restores the packages before it that it wrote, and no other', () => {
+		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {} } });
+		conn.uci_commit = function(pkg) {
+			if (pkg == "cc") die("uci commit cc: another writer changed the package while the request ran, and its writes no longer apply: uci set cc: Entry not found");
+			return pkg == "aa";
+		};
+		let r = tx.multi_transaction(conn, {
+			packages: [ "aa", "bb", "cc" ], reload_services: [],
+			lock_path: "/tmp/uapi-test-restore-global.lock", pkg_lock_prefix: "/tmp/uapi-test-restore-pkg.",
+			fn: (c) => ({ ok: true, body: {} }),
+			reload: noop_reload, check_services: noop_check,
+		});
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_match(r.reload_error, /^uci_commit\(cc\) failed: uci commit cc: another writer changed the package/);
+		t.assert_deep_equal(imports(conn), [ "aa" ]);
+		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock", "pkg.cc.lock" ])
+			require('fs').unlink("/tmp/uapi-test-restore-" + f);
+	});
+});
+
 t.describe('transaction, reload failure with restore failure', () => {
 	t.it('returns reload_failed_unrecovered when the re-reload also fails', () => {
 		let conn = ubus.stub({

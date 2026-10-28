@@ -12,20 +12,40 @@ function deepcopy(v) {
 	return v;
 }
 
-// libuci replaces a package by renaming a temp file from the same directory over it, under an
-// flock on the package file, and the restore writes the same way. A reader sees the old file or
-// the new one, a kill or a full overlay leaves the old one whole, and the restore waits for a
-// `uci commit` that is writing the package, as another commit would. ucode has no fsync: the
-// commit that follows a restore rewrites the file through libuci, which syncs it.
-function replace_config(fs_mod, file, content) {
+// libuci takes a name that starts with `./` or `/` as a path and refuses any other that starts
+// with a dot, which keeps its temp files, such as .firewall.uci-XXXXXX, and the restore's out of
+// reach. A load by path opens any file in the directory, so only a name that uci loads passes.
+function loadable(pkg) {
+	return type(pkg) == "string" && match(pkg, /^[!-~]+$/) != null
+		&& substr(pkg, 0, 1) != "." && index(pkg, "/") < 0;
+}
+
+// libuci writes a package to a temp file in the config directory and renames it over the package
+// after it releases its flock on the package file. The restore writes its temp file beside the
+// file that the package names, the target of a symlink included, so that the rename stays on one
+// filesystem. A reader sees the old file or the new one, and a kill or a full overlay leaves the
+// old one whole. The flock makes the restore wait for a load that is parsing the package and for
+// a commit that is reading, writing and syncing it, and orders nothing after that: a commit that
+// held the lock, or waited on it with the old file open, can rename its file over the restored
+// one. ucode has no fsync, so the rename holds against a kill but not against a power cut on a
+// filesystem that writes data back later than the rename, such as ubifs.
+function replace_config(fs_mod, file, content, wait_ms) {
 	let path = fs_mod.realpath(file);
 	let st = (path != null) ? fs_mod.stat(path) : null;
 	let lock = (st != null) ? fs_mod.open(path, "r") : null;
 	if (lock == null) die(sprintf("restore of %s: cannot open it", file));
 	let tmp = sprintf("%s/.%s.uapi-restore", fs_mod.dirname(path), fs_mod.basename(path));
+	// A load or a commit holds the lock for milliseconds, longer when it syncs to slow flash. A
+	// holder that takes seconds is stuck, and giving up well within uhttpd's 60 s script timeout
+	// still answers the client, after the reload that the restore runs next.
+	let locked = lock.lock("xn");
+	for (let waited = 0; !locked && waited < wait_ms; waited += 50) {
+		sleep(50);
+		locked = lock.lock("xn");
+	}
 	let err = null;
-	if (!lock.lock("x"))
-		err = "cannot lock it: " + fs_mod.error();
+	if (!locked)
+		err = sprintf("another process held its lock for %d ms", wait_ms);
 	else {
 		// A fixed name, so a restore killed before its rename leaves one file that the next
 		// restore of the package removes. uapi's lock of the package keeps two from sharing it.
@@ -41,7 +61,9 @@ function replace_config(fs_mod, file, content) {
 			let held = fs_mod.readfile(tmp) ?? "";
 			if (held != content)
 				err = sprintf("cannot write %s: it holds %d of %d bytes", tmp, length(held), length(content));
-			else if (!fs_mod.chmod(tmp, st.mode) || !fs_mod.rename(tmp, path))
+			else if (!fs_mod.chmod(tmp, st.mode))
+				err = sprintf("cannot set the mode of %s: %s", tmp, fs_mod.error());
+			else if (!fs_mod.rename(tmp, path))
 				err = sprintf("cannot rename %s over it: %s", tmp, fs_mod.error());
 			if (err != null) fs_mod.unlink(tmp);
 		}
@@ -56,6 +78,7 @@ function connect(opts) {
 	let uci_mod = opts?.uci ?? require('uci');
 	let fs_mod = opts?.fs ?? require('fs');
 	let config_dir = opts?.config_dir ?? "/etc/config";
+	let lock_wait_ms = opts?.lock_wait_ms ?? 5000;
 	let conn = ubus_mod.connect();
 	if (!conn) die("ubus: connect failed");
 	let cursor = uci_mod.cursor(config_dir);
@@ -64,15 +87,18 @@ function connect(opts) {
 	// libuci gives a package that it loads by name the delta file of that name in each directory
 	// of its search path, and /tmp/.uci, where `uci set` stages, is always one of them: cursor()
 	// adds a directory but cannot remove that one, which is why rpcd clears the list itself. So
-	// the cursor loads each package by its path, which reads the file alone.
+	// the cursor loads each package by its path, which reads the file alone. A package that does
+	// not load that way fails the call: the load by name that the cursor does on first use would
+	// apply /tmp/.uci, and read /var/run/uci/<pkg> in place of the file when that exists.
 	//
 	// libuci commits a package loaded by path by writing the copy that it holds, where it reads a
 	// package loaded by name again and replays the delta. So the commit reloads the file and
 	// replays the writes kept here, and a commit by LuCI or a shell while the request ran stays.
 	let writes = {};
 	function load(pkg) {
-		if (writes[pkg] == null && cursor.load(config_dir + "/" + pkg))
+		if (writes[pkg] == null && loadable(pkg) && cursor.load(config_dir + "/" + pkg))
 			writes[pkg] = [];
+		return writes[pkg] != null;
 	}
 	function drop(pkg) {
 		cursor.unload(pkg);
@@ -80,7 +106,8 @@ function connect(opts) {
 		return true;
 	}
 	function write(pkg, op) {
-		load(pkg);
+		if (!load(pkg))
+			die(sprintf("uci load %s: %s", pkg, cursor.error() ?? "not a package that uci loads"));
 		let r = op();
 		push(writes[pkg], op);
 		return r;
@@ -114,7 +141,7 @@ function connect(opts) {
 			return r;
 		},
 		uci_get: function(pkg, section, option) {
-			load(pkg);
+			if (!load(pkg)) return null;
 			if (option != null)
 				return cursor.get(pkg, section, option);
 			return cursor.get_all(pkg, section);
@@ -142,11 +169,22 @@ function connect(opts) {
 				? cursor.delete(pkg, section, option)
 				: cursor.delete(pkg, section)));
 		},
+		// False when the request wrote nothing to the package. libuci skips such a commit too, and
+		// a rewrite would drop the comments of the file and any commit that landed since the load.
 		uci_commit: function(pkg) {
 			let ops = writes[pkg] ?? [];
+			if (length(ops) == 0) return false;
 			drop(pkg);
-			load(pkg);
-			for (let op in ops) op();
+			if (!load(pkg))
+				die(sprintf("uci load %s: %s", pkg, cursor.error() ?? "failed"));
+			// The writes applied to the copy loaded earlier in the request, so a replay fails only
+			// on a file that changed since.
+			try {
+				for (let op in ops) op();
+			} catch (e) {
+				die(sprintf("uci commit %s: another writer changed the package while the request ran, and its writes no longer apply: %s",
+				            pkg, e.message));
+			}
 			return wrote("commit", pkg, cursor.commit(pkg));
 		},
 		uci_package_exists: function(pkg) {
@@ -164,11 +202,11 @@ function connect(opts) {
 			return content;
 		},
 		uci_import: function(pkg, snapshot) {
-			replace_config(fs_mod, config_dir + "/" + pkg, snapshot);
+			replace_config(fs_mod, config_dir + "/" + pkg, snapshot, lock_wait_ms);
 			return drop(pkg);
 		},
 		uci_foreach: function(pkg, sec_type, fn) {
-			load(pkg);
+			if (!load(pkg)) return null;
 			return cursor.foreach(pkg, sec_type, fn);
 		},
 	};
