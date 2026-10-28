@@ -33,7 +33,7 @@ id=$(echo "$created" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s
 [ -n "$id" ] || fail "POST missing id"
 
 cleanup() {
-	for i in $id ${sid:-} ${nid:-}; do
+	for i in $id ${sid:-} ${nid:-} ${stid:-}; do
 		curl -sS -H "$ADMIN" -X DELETE "$URL/wireless/interfaces/$i" >/dev/null 2>&1 || true
 	done
 }
@@ -148,6 +148,33 @@ for body in '{"mode":"wds"}' '{"ssid":"'"$(printf '%033d' 0)"'"}' \
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$nid" -d "$body")
 	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
 done
+
+# Storing ap for the null turned a station into an access point that broadcast its SSID and key.
+echo "--- a write that sends mode as null answers 422 and keeps the stored mode ---"
+sta=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" -d '{
+	"device": "radio0", "network": "lan", "mode": "sta", "ssid": "uapi-test-sta",
+	"encryption": "psk2", "key": "correcthorse", "disabled": true
+}')
+echo "$sta" | tail -1 | grep -q '^200$' || fail "POST of a station expected 200: $sta"
+stid=$(echo "$sta" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+null_mode() {
+	echo "$2" | tail -1 | grep -q '^422$' || fail "$1 expected 422: $2"
+	echo "$2" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["mode", "required"]]' >/dev/null \
+		|| fail "$1 expected one required error on mode: $2"
+}
+put_body=$(call "$URL/wireless/interfaces/$stid" | sed '$d' \
+	| jq -c 'del(.id, .managed, .runtime, .has_key, .has_r0kh, .has_r1kh) | .mode = null')
+null_mode "merge PATCH" "$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$stid" -d '{"mode":null}')"
+null_mode "PUT" "$(call -X PUT -H 'Content-Type: application/json' "$URL/wireless/interfaces/$stid" -d "$put_body")"
+null_mode "JSON Patch remove" "$(call -X PATCH -H 'Content-Type: application/json-patch+json' \
+	"$URL/wireless/interfaces/$stid" -d '[{"op":"remove","path":"/mode"}]')"
+null_mode "JSON Patch replace" "$(call -X PATCH -H 'Content-Type: application/json-patch+json' \
+	"$URL/wireless/interfaces/$stid" -d '[{"op":"replace","path":"/mode","value":null}]')"
+null_mode "POST" "$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" \
+	-d '{"device":"radio0","ssid":"uapi-test-nullmode","mode":null}')"
+[ "$($SSH "uci -q get wireless.$stid.mode")" = sta ] || fail "a refused null mode changed the stored mode"
+$SSH 'uci show wireless' | grep -q "uapi-test-nullmode" && fail "a refused POST stored a section"
+call -X DELETE "$URL/wireless/interfaces/$stid" | tail -1 | grep -q '^204$' || fail "station DELETE expected 204"
 
 # netifd converts a number with ucode's `+v`, and validate.uc stops the setup of the radio for a
 # reassociation_deadline outside 1000 to 65535 on any enabled SSID.

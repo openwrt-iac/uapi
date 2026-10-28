@@ -30080,7 +30080,7 @@
 							"mesh"
 						],
 						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
 					},
 					"ssid": {
 						"type": [
@@ -30224,7 +30224,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ieee80211r on"
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it with 802.11r, for example by setting the SSID up or turning ieee80211r on"
 					},
 					"nasid": {
 						"type": [
@@ -30383,7 +30383,7 @@
 							"mesh"
 						],
 						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
 					},
 					"ssid": {
 						"type": [
@@ -30528,7 +30528,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ieee80211r on",
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it with 802.11r, for example by setting the SSID up or turning ieee80211r on",
 						"pattern": "^[0-9A-Fa-f]{4}$"
 					},
 					"nasid": {

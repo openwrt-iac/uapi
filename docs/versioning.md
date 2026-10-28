@@ -170,8 +170,10 @@ whole. These fields keep the type of `<Name>Request`, because a null does not re
   removes it. Some of these fields take null in `<Name>Request`, because a read can return null
   for them, such as `firewall/rules.target` and `mwan3/interfaces.family`. The merge-patch body
   takes that null too.
-- `wireless/interfaces.mode`. A null stores mode `ap`, as a create without a mode does. The
-  module names such a field in `openapi_patch_non_null`.
+- `wireless/interfaces.mode`. The server refuses its null with 422, because wifi-scripts sets up
+  no interface without a mode, and storing `ap` would turn a station into an access point. A
+  create or a PUT that leaves `mode` out stores `ap`. The module names such a field in
+  `openapi_patch_non_null`.
 
 This changes no `<Name>Request` and no `<Name>Response`.
 
