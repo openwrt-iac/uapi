@@ -44,6 +44,10 @@ rest.
 
 - New endpoints / resources.
 - New optional request fields.
+- A request schema that takes more bodies, where the server already took them with the same
+  result, such as a merge-patch body that drops a `required` or takes null. Every body that was
+  valid stays valid, and no response changes. A generated client can get a wider type for such a
+  field, such as an optional boolean.
 - New response fields. Clients must ignore unknown fields.
 - New optional query parameters.
 - New error codes. Clients branch on HTTP status and treat unknown `code` gracefully.
@@ -141,8 +145,8 @@ and merges it into the stored section. It checks the required fields on the resu
 leave out a field that a create requires.
 
 - The `application/json` body of a CRUD PATCH is `<Name>Patch`. It has the properties of
-  `<Name>Request` with the same types, enums, patterns and bounds. It has no `required` and no
-  conditionals.
+  `<Name>Request` with the same types, enums, patterns and bounds, and it takes null as the list
+  below says. It has no `required` and no conditionals.
 - A nested object, such as the `match` of `firewall/redirects`, has no `required` either. The
   server merges it into the stored object.
 - `<Name>Patch` has no defaults. A merge-patch body has none, and a client that fills defaults
@@ -150,11 +154,32 @@ leave out a field that a create requires.
 - `<Name>Patch` leaves descriptions and examples to `<Name>Request`, because the document ships
   on the router. A deprecated field keeps its description, which says why.
 - A singleton has no create, so its PATCH body is `<Name>Request`. That schema has no `required`
-  and no conditionals.
+  and no conditionals, and it takes null as a `<Name>Patch` does. A separate Patch would leave the
+  Request of a singleton with no operation to describe.
 - The `application/json-patch+json` body is `JsonPatch`.
 
-Before 3.2.0 the merge-patch body was an `allOf` of the Request. So a strict client refused a
-partial body that the server accepts.
+The merge-patch body of a PATCH takes null on a field where the server removes the field for a
+null, since 3.2.0. RFC 7396 removes a member with null. The server skips a null in its type
+check, the merge drops the field, and the write removes the uci option. A read then gives what it
+gives for an unset option, often the default. On a nested object such as `match`, a null removes
+that member only. An array does not take null items, because a merge patch replaces an array
+whole. These fields keep the type of `<Name>Request`, because a null does not remove them:
+
+- `id`. A PATCH ignores it.
+- A write-only secret, such as `wireless/interfaces.key`. A null keeps the stored secret.
+- A field that `<Name>Request` requires, such as `network/interfaces.proto` or the `match` of
+  `firewall/redirects`. The merged section needs it, so the server refuses its null with 422.
+  The one exception is `mwan3/interfaces.family`, which `validate()` does not require, so a null
+  removes it. Some of these fields take null in `<Name>Request`, because a read can return null
+  for them, such as `firewall/rules.target` and `mwan3/interfaces.family`. The merge-patch body
+  takes that null too.
+- `wireless/interfaces.mode`. A null stores mode `ap`, as a create without a mode does. The
+  module names such a field in `openapi_patch_non_null`.
+
+This does not change `<Name>Request` or `<Name>Response` of a CRUD resource.
+
+Before 3.2.0 the merge-patch body was an `allOf` of the Request, which refuses null on most
+fields. So a strict client refused partial bodies and removals that the server accepts.
 
 The two operation-shaped pairs, `BatchRequest` and `TokenCreateRequest`, are hand-written rather
 than generated from a resource module, and are legitimately request-only in places: a token

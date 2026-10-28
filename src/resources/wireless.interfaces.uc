@@ -377,6 +377,8 @@ return {
 	radios: radios,
 	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
+	// toUci stores ap for a null mode, so a null is not a removal.
+	openapi_patch_non_null: ["mode"],
 	openapi_conditional: [
 		{ if:   { properties: { encryption: { enum: KEY_ENCRYPTION } },
 		          required: ["encryption"] },

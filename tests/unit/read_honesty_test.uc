@@ -239,6 +239,50 @@ t.describe('property: a PATCH that names nothing leaves uci as stored', () => {
 	}
 });
 
+// The merge-patch body takes null on a field unless the module or a rule of the generator says a
+// null is not a removal there, so the server has to remove the field for each null that the body
+// takes. A toUci that writes a value for a null, as wireless/interfaces does for `mode`, breaks
+// that unless the module names the field in openapi_patch_non_null. A seed that stores the field
+// shows it.
+const SPEC = json(fs.readfile("build/openapi.json")).components.schemas;
+
+function takes_null(s) {
+	let t = s?.type;
+	return (t == null || t == "null" || (type(t) == "array" && index(t, "null") >= 0))
+	       && (type(s?.enum) != "array" || index(s.enum, null) >= 0);
+}
+
+t.describe('property: a null that a merge-patch body takes removes the field', () => {
+	for (let c in CASES) {
+		t.it(sprintf("%s/%s", c.file, c.id), () => {
+			let mod = loadfile('src/resources/' + c.file)();
+			let h = c.singleton ? handler.make_singleton(mod, { tx: tx_stub() })
+			                    : handler.make(mod, { tx: tx_stub() });
+			let name = "";
+			for (let w in split(replace(c.file, /\.uc$/, ""), /[._]/)) name += uc(substr(w, 0, 1)) + substr(w, 1);
+			let bodies = [];
+			for (let k, p in SPEC[name + (c.singleton ? "Request" : "Patch")].properties) {
+				for (let n, q in p.properties ?? {})
+					if (takes_null(q)) push(bodies, { [k]: { [n]: null } });
+				if (takes_null(p)) push(bodies, { [k]: null });
+			}
+			let wrote = [];
+			for (let b in bodies) {
+				let conn = seeded(c);
+				let patch = (body) => c.singleton ? h.patch(conn, ctx(), body) : h.patch(conn, ctx(), c.id, body);
+				patch({});
+				let before = json(sprintf("%J", conn._state.uci[c.pkg][c.id]));
+				let r = patch(b);
+				if (r.status == 422) continue;
+				if (r.status != 200) push(wrote, sprintf("%J answered %d", b, r.status));
+				for (let o, v in conn._state.uci[c.pkg][c.id])
+					if (!ph.json_eq(before[o], v)) push(wrote, sprintf("%J wrote %s: %J -> %J", b, o, before[o], v));
+			}
+			t.assert_deep_equal(wrote, []);
+		});
+	}
+});
+
 // The case list must not fall behind the resource tree. Every resource with a validate()
 // is writable and therefore has to round-trip; there is no exempt category any more.
 t.describe('property: every writable resource has a round-trip case', () => {
