@@ -448,11 +448,12 @@ stale enough to be misleading:
   (`PROPERTY_ITERS=1000 make test-property`), which was the iteration gate this
   section asked for.
 - The property-fuzz pass derives its resource list from `src/resources/` since
-  3.2.0 (`tests/unit/property_test.uc`), as `tests/unit/read_honesty_test.uc`
-  derives its case list. It skips the read-only collections (`dhcp.leases`,
-  `dhcp.leases6`), which have no `validate()`, and fails naming any other module
-  without one. The hand-written list it replaced had left `unbound.srv` and
-  `unbound.ext` unfuzzed.
+  3.2.0 (`tests/unit/property_test.uc`). It skips the read-only collections
+  (`dhcp.leases`, `dhcp.leases6`), which have no `validate()`, and fails naming
+  any other module without one. The hand-written list it replaced had left
+  `unbound.srv` and `unbound.ext` unfuzzed. `tests/unit/read_honesty_test.uc`
+  walks the same directory, but only to check that its hand-written cases cover
+  every writable module.
 
 ## Objectives for the next major
 

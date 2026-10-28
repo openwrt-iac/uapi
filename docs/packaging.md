@@ -72,7 +72,7 @@ make openapi   # regenerate build/openapi.json
 make stage     # populate build/openwrt/uapi/files/
 ```
 
-`make stage` needs `python3`, which the OpenWrt SDK requires on the host too. `tools/compact_json.py` writes the spec into the package without whitespace, and the stage fails unless that copy parses to the same JSON value as `build/openapi.json`, with the keys in the same order. `main.uc` reads the file whole into every request process that serves `GET /api/v3/openapi.json`, and uhttpd does not compress it. The compact copy is about 30% smaller. `build/openapi.json` stays indented in the repository, because reviews read its diffs.
+`make stage` needs `python3`, which the OpenWrt SDK requires on the host too. `tools/compact_json.py` writes the spec into the APK without whitespace, and the stage fails unless that copy parses to the same JSON value as `build/openapi.json`, with the keys in the same order. `main.uc` reads the file whole into every request process that serves `GET /api/v3/openapi.json`, and uhttpd does not compress it. The compact copy is about 30% smaller. `build/openapi.json` stays indented in the repository, because reviews read its diffs. The uapi package of the OpenWrt packages feed builds from the release tarball and copies `build/openapi.json` as it is, so it installs the indented file until its Makefile runs `tools/compact_json.py`.
 
 ### 3. Build inside the SDK
 
