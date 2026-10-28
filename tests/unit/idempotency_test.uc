@@ -60,7 +60,6 @@ t.describe('idempotency.lookup + store round-trip', () => {
 	});
 });
 
-// Other daemons of the box run as other users.
 t.describe('idempotency.store keeps its entries private and bounded', () => {
 	let dir = "/var/run/uapi-idempotency";
 	let resp = { status: 200, headers: {}, body: { token: "uapi_secret" } };
@@ -77,6 +76,7 @@ t.describe('idempotency.store keeps its entries private and bounded', () => {
 		let files = entries();
 		t.assert_equal(length(files), 1);
 		t.assert_equal(mode(dir + "/" + files[0]), 384);
+		t.assert_equal(mode(dir + "/.swept"), 384);
 	});
 
 	t.it('keeps the entries younger than the TTL and removes the older ones', () => {
@@ -113,20 +113,18 @@ t.describe('idempotency.store, two stores of one key at the same moment', () => 
 	t.it('each writes a whole entry, and the later one stays', () => {
 		wipe();
 		let body = "{\"name\":\"x\"}";
-		let other = sprintf("require('idempotency').store('test_token', 'key_c', %J, %J)",
-			body, { status: 201, headers: {}, body: { id: "other", pad: sprintf("%300s", "y") } });
-		let ran = false;
+		let other = sprintf("exit(require('idempotency').store('test_token', 'key_c', %J, %J) ? 0 : 1)",
+			body, { status: 201, headers: {}, body: { id: "other" } });
+		let child = null;
 		let mod = t.load_with_fs({ ...fs, open: (p, m, perm) => {
 			let f = fs.open(p, m, perm);
-			if (m == "w" && !ran) {
-				ran = true;
-				system([ "ucode", "-L", "src/lib", "-e", other ]);
-			}
+			if (m == "w" && child == null && index(p, ".json.") >= 0)
+				child = system([ "ucode", "-L", "src/lib", "-e", other ]);
 			return f;
 		} }, [ "state_dir", "idempotency" ]);
 		t.assert_true(mod.store("test_token", "key_c", body,
 			{ status: 201, headers: {}, body: { id: "this" } }));
-		t.assert_true(ran);
+		t.assert_equal(child, 0);
 		let r = idem.lookup("test_token", "key_c", body, time());
 		t.assert_equal(r.state, "hit");
 		t.assert_equal(r.response.body.id, "this");

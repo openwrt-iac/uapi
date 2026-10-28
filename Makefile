@@ -31,12 +31,14 @@ help:
 
 test: lint test-unit
 
-# The rate limiter, the metrics, the error ring and the idempotency cache keep their state under
-# /var/run, which only root can write. CI runs the suite as root, and anyone else runs it as root
-# of a user namespace that has a /var/run of its own.
+# The rate limiter, the metrics, the error ring, the idempotency cache and the last-used markers
+# keep their state under /var/run, which only root can write. CI runs the suite as root, and
+# anyone else runs it as root of a user namespace that has a /var/run of its own. Where /var/run
+# is /run, that mount also hides the directory of /var/lock, so it is made again.
 UNIT_RUN = $(UCODE) $(UNIT_PATHS) tests/run_unit.uc
 AS_ROOT = if [ "$$(id -u)" = 0 ]; then $(1); \
-	else unshare -rm sh -c 'mount -t tmpfs uapi-test /var/run && exec $(1)'; fi
+	else unshare -rm sh -c 'lock=$$(readlink -f /var/lock) && \
+		mount -t tmpfs uapi-test /var/run && mkdir -p "$$lock" && exec $(1)'; fi
 
 test-unit:
 	@$(call AS_ROOT,$(UNIT_RUN))

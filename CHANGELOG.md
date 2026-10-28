@@ -858,15 +858,17 @@ All notable changes to this project will be documented in this file. Format foll
 ### Security
 
 - **The metrics, the rate-limit buckets, the error ring and the idempotency cache keep their files
-  private under `/var/run`.** They were in `/tmp`. Each now keeps its files in a directory of mode
-  0700, `/var/run/uapi-metrics`, `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring` or
-  `/var/run/uapi-idempotency`, with files of mode 0600. A package install or upgrade removes these
-  four directories, and the four that an older uapi kept in `/tmp` when root owns them, so the
-  counters start again from zero, which Prometheus reads as a reset. The buckets and the ring now
-  check the size on disk before the rename, as the cache and the counters do, so a full tmpfs no
-  longer empties the ring or refills a bucket. Two idempotency stores of one key at the same moment
-  no longer share a temp file, which could leave an entry that read as a miss. No request, response
-  or header changes. (#270)
+  private under `/var/run`, and so do the last-used markers of the tokens.** The first four were in
+  `/tmp`. Each keeps its files in a directory of mode 0700, `/var/run/uapi-metrics`,
+  `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring`, `/var/run/uapi-idempotency` or
+  `/var/run/uapi-token-update`, with files of mode 0600. A package install or upgrade removes these
+  five directories after its uhttpd restart, and the four that an older uapi kept in `/tmp` when
+  each is a directory that root owns. The counters then start again from zero, which Prometheus
+  reads as a reset, every token has a full burst, the error ring is empty, and the 24 h idempotency
+  replay window starts empty. The buckets and the ring now check the size on disk before the rename,
+  as the cache and the counters do, so a full tmpfs no longer empties the ring. Two idempotency
+  stores of one key at the same moment no longer share a temp file, which could leave an entry that
+  read as a miss. No request, response or header changes. (#270)
 - **The idempotency cache keeps its entries private and bounded.** It uses only a directory that
   uapi owns with mode 0700 and writes each entry with mode 0600, a package install or upgrade
   removes the directory when root owns it, a store removes the entries older than the 24 h TTL at

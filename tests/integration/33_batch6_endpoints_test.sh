@@ -10,7 +10,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
 
 # Wipe per-test state so a previous run doesn't poison this one.
-$SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring' >/dev/null 2>&1 || true
+$SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update' >/dev/null 2>&1 || true
 
 echo "--- /metrics returns Prometheus text under *:ro ---"
 # Generate a couple of requests so there's data to scrape.
@@ -122,12 +122,11 @@ curl -sS -o /dev/null -D /tmp/uapi_idem_batch.h -H "$ADMIN" -H 'Content-Type: ap
 	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w"
 grep -i '^idempotent-replayed:' /tmp/uapi_idem_batch.h >/dev/null || fail "the replay of a batch that writes is not marked replayed"
 
-echo "--- the metrics, the rate-limit buckets and the error ring are private ---"
-for d in /var/run/uapi-metrics /var/run/uapi-ratelimit /var/run/uapi-error-ring; do
-	[ "$($SSH "ls -ld $d" | cut -c1-10)" = "drwx------" ] || fail "$d is not 0700"
-done
-[ -z "$($SSH 'ls -l /var/run/uapi-ratelimit /var/run/uapi-error-ring' | grep '^-' | grep -v '^-rw------- ')" ] \
-	|| fail "a bucket or the error ring is not 0600"
+echo "--- every state directory is 0700 and every file in it 0600 ---"
+dirs="/var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update"
+for d in $dirs; do $SSH "test -d $d" || fail "$d is missing"; done
+wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)")
+[ -z "$wrong" ] || fail "these are not 0700 or 0600: $wrong"
 
 echo "--- pagination: ?limit=N returns a partial page + Link/X-Next-Cursor ---"
 # firewall/rules typically has zero managed entries on a clean install.

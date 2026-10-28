@@ -85,6 +85,9 @@ echo "--- a token read and revoked by position is named, and its bucket, marker 
 	|| fail "GET /tokens/@token[-1] did not name api_shortlived"
 $SSH "test -e /var/run/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to reap"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" || fail "api_shortlived has no marker to reap"
+[ "$($SSH 'ls -ld /var/run/uapi-token-update' | cut -c1-10)" = "drwx------" ] || fail "the marker directory is not 0700"
+[ "$($SSH 'ls -l /var/run/uapi-token-update/api_shortlived' | cut -c1-10)" = "-rw-------" ] \
+	|| fail "the last-used marker of api_shortlived is not 0600"
 # The mint of api_shortlived reaped every other token that no longer authenticates, so its
 # series are the only ones that this revoke folds.
 before=$(curl -sS -H "$ADMIN" "$URL/metrics")

@@ -1,4 +1,5 @@
 let fs = require('fs');
+let state_dir = require('state_dir');
 let ratelimit = require('ratelimit');
 let metrics = require('metrics');
 let transaction = require('transaction');
@@ -162,6 +163,7 @@ function reap_state(tokens, now) {
 		if (t.expires_at == null || now == null || now < t.expires_at) live[t.name] = true;
 	ratelimit.reap(live);
 	metrics.retire_tokens(live);
+	if (!state_dir.owned(LAST_USED_DIR)) return;
 	for (let name in fs.lsdir(LAST_USED_DIR) ?? [])
 		if (!live[name]) fs.unlink(LAST_USED_DIR + "/" + name);
 }
@@ -250,15 +252,17 @@ function remove(conn, name, now, tx_overrides) {
 // already succeeded and the wire response must not depend on the audit write.
 function update_last_used(conn, name, addr, now) {
 	if (name == null || now == null) return;
-	if (!match(name, NAME_RE)) return;
-	try { fs.mkdir(LAST_USED_DIR); } catch (_) {}
+	// Without its marker every authenticated request would write /etc/config/uapi.
+	if (!match(name, NAME_RE) || !state_dir.owned(LAST_USED_DIR)) return;
 	let marker = LAST_USED_DIR + "/" + name;
 	let st = fs.stat(marker);
 	if (st != null && st.mtime != null
 	    && (now - st.mtime) < LAST_USED_THROTTLE_SECONDS)
 		return;
-	let fd = fs.open(marker, "w");
-	if (fd) { fd.write(""); fd.close(); }
+	// open() gives its mode only to a file that it creates.
+	fs.unlink(marker);
+	let fd = fs.open(marker, "w", 0o600);
+	if (fd) fd.close();
 
 	let r = transaction.transaction(conn, {
 		package: PACKAGE,

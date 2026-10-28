@@ -231,19 +231,13 @@ t.describe('token_store.remove', () => {
 const BUCKETS = "/var/run/uapi-ratelimit/";
 const MARKERS = "/var/run/uapi-token-update/";
 
-// /var/run belongs to root. CI runs the unit tests as root, and a developer who does not
-// leaves the markers unchecked.
 function plant_state(names) {
-	fs.mkdir(MARKERS);
-	let markers = true;
+	fs.mkdir(MARKERS, 0o700);
 	for (let n in names) {
 		ratelimit.check(n, { now: 1000 });
 		metrics.record_request("GET", "/system", 200, 1, n);
-		let f = fs.open(MARKERS + n, "w");
-		if (f) f.close();
-		else markers = false;
+		fs.writefile(MARKERS + n, "");
 	}
-	return markers;
 }
 
 function has_series(id) {
@@ -262,7 +256,7 @@ function requests_of(id) {
 t.describe('token_store, the tmpfs state of a token', () => {
 	t.it('a revoke reaps the bucket, the series and the marker of the token after its commit', () => {
 		let c = bus.stub({}); seed_tokens(c);
-		let markers = plant_state([ "admin", "readonly" ]);
+		plant_state([ "admin", "readonly" ]);
 		let want = requests_of("-retired") + requests_of("admin");
 		t.assert_true(token_store.remove(c, "admin", 1700000000, noop_tx()).ok);
 		t.assert_equal(fs.stat(BUCKETS + "admin.txt"), null);
@@ -270,10 +264,8 @@ t.describe('token_store, the tmpfs state of a token', () => {
 		t.assert_false(has_series("admin"));
 		t.assert_true(has_series("readonly"));
 		t.assert_equal(requests_of("-retired"), want);
-		if (markers) {
-			t.assert_equal(fs.stat(MARKERS + "admin"), null);
-			t.assert_true(fs.stat(MARKERS + "readonly") != null);
-		}
+		t.assert_equal(fs.stat(MARKERS + "admin"), null);
+		t.assert_true(fs.stat(MARKERS + "readonly") != null);
 	});
 
 	t.it('a revoke whose commit fails keeps the state of the token', () => {
@@ -291,7 +283,7 @@ t.describe('token_store, the tmpfs state of a token', () => {
 		let c = bus.stub({}); seed_tokens(c);
 		c._state.uci.uapi.old = { '.type': 'token', salt: 's', hash: 'h', scopes: [ '*:ro' ],
 		                          expires_at: '1700000000' };
-		let markers = plant_state([ "readonly", "old", "gone" ]);
+		plant_state([ "readonly", "old", "gone" ]);
 		t.assert_true(token_store.create(c, { name: "run_3", scopes: [ "*:ro" ] },
 		                                 [ "*:rw" ], 1700000000, noop_tx()).ok);
 		t.assert_true(fs.stat(BUCKETS + "readonly.txt") != null);
@@ -300,11 +292,9 @@ t.describe('token_store, the tmpfs state of a token', () => {
 		t.assert_true(has_series("readonly"));
 		t.assert_false(has_series("old"));
 		t.assert_false(has_series("gone"));
-		if (markers) {
-			t.assert_true(fs.stat(MARKERS + "readonly") != null);
-			t.assert_equal(fs.stat(MARKERS + "old"), null);
-			t.assert_equal(fs.stat(MARKERS + "gone"), null);
-		}
+		t.assert_true(fs.stat(MARKERS + "readonly") != null);
+		t.assert_equal(fs.stat(MARKERS + "old"), null);
+		t.assert_equal(fs.stat(MARKERS + "gone"), null);
 	});
 
 	t.it('reap_state keeps a token whose expiry is ahead, and one with no expiry', () => {
@@ -316,5 +306,36 @@ t.describe('token_store, the tmpfs state of a token', () => {
 		t.assert_true(fs.stat(BUCKETS + "never.txt") != null);
 		t.assert_equal(fs.stat(BUCKETS + "past.txt"), null);
 		token_store.reap_state([], 1700000000);
+	});
+});
+
+t.describe('token_store.update_last_used, the last-used marker', () => {
+	let mode = (p) => fs.stat(p).mode & 0o777;
+
+	t.it('writes the marker 0600 in a directory 0700, also over a marker with mode 0644', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		let now = time();
+		fs.unlink(MARKERS + "admin");
+		token_store.update_last_used(c, "admin", null, now);
+		t.assert_equal(mode(MARKERS), 0o700);
+		t.assert_equal(mode(MARKERS + "admin"), 0o600);
+		fs.chmod(MARKERS + "admin", 0o644);
+		token_store.update_last_used(c, "admin", null, now + 120);
+		t.assert_equal(mode(MARKERS + "admin"), 0o600);
+		fs.unlink(MARKERS + "admin");
+	});
+
+	t.it('does not use a directory that is not uapi\'s own', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		plant_state([ "gone" ]);
+		fs.unlink(MARKERS + "admin");
+		fs.chmod(MARKERS, 0o777);
+		token_store.update_last_used(c, "admin", null, time());
+		token_store.reap_state([], time());
+		let written = fs.stat(MARKERS + "admin") != null, kept = fs.stat(MARKERS + "gone") != null;
+		fs.chmod(MARKERS, 0o700);
+		token_store.reap_state([], time());
+		t.assert_false(written);
+		t.assert_true(kept);
 	});
 });

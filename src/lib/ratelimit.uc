@@ -41,8 +41,8 @@ function check(token_id, opts) {
 	let rate = o.rate ?? DEFAULT_RATE;
 	let burst = o.burst ?? DEFAULT_BURST;
 	let now_ms = _now_ms(o.now);
-	// A directory that is not this process's own holds no bucket, the same as a bucket that
-	// cannot be read.
+	// Without a directory of its own the limiter allows every request. Under /var/run only root
+	// can cause that, and refusing instead would answer 429 to every token.
 	if (token_id == null || !match(token_id, SAFE_NAME_RE) || now_ms == null
 	    || !state_dir.owned(DIR))
 		return { allowed: true, retry_after_seconds: 0 };
