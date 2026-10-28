@@ -323,11 +323,21 @@ for (let p in paths_for_body)
 		collect_refs(op.requestBody, body_refs);
 	}
 
+// A singleton has no POST or PUT, so no operation references its Request once its PATCH body is
+// the Patch built from that Request. The Request stays for a client that names it. Only the
+// Request of such a singleton is exempt.
+let singleton_requests = {};
+for (let p, kind in curated) {
+	let m = match(paths[p]?.patch?.requestBody?.content?.["application/json"]?.schema?.["$ref"] ?? "",
+	              /^#\/components\/schemas\/(.+)Patch$/);
+	if (kind == "singleton" && m) singleton_requests[m[1] + "Request"] = true;
+}
+
 let request_schemas = 0;
 for (let name in schemas) {
 	if (substr(name, -7) != "Request") continue;
 	request_schemas++;
-	if (!body_refs[name])
+	if (!body_refs[name] && !singleton_requests[name])
 		note(sprintf("/components/schemas/%s", name),
 		     "is a Request schema no request body references, so it describes a write that cannot happen");
 }
@@ -336,7 +346,7 @@ for (let name in schemas) {
 // reading writability off the schema set sees a writable resource as read-only. Scoped to
 // curated paths, since /raw/ and the auth and package endpoints have their own hand-written
 // bodies, and only to verbs that actually take a body: `adopt` is a POST with none, which is
-// correct rather than a gap. A CRUD merge PATCH names the Patch built from its Request instead.
+// correct rather than a gap. A merge PATCH names the Patch built from its Request instead.
 let writable_bodies = 0;
 for (let p in paths_for_body) {
 	if (!is_curated(p)) continue;
@@ -377,9 +387,6 @@ function without_annotations(v) {
 // comparison with the Request leaves null out.
 function without_null(v) {
 	if (type(v) != "object") return v;
-	if (type(v.anyOf) == "array" && length(v.anyOf) == 2 && v.anyOf[1]?.type == "null"
-	    && length(keys(v.anyOf[1])) == 1)
-		return without_null(v.anyOf[0]);
 	let out = { ...v };
 	if (type(out.type) == "array") {
 		let t = filter(out.type, (x) => x != "null");
@@ -393,7 +400,8 @@ function without_null(v) {
 	return out;
 }
 
-// For the keywords the generator emits. tests/merge_patch_bodies.py asks a full validator.
+// A module can write a const or a $ref, which widen_null leaves refusing null, so this reads both.
+// tests/merge_patch_bodies.py asks a full validator.
 function admits_null(s) {
 	if (type(s) != "object") return s !== false;
 	let t = s.type;
@@ -401,17 +409,10 @@ function admits_null(s) {
 	if (type(s.enum) == "array" && index(s.enum, null) < 0) return false;
 	if (exists(s, "const") && s.const != null) return false;
 	let ref = match(s["$ref"] ?? "", /^#\/components\/schemas\/(.+)$/)?.[1];
-	if (ref != null && !admits_null(schemas[ref])) return false;
-	if (type(s.anyOf) == "array" && length(filter(s.anyOf, (a) => admits_null(a))) == 0) return false;
-	return true;
+	return ref == null || admits_null(schemas[ref]);
 }
 
-// A merge PATCH removes a field with null, and the server takes it: the type check skips a null,
-// the merge drops the field, and the write removes the option. A field keeps the nullability of
-// its Request where a null is not a removal: `id`, which a PATCH ignores, a write-only secret,
-// which a null keeps, and a field that the Request requires, which validate() refuses on the
-// merged section. A module names any other such field in openapi_patch_non_null, and this list
-// keeps each one a recorded decision.
+// Kept fields follow nullable_properties in build/gen_openapi.uc, and each openapi_patch_non_null field is listed here.
 const PATCH_NULL_KEPT = {
 	"WirelessInterfacesPatch": { "mode": "a null stores mode ap, as a create without a mode does" },
 };

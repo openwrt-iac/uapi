@@ -302,37 +302,30 @@ function patch_copy(v) {
 	return out;
 }
 
-// A $ref or a const refuses null whatever its siblings declare, so it goes into an anyOf. The
-// copy is there because widen_null writes into a node that carries no marker, and this node is
-// the Request's own.
-function admit_null(v) {
-	if (exists(v, "$ref") || exists(v, "const")) return { anyOf: [ v, { type: "null" } ] };
-	return widen_null({ ...v });
-}
-
 // A merge patch removes a field with null, and so does the server: check_schema_types skips a
-// null, the merge drops the field, and toUci leaves the option out. A field in `keep` holds its
-// type, because its null is not a removal: `id`, which a PATCH ignores, a field that the Request
-// requires, which validate() refuses on the merged section, and a field that the module names in
-// openapi_patch_non_null. So does a write-only secret, which carry_write_only keeps for a null.
-// Array items stay as they are, because a merge patch replaces an array whole.
+// null, the merge sets the field to null, and toUci leaves the option out. A field in `keep`
+// keeps its Request type, because its null is not a removal: `id`, which a PATCH ignores, a field
+// that the Request requires, which validate() refuses on the merged section, and a field that the
+// module names in openapi_patch_non_null. So does a write-only secret, which carry_write_only
+// keeps for a null. `mwan3/interfaces.family` is the one required field whose null the server
+// removes, because its validate() does not require it, and its Request already takes null.
+// Array items stay as they are, because a merge patch replaces an array whole. The copy is there
+// because widen_null writes into a node that carries no marker, and this node is the Request's.
+// lint-openapi-shape, tests/merge_patch_bodies.py and tests/unit/read_honesty_test.uc check this
+// rule against the spec and the server.
 function nullable_properties(props, keep) {
 	let out = {};
 	for (let k, v in props) {
 		let w = (type(v.properties) == "object")
 		        ? { ...v, properties: nullable_properties(v.properties, v.required ?? []) } : v;
-		out[k] = (index(keep, k) >= 0 || v.writeOnly === true) ? w : admit_null(w);
+		out[k] = (index(keep, k) >= 0 || v.writeOnly === true) ? w : widen_null({ ...w });
 	}
 	return out;
 }
 
-function patch_keep(mod, req) {
-	return [ "id", ...(req.required ?? []), ...(mod.openapi_patch_non_null ?? []) ];
-}
-
-function patch_schema(req, request_ref, keep) {
+function patch_schema(req, request_ref, non_null) {
 	let props = {};
-	for (let k, v in nullable_properties(req.properties, keep)) {
+	for (let k, v in nullable_properties(req.properties, [ "id", ...(req.required ?? []), ...non_null ])) {
 		props[k] = patch_copy(v);
 		if (type(v) == "object") delete props[k].required;
 	}
@@ -602,7 +595,6 @@ function build_crud_paths(ep) {
 
 function build_singleton_paths(ep) {
 	let schema_ref = response_name(ep);
-	let request_ref = request_name(ep);
 	return {
 		[ep.path]: {
 			"get":   { "summary": sprintf("Get the %s singleton", ep.domain),
@@ -615,13 +607,10 @@ function build_singleton_paths(ep) {
 			"patch": { "summary": sprintf("Update the %s singleton", ep.domain),
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
-			           // A singleton has no POST or PUT, so its Request already is the merge-patch
-			           // body, and build_schemas admits null on it as on a Patch. A separate Patch
-			           // would leave the Request describing no operation. lint-openapi-shape refuses a
-			           // top-level `required` or `allOf` on it. A nested `required` would hold,
-			           // because a singleton PATCH replaces a nested object whole.
+			           // The Patch, as on a CRUD resource. A singleton has no POST or PUT, so no
+			           // operation references its Request, which stays for a client that names it.
 			           "requestBody": { "required": true, "content": {
-			             "application/json":            { "schema": { "$ref": "#/components/schemas/" + request_ref } },
+			             "application/json":            { "schema": { "$ref": "#/components/schemas/" + patch_name(ep) } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
 			           } },
 			           "responses": responses("patch", { "200": make_response(200, "Updated", schema_ref) }, UCI_TX) },
@@ -1649,12 +1638,10 @@ function build_schemas() {
 		// missing Request as "not writable, or gone", and that inference is what made the
 		// removal of vnstat/interfaces fail codegen loudly instead of quietly; minting one
 		// for a read-only endpoint would blunt it.
-		if (ep.kind == "singleton")
-			req.properties = nullable_properties(req_props, patch_keep(mod, req));
-		if (ep.kind != "collection")
+		if (ep.kind != "collection") {
 			schemas[request_name(ep)] = req;
-		if (ep.kind == "crud")
-			schemas[patch_name(ep)] = patch_schema(req, request_name(ep), patch_keep(mod, req));
+			schemas[patch_name(ep)] = patch_schema(req, request_name(ep), mod.openapi_patch_non_null ?? []);
+		}
 	}
 
 	return schemas;

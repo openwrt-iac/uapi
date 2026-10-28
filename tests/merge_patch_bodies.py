@@ -15,11 +15,7 @@ spec = json.load(open("build/openapi.json"))
 schemas = spec["components"]["schemas"]
 registry = Registry().with_resource("urn:spec", Resource(contents=spec, specification=DRAFT202012))
 
-# A merge patch removes a field with null, and the server takes it: the type check skips a null,
-# the merge drops the field and the write removes the option. A field keeps the nullability of its
-# Request where a null is not a removal: `id`, which a PATCH ignores, a write-only secret, which a
-# null keeps, a field that the Request requires, which validate() refuses on the merged section,
-# and the fields named here.
+# Kept fields follow nullable_properties in build/gen_openapi.uc, and each openapi_patch_non_null field is listed here.
 NULL_KEPT = {"WirelessInterfacesPatch": {"mode"}}
 
 
