@@ -59,3 +59,50 @@ t.describe('idempotency.lookup + store round-trip', () => {
 		t.assert_equal(r.state, "miss");
 	});
 });
+
+// Other daemons of the box run as other users.
+t.describe('idempotency.store keeps its entries private and bounded', () => {
+	let dir = "/tmp/uapi-idempotency";
+	let resp = { status: 200, headers: {}, body: { token: "uapi_secret" } };
+	let mode = (p) => fs.stat(p).mode & 511;
+	let entries = () => filter(fs.lsdir(dir) ?? [], (n) => !match(n, /^\.|\.tmp$/));
+
+	t.it('writes the directory 0700 and each entry 0600, also over a directory that an older uapi made 0755', () => {
+		wipe();
+		fs.mkdir(dir);
+		fs.chmod(dir, 493);
+		t.assert_equal(mode(dir), 493);
+		t.assert_true(idem.store("test_token", "key_p", "{}", resp));
+		t.assert_equal(mode(dir), 448);
+		let files = entries();
+		t.assert_equal(length(files), 1);
+		t.assert_equal(mode(dir + "/" + files[0]), 384);
+	});
+
+	t.it('keeps the entries younger than the TTL and removes the older ones', () => {
+		wipe();
+		let now = time();
+		idem.store("test_token", "key_old", "{}", resp, now);
+		idem.store("test_token", "key_mid", "{}", resp, now + 43200);
+		t.assert_equal(idem.lookup("test_token", "key_old", "{}", now).state, "hit");
+		idem.store("test_token", "key_new", "{}", resp, now + 86400 + 60);
+		t.assert_equal(idem.lookup("test_token", "key_old", "{}", now).state, "miss");
+		t.assert_equal(idem.lookup("test_token", "key_new", "{}", now).state, "hit");
+		t.assert_equal(length(entries()), 1);
+	});
+
+	t.it('stores and finds nothing when the path is not a directory that this process owns', () => {
+		let elsewhere = "/tmp/uapi-idempotency-elsewhere";
+		if (fs.lstat(dir)?.type == "link") { fs.unlink(dir); fs.rename(elsewhere, dir); }
+		wipe();
+		t.assert_true(idem.store("test_token", "key_l", "{}", resp));
+		fs.rename(dir, elsewhere);
+		fs.symlink(elsewhere, dir);
+		let before = length(fs.lsdir(elsewhere));
+		t.assert_equal(idem.lookup("test_token", "key_l", "{}", time()).state, "miss");
+		t.assert_false(idem.store("test_token", "key_l2", "{}", resp));
+		t.assert_equal(length(fs.lsdir(elsewhere)), before);
+		fs.unlink(dir);
+		fs.rename(elsewhere, dir);
+	});
+});

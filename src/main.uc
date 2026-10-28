@@ -559,7 +559,9 @@ function batch_dispatch(conn, ctx, token, method, body) {
 
 	let r;
 	if (length(pkgs) == 0) {
-		// Pure-read batch: no flock, no snapshot, no commit, no reload.
+		// Pure-read batch: no flock, no snapshot, no commit, no reload, and no idempotency entry, which
+		// would let a token that can only read fill /tmp with one large entry per key.
+		ctx.reads_only = true;
 		r = run_ops(conn);
 	} else {
 		r = transaction.multi_transaction(conn, {
@@ -1172,7 +1174,7 @@ global.handle_request = function(env) {
 	// replay path returns before metrics/idempotency-store).
 	if (method == "POST" && token != null && ctx != null
 	    && ctx.idempotency_key != null
-	    && resp.status >= 200 && resp.status < 300
+	    && resp.status >= 200 && resp.status < 300 && !ctx.reads_only
 	    && (resp.headers == null || resp.headers["Idempotent-Replayed"] == null)) {
 		try { idempotency.store(token.name, ctx.idempotency_key,
 		                        ctx.body_text ?? "", resp); }
