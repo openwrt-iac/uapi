@@ -234,6 +234,13 @@ t.describe('wg.apply against logging wg and ip', () => {
 		                    [ set_of(PK, '10.0.0.2/32'), set_of(PK, '10.0.0.4/32') ]);
 	});
 
+	t.it('a remove sets again a section with the key and no allowed IPs, with none', () => {
+		let r = apply({ network: { wg1: WG1, a: peer({ public_key: PK }) } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0), [ set_of(PK, '') ]);
+	});
+
 	t.it('gives wg the key and the host without the whitespace that wg strips from the config', () => {
 		let r = apply({ network: { wg1: WG1 } },
 		              [ { iface: 'wg1', action: 'set', public_key: ' ' + PK, allowed_ips: [ '10.0.0.2/32' ],
@@ -393,6 +400,19 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
 		                    [ 'wg|set|wg1|peer|' + PK + '|allowed-ips|10.0.0.2/32|preshared-key|/dev/null',
 		                      set_of(PK2, '10.0.0.3/32') + '|endpoint|192.0.2.1:51820' ]);
+	});
+
+	// wireguard.sh writes no [Peer] for a section without a key, and no AllowedIPs line for a peer
+	// without allowed IPs, which LuCI leaves optional. The restore stopped at the first such section.
+	t.it('skips a section without a key, sets a peer without allowed IPs with none, and sets the peers after them', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ allowed_ips: '10.0.0.2/32' }),
+		                               b: peer({ public_key: '', allowed_ips: '10.0.0.4/32' }),
+		                               c: peer({ public_key: PK }),
+		                               d: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
+		                    [ set_of(PK, ''), set_of(PK2, '10.0.0.3/32') ]);
 	});
 });
 

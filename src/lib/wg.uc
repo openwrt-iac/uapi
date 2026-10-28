@@ -139,7 +139,8 @@ function psk_file(value) {
 // fails the command and changes nothing, so the peer keeps working on its old
 // config. Keepalive and preshared key are spelled out, with 0 and /dev/null as
 // the explicit clears, because `wg set` merges and would otherwise leave a stale
-// value behind that uci no longer has.
+// value behind that uci no longer has. An empty allowed-ips is the clear of the
+// list, for a peer without allowed IPs, which LuCI allows and ifup sets.
 // An IPv6 endpoint has to be bracketed for wg to find the port. A peer that LuCI's RPC, /raw or a
 // shell stored can hold one bracketed already, and without the guard "[fd00::1]" became
 // "[[fd00::1]]" and wg refused the peer.
@@ -303,8 +304,6 @@ function apply_peer(iface, peer) {
 	let psk = kernel_key(peer.preshared_key);
 	if (!psk && peer.preshared_key != null && peer.preshared_key != "")
 		return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
-	if (length(peer.allowed_ips) == 0)
-		return sprintf("refusing to apply a peer with no allowed_ips on %s", iface);
 	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
 	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses to
@@ -377,7 +376,9 @@ function reconcile(conn, interfaces) {
 		for (let s in sections)
 			for (let r in peer_routes(s)) push(wanted_routes, r);
 
+		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it.
 		for (let s in sections) {
+			if ((values.config_get(s.public_key) ?? "") == "") continue;
 			let err = apply_peer(iface, to_peer(s));
 			if (err != null) return err;
 		}

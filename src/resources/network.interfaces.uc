@@ -250,13 +250,16 @@ function toUci(body) {
 	if (json.sourcefilter != null) out.sourcefilter = json.sourcefilter ? "1" : "0";
 	if (json.private_key != null) out.private_key = json.private_key;
 	if (json.listen_port != null) out.listen_port = "" + json.listen_port;
+	// A PATCH deletes only what the read of the old proto shows, so a switch from static could not
+	// remove a hand-written listen_port without this clear.
+	else if (exists(json, "listen_port")) out.listen_port = [];
 	if (type(json.addresses) == "array" && length(json.addresses) > 0)
 		out.addresses = json.addresses;
 	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
 
 	values.require_present(errs, json, "proto");
@@ -390,9 +393,9 @@ function validate(json, conn, id, delta) {
 	// conn still holds the section as it was, because validation runs before the write is staged.
 	// A name that the server generates has no stored options and no peers.
 	let name = id ?? json.id;
-	let goes_live = false, enabling = false;
+	let goes_live = false, enabling = false, old = null;
 	if (json.proto == "wireguard" && json.disabled !== true && conn != null && name != null) {
-		let old = conn.uci_get(PKG, name);
+		old = conn.uci_get(PKG, name);
 		goes_live = old?.proto != "wireguard" || strict_bool(old.disabled);
 		enabling = old?.proto == "wireguard";
 	}
@@ -403,6 +406,14 @@ function validate(json, conn, id, delta) {
 	if (ok("listen_port") && (named.listen_port === -1 || (goes_live && json.listen_port === -1)))
 		push(errs, { field: "listen_port", code: "out_of_range",
 		             message: "must be from 0 to 65535: -1 is how a port name that /etc/services does not resolve reads, and wg cannot bring the interface up with it" });
+	// A PATCH keeps an option that it leaves out, and the read of a proto without listen_port hides
+	// it, so the check above cannot see a hand-written value that a switch brings up. LuCI saves such
+	// a switch and refuses the value at the next save of its wireguard form: uapi refuses the switch,
+	// which is the write that makes wg fail.
+	if (partial && goes_live && !exists(json, "listen_port")
+	    && values.service_port(old.listen_port, () => fs.readfile("/etc/services"), -1) === -1)
+		push(errs, { field: "listen_port", code: "conflict",
+		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null, or switch with disabled true and send one before enabling the interface" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
 	    && !is_valid_ipv6_cidr(json.reqprefix))
@@ -547,7 +558,7 @@ return {
 		               description: "WireGuard private key; accepted on write, masked on read" },
 		has_private_key: { type: "boolean", readOnly: true },
 		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
-		                description: "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422." },
+		                description: "WireGuard listen port; 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up; a write of -1 answers 422. A PATCH that switches an enabled interface to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the implicit host-route for wireguard endpoint" },
 		ip4table:     { type: ["string", "null"],

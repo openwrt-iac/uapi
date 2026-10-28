@@ -129,7 +129,7 @@ without uci state change.
    before the lock loaded the package into the cursor, which serves every later
    read from that copy, so a commit by LuCI or a shell in between was invisible
    to the write.
-3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta)`
+3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta, partial)`
    run inside the lock, and `validate_new(json, conn)` where a resource has one, which refuses only
    the errors that the write adds (`docs/adding-a-resource.md`). Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
