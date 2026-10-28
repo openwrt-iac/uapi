@@ -259,20 +259,93 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		}
 	});
 
-	// The read shows the stored value as one that a write refuses, so a PUT of the read cannot store
-	// it as that number, and a write that sends a real value fixes it.
-	t.it('a stored port or keepalive that wg cannot use blocks every write until one replaces it', () => {
-		for (let c in [ [ { endpoint_host: '192.0.2.1', endpoint_port: 'nosuchservice' }, { endpoint_port: 51820 } ],
-		                [ { persistent_keepalive: '25x' }, { persistent_keepalive: 25 } ] ]) {
-			let conn = with_wg();
-			for (let k, v in { ...c[0], disabled: '1' }) conn._state.uci.network.g_existing[k] = v;
+	let fields_of = (r) => map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
+	const UNUSABLE = [ { persistent_keepalive: '25x' }, { endpoint_host: '192.0.2.1', endpoint_port: 'nosuchservice' },
+	                   { endpoint_host: '192.0.2.1', endpoint_port: '0' } ];
+
+	t.it('a stored port or keepalive that wg cannot use does not block a write that leaves it as it is', () => {
+		for (let stored in UNUSABLE) {
+			let c = with_wg();
+			for (let k, v in stored) c._state.uci.network.g_existing[k] = v;
 			let h = make_handler();
-			t.assert_equal(length(h.sweep(conn)), 1, c[0]);
-			t.assert_equal(h.patch(conn, ctx(), 'g_existing', { description: 'x' }).status, 422, c[0]);
-			let body = h.get_one(conn, ctx(), 'g_existing').body;
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200, stored);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200, stored);
+			for (let k, v in stored) t.assert_equal(c._state.uci.network.g_existing[k], v, stored);
+			t.assert_equal(length(h.sweep(c)), 1, stored);
+		}
+	});
+
+	t.it('enabling a peer that stores such a port or keepalive is refused for it', () => {
+		for (let stored in UNUSABLE) {
+			let c = with_wg();
+			for (let k, v in { ...stored, disabled: '1' }) c._state.uci.network.g_existing[k] = v;
+			let r = make_handler().patch(c, ctx(), 'g_existing', { disabled: false });
+			t.assert_deep_equal(fields_of(r), [ [ (stored.endpoint_port != null) ? 'endpoint_port' : 'persistent_keepalive', 'out_of_range' ] ], stored);
+		}
+	});
+
+	// wireguard.sh writes the port only with a host, and no peer without a key.
+	t.it('a port that reads 0 is live only with a host, and a value only on a peer with a key', () => {
+		let c = with_wg();
+		for (let k, v in { endpoint_port: 'nosuchservice', disabled: '1' }) c._state.uci.network.g_existing[k] = v;
+		let h = make_handler();
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
+		t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1' })), [ [ 'endpoint_port', 'out_of_range' ] ]);
+		t.assert_deep_equal(map(wgp.validate_new({ persistent_keepalive: -1 }), (e) => e.live), [ false ]);
+		t.assert_deep_equal(map(wgp.validate_new({ persistent_keepalive: -1, public_key: PK }), (e) => e.live), [ true ]);
+	});
+
+	// The kernel apply sends a host only with a port, so the kernel would keep the old endpoint.
+	t.it('a write that changes the host of an enabled peer whose port reads 0 is refused', () => {
+		for (let port in [ '0', 'nosuchservice' ]) {
+			let c = with_wg();
+			for (let k, v in { endpoint_host: '192.0.2.1', endpoint_port: port }) c._state.uci.network.g_existing[k] = v;
+			let h = make_handler();
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' })), [ [ 'endpoint_port', 'out_of_range' ] ], port);
+			t.assert_equal(c._state.uci.network.g_existing.endpoint_host, '192.0.2.1', port);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2', endpoint_port: 51820 }).status, 200, port);
+		}
+		let c = with_wg();
+		for (let k, v in { endpoint_host: '192.0.2.1', endpoint_port: '0', disabled: '1' }) c._state.uci.network.g_existing[k] = v;
+		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' }).status, 200);
+	});
+
+	t.it('a write that sends -1 or 0 is refused', () => {
+		let h = make_handler();
+		t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { persistent_keepalive: -1 })), [ [ 'persistent_keepalive', 'out_of_range' ] ]);
+		t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: '192.0.2.1', endpoint_port: 0 })), [ [ 'endpoint_port', 'out_of_range' ] ]);
+		let c = with_wg();
+		for (let k, v in { disabled: '1', endpoint_host: '192.0.2.1', endpoint_port: '51820' }) c._state.uci.network.g_existing[k] = v;
+		t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_port: 0 })), [ [ 'endpoint_port', 'out_of_range' ] ]);
+		t.assert_deep_equal(fields_of(h.create(with_wg(), ctx(), { interface: 'wg1', public_key: PK2, allowed_ips: [ '10.42.0.9/32' ],
+		                                                           persistent_keepalive: -1 })), [ [ 'persistent_keepalive', 'out_of_range' ] ]);
+	});
+
+	// toUci writes the number that the PUT sends. wg refuses -1 as it refuses the stored text, and a
+	// stored decimal 0 is what it was, but wg takes port 0 where it cannot resolve the stored name.
+	t.it('a PUT of the read stores only a port or keepalive that wg reads as it read the stored one', () => {
+		let put_read = function(stored) {
+			let c = with_wg();
+			for (let k, v in stored) c._state.uci.network.g_existing[k] = v;
+			let h = make_handler();
+			let body = h.get_one(c, ctx(), 'g_existing').body;
 			for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
-			t.assert_equal(h.replace(conn, ctx(), 'g_existing', body).status, 422, c[0]);
-			t.assert_equal(h.patch(conn, ctx(), 'g_existing', c[1]).status, 200, c[1]);
+			let r = h.replace(c, ctx(), 'g_existing', body);
+			return { r, c, read: h.get_one(c, ctx(), 'g_existing').body };
+		};
+		let p = put_read(UNUSABLE[0]);
+		t.assert_equal(p.r.status, 200);
+		t.assert_equal(p.c._state.uci.network.g_existing.persistent_keepalive, '-1');
+		t.assert_equal(p.read.persistent_keepalive, -1);
+		p = put_read(UNUSABLE[1]);
+		t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'conflict' ] ]);
+		t.assert_equal(p.c._state.uci.network.g_existing.endpoint_port, 'nosuchservice');
+		for (let stored in [ ' 70000', '  ' ])
+			t.assert_deep_equal(fields_of(put_read({ endpoint_host: '192.0.2.1', endpoint_port: stored }).r), [ [ 'endpoint_port', 'conflict' ] ], stored);
+		for (let stored in [ UNUSABLE[2], { endpoint_host: '192.0.2.1', endpoint_port: ' +00' } ]) {
+			p = put_read(stored);
+			t.assert_equal(p.r.status, 200, stored);
+			t.assert_equal(p.read.endpoint_port, 0, stored);
 		}
 	});
 
@@ -403,6 +476,91 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		let r = h.patch(c, ctx(), 'g_existing', { allowed_ips: ['10.42.0.6/32'] });
 		t.assert_equal(r.status, 200);
 		t.assert_equal(r.body.interface, 'wg1');
+	});
+});
+
+// wireguard.sh gives every enabled peer of an interface to one `wg syncconf`, so the write of the
+// interface that makes its stored peers live is refused for a peer that wg refuses.
+t.describe('network.interfaces refuses a write that makes a stored peer that wg refuses live', () => {
+	let ifaces = loadfile('src/resources/network.interfaces.uc')();
+	let h = handler.make(ifaces, { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} });
+	const WG = { proto: 'wireguard', private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.42.0.1/24' ] };
+	const STATIC = { proto: 'static', ipaddr: [ '192.0.2.1/24' ] };
+	const BAD = { g_ka: { persistent_keepalive: '25x' },
+	              g_psk: { public_key: PK2, preshared_key: 'K\\n[Peer]', endpoint_host: '192.0.2.9', endpoint_port: 'nosuchservice' } };
+	function world(iface, peers, parent) {
+		let network = { [parent ?? 'wg1']: { '.type': 'interface', '.anonymous': false, ...iface } };
+		for (let id, p in peers)
+			network[id] = { '.type': 'wireguard_wg1', '.anonymous': false, public_key: PK, allowed_ips: [ '10.42.0.2/32' ], ...p };
+		return ubus.stub({ uci: { network } });
+	}
+	let errs = (r) => map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
+
+	t.it('a switch to wireguard names each peer that wg refuses and the fields, and no value', () => {
+		let r = h.patch(world(STATIC, { ...BAD, g_ok: { public_key: PK2 } }), ctx(), 'wg1', WG);
+		t.assert_deep_equal(errs(r), [ [ 'proto', 'conflict' ] ]);
+		let m = r.body.errors[0].message;
+		t.assert_true(index(m, 'g_ka (persistent_keepalive)') >= 0, m);
+		t.assert_true(index(m, 'g_psk (preshared_key, endpoint_port)') >= 0, m);
+		t.assert_true(index(m, 'g_ok') < 0 && index(m, '25x') < 0 && index(m, 'Peer]') < 0 && index(m, 'nosuchservice') < 0, m);
+		// A peer write refuses a parent that is not on wireguard, so the way out is a disabled switch.
+		t.assert_true(index(m, 'Switch with disabled true') >= 0, m);
+	});
+
+	t.it('a switch to wireguard passes when such a peer is disabled or has no key, or when every peer is clean', () => {
+		t.assert_equal(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', disabled: '1' } }), ctx(), 'wg1', WG).status, 200);
+		t.assert_equal(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', public_key: null } }), ctx(), 'wg1', WG).status, 200);
+		t.assert_equal(h.patch(world(STATIC, { g_ok: {}, g_ok2: { public_key: PK2, persistent_keepalive: '25' } }), ctx(), 'wg1', WG).status, 200);
+		t.assert_equal(h.patch(world(STATIC, BAD), ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
+	});
+
+	t.it('the way out that the message gives works: switch disabled, fix the peer, enable', () => {
+		let ph = handler.make(wgp, { tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+		} });
+		let c = world(STATIC, { g_ka: BAD.g_ka });
+		t.assert_equal(h.patch(c, ctx(), 'wg1', WG).status, 422);
+		t.assert_equal(ph.patch(c, ctx(), 'g_ka', { persistent_keepalive: 25 }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
+		t.assert_equal(ph.patch(c, ctx(), 'g_ka', { persistent_keepalive: 25 }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { disabled: false }).status, 200);
+	});
+
+	t.it('a write of an interface already live on wireguard does not check its peers', () => {
+		t.assert_equal(h.patch(world(WG, BAD), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+	});
+
+	t.it('enabling a wireguard interface refuses such a peer on disabled, also a PUT that leaves disabled out', () => {
+		let off = { ...WG, disabled: '1' };
+		let r = h.patch(world(off, BAD), ctx(), 'wg1', { disabled: false });
+		t.assert_deep_equal(errs(r), [ [ 'disabled', 'conflict' ] ]);
+		t.assert_true(index(r.body.errors[0].message, 'Fix or disable each of them first') >= 0, r.body.errors[0].message);
+		t.assert_deep_equal(errs(h.replace(world(off, BAD), ctx(), 'wg1', { proto: 'wireguard', addresses: WG.addresses })),
+		                    [ [ 'disabled', 'conflict' ] ]);
+		t.assert_equal(h.patch(world(off, BAD), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+	});
+
+	t.it('a create checks the stored peers of the name that it sends, and a generated name has none', () => {
+		let c = world(STATIC, BAD, 'lan');
+		t.assert_deep_equal(errs(h.create(c, ctx(), { id: 'wg1', ...WG })), [ [ 'proto', 'conflict' ] ]);
+	});
+
+	// netifd cannot bring the interface up with a listen port that /etc/services does not resolve.
+	t.it('a write that brings up an interface with a stored listen_port that reads -1 is refused for it', () => {
+		let ports = (r) => filter(errs(r), (e) => e[0] == 'listen_port');
+		t.assert_deep_equal(ports(h.patch(world({ ...WG, listen_port: '65536', disabled: '1' }), ctx(), 'wg1', { disabled: false })),
+		                    [ [ 'listen_port', 'out_of_range' ] ]);
+		t.assert_equal(h.patch(world({ ...WG, listen_port: '65536' }), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+		t.assert_equal(h.patch(world({ ...WG, listen_port: '65536', disabled: '1' }), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+	});
+
+	t.it('the sweep reports nothing for the peers of a live or disabled wireguard interface', () => {
+		for (let iface in [ WG, { ...WG, disabled: '1' } ])
+			t.assert_deep_equal(h.sweep(world(iface, BAD)), [], iface);
 	});
 });
 

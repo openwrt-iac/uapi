@@ -34,6 +34,7 @@ if ! ensure_wireguard; then
 fi
 
 IFACE=wgpa
+IFACE2=wgpb
 PRIV='yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk='
 PEER1='xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg='
 PEER2='TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0='
@@ -43,12 +44,14 @@ PEER4='TWlzY2VsbGFuZW91c1BlZXJLZXlGb3JUZXN0aW5nMD0='
 # Peers outlive their parent in uci, and a peer section whose interface is gone
 # would be left behind for every later run to trip over, so they go first.
 cleanup() {
-	$SSH "ifdown $IFACE >/dev/null 2>&1 || true
-	      for s in \$(uci show network | sed -n \"s/^network\\.\\([^.]*\\)=wireguard_$IFACE\$/\\1/p\"); do
-	          uci -q delete network.\$s
-	      done
-	      uci -q delete network.$IFACE 2>/dev/null || true
-	      uci -q commit network" >/dev/null 2>&1 || true
+	for i in $IFACE $IFACE2; do
+		$SSH "ifdown $i >/dev/null 2>&1 || true
+		      for s in \$(uci show network | sed -n \"s/^network\\.\\([^.]*\\)=wireguard_$i\$/\\1/p\"); do
+		          uci -q delete network.\$s
+		      done
+		      uci -q delete network.$i 2>/dev/null || true
+		      uci -q commit network" >/dev/null 2>&1 || true
+	done
 }
 trap cleanup EXIT
 
@@ -312,6 +315,71 @@ for want in '10.98.130.0/24' '10.98.131.9/32' 'fd00:98:aa::/64' 'fd00:98:bb::5/1
 	echo "$kernel_aips" | grep -q "$want" || fail "allowed-ip $want not in kernel: $kernel_aips"
 done
 call -X DELETE "$URL/network/wireguard_peers/$ds" >/dev/null
+
+# A write refuses to change a port to 0 or a keepalive to -1, and LuCI's form takes port 0. A
+# write that leaves them as uci holds them passes, sets the rest of the peer, and leaves the kernel
+# its endpoint and keepalive. Enabling such a peer is refused, because wireguard.sh would then give
+# the value to wg.
+echo "--- a stored port of 0 and an unreadable keepalive take a write that leaves them, and the kernel keeps its endpoint ---"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.35/32\"],
+	    \"endpoint_host\":\"198.51.100.7\",\"endpoint_port\":51820,\"persistent_keepalive\":25}")
+[ "$(status_of "$r")" = "200" ] || fail "POST peer for the stored port: $(body_of "$r")"
+kept=$(id_of "$r")
+$SSH "uci set network.$kept.endpoint_port=0; uci set network.$kept.persistent_keepalive=25x; uci commit network"
+for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}'; do
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
+	[ "$(status_of "$r")" = "200" ] || fail "PATCH $body of a peer with a stored port of 0: $(body_of "$r")"
+done
+endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
+keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
+[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
+$SSH "wg show $IFACE allowed-ips" | grep -q '10.98.99.36/32' || fail "the PATCH of allowed_ips did not reach the kernel"
+[ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
+	|| fail "a PATCH rewrote the stored port or keepalive"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":true}')
+[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of a peer with a stored port of 0: $(body_of "$r")"
+has_peer "$PEER3" && fail "the disabled peer is still in the kernel"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "enabling a peer with a stored port of 0 expected 422, got $(status_of "$r"): $(body_of "$r")"
+call -X DELETE "$URL/network/wireguard_peers/$kept" >/dev/null
+
+# wireguard.sh gives every enabled peer to one `wg syncconf`, so one stored peer that wg refuses
+# keeps the whole interface down. A peer write needs its parent on proto wireguard, so the way out
+# is a switch that lands disabled, then a fix of the peer, then enabling the interface.
+echo "--- a switch to wireguard and enabling refuse a stored peer that wg refuses, which keeps the interface down ---"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" -d "{\"proto\":\"none\",\"id\":\"$IFACE2\"}")
+[ "$(status_of "$r")" = "200" ] || fail "POST $IFACE2: $(body_of "$r")"
+KA_PEER=$($SSH 'wg genkey | wg pubkey')
+PRIV2=$($SSH 'wg genkey')
+$SSH "uci set network.uapi45ka=wireguard_$IFACE2; uci set network.uapi45ka.public_key='$KA_PEER'
+	uci add_list network.uapi45ka.allowed_ips=10.98.97.2/32; uci set network.uapi45ka.persistent_keepalive=25x; uci commit network"
+TO_WG="{\"proto\":\"wireguard\",\"private_key\":\"$PRIV2\",\"addresses\":[\"10.98.97.1/30\"]"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE2" -d "$TO_WG}")
+[ "$(status_of "$r")" = "422" ] || fail "switch with a peer that wg refuses expected 422, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"field": "proto"' || fail "the 422 is not on proto: $(body_of "$r")"
+body_of "$r" | grep -q 'uapi45ka (persistent_keepalive)' || fail "the 422 does not name the peer: $(body_of "$r")"
+body_of "$r" | grep -q '25x' && fail "the 422 quotes the stored value: $(body_of "$r")"
+[ "$($SSH "uci get network.$IFACE2.proto")" = "none" ] || fail "the refused switch changed the proto"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE2" -d "$TO_WG,\"disabled\":true}")
+[ "$(status_of "$r")" = "200" ] || fail "switch with disabled true: $(body_of "$r")"
+$SSH "uci set network.$IFACE2.disabled=0; uci commit network; /etc/init.d/network reload"
+sleep 10
+$SSH "ubus call network.interface.$IFACE2 status" | grep -q '"up": true' \
+	&& fail "$IFACE2 came up with a peer that wg refuses, so the refusal guards nothing"
+$SSH "uci set network.$IFACE2.disabled=1; uci commit network; /etc/init.d/network reload"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE2" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "enabling with a peer that wg refuses expected 422, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"field": "disabled"' || fail "the 422 is not on disabled: $(body_of "$r")"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45ka" -d '{"persistent_keepalive":25}')
+[ "$(status_of "$r")" = "200" ] || fail "fixing the peer once its parent is on wireguard: $(body_of "$r")"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE2" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "200" ] || fail "enabling with the fixed peer: $(body_of "$r")"
+n=0
+until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
+	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with its fixed peer"; sleep 1
+done
 
 echo "--- a peer written to a down tunnel is accepted, and applies on ifup ---"
 $SSH "ifdown $IFACE"; sleep 2

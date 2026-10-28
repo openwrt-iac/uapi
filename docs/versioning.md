@@ -114,7 +114,7 @@ and a write still takes the space-separated string that the 3.1 spec declared, u
 major removes it.
 
 A request can also be narrower than the response, since 3.2.0, where a read returns a value
-that every write refuses. Three kinds of value qualify:
+that the request schema does not take. Three kinds of value qualify:
 
 - a stored option that the daemon ignores or cannot use, such as `mtu` below 68 or a route
   `table` of 0,
@@ -123,8 +123,10 @@ that every write refuses. Three kinds of value qualify:
 - a `network/interfaces.proto` that uapi does not model, such as the `6in4` that LuCI writes.
 
 The response declares what a read can return, and the request declares what a write can send,
-so a read-modify-write of such a value fails against the request schema as it fails against the
-server. A module declares the difference with `x-uapi-write`, and
+so a read-modify-write of such a value fails against the request schema. The server refuses it
+too, except where the rule is in `validate_new()`, such as the -1 of
+`network/wireguard_peers.persistent_keepalive`: there the server takes a write that leaves the
+stored value as it is. A module declares the difference with `x-uapi-write`, and
 `tests/unit/write_overlay_test.uc` checks each such keyword against the refusal in
 `validate()`.
 

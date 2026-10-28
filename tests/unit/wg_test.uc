@@ -248,6 +248,17 @@ t.describe('wg.apply against logging wg and ip', () => {
 		t.assert_deep_equal(r.commands, []);
 	});
 
+	// A write that leaves such a port as uci holds it gives it here, and so does the restore, which
+	// must still set the peers after it.
+	t.it('sets a peer with a host and a port that reads 0 without its endpoint, and does not remove it', () => {
+		let r = apply({ network: { wg1: WG1 } },
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: '192.0.2.1', endpoint_port: 0 },
+		                { iface: 'wg1', action: 'set', public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] } ]);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, PK + '|') >= 0), [ set_of(PK, '10.0.0.2/32') ]);
+		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+	});
+
 	t.it('sets a peer whose keepalive wg cannot read without a keepalive', () => {
 		t.assert_deep_equal(wg.set_peer_argv('wg1', { public_key: PK, allowed_ips: [ '10.0.0.2/32' ], persistent_keepalive: -1 }, null),
 		                    [ 'wg', 'set', 'wg1', 'peer', PK, 'allowed-ips', '10.0.0.2/32', 'preshared-key', '/dev/null' ]);

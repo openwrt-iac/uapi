@@ -1325,4 +1325,10 @@ t.describe('network.interfaces listen_port', () => {
 		let merged = { ...wg, proto: 'dhcp', listen_port: -1 };
 		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { proto: 'dhcp' }), 'listen_port'), []);
 	});
+	t.it('refuses -1 only in a request that sends it, so a PATCH that leaves a stored name passes', () => {
+		let merged = { ...wg, listen_port: -1 };
+		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { mtu: 1400 }), 'listen_port'), []);
+		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { disabled: true }), 'listen_port'), []);
+		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', merged), 'listen_port'), [ 'out_of_range' ]);
+	});
 });

@@ -143,9 +143,10 @@ function endpoint_arg(host, port) {
 
 function set_peer_argv(iface, peer, psk_path) {
 	let argv = [ "wg", "set", iface, "peer", peer.public_key, "allowed-ips", join(",", peer.allowed_ips) ];
-	// -1 is a stored value that only ifup refuses, since validate() refuses it in a write. The
-	// restore sets every peer from uci and stops at the first one that fails, so a refusal here
-	// kept every later peer of the interface out of the kernel. The kernel keeps its keepalive.
+	// -1 is a stored value that wg refuses, which another writer stored or a PUT sent back from its
+	// read: a write that leaves it as it is and the restore give it here. The restore sets every peer from uci and stops at the first one
+	// that fails, so a refusal here kept every later peer of the interface out of the kernel. The
+	// kernel keeps its keepalive.
 	if (peer.persistent_keepalive !== -1)
 		push(argv, "persistent-keepalive", sprintf("%d", peer.persistent_keepalive ?? 0));
 	push(argv, "preshared-key", psk_path ?? "/dev/null");
@@ -310,8 +311,10 @@ function apply_peer(iface, peer) {
 		return sprintf("refusing to apply a peer with no allowed_ips on %s", iface);
 	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
-	if (host != "" && peer.endpoint_port === 0)
-		return sprintf("refusing to apply a peer whose endpoint port does not resolve on %s", iface);
+	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses to
+	// set, as for the keepalive above. A write that leaves it as it is, and the restore, set the rest of
+	// the peer, and the kernel keeps its endpoint.
+	let keep_endpoint = host != "" && peer.endpoint_port === 0;
 
 	// `wg set` cannot unset an endpoint, so clearing one means removing the peer
 	// and setting it fresh. Safe only in this direction: with no endpoint there is
@@ -320,7 +323,7 @@ function apply_peer(iface, peer) {
 	if (host == "")
 		remove_peer(iface, key);
 
-	let r = set_peer(iface, { ...peer, public_key: key, preshared_key: psk, endpoint_host: host });
+	let r = set_peer(iface, { ...peer, public_key: key, preshared_key: psk, endpoint_host: keep_endpoint ? null : host });
 	if (!r.ok)
 		return sprintf("wg set on %s failed: %s", iface, r.output);
 	return null;
