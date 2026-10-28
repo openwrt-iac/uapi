@@ -410,10 +410,10 @@ function validate(json, conn, id, delta, partial) {
 	// it, so the check above cannot see a hand-written value that a switch brings up. LuCI saves such
 	// a switch and refuses the value at the next save of its wireguard form: uapi refuses the switch,
 	// which is the write that makes wg fail.
-	if (partial && goes_live && !exists(json, "listen_port")
+	if (partial && goes_live && !exists(json, "listen_port") && !exists(named, "listen_port")
 	    && values.service_port(old.listen_port, () => fs.readfile("/etc/services"), -1) === -1)
 		push(errs, { field: "listen_port", code: "conflict",
-		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null, or switch with disabled true and send one before enabling the interface" });
+		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null, or switch with disabled true and send a port or null before enabling the interface" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
 	    && !is_valid_ipv6_cidr(json.reqprefix))

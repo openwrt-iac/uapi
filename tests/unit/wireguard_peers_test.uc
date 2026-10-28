@@ -617,9 +617,26 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 	// toUci clears listen_port when a write sends it as null, and a wireguard read without the option
 	// reads null, so every PATCH would delete an option that is not there.
 	t.it('a PATCH of a wireguard interface without listen_port does not write listen_port', () => {
-		let c = world(WG);
-		t.assert_equal(h.patch(c, ctx(), 'wg1', { mtu: 1400 }).status, 200);
-		t.assert_deep_equal(filter(c._state.uci_ops, (op) => op[3] == 'listen_port'), []);
+		for (let body in [ { mtu: 1400 }, [ { op: 'remove', path: '/listen_port' } ] ]) {
+			let c = world(WG);
+			t.assert_equal(h.patch(c, type(body) == 'array' ? { ...ctx(), json_patch: true } : ctx(), 'wg1', body).status, 200, body);
+			t.assert_deep_equal(filter(c._state.uci_ops, (op) => op[3] == 'listen_port'), [], body);
+		}
+	});
+
+	// A JSON Patch remove names the field, and deletes the option, so the interface comes up without it.
+	t.it('a JSON Patch that makes the interface live and removes /listen_port passes and deletes the option', () => {
+		let jp = { ...ctx(), json_patch: true };
+		let c = world({ ...WG, disabled: '1', listen_port: 'nosuchservice' });
+		t.assert_equal(h.patch(c, jp, 'wg1', [ { op: 'replace', path: '/disabled', value: false },
+		                                       { op: 'remove', path: '/listen_port' } ]).status, 200);
+		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
+		c = world({ proto: '6in4', listen_port: 'nosuchservice' });
+		t.assert_equal(h.patch(c, jp, 'wg1', [ { op: 'replace', path: '/proto', value: 'wireguard' },
+		                                       { op: 'add', path: '/private_key', value: WG.private_key },
+		                                       { op: 'add', path: '/addresses', value: TO_WG.addresses },
+		                                       { op: 'remove', path: '/listen_port' } ]).status, 200);
+		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
 	});
 
 	t.it('the sweep reports nothing for the peers of a live or disabled wireguard interface', () => {

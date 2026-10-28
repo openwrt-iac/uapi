@@ -411,14 +411,14 @@ All notable changes to this project will be documented in this file. Format foll
   keeps an option that it leaves out, so the check of #225 could not see a value such as
   `nosuchservice` that a hand edit left there. wireguard.sh wrote it after `ListenPort=`, wg refused
   it, and the interface did not come up, while the PATCH answered 200. Such a PATCH now passes when
-  it sends a port or `null`, and a `null` now removes the option. It removed nothing before, because
-  a PATCH deletes only the options that the read of the old proto shows. A switch with
-  `disabled: true` passes too, and a write that sends a port or `null` can then enable the
-  interface. A PUT removes every option that it does not write, so the check does not apply to it.
-  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. LuCI saves such a switch, and its wireguard form refuses
-  the value at the next save, so uapi refuses earlier, at the write that makes wg fail. No stock
-  `/etc/config/network` holds a `listen_port`. (#272)
+  it names `listen_port`: a port, a `null`, which now removes the option, or the `remove` of a JSON
+  Patch. A `null` removed nothing before, because a PATCH deletes only the options that the read of
+  the old proto shows. A switch with `disabled: true` passes too, and a write that sends a port or
+  `null` can then enable the interface. A PUT removes every option that it does not write, so the
+  check does not apply to it. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. LuCI saves such a
+  switch, and its wireguard form refuses the value at the next save, so uapi refuses earlier, at the
+  write that makes wg fail. No stock `/etc/config/network` holds a `listen_port`. (#272)
 
 ### Deprecated
 
@@ -877,14 +877,14 @@ All notable changes to this project will be documented in this file. Format foll
   as wireguard.sh does, and sets a peer without allowed IPs with an empty `allowed-ips`, which
   clears the list in the kernel. A write that removes a peer from the kernel, such as a DELETE, sets
   again each other enabled section with the same key, and refused such a section in the same way. A
-  write of `network/wireguard_peers` still requires `allowed_ips`. No request, response or header
-  changes. (#272)
+  write of `network/wireguard_peers` still requires `allowed_ips`. A failed peer write on such an
+  interface now answers `500 reload_failed_restored`. No request or response schema changes. (#272)
 - **A PATCH that changes nothing no longer rewrites the package of `network/rules`, `lldpd/config`,
   `snmpd/system` or `unbound/server`.** Each write of these clears an option, `action` of a lookup
   or goto rule, or the legacy `lldp_capabilities`, `sysServices` or `dnssec_enabled`, and a PATCH
   sent that delete even when the section did not hold the option. The bus counts a delete as a
   write, so the commit wrote the package again, which drops its comments. A PATCH now skips the
-  clear of an option that the section does not hold. No request, response or header changes. (#272)
+  delete of an option that the section does not hold. No request, response or header changes. (#272)
 
 ### Security
 

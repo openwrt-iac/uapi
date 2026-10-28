@@ -571,7 +571,7 @@ function default_footprint(resource, existing, old_opts, new_opts) {
 function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
-		if (exists(new_opts, k)) continue;
+		if (exists(new_opts, k) || !exists(existing, k)) continue;
 		c.uci_delete(p, id, k);
 	}
 	for (let k in new_opts) {
@@ -594,8 +594,8 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		// Null and the empty list are how toUci says "this key should not be there", so
 		// neither is ever a skip: unbound clears the legacy name with `[]`, and comparing two
 		// sentinels equal would have left the operator's stale key in place. A clear of a key that
-		// the section does not hold is skipped, because the bus counts the delete as a write and
-		// commits, which rewrites the package.
+		// the section does not hold is skipped, here and in the loop above, because the bus counts
+		// the delete as a write and commits, which rewrites the package.
 		let nv = new_opts[k];
 		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
 		if (clearing && !exists(existing, k))
