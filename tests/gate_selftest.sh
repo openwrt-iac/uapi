@@ -162,6 +162,18 @@ p.write_text(s.replace(a, 'PROBE hostname (alphanumerics', 1))
 EOF
 }
 
+# The compact copy and its check come from one script, so the probe breaks the copy in the way
+# that a dict comparison would let through: the keys come out sorted.
+mut_compact_reorders() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('tools/compact_json.py'); s = p.read_text()
+a = 'separators=(",", ":")'
+assert a in s, 'dump anchor not found'
+p.write_text(s.replace(a, a + ', sort_keys=True', 1))
+EOF
+}
+
 mut_dead_import() {
 	python3 - <<'EOF'
 from pathlib import Path
@@ -561,6 +573,7 @@ probe lint-doc-refs      "a claim no test prints"               "no test prints 
 probe lint-doc-refs      "an error code nothing emits"         "nothing in src/ emits it"          mut_code_unemitted
 probe lint-doc-refs      "an enum code nothing documents"      "appears nowhere in docs/errors.md" mut_code_undocumented
 probe openapi-check      "a schema change not regenerated"     ""                                  mut_stale_spec
+probe stage              "a compact spec with its keys reordered" "does not parse to the same JSON value" mut_compact_reorders
 probe coverage           "a module import nothing reads"    "DEAD MODULE IMPORTS"               mut_dead_import
 probe coverage           "a lib export nothing uses"           "DEAD LIB EXPORTS"                  mut_dead_export
 
@@ -576,7 +589,7 @@ missing=""
 for g in $chain; do
 	case " $probed " in *" $g "*) : ;; *) missing="$missing $g" ;; esac
 done
-for g in openapi-check coverage; do
+for g in openapi-check coverage stage; do
 	case " $probed " in *" $g "*) : ;; *) missing="$missing $g" ;; esac
 done
 if [ -n "$missing" ]; then
@@ -586,7 +599,7 @@ if [ -n "$missing" ]; then
 	echo "  nobody knows works: lint-emdash passed in CI for releases without reading a file."
 	failures=$((failures + 1))
 else
-	echo "  $(printf '%s' "$probed" | wc -w) gates probed, covering the Makefile lint chain plus openapi-check and coverage"
+	echo "  $(printf '%s' "$probed" | wc -w) gates probed, covering the Makefile lint chain plus openapi-check, coverage and stage"
 fi
 
 echo

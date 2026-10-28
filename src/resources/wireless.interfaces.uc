@@ -227,14 +227,15 @@ function validate(json) {
 
 // The rules on the values that wifi-scripts or a daemon refuses or misreads. wifi-scripts sets up an
 // SSID only while the SSID and its radio are enabled, and another writer, such as LuCI, can enable
-// either or change the mode or encryption later. So a rule on the value alone, such as a newline or
-// a length, reports its error in every mode, and marks it `live: false` when the daemon does not read
-// the value now. A rule of one mode or encryption, such as the 48-byte nasid of fast transition,
-// reports its error only there, and marks it `live: false` when the SSID is not set up. A write that
-// moves the SSID there adds the error. See new_errors() in the handler. wireless/devices runs the
-// rules with the radio on for a write that turns the radio on. Only a newline ends a line in
-// hostapd's and wpa_supplicant's config readers, and each problem is its own error, so that one
-// cannot hide another.
+// either or change the mode, the encryption or the 802.11r options later. So a rule on the value
+// alone, such as a newline or a length, reports its error in every mode, and marks it `live: false`
+// when the daemon does not read the value now. A rule of one mode, encryption or 802.11r setup, such
+// as the 48-byte nasid of fast transition or the grammar of the key holder lists, reports its error
+// only there, and marks it `live: false` when the SSID is not set up. A write that moves the SSID
+// there adds the error. See new_errors() in the handler. wireless/devices runs the rules with the
+// radio on for a write that turns the radio on. Only a newline ends a line in hostapd's and
+// wpa_supplicant's config readers, and each problem is its own error, so that one cannot hide
+// another.
 function rules(json, radio_on) {
 	let errs = [];
 	let on = radio_on && json.disabled !== true;

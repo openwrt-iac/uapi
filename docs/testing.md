@@ -77,7 +77,7 @@ No layer here can see a uci option no resource models at all. PUT deliberately d
 
 ## Every gate ships with a demonstrated failure
 
-`make gate-selftest` breaks each gate on purpose and asserts it says so. Forty-one probes across eleven gates: the nine `lint` sub-targets, `openapi-check` and `coverage`, with each distinct rejection shape probed separately (twenty-one for `lint-openapi-shape`, seven for `lint-doc-refs`, three for `lint-defaults`, two each for `lint-reserved` and `coverage`). It also makes one well-formed change that a gate must let through. It deprecates a CRUD field with a reason, and `lint-openapi-shape` must pass.
+`make gate-selftest` breaks each gate on purpose and asserts it says so. Forty-two probes across twelve gates: the nine `lint` sub-targets, `openapi-check`, `coverage` and `stage`, with each distinct rejection shape probed separately (twenty-one for `lint-openapi-shape`, seven for `lint-doc-refs`, three for `lint-defaults`, two each for `lint-reserved` and `coverage`). It also makes one well-formed change that a gate must let through. It deprecates a CRUD field with a reason, and `lint-openapi-shape` must pass.
 
 It exists because `lint-emdash` shipped for several releases without ever running in CI. It lists tracked files with `git ls-files`, the CI container installed no `git`, and `|| true` turned the failure into a pass, so it reported success without reading a file. From the outside a green check and a working check look identical: "the gate runs" and "the gate works" are different claims, and only a planted defect separates them.
 
@@ -149,7 +149,7 @@ Six resource families remain uncovered because their packages stay outside the i
 
 ## OpenAPI emission
 
-Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
+Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The package carries it without whitespace, and `make stage` fails unless that copy parses to the same JSON value as `build/openapi.json`, key order included (see `docs/packaging.md`). The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
 
 `make openapi-check` regenerates the spec into a temp file and diffs against the committed `build/openapi.json`. CI runs this as a sanity gate; if it fails, the committed spec is out of sync with the resource modules and one of them has to give.
 

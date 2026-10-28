@@ -394,6 +394,15 @@ All notable changes to this project will be documented in this file. Format foll
   such a value, and a few forms that wg takes, such as a prefix length of three digits, on every
   write. The rule counts only on an enabled peer with a public key, because wireguard.sh gives wg no
   other peer. That uses the tightening carve-out of #261. (#262)
+- **The package installs `openapi.json` without whitespace.** `main.uc` reads the installed file
+  whole into the request process that serves `GET /api/v3/openapi.json`, and uhttpd sends it
+  uncompressed, so its size is paid in memory and on the wire. The file shrinks by about 30%, from
+  949,429 to 668,736 bytes for the spec at this change. The served document is the same JSON value,
+  with its keys in the same order, so a client that parses it sees no change. A script that matches
+  its text, such as a `grep` for `"version": "`, has to match without the space. `make stage` now
+  needs `python3`, which the OpenWrt SDK requires on the host too, and fails unless the installed
+  copy parses to the same value as `build/openapi.json`, which stays indented in the repository.
+  (#264)
 
 ### Deprecated
 

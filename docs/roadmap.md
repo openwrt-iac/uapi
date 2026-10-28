@@ -435,18 +435,6 @@ is unresolvable.
   in this repo, and it is recorded here only so the question is not re-opened as uapi
   work.
 
-- **Derive the property-fuzz resource list from the resource registry.**
-  `tests/unit/read_honesty_test.uc` now does exactly this and is the pattern to
-  copy: it walks `src/resources/` and fails naming any module with a `validate()`
-  that has no case, so the list cannot fall behind the tree.
-  `tests/unit/property_test.uc` keeps `RESOURCES` as a hand-written literal, so a
-  new curated resource gets no fuzz coverage until somebody remembers to add it.
-  That is how `unbound.srv` and `unbound.ext` went unfuzzed: both are writable and
-  both have a `validate()`, and neither was in the list. They are in it now, but
-  the next resource can slip the same way. The read-only collections
-  (`dhcp.leases`, `dhcp.leases6`) have no `validate()` and are correctly excluded,
-  so a derived list needs that one filter.
-
 Everything else this section used to list has shipped, and the section had gone
 stale enough to be misleading:
 
@@ -459,6 +447,12 @@ stale enough to be misleading:
 - CI already runs the property pass at a fixed 1000 iterations per resource
   (`PROPERTY_ITERS=1000 make test-property`), which was the iteration gate this
   section asked for.
+- The property-fuzz pass derives its resource list from `src/resources/` since
+  3.2.0 (`tests/unit/property_test.uc`), as `tests/unit/read_honesty_test.uc`
+  derives its case list. It skips the read-only collections (`dhcp.leases`,
+  `dhcp.leases6`), which have no `validate()`, and fails naming any other module
+  without one. The hand-written list it replaced had left `unbound.srv` and
+  `unbound.ext` unfuzzed.
 
 ## Objectives for the next major
 
