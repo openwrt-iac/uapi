@@ -373,6 +373,69 @@ function without_annotations(v) {
 	return out;
 }
 
+// The Patch admits null where its Request may not, which the null rule below checks, so the
+// comparison with the Request leaves null out.
+function without_null(v) {
+	if (type(v) != "object") return v;
+	if (type(v.anyOf) == "array" && length(v.anyOf) == 2 && v.anyOf[1]?.type == "null"
+	    && length(keys(v.anyOf[1])) == 1)
+		return without_null(v.anyOf[0]);
+	let out = { ...v };
+	if (type(out.type) == "array") {
+		let t = filter(out.type, (x) => x != "null");
+		out.type = (length(t) == 1) ? t[0] : t;
+	}
+	if (type(out.enum) == "array") out.enum = filter(out.enum, (x) => x != null);
+	if (type(out.properties) == "object") {
+		out.properties = {};
+		for (let name, p in v.properties) out.properties[name] = without_null(p);
+	}
+	return out;
+}
+
+// For the keywords the generator emits. tests/merge_patch_bodies.py asks a full validator.
+function admits_null(s) {
+	if (type(s) != "object") return s !== false;
+	let t = s.type;
+	if (t != null && t != "null" && !(type(t) == "array" && index(t, "null") >= 0)) return false;
+	if (type(s.enum) == "array" && index(s.enum, null) < 0) return false;
+	if (exists(s, "const") && s.const != null) return false;
+	let ref = match(s["$ref"] ?? "", /^#\/components\/schemas\/(.+)$/)?.[1];
+	if (ref != null && !admits_null(schemas[ref])) return false;
+	if (type(s.anyOf) == "array" && length(filter(s.anyOf, (a) => admits_null(a))) == 0) return false;
+	return true;
+}
+
+// A merge PATCH removes a field with null, and the server takes it: the type check skips a null,
+// the merge drops the field, and the write removes the option. A field keeps the nullability of
+// its Request where a null is not a removal: `id`, which a PATCH ignores, a write-only secret,
+// which a null keeps, and a field that the Request requires, which validate() refuses on the
+// merged section. A module names any other such field in openapi_patch_non_null, and this list
+// keeps each one a recorded decision.
+const PATCH_NULL_KEPT = {
+	"WirelessInterfacesPatch": { "mode": "a null stores mode ap, as a create without a mode does" },
+};
+
+let null_fields = 0;
+function check_null(where, props, req_props, keep, request) {
+	for (let k, p in props) {
+		let rp = req_props?.[k];
+		if (type(p?.properties) == "object") {
+			let nested = {};
+			for (let r in rp?.required ?? []) nested[r] = true;
+			check_null(where + "/properties/" + k, p.properties, rp?.properties, nested, request);
+		}
+		null_fields++;
+		if (!exists(keep, k) && p?.writeOnly !== true) {
+			if (!admits_null(p))
+				note(where + "/properties/" + k, "refuses null, which a merge PATCH sends to remove the field and the server takes as a removal");
+		}
+		else if (admits_null(p) != admits_null(rp))
+			note(where + "/properties/" + k,
+			     sprintf("%s null unlike %s, although a null does not remove this field", admits_null(p) ? "takes" : "refuses", request));
+	}
+}
+
 // The server type-checks a merge PATCH (RFC 7396) body, merges it into the stored section, and
 // checks the required fields on the result, so a body that names one field is valid. The body
 // schema used to be an allOf of the Request, which carried the create's `required` and its
@@ -390,13 +453,19 @@ for (let p in paths) {
 		if (exists(target, kw))
 			note(where, sprintf("is the merge-patch body of PATCH %s and declares %s, which refuses a partial body that the server merges and accepts", p, kw));
 
+	let is_patch = name != null && substr(name, -5) == "Patch";
+	let request = is_patch ? substr(name, 0, length(name) - 5) + "Request" : (name ?? where);
+	let req = is_patch ? (schemas[request] ?? {}) : target;
+	let keep = { id: true, ...(PATCH_NULL_KEPT[name] ?? {}) };
+	for (let r in req.required ?? []) keep[r] = true;
+	if (is_curated(p))
+		check_null(where, target.properties ?? {}, req.properties ?? {}, keep, request);
+
 	// A Patch is its Request with the requirements taken out, at the top level and on a nested
-	// object, which default_merge_for_patch merges into the stored one too. Descriptions, examples
-	// and defaults are left to the Request. Any other difference is a value that PATCH and PUT
-	// disagree about.
-	if (name == null || substr(name, -5) != "Patch") continue;
-	let request = substr(name, 0, length(name) - 5) + "Request";
-	let req = schemas[request] ?? {};
+	// object, which default_merge_for_patch merges into the stored one too, and null admitted.
+	// Descriptions, examples and defaults are left to the Request. Any other difference is a value
+	// that PATCH and PUT disagree about.
+	if (!is_patch) continue;
 	let rest = function(s) {
 		let o = { ...s };
 		for (let kw in [ "required", "allOf", "description", "properties" ]) delete o[kw];
@@ -411,7 +480,7 @@ for (let p in paths) {
 			want = { ...want };
 			delete want.required;
 		}
-		if (sprintf("%J", without_annotations(want)) != sprintf("%J", without_annotations(pp[k])))
+		if (sprintf("%J", without_null(without_annotations(want))) != sprintf("%J", without_null(without_annotations(pp[k]))))
 			note(where + "/properties/" + k,
 			     sprintf("differs from %s/properties/%s with its `required` removed", request, k));
 	}
@@ -601,5 +670,5 @@ if (length(problems) > 0) {
 	exit(1);
 }
 
-printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d request/response pairs, %d merge-patch bodies, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
-       schemas_seen, conditionals_seen, runtime_seen, managed_seen, halves, merge_bodies, deprecated_seen, collections, tx_responses, etag_responses);
+printf("OK: %d schema nodes checked, %d conditionals, %d read-only runtimes, %d read-only managed, %d request/response pairs, %d merge-patch bodies with %d fields checked for null, %d deprecations with reasons, %d collections, %d transaction-header responses, %d etag responses, no structural problems\n",
+       schemas_seen, conditionals_seen, runtime_seen, managed_seen, halves, merge_bodies, null_fields, deprecated_seen, collections, tx_responses, etag_responses);

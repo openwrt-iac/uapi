@@ -302,9 +302,37 @@ function patch_copy(v) {
 	return out;
 }
 
-function patch_schema(req, request_ref) {
+// A $ref or a const refuses null whatever its siblings declare, so it goes into an anyOf. The
+// copy is there because widen_null writes into a node that carries no marker, and this node is
+// the Request's own.
+function admit_null(v) {
+	if (exists(v, "$ref") || exists(v, "const")) return { anyOf: [ v, { type: "null" } ] };
+	return widen_null({ ...v });
+}
+
+// A merge patch removes a field with null, and so does the server: check_schema_types skips a
+// null, the merge drops the field, and toUci leaves the option out. A field in `keep` holds its
+// type, because its null is not a removal: `id`, which a PATCH ignores, a field that the Request
+// requires, which validate() refuses on the merged section, and a field that the module names in
+// openapi_patch_non_null. So does a write-only secret, which carry_write_only keeps for a null.
+// Array items stay as they are, because a merge patch replaces an array whole.
+function nullable_properties(props, keep) {
+	let out = {};
+	for (let k, v in props) {
+		let w = (type(v.properties) == "object")
+		        ? { ...v, properties: nullable_properties(v.properties, v.required ?? []) } : v;
+		out[k] = (index(keep, k) >= 0 || v.writeOnly === true) ? w : admit_null(w);
+	}
+	return out;
+}
+
+function patch_keep(mod, req) {
+	return [ "id", ...(req.required ?? []), ...(mod.openapi_patch_non_null ?? []) ];
+}
+
+function patch_schema(req, request_ref, keep) {
 	let props = {};
-	for (let k, v in req.properties) {
+	for (let k, v in nullable_properties(req.properties, keep)) {
 		props[k] = patch_copy(v);
 		if (type(v) == "object") delete props[k].required;
 	}
@@ -588,9 +616,10 @@ function build_singleton_paths(ep) {
 			           "description": "Merge-patch by default; `application/json-patch+json` selects RFC 6902 ops.",
 			           "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
 			           // A singleton has no POST or PUT, so its Request already is the merge-patch
-			           // body. lint-openapi-shape refuses a top-level `required` or `allOf` on it. A
-			           // nested `required` would hold, because a singleton PATCH replaces a nested
-			           // object whole.
+			           // body, and build_schemas admits null on it as on a Patch. A separate Patch
+			           // would leave the Request describing no operation. lint-openapi-shape refuses a
+			           // top-level `required` or `allOf` on it. A nested `required` would hold,
+			           // because a singleton PATCH replaces a nested object whole.
 			           "requestBody": { "required": true, "content": {
 			             "application/json":            { "schema": { "$ref": "#/components/schemas/" + request_ref } },
 			             "application/json-patch+json": { "schema": { "$ref": "#/components/schemas/JsonPatch" } },
@@ -1620,10 +1649,12 @@ function build_schemas() {
 		// missing Request as "not writable, or gone", and that inference is what made the
 		// removal of vnstat/interfaces fail codegen loudly instead of quietly; minting one
 		// for a read-only endpoint would blunt it.
+		if (ep.kind == "singleton")
+			req.properties = nullable_properties(req_props, patch_keep(mod, req));
 		if (ep.kind != "collection")
 			schemas[request_name(ep)] = req;
 		if (ep.kind == "crud")
-			schemas[patch_name(ep)] = patch_schema(req, request_name(ep));
+			schemas[patch_name(ep)] = patch_schema(req, request_name(ep), patch_keep(mod, req));
 	}
 
 	return schemas;

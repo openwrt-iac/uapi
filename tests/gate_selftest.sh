@@ -428,6 +428,27 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
+mut_merge_patch_refuses_null() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+f = d['components']['schemas']['FirewallRulesPatch']['properties']['match']['properties']['family']
+f['type'] = 'string'
+f['enum'].remove(None)
+json.dump(d, open(p, 'w'))
+EOF
+}
+
+mut_merge_patch_kept_takes_null() {
+	python3 - <<'EOF'
+import json
+p = 'build/openapi.json'; d = json.load(open(p))
+d['components']['schemas']['NetworkInterfacesPatch']['properties']['proto']['type'] = ['string', 'null']
+d['components']['schemas']['NetworkInterfacesPatch']['properties']['proto']['enum'].append(None)
+json.dump(d, open(p, 'w'))
+EOF
+}
+
 # In the module and regenerated, because the copy in <Base>Patch is the generator's work: a
 # deprecation planted in the spec alone would not show what the generator drops.
 mut_wellformed_deprecation() {
@@ -520,6 +541,8 @@ probe lint-openapi-shape "a deprecation with no reason"       "does not open wit
 probe lint-openapi-shape "a derived field in a request schema"  "must not appear in a request schema" mut_request_regrows_managed
 probe lint-openapi-shape "a merge-patch body that requires a field" "refuses a partial body"       mut_merge_patch_requires
 probe lint-openapi-shape "a Patch that keeps a nested required" "with its \`required\` removed"    mut_merge_patch_nested_required
+probe lint-openapi-shape "a Patch field that refuses null"     "sends to remove the field"         mut_merge_patch_refuses_null
+probe lint-openapi-shape "a null taken where it is no removal" "although a null does not remove"   mut_merge_patch_kept_takes_null
 probe lint-wire-names    "an unaccounted alias name"            "is read by toUci but never written" mut_unaccounted_wire_name
 probe lint-openapi-shape "a curated GET not declaring its ETag" "does not declare it"              mut_etag_undeclared_on_curated
 probe lint-openapi-shape "an emitted header declared nowhere"  "path(s) should declare the header" mut_mgmt_header_undeclared

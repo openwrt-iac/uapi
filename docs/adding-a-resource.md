@@ -32,6 +32,10 @@ return {
           then: { required: ["addresses"] } },
     ],
     openapi_write_conditional: [ ... ],           // same shape, emitted on the *Request schema only
+    openapi_patch_non_null: ["mode"],             // fields that toUci does not remove for a null, so
+                                                  // the merge-patch body keeps them non-nullable.
+                                                  // List each in tests/lint_openapi_shape.uc
+                                                  // and tests/merge_patch_bodies.py too
     openapi_runtime: {                            // replaces the opaque `runtime: {type: object}`
         type: "object",
         properties: { up: { type: "boolean" }, ... },
