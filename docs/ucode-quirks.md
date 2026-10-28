@@ -82,11 +82,11 @@ There is no type name for it: `type(null)` is the null value itself, so `type(x)
 
 ### `fs` calls return null on failure and do not throw
 
-`fs.rename`, `fs.unlink`, `fs.chmod` and the other `fs` calls report a failure by returning null and setting `fs.error()`. A `catch` around one never runs: the error ring and the metrics relied on one to remove the temp file after a failed rename, and left it behind. Test the return value.
+`fs.rename`, `fs.unlink`, `fs.chmod` and the other `fs` calls report a failure by returning null and setting `fs.error()`. A `catch` around one never runs: the error ring and the metrics relied on one to remove the temp file after a failed rename, and left it behind. Test the return value. `fs.open()` is the exception: it returns null without setting `fs.error()`, so a failed open has no reason to report.
 
 ### `close()` drops the write error, and `flush()` reports it backwards on the CI image
 
-A small write only fills the stdio buffer, and a file's `close()` ignores the result of `fclose`, so a write that the filesystem cannot hold shows up only as a failed `flush()`. On OpenWrt 25.12 a failed flush returns null. ucode 0.0.20250529, which Alpine 3.24 ships and the unit job of CI runs, returns null from a flush that worked and true from one that failed. ucode fixed this on 2025-11-27, before OpenWrt 25.12.0-rc1. A unit test therefore cannot check a flush through a real handle: the tests of a full filesystem give the module a stub handle through `load_with_fs()` in `tests/harness.uc`.
+A small write only fills the stdio buffer, and a file's `close()` ignores the result of `fclose`, so a write that the filesystem cannot hold shows up only as a failed `flush()`. On OpenWrt 25.12, with ucode 2026.01.16, a flush answers `true` when it works and `null` when it fails, with the error in `fs.error()`. ucode 0.0.20250529, which Alpine 3.24 ships and the unit job of CI runs, answers `null` from a flush that worked and `true` from one that failed, measured on `/dev/full`. ucode fixed this on 2025-11-27, before OpenWrt 25.12.0-rc1. A unit test therefore cannot check a flush through a real handle: the tests of a full filesystem give the module a stub handle through `load_with_fs()` in `tests/harness.uc`. A check that must pass in CI and catch a full filesystem on a router reads the file back, as the restore does, or compares the size on disk, as the idempotency cache does.
 
 ## OpenWrt runtime integration
 
@@ -104,7 +104,13 @@ To get the option dict, use `cursor.get_all(pkg, sect)`. This codebase wraps the
 
 ### `cursor.export` / `cursor.import` do not exist in ucode-mod-uci
 
-The snapshot/restore mechanism in `transaction.uc` uses file IO on `/etc/config/<pkg>` plus `cursor.unload(pkg); cursor.load(pkg)`. If you need a snapshot somewhere new, use the existing helpers.
+The snapshot/restore mechanism in `transaction.uc` uses file IO on `/etc/config/<pkg>`: the `uci_export` of `bus.connect()` reads the file, and its `uci_import` writes a temp file beside it and renames it over the package, as libuci commits. If you need a snapshot somewhere new, use the existing helpers.
+
+### A delta directory passed to `cursor()` does not hide what `uci set` staged
+
+`uci.cursor(null, dir)` makes `dir` the directory that the cursor saves its changes in, and adds it to libuci's search path for delta files. `/tmp/.uci` stays in that path, and ucode offers no call that removes it. So a package that the cursor loads by name, including the load that `get()` or `set()` do on first use, still carries what a shell staged with `uci set`, and a `commit()` stores it while `/tmp/.uci` keeps it staged. rpcd clears the list in C. Measured with libuci 2025.12.02 and ucode 2026.01.16 of the OpenWrt 25.12 SDK.
+
+`cursor.load("/etc/config/<pkg>")` loads the package by its path, and libuci applies no delta file to it. Later calls find it by its name. Two things change for such a package: `revert()` answers `Invalid argument`, and `commit()` writes the copy that the cursor holds instead of reading the file again and replaying the delta. `bus.uc` replays the writes of a request itself for that reason.
 
 ### `ucode-mod-digest` exports `digest.sha256(s)` directly
 

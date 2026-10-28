@@ -14,7 +14,7 @@ Thin homegrown harness (`tests/harness.uc`, ~125 lines): `describe` / `it` / `as
 
 ## Injectable ubus surface
 
-All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`). In production it's the real `ubus.connect()` / `uci.cursor()`; in unit tests it's a stub returning canned responses. This is the difference between covering 30% and covering the transaction recipe's failure paths (specifically the snapshot-restore rollback, which is hard to trigger naturally).
+All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`). In production it's the real `ubus.connect()` / `uci.cursor()`; in unit tests it's a stub returning canned responses. This is the difference between covering 30% and covering the transaction recipe's failure paths (specifically the snapshot-restore rollback, which is hard to trigger naturally). The stub cannot show what `bus.connect()` itself does, so `tests/unit/bus_test.uc` also runs `connect()` with a fake ubus, a fake uci module that loads a package by name or by path as libuci does, and real files for the restore. CI's ucode has no uci module, which is why the fake exists.
 
 ## Load-bearing integration tests
 

@@ -1,5 +1,6 @@
 let t = require('harness');
 let ubus = require('bus');
+let fs = require('fs');
 
 t.describe('ubus.stub, ubus call', () => {
 	t.it('records each call with normalized args', () => {
@@ -179,5 +180,181 @@ t.describe('ubus.stub, isolation', () => {
 		let c = ubus.stub({ uci: initial_uci });
 		initial_uci.net.lan.proto = 'dhcp';
 		t.assert_equal(c.uci_get('net', 'lan', 'proto'), 'static');
+	});
+});
+
+const FAKE_UBUS = { connect: () => ({ call: () => null }), error: () => null };
+
+// libuci as the uci and ucode of the OpenWrt SDK behave: a package loaded by name carries what
+// `uci set` staged in /tmp/.uci, also when the cursor loads it on first use, one loaded by its
+// path carries the file alone and commits the copy that the cursor holds, and a revert also
+// deletes what the shell staged.
+function fake_uci(disk) {
+	let copy = (v) => json(sprintf("%J", v));
+	return {
+		cursor: function() {
+			let held = {};
+			function take(name, with_staged) {
+				if (held[name] == null && disk.files[name] != null) {
+					held[name] = copy(disk.files[name]);
+					if (with_staged)
+						for (let s, opts in disk.staged[name] ?? {})
+							held[name][s] = { ...held[name][s], ...opts };
+				}
+				return held[name];
+			}
+			return {
+				load: (arg) => take(fs.basename(arg), index(arg, "/") < 0) != null,
+				unload: (name) => delete held[name],
+				get: (p, s, o) => take(p, true)?.[s]?.[o],
+				set: function(p, s, o, v) {
+					let sec = take(p, true)?.[s];
+					if (sec == null) return null;
+					sec[o] = v;
+					return true;
+				},
+				commit: function(p) {
+					if (held[p] == null) return null;
+					disk.files[p] = copy(held[p]);
+					return true;
+				},
+				revert: function(p) {
+					delete disk.staged[p];
+					delete held[p];
+					return true;
+				},
+				error: () => "Entry not found",
+			};
+		},
+	};
+}
+
+function seeded() {
+	return {
+		files: { fw: { d: { '.type': 'defaults', input: 'ACCEPT', forward: 'REJECT' } } },
+		staged: { fw: { d: { input: 'DROP' } } },
+	};
+}
+
+function connect_to(disk, opts) {
+	return ubus.connect({ ubus: FAKE_UBUS, uci: fake_uci(disk), ...(opts ?? {}) });
+}
+
+function temp_dir() {
+	let p = fs.popen("mktemp -d /tmp/uapi-bus-restore.XXXXXX");
+	let dir = trim(p.read("all") ?? "");
+	p.close();
+	return dir;
+}
+
+t.describe('bus.connect, changes that the shell staged and did not commit', () => {
+	t.it('a read reports what the file holds', () => {
+		t.assert_equal(connect_to(seeded()).uci_get('fw', 'd', 'input'), 'ACCEPT');
+	});
+
+	t.it('a commit stores the writes of the request and leaves the staged change staged', () => {
+		let disk = seeded();
+		let c = connect_to(disk);
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		c.uci_commit('fw');
+		t.assert_deep_equal(disk.files.fw.d, { '.type': 'defaults', input: 'ACCEPT', forward: 'ACCEPT' });
+		t.assert_deep_equal(disk.staged.fw, { d: { input: 'DROP' } });
+	});
+
+	t.it('a commit keeps what another writer committed while the request ran', () => {
+		let disk = seeded();
+		let c = connect_to(disk);
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		disk.files.fw.d.output = 'DROP';
+		c.uci_commit('fw');
+		t.assert_equal(disk.files.fw.d.output, 'DROP');
+		t.assert_equal(disk.files.fw.d.forward, 'ACCEPT');
+	});
+
+	t.it('a revert drops the writes of the request and keeps the staged change', () => {
+		let disk = seeded();
+		let c = connect_to(disk);
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		c.uci_revert('fw');
+		t.assert_equal(c.uci_get('fw', 'd', 'forward'), 'REJECT');
+		t.assert_deep_equal(disk.staged.fw, { d: { input: 'DROP' } });
+	});
+});
+
+t.describe('bus.connect, the restore of a snapshot', () => {
+	const BEFORE = "config defaults 'd'\n\toption forward 'ACCEPT'\n";
+	const SNAPSHOT = "config defaults 'd'\n\toption forward 'REJECT'\n";
+
+	function restore_with(fs_mod) {
+		let dir = temp_dir();
+		fs.writefile(dir + "/fw", BEFORE);
+		fs.chmod(dir + "/fw", 0o640);
+		let c = connect_to({ files: {}, staged: {} }, { config_dir: dir, fs: fs_mod ?? fs });
+		let err = null;
+		try { c.uci_import('fw', SNAPSHOT); } catch (e) { err = "" + e; }
+		let out = { dir, err, content: fs.readfile(dir + "/fw"), mode: fs.stat(dir + "/fw").mode,
+		            files: fs.lsdir(dir) };
+		system([ "rm", "-rf", dir ]);
+		return out;
+	}
+
+	t.it('replaces the file, keeps its mode and leaves no temp file', () => {
+		let r = restore_with(null);
+		t.assert_equal(r.err, null);
+		t.assert_equal(r.content, SNAPSHOT);
+		t.assert_equal(r.mode, 0o640);
+		t.assert_deep_equal(r.files, [ "fw" ]);
+	});
+
+	t.it('holds the flock that libuci takes on the package across the rename', () => {
+		let free_during = "no rename";
+		let r = restore_with({ ...fs, rename: function(from, to) {
+			let probe = fs.open(to, "r");
+			free_during = probe.lock("sn");
+			probe.close();
+			return fs.rename(from, to);
+		} });
+		t.assert_equal(r.content, SNAPSHOT);
+		t.assert_equal(free_during, null);
+	});
+
+	// A full overlay takes part of the buffer, and the failure reaches only the fclose that
+	// ucode's close() does not report.
+	t.it('fails naming the file and leaves it whole when the filesystem cannot hold the snapshot', () => {
+		let r = restore_with({ ...fs, open: function(path, mode, perm) {
+			let f = fs.open(path, mode, perm);
+			if (f == null || substr(mode, 0, 1) != "w") return f;
+			return { write: (s) => { f.write(substr(s, 0, 10)); return length(s); },
+			         close: () => f.close() };
+		} });
+		t.assert_match(r.err, regexp("^restore of " + r.dir + "/fw: cannot write "));
+		t.assert_equal(r.content, BEFORE);
+		t.assert_deep_equal(r.files, [ "fw" ]);
+	});
+
+	t.it('fails naming the file and leaves it whole when the rename fails', () => {
+		let r = restore_with({ ...fs, rename: () => null });
+		t.assert_match(r.err, regexp("^restore of " + r.dir + "/fw: cannot rename "));
+		t.assert_equal(r.content, BEFORE);
+		t.assert_deep_equal(r.files, [ "fw" ]);
+	});
+
+	t.it('fails naming the file when the package is gone', () => {
+		let c = connect_to({ files: {}, staged: {} }, { config_dir: "/nonexistent" });
+		let err = null;
+		try { c.uci_import('fw', SNAPSHOT); } catch (e) { err = "" + e; }
+		t.assert_equal(err, "restore of /nonexistent/fw: cannot open it");
+	});
+
+	t.it('discards the writes of the request, so the commit that follows does not apply them again', () => {
+		let disk = seeded();
+		let dir = temp_dir();
+		fs.writefile(dir + "/fw", BEFORE);
+		let c = connect_to(disk, { config_dir: dir });
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		c.uci_import('fw', SNAPSHOT);
+		c.uci_commit('fw');
+		system([ "rm", "-rf", dir ]);
+		t.assert_equal(disk.files.fw.d.forward, 'REJECT');
 	});
 });
