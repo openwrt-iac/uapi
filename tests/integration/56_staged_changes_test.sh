@@ -93,13 +93,14 @@ $SSH 'grep -q "^# kept by a write that changes nothing" /etc/config/firewall' \
 
 # A PATCH that names nothing wrote the private_key of a wireguard interface again, because the read
 # masks it, and on a lookup rule it deleted an `action` that the rule does not hold. The bus counted
-# each as a write, so the commit rewrote the package. The interface stays disabled, so netifd does
-# not set it up.
+# each as a write, so the commit rewrote the package. Both sections stay disabled, so netifd sets up
+# neither.
 echo "--- a PATCH that names nothing leaves /etc/config/network as it is, for a wireguard interface and a lookup rule ---"
 $SSH "uci set network.uapi56wg=interface; uci set network.uapi56wg.proto=wireguard; uci set network.uapi56wg.disabled=1
 	uci set network.uapi56wg.private_key=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
 	uci add_list network.uapi56wg.addresses=10.98.56.1/30
 	uci set network.uapi56rule=rule; uci set network.uapi56rule.src=10.98.56.0/30; uci set network.uapi56rule.lookup=100
+	uci set network.uapi56rule.disabled=1
 	uci commit network
 	{ echo '# kept by a PATCH that names nothing'; cat /etc/config/network; } > /tmp/uapi-staged-net &&
 	cat /tmp/uapi-staged-net > /etc/config/network && rm -f /tmp/uapi-staged-net"

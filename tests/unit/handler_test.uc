@@ -2073,10 +2073,10 @@ t.describe('handler ids by position', () => {
 	});
 });
 
-// A PATCH keeps an option that it does not name, and the read of proto static hides listen_port.
-// The response was built from toUci's output, so it answered null for the port that uci kept, and
-// a client that stored the null deleted the port at its next apply.
-t.describe('a write answers the section that uci then holds', () => {
+// A PATCH keeps an option that it does not name, and the read of proto static hides the options of
+// other protos. The response was built from toUci's output, so it answered null for such an option
+// that uci kept, and a client that stored the null deleted the option at its next apply.
+t.describe('a write answers the section that it staged', () => {
 	let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), { tx: {
 		acquire: function() { return {}; }, release: function() {},
 		reload: function() { return null; }, check_services: function() { return null; },
@@ -2102,4 +2102,16 @@ t.describe('a write answers the section that uci then holds', () => {
 		}
 	});
 
+	t.it('a PATCH that switches static to dhcp answers the hostname, clientid and peerdns that it keeps', () => {
+		let c = ubus.stub({ uci: { network: { lan2: { '.type': 'interface', '.anonymous': false, proto: 'static',
+		                                              ipaddr: [ '10.9.1.1/24' ], hostname: 'h', clientid: '01aa', peerdns: '0' } } } });
+		let r = ifaces.patch(c, ctx(), 'lan2', { proto: 'dhcp' });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal([ r.body.hostname, r.body.clientid, r.body.peerdns ], [ 'h', '01aa', false ]);
+		let got = ifaces.get_one(c, ctx(), 'lan2');
+		delete r.body.runtime;
+		delete got.body.runtime;
+		t.assert_deep_equal(r.body, got.body);
+		t.assert_equal(r.headers.ETag, got.headers.ETag);
+	});
 });

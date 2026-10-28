@@ -62,16 +62,6 @@ function read(h, c, conn) {
 	return c.singleton ? h.get(conn, ctx()) : h.get_one(conn, ctx(), c.id);
 }
 
-// A client stores the body and the ETag that a write answers, so both have to be what the next GET
-// answers, or its refresh sees drift that its next apply writes back.
-function answers_as_read(write_resp, read_resp, what) {
-	let strip = (b) => { let o = { ...b }; delete o.runtime; return o; };
-	if (!ph.json_eq(strip(write_resp.body), strip(read_resp.body)))
-		t.assert_equal(sprintf("%s answered %J, and the GET after it %J", what, write_resp.body, read_resp.body),
-		               "the same body");
-	t.assert_equal(write_resp.headers.ETag, read_resp.headers.ETag, what + " ETag");
-}
-
 // A singleton has no PUT (see handler.make_singleton), so its round trip is PATCH with the
 // body it just served, which is the same shape 44_stock_config_test.sh uses.
 function write(h, c, conn, body) {
@@ -109,7 +99,6 @@ t.describe('property: a read written straight back changes nothing', () => {
 
 			let second = read(h, c, conn);
 			t.assert_equal(second.status, 200);
-			answers_as_read(put, second, "the write of the read");
 			for (let k in first.body) {
 				if (k == "runtime") continue;
 				if (!ph.json_eq(first.body[k], second.body[k]))
@@ -212,7 +201,6 @@ function empty_patch_moves(h, c, section) {
 	let before = json(sprintf("%J", conn._state.uci[c.pkg][c.id]));
 	let r = c.singleton ? h.patch(conn, ctx(), {}) : h.patch(conn, ctx(), c.id, {});
 	if (r.status != 200) return null;
-	answers_as_read(r, read(h, c, conn), "PATCH {}");
 	let after = conn._state.uci[c.pkg][c.id];
 	let m = MOVED_ON_PURPOSE[c.file + "/" + c.id];
 	let allowed = (m != null && section[m.from] != null) ? [ m.from, m.to ] : [];

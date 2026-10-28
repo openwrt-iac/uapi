@@ -524,13 +524,14 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 
 // The bus commits only a package that the request wrote, and a write of the value that uci holds
 // still counts. A PATCH that names nothing wrote each stored secret again, because the read masks
-// it, so on any section with one the commit rewrote the package and dropped its comments.
+// it, so on any section with one the commit rewrote the package and dropped its comments. On the
+// goto rule nr3 it deleted the `action` that toUci clears and the rule does not hold.
 t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 	let handler = require('handler');
 	let fx = require('resource_fixtures');
 	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null,
 	           wg_apply: () => null, wg_reconcile: () => null };
-	for (let id in [ "wg0", "p1", "w1", "vpn0", "nr1" ]) {
+	for (let id in [ "wg0", "p1", "w1", "vpn0", "nr3" ]) {
 		let c = filter(fx.CASES, (x) => x.id == id)[0];
 		t.it(sprintf("%s/%s", c.file, id), () => {
 			let files = fx.world();
