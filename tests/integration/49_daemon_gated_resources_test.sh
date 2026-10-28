@@ -55,20 +55,23 @@ code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" 
 $SSH 'lldpcli show configuration' | grep -qF ',!eth9' \
 	|| fail "lldpd does not use the pattern: $($SSH 'lldpcli show configuration' 2>&1 | grep -i pattern)"
 
-echo "--- lldpd/config: an interface option reads as the words that lldpd.init splits it into ---"
-$SSH "uci -q delete lldpd.config.interface; uci set lldpd.config.interface='loopback lan !eth9'; uci commit lldpd"
-view=$(curl -sS -H "$ADMIN" "$URL/lldpd/config")
-[ "$(printf '%s' "$view" | jq -c '.interface')" = '["loopback","lan","!eth9"]' ] \
-	|| fail "the interface option read wrong: $view"
-code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
-	-H 'Content-Type: application/json-patch+json' \
-	-d '[{"op":"replace","path":"/lldp_description","value":"uapi words probe"}]' "$URL/lldpd/config")
-[ "$code" = "200" ] || fail "JSON Patch beside an interface option returned $code: $(cat /tmp/lldpd_patch.json)"
-$SSH "grep -q '^configure system interface pattern [^,]*,[^,]*,!eth9\$' /tmp/lldpd.conf" \
-	|| fail "lldpd.init did not make three patterns of the option: $($SSH 'grep "interface pattern" /tmp/lldpd.conf' 2>&1)"
-code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
-	-H 'Content-Type: application/json' -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')" "$URL/lldpd/config")
-[ "$code" = "200" ] || fail "merge PATCH of the read returned $code: $(cat /tmp/lldpd_patch.json)"
+echo "--- lldpd/config: an interface option or list entry reads as the words that lldpd.init splits it into ---"
+for store in "uci set lldpd.config.interface='loopback lan !eth9'" \
+	"uci add_list lldpd.config.interface='loopback lan'; uci add_list lldpd.config.interface='!eth9'"; do
+	$SSH "uci -q delete lldpd.config.interface; $store; uci commit lldpd"
+	view=$(curl -sS -H "$ADMIN" "$URL/lldpd/config")
+	[ "$(printf '%s' "$view" | jq -c '.interface')" = '["loopback","lan","!eth9"]' ] \
+		|| fail "after $store, the interface read wrong: $view"
+	code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+		-H 'Content-Type: application/json-patch+json' \
+		-d '[{"op":"replace","path":"/lldp_description","value":"uapi words probe"}]' "$URL/lldpd/config")
+	[ "$code" = "200" ] || fail "after $store, a JSON Patch returned $code: $(cat /tmp/lldpd_patch.json)"
+	$SSH "grep -q '^configure system interface pattern [^,]*,[^,]*,!eth9\$' /tmp/lldpd.conf" \
+		|| fail "after $store, lldpd.init did not make three patterns: $($SSH 'grep "interface pattern" /tmp/lldpd.conf' 2>&1)"
+	code=$(curl -sS -o /tmp/lldpd_patch.json -w '%{http_code}' -X PATCH -H "$ADMIN" \
+		-H 'Content-Type: application/json' -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')" "$URL/lldpd/config")
+	[ "$code" = "200" ] || fail "after $store, a merge PATCH of the read returned $code: $(cat /tmp/lldpd_patch.json)"
+done
 
 echo "--- lldpd/config: a backslash or a quote that lldpcli reads as syntax answers 422 ---"
 for body in '{"lldp_description":"a\\"}' '{"lldp_mgmt_ip":"a\\b"}' '{"interface":["lan\"x"]}' '{"interface":["eth#0"]}'; do

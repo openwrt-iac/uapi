@@ -192,26 +192,28 @@ t.describe('snmpd/accesses fields that snmpd.init needs', () => {
 	});
 });
 
-// lldpd.init splits `interface` into words, and LuCI shows an option as its words. A read of
-// `option interface 'loopback lan'` as one entry broke the pattern of the field, so a JSON Patch
-// of any field of the singleton, and a merge PATCH of the read, answered 422.
-t.describe('lldpd/config interface held as one option', () => {
+// lldpd.init joins the entries of `interface` and splits them into words. A read of
+// `option interface 'loopback lan'`, or of such a list entry, as one entry broke the pattern of the
+// field, so a JSON Patch of any field of the singleton, and a merge PATCH of the read, answered 422.
+t.describe('lldpd/config interface of several words in one value', () => {
 	let lldpd = loadfile('src/resources/lldpd.config.uc')();
 	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
 	let h = handler.make_singleton(lldpd, { tx });
 	const CTX = { request_id: "01hx0000000000000000000000" };
-	let stored = () => ubus.stub({ uci: { lldpd: {
-		config: { '.type': 'lldpd', '.anonymous': false, interface: 'loopback lan' },
+	let stored = (v) => ubus.stub({ uci: { lldpd: {
+		config: { '.type': 'lldpd', '.anonymous': false, interface: v ?? 'loopback lan' },
 	} } });
 
-	t.it('reads as its words, and a JSON Patch or a merge PATCH of the read passes', () => {
-		let c = stored();
-		let body = h.get(c, CTX).body;
-		t.assert_deep_equal(body.interface, [ 'loopback', 'lan' ]);
-		t.assert_equal(h.patch(c, { ...CTX, json_patch: true },
-		                       [ { op: 'replace', path: '/enable_cdp', value: true } ]).status, 200);
-		delete body.runtime;
-		t.assert_equal(h.patch(c, CTX, body).status, 200);
+	t.it('reads an option or a list entry as its words, and a JSON Patch or a merge PATCH of the read passes', () => {
+		for (let v in [ 'loopback lan', [ 'loopback lan' ] ]) {
+			let c = stored(v);
+			let body = h.get(c, CTX).body;
+			t.assert_deep_equal(body.interface, [ 'loopback', 'lan' ], sprintf("%J", v));
+			t.assert_equal(h.patch(c, { ...CTX, json_patch: true },
+			                       [ { op: 'replace', path: '/enable_cdp', value: true } ]).status, 200, sprintf("%J", v));
+			delete body.runtime;
+			t.assert_equal(h.patch(c, CTX, body).status, 200, sprintf("%J", v));
+		}
 	});
 
 	t.it('stores a list when a write changes the entries', () => {

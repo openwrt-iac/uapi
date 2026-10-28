@@ -241,6 +241,19 @@ t.describe('values.as_word_list_or_null', () => {
 	});
 });
 
+t.describe('values.config_get_words', () => {
+	t.it('splits an option and each list entry at the shell IFS, and keeps a carriage return', () => {
+		t.assert_deep_equal(v.config_get_words(' lan \twan\nwan6 '), [ 'lan', 'wan', 'wan6' ]);
+		t.assert_deep_equal(v.config_get_words([ 'lan wan', 'wan6' ]), [ 'lan', 'wan', 'wan6' ]);
+		t.assert_deep_equal(v.config_get_words('lan\r'), [ 'lan\r' ]);
+	});
+	t.it('returns null for nothing to split', () => {
+		t.assert_equal(v.config_get_words(null), null);
+		t.assert_equal(v.config_get_words(' \n'), null);
+		t.assert_equal(v.config_get_words([ ' ' ]), null);
+	});
+});
+
 t.describe('values.netifd_int', () => {
 	t.it('reads hex, octal and decimal as strtol with base 0 does', () => {
 		t.assert_equal(v.netifd_int('0x10'), 16);

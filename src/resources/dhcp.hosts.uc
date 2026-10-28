@@ -21,8 +21,8 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		// dnsmasq.init splits `mac` into words, so an option of several words holds several MACs.
-		macs: values.as_word_list_or_null(section.mac),
+		// dnsmasq.init reads `mac` with config_get and splits it into words: see config_get_words().
+		macs: values.config_get_words(section.mac),
 		duid: section.duid ?? null,
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
@@ -45,7 +45,7 @@ function toUci(json) {
 	if (json.name != null) out.name = json.name;
 
 	// uci cannot hold a one-element list distinctly from a scalar, so a single mac is
-	// written as a scalar and read back through as_word_list_or_null as a one-element array.
+	// written as a scalar and read back through config_get_words as a one-element array.
 	if (type(json.macs) == "array" && length(json.macs) > 0)
 		out.mac = (length(json.macs) > 1) ? json.macs : json.macs[0];
 

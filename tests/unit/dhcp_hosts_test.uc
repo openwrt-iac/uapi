@@ -412,26 +412,32 @@ t.describe('dhcp/hosts refuses a reservation IP another host already holds', () 
 	});
 });
 
-// dnsmasq.init splits `option mac` into words, and LuCI shows it as its words. A read of the
-// option as one entry broke the MAC check, so every write to the host answered 422 on macs[0].
-t.describe('dhcp/hosts macs held as one option', () => {
+// dnsmasq.init joins the entries of `mac` and splits them into words. A read of an option, or of a
+// list entry, of several MACs as one entry broke the MAC check, so every write to the host answered
+// 422 on macs[0].
+t.describe('dhcp/hosts macs of several words in one value', () => {
 	let handler = require('handler');
 	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
 	let h = handler.make(hosts, { tx });
 	let ctx = { request_id: "01hx0000000000000000000000" };
-	let stored = () => ubus.stub({ uci: { dhcp: { h1: { '.type': 'host', '.anonymous': false, name: 'pc',
-	                                                    ip: '192.168.1.50', mac: '00:11:22:33:44:55 00:11:22:33:44:66' } } } });
+	const TWO = '00:11:22:33:44:55 00:11:22:33:44:66';
+	let stored = (mac) => ubus.stub({ uci: { dhcp: { h1: { '.type': 'host', '.anonymous': false, name: 'pc',
+	                                                       ip: '192.168.1.50', mac: mac } } } });
 
-	t.it('reads as its words, and a PUT of the read stores them as a list', () => {
-		let c = stored();
-		let body = h.get_one(c, ctx, 'h1').body;
-		t.assert_deep_equal(body.macs, [ '00:11:22:33:44:55', '00:11:22:33:44:66' ]);
-		delete body.runtime;
-		t.assert_equal(h.replace(c, ctx, 'h1', body).status, 200);
-		t.assert_deep_equal(c._state.uci.dhcp.h1.mac, [ '00:11:22:33:44:55', '00:11:22:33:44:66' ]);
+	t.it('reads an option or a list entry as its words, and a PUT of the read stores them as a list', () => {
+		for (let mac in [ TWO, [ TWO ] ]) {
+			let c = stored(mac);
+			let body = h.get_one(c, ctx, 'h1').body;
+			t.assert_deep_equal(body.macs, [ '00:11:22:33:44:55', '00:11:22:33:44:66' ], sprintf("%J", mac));
+			delete body.runtime;
+			t.assert_equal(h.replace(c, ctx, 'h1', body).status, 200, sprintf("%J", mac));
+			t.assert_deep_equal(c._state.uci.dhcp.h1.mac, [ '00:11:22:33:44:55', '00:11:22:33:44:66' ]);
+		}
 	});
 
-	t.it('takes a PATCH of another field', () => {
-		t.assert_equal(h.patch(stored(), ctx, 'h1', { leasetime: '24h' }).status, 200);
+	t.it('takes a PATCH of another field and keeps the option', () => {
+		let c = stored(TWO);
+		t.assert_equal(h.patch(c, ctx, 'h1', { leasetime: '24h' }).status, 200);
+		t.assert_equal(c._state.uci.dhcp.h1.mac, TWO);
 	});
 });
