@@ -97,12 +97,14 @@ The interactions:
 
 All locks are non-blocking (`LOCK_NB`); contention surfaces as `423
 locked` so the client can decide whether to back off and retry. The HTTP
-worker never sleeps holding a lock.
+worker never waits for a lock. It can sleep while it holds one: the stay-up
+watch of an unbound reload polls for up to 2 s under the transaction's locks.
 
-Audit and verification: `docs/lock-state-audit.md` covers the fd-open and
-lock-acquire sites on the transaction and token paths, with proof of release
-on every exit path including `die()`. Its own summary marks the coverage
-partial and names the modules the table does not reach.
+Audit and verification: `docs/lock-state-audit.md` covers every site in
+`src/` and `cli/` that takes an fd, a pipe, a lock, a ubus connection or a uci
+cursor, with proof of release on every in-request exit path including `die()`.
+It also says what runs while each lock is held and what a killed request leaves
+behind. `make lint-lock-audit` fails when a site is missing from it.
 
 ## Transaction recipe
 

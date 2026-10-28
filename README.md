@@ -119,7 +119,7 @@ Contributor-facing:
 - `docs/packaging.md`: building the APK from source against the OpenWrt SDK.
 - `docs/release-process.md`: signed tags, reproducible builds, SBOM, multi-arch verification.
 - `docs/roadmap.md`: what shipped, what's next, what's intentionally out of scope.
-- `docs/lock-state-audit.md`: every fd-open / lock site, release proven on every exit.
+- `docs/lock-state-audit.md`: every fd, pipe, lock, ubus connection and uci cursor site, with the paths that release it and what a killed request leaves behind.
 - `CLAUDE.md`: the project's design contract (architectural principles, code style, branch/PR workflow) plus the index to the `docs/` topics.
 - `CHANGELOG.md`: per-release notes.
 
