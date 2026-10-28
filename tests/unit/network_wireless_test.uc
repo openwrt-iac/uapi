@@ -1038,6 +1038,25 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 		}
 	});
 
+	// netifd skips a wifi-device without a type before it reads disabled (wireless.uc:142-148).
+	t.it('a radio without a type counts as off, and a write that gives it one turns it on', () => {
+		// A list indexes no handler in netifd either.
+		for (let none in [ null, [ 'mac80211' ] ]) {
+			let c = box({ type: none }, { w0: ssid({ device: 'radio0' }), w1: ssid({ disabled: '1', key: INJECTED }) });
+			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, 200, none);
+			t.assert_deep_equal(fields(radios.patch(c, ctx, 'radio1', { type: 'mac80211' })), [ [ 'disabled', 'conflict' ] ], none);
+			t.assert_deep_equal(c._state.uci.wireless.radio1.type, none, none);
+			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: 'radio0' })), [ [ 'key', 'invalid_format' ] ], none);
+		}
+		let c = box({ type: null }, { w1: ssid({ key: INJECTED }) });
+		t.assert_deep_equal(map(filter(radios.sweep(c), (r) => r.id == 'radio1')[0].errors, (e) => e.field), [ 'type' ]);
+
+		c = box({ type: null, cell_density: '5' }, {});
+		let density = filter(filter(radios.sweep(c), (r) => r.id == 'radio1')[0].errors, (e) => e.field == 'cell_density');
+		t.assert_deep_equal(map(density, (e) => e.live), [ false ]);
+		t.assert_deep_equal(fields(radios.patch(c, ctx, 'radio1', { type: 'mac80211' })), [ [ 'cell_density', 'out_of_range' ] ]);
+	});
+
 	// mac80211.uc writes the radio with no disabled option, here disabled as LuCI does when its last SSID
 	// goes, and the SSID with encryption none, or owe and country 00 on 6 GHz, and an empty key, which
 	// uci does not store.

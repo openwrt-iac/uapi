@@ -110,7 +110,15 @@ function peers_that_wg_refuses(conn, name) {
 		let view = peers.fromUci(s);
 		for (let k, spec in peers.schema_properties)
 			if (spec.writeOnly && view[k] == null && s[k] != null) view[k] = s[k];
-		let fields = uniq(map(filter(peers.validate_new(view), (e) => e.live !== false), (e) => e.field));
+		let errs = filter(peers.validate_new(view), (e) => e.live !== false);
+		// wg refuses the whole config for an allowed IP that it cannot parse. A peer write refuses
+		// such a value, and a few other forms, in validate(), and wg reads the allowed IPs of a peer
+		// only with its key.
+		let key = values.config_get(view.public_key);
+		if (view.disabled !== true && type(key) == "string" && key != "")
+			for (let e in peers.validate(view, null))
+				if (match(e.field, /^allowed_ips\[/)) push(errs, e);
+		let fields = uniq(map(errs, (e) => e.field));
 		if (length(fields) > 0) push(out, sprintf("%s (%s)", s['.name'], join(", ", fields)));
 	});
 	return out;

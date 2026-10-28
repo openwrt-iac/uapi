@@ -84,12 +84,15 @@ function validate(json, conn, id) {
 		push(errs, { field: "band", code: "not_in_enum",
 		             message: "must be one of 2g, 5g, 6g, 60g" });
 
+	// netifd sets up no SSID of a radio that is disabled or has no type, so a write that gives a
+	// radio its type turns it on as surely as one that enables it.
 	let name = id ?? json.id;
-	if (conn == null || name == null || json.disabled === true) return errs;
+	if (conn == null || name == null || json.disabled === true || type(json.type) != "string" || json.type == "") return errs;
 	// Validation runs before the write is staged, so uci still holds the radio as it was.
 	let was = conn.uci_get("wireless", name);
 	// Only a create makes a radio that uci does not hold: a PUT or a PATCH of one answers 404.
-	let bad = ((was == null && id == null) || (was != null && platform_bool(was.disabled, false))) ? ssid_errors(conn, name) : [];
+	let bad = ((was == null && id == null) || (was != null && (platform_bool(was.disabled, false) || type(was.type) != "string" || was.type == "")))
+		? ssid_errors(conn, name) : [];
 	if (length(bad) > 0)
 		push(errs, { field: "disabled", code: "conflict",
 		             message: "must be true while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses: " + join(", ", bad) });
@@ -109,7 +112,7 @@ function validate_new(json) {
 	for (let f, r in RANGES) {
 		let v = json[f];
 		if (type(v) == "int" && (v < r[0] || (r[1] != null && v > r[1])))
-			push(errs, { field: f, code: "out_of_range", live: r[2] && json.disabled !== true,
+			push(errs, { field: f, code: "out_of_range", live: r[2] && json.disabled !== true && type(json.type) == "string" && json.type != "",
 			             message: (r[1] != null) ? sprintf("must be from %d to %d", r[0], r[1])
 			                                      : sprintf("must be at least %d", r[0]) });
 	}
@@ -151,6 +154,6 @@ return {
 		legacy_rates: { type: "boolean", default: false,
 		            description: "Allow the legacy 802.11b rates" },
 		disabled: { type: "boolean", default: false,
-		            description: "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio. A write that turns the radio on, such as a create without `disabled: true`, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio" },
+		            description: "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio" },
 	},
 };

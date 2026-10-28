@@ -29614,7 +29614,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio. A write that turns the radio on, such as a create without `disabled: true`, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
+						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
 					},
 					"runtime": {
 						"type": "object",
@@ -29737,7 +29737,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio. A write that turns the radio on, such as a create without `disabled: true`, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
+						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
 					}
 				},
 				"required": [
@@ -29992,7 +29992,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe"
+						"description": "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and that radio has a `type`, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe"
 					},
 					"hidden": {
 						"type": "boolean",
@@ -30296,7 +30296,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe"
+						"description": "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and that radio has a `type`, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe"
 					},
 					"hidden": {
 						"type": "boolean",

@@ -351,7 +351,7 @@ function rules(json, radio_on) {
 }
 
 // netifd sets up an SSID on each radio that its device option names, as a list or as words, and
-// skips a radio that is disabled or that uci does not hold.
+// skips a radio that is disabled, that has no type, or that uci does not hold.
 function radios(device) {
 	return (type(device) == "array") ? device : split(device ?? "", /\s+/);
 }
@@ -360,7 +360,7 @@ function validate_new(json, conn) {
 	if (conn == null) return rules(json, true);
 	let enabled = {};
 	conn.uci_foreach("wireless", "wifi-device", function(s) {
-		if (!platform_bool(s.disabled, false)) enabled[s['.name']] = true;
+		if (!platform_bool(s.disabled, false) && type(s.type) == "string" && s.type != "") enabled[s['.name']] = true;
 	});
 	return rules(json, length(filter(radios(json.device), (r) => enabled[r])) > 0);
 }
@@ -423,7 +423,7 @@ return {
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
-		              description: "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe" },
+		              description: "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and that radio has a `type`, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe" },
 		hidden:     { type: "boolean", default: false,
 		              description: "Suppress SSID in beacon frames" },
 		isolate:    { type: "boolean", default: false,

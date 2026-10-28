@@ -348,13 +348,14 @@ All notable changes to this project will be documented in this file. Format foll
   that moves an enabled SSID with such a value from a radio that is off or missing to an enabled one
   is refused too. A move between two enabled radios is not checked, as before. An SSID is on each
   radio that `device` names, as a list or as words, as netifd reads it, and a radio is off when its
-  `disabled` is `1` or `true`. The other way round, a write to an SSID whose radio is off or missing
-  is no longer refused for a stored value that it leaves as it is, so enabling the SSID there
-  passes, and the validation sweep lists the value with `live: false`. The refusals use the
-  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on,
-  because such a write gave wifi-scripts or a daemon a value that it refuses, and they fail loudly.
-  The rest only widens what a write takes. LuCI checks no SSID when it turns a radio on. A radio and
-  its SSID as `wifi config` writes them, on 2g, 5g and 6g, take the enable. (#260)
+  `disabled` is `1` or `true`, or when it has no `type` (#262). The other way round, a write to an
+  SSID whose radio is off or missing is no longer refused for a stored value that it leaves as it
+  is, so enabling the SSID there passes, and the validation sweep lists the value with
+  `live: false`. The refusals use the carve-out in `docs/versioning.md` for payloads that produced a
+  state no caller can rely on, because such a write gave wifi-scripts or a daemon a value that it
+  refuses, and they fail loudly. The rest only widens what a write takes. LuCI checks no SSID when
+  it turns a radio on. A radio and its SSID as `wifi config` writes them, on 2g, 5g and 6g, take the
+  enable. (#260)
 - **A write of `network/interfaces` that makes the stored peers of a WireGuard interface live
   refuses a peer that a peer write refuses to enable, with 422 `conflict`.** wireguard.sh gives
   every enabled peer of the interface to one `wg syncconf`, and wg refuses the whole config for one
@@ -367,16 +368,32 @@ All notable changes to this project will be documented in this file. Format foll
   are fixed or disabled. The peer rules are the ones that a write of `network/wireguard_peers`
   checks when it enables the peer: the keys, the endpoint host, the port, the keepalive, and a
   prefix length with a leading zero when the peer routes its allowed IPs, which wg takes and the
-  route reads in another way. A write of an interface that is already live on wireguard, or that
-  stays disabled, does not check the peers, and neither does the validation sweep. That tightening
-  uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely
-  on, and it fails loudly. LuCI checks no peer when it switches the proto. (#261)
+  route reads in another way, and an allowed IP that a peer write refuses (#262). A write of an
+  interface that is already live on wireguard, or that stays disabled, does not check the peers, and
+  neither does the validation sweep. That tightening uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, and it fails loudly. LuCI checks no peer
+  when it switches the proto. (#261)
 - **A stored `network/wireguard_peers` value that wg refuses is live only on a peer with a public
   key.** wireguard.sh writes no `[Peer]` block for a peer without a key, so wg never reads its other
   values. `GET /api/v3/diagnostics?validate=1` reports the error of such a value with `live: false`,
   and a write that sets the key answers 422 for it. A port name that does not resolve keeps a second
   error there, because a PUT of the read is refused for it. The routes of `route_allowed_ips` do not
   need the key, so a prefix length with a leading zero stays live without one. (#261)
+- **A radio without a `type` counts as off, and a write that gives an enabled radio its type is
+  checked as one that turns it on.** netifd sets up no SSID of a wifi-device without a type
+  (`/lib/netifd/wireless.uc`, before it reads `disabled`). So a write to an SSID of such a radio is
+  no longer refused for a stored value that it leaves as it is, the validation sweep lists the
+  value with `live: false`, and so does the `cell_density` of such a radio. A write of
+  `wireless/devices` that gives the radio a type answers 422 `conflict` on `disabled` while an
+  enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as a write that
+  enables the radio does. That uses the same carve-out as the refusal of #260, and the rest only
+  widens what a write takes. (#262)
+- **A write of `network/interfaces` that makes the stored peers of a WireGuard interface live also
+  refuses a peer with an allowed IP that a peer write refuses.** wg refuses the whole config for an
+  allowed IP that it cannot parse, as for the other peer rules of #261, and a peer write refuses
+  such a value, and a few forms that wg takes, such as a prefix length of three digits, on every
+  write. The rule counts only on an enabled peer with a public key, because wireguard.sh gives wg no
+  other peer. That uses the tightening carve-out of #261. (#262)
 
 ### Deprecated
 
