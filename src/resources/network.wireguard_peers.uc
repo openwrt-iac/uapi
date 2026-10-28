@@ -111,15 +111,17 @@ function validate(json, conn, id, delta) {
 		push(errs, { field: "endpoint_port", code: "conflict",
 		             message: "must be from 1 to 65535: uci holds a port that does not resolve, which reads 0, and a write of 0 would replace it with port 0, which wg takes" });
 
-	// The kernel apply gives wg a new host only with a port, so a write that changes the host of an
-	// enabled peer whose port reads 0 would leave the kernel on the old endpoint.
-	let key = config_get(json.public_key);
-	let host = config_get(json.endpoint_host);
-	if (json.endpoint_port === 0 && json.disabled !== true && type(key) == "string" && key != ""
-	    && type(host) == "string" && host != "" && conn != null && id != null
-	    && host != config_get(conn.uci_get("network", id, "endpoint_host")))
-		push(errs, { field: "endpoint_port", code: "out_of_range",
-		             message: "must be from 1 to 65535 in a write that changes endpoint_host: the port reads 0, so the kernel would keep the old endpoint" });
+	// The kernel apply gives wg an endpoint only with a port. A write that changes the host of an
+	// enabled peer whose port reads 0 would leave the kernel on the old endpoint, and one that changes
+	// the key sets the peer again, with no endpoint at all. Hosts compare as apply_peer reads them.
+	let strip = (v) => replace(config_get(v) ?? "", /[[:space:]]/g, "");
+	let host = strip(json.endpoint_host);
+	if (json.endpoint_port === 0 && json.disabled !== true && host != "" && conn != null && id != null) {
+		let old = conn.uci_get("network", id) ?? {};
+		if (host != strip(old.endpoint_host) || wg.kernel_key(json.public_key) != wg.kernel_key(old.public_key))
+			push(errs, { field: "endpoint_port", code: "out_of_range",
+			             message: "must be from 1 to 65535 in a write that changes endpoint_host or public_key: the port reads 0, and the kernel apply gives wg an endpoint only with a port" });
+	}
 
 	if (conn != null && json.interface != null && json.interface != "") {
 		if (!interface_exists_with_wg_proto(conn, json.interface))
@@ -283,7 +285,7 @@ return {
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
-		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer or sets its host while the port reads 0." },
+		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
 		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value." },
 		route_allowed_ips:    { type: "boolean", default: false,
