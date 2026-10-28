@@ -22,7 +22,7 @@ function _mkdir_p(path) {
 	for (let p in parts) {
 		if (p == "") { acc = "/"; continue; }
 		acc = (acc == "/" || acc == "") ? acc + p : acc + "/" + p;
-		try { fs.mkdir(acc); } catch (_) {}
+		try { fs.mkdir(acc, 0o700); } catch (_) {}
 	}
 }
 

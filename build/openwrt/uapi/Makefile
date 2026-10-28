@@ -63,14 +63,6 @@ define Package/uapi/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 [ -x /etc/uci-defaults/99-uapi ] && /etc/uci-defaults/99-uapi && rm -f /etc/uci-defaults/99-uapi
-# These hold a 24 h replay window and state that a reboot clears too, so each starts empty at an
-# install or upgrade and keeps no file that an older version wrote. An older uapi kept them in
-# /tmp, 0755 with files 0644. Only a directory that root owns is removed.
-for d in /var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit \
-	/var/run/uapi-error-ring /tmp/uapi-idempotency /tmp/uapi-metrics /tmp/uapi-ratelimit \
-	/tmp/uapi-error-ring; do
-	[ -O "$$d" ] && rm -rf "$$d"
-done
 # uhttpd-mod-ucode compiles main.uc at parent startup and caches the VM. A
 # plain "reload" does not re-read the script, so upgrades that overwrite
 # /usr/share/uapi/*.uc would otherwise keep serving the previous version's
@@ -78,6 +70,15 @@ done
 # in effect immediately after `apk add` / `apk upgrade uapi`, unless the
 # operator disabled uhttpd: a restart would start it.
 /etc/init.d/uhttpd enabled && /etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+# These hold a 24 h replay window and state that a reboot clears too, so each starts empty at an
+# install or upgrade. An older uapi kept four of them in /tmp, 0755 with files 0644, and its cached
+# VM writes them until the restart above. Only an entry that is itself a directory owned by root is
+# removed.
+for d in /var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit \
+	/var/run/uapi-error-ring /var/run/uapi-token-update /tmp/uapi-idempotency \
+	/tmp/uapi-metrics /tmp/uapi-ratelimit /tmp/uapi-error-ring; do
+	find "$$d" -maxdepth 0 -type d -user 0 -exec rm -rf {} \; 2>/dev/null
+done
 # Only show the bootstrap message when no token exists yet. The token store
 # survives upgrades and remove/reinstall (conffile), so on second-and-later
 # installs the operator already knows the drill.

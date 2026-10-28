@@ -165,6 +165,23 @@ t.describe('metrics, a counter file that holds no count', () => {
 	});
 });
 
+t.describe('metrics, the modes on disk', () => {
+	t.it('keeps every directory 0700 and every file 0600', () => {
+		wipe();
+		metrics.record_request("GET", "/firewall/rules/:id", 200, 1, "ci_bot");
+		let wrong = [];
+		function walk(p) {
+			let st = fs.lstat(p);
+			if ((st.mode & 0o777) != (st.type == "directory" ? 0o700 : 0o600))
+				push(wrong, sprintf("%s %o", p, st.mode & 0o777));
+			if (st.type == "directory")
+				for (let n in fs.lsdir(p)) walk(p + "/" + n);
+		}
+		walk("/var/run/uapi-metrics");
+		t.assert_deep_equal(wrong, []);
+	});
+});
+
 t.describe('metrics, a directory that is not uapi\'s own', () => {
 	// A fold unlinks a file that holds no count without adding anything, so the increment's own
 	// check does not cover it.

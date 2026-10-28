@@ -10,7 +10,7 @@ function owned(dir) {
 	fs.mkdir(dir, 0o700);
 	let st = fs.lstat(dir);
 	if (st?.type != "directory" || sprintf("%d", st.uid) !== EUID || (st.mode & 0o022)) return false;
-	if ((st.mode & 0o777) != 0o700) fs.chmod(dir, 0o700);
+	if ((st.mode & 0o777) != 0o700 && !fs.chmod(dir, 0o700)) return false;
 	return true;
 }
 

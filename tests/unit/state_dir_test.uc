@@ -69,6 +69,15 @@ t.describe('state_dir.owned', () => {
 		t.assert_false(other.owned(DIR));
 		t.assert_true(state_dir.owned(DIR));
 	});
+
+	t.it('does not use a directory of its own that it cannot narrow to 0700', () => {
+		fresh();
+		fs.mkdir(DIR);
+		fs.chmod(DIR, 0o755);
+		let other = t.load_with_fs({ ...fs, chmod: (p, m) => null }, [ "state_dir" ]);
+		t.assert_false(other.owned(DIR));
+		t.assert_true(state_dir.owned(DIR));
+	});
 });
 
 t.describe('state_dir.replace', () => {
@@ -93,6 +102,19 @@ t.describe('state_dir.replace', () => {
 		t.assert_equal(fs.readfile(ELSEWHERE + "/target"), "old\n");
 		t.assert_equal(fs.lstat(DIR + "/f").type, "file");
 		t.assert_equal(fs.readfile(DIR + "/f"), "new\n");
+	});
+
+	// ulimit -f 0 fails every write as a full tmpfs does, and the close that would report it
+	// reports nothing.
+	t.it('keeps the file whole and leaves no temp file when the filesystem cannot hold the text', () => {
+		fresh();
+		state_dir.owned(DIR);
+		fs.writefile(DIR + "/f", "old\n");
+		fs.writefile(DIR + "/full.uc", sprintf("exit(require('state_dir').replace(%J, %J, 'new\\n') ? 0 : 1);\n",
+		                                       DIR + "/f.tmp", DIR + "/f"));
+		t.assert_equal(system("trap '' XFSZ; ulimit -f 0; exec ucode -L src/lib " + DIR + "/full.uc"), 1);
+		t.assert_equal(fs.readfile(DIR + "/f"), "old\n");
+		t.assert_equal(fs.lstat(DIR + "/f.tmp"), null);
 	});
 });
 

@@ -564,17 +564,18 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
 
 uapi keeps the rate-limit buckets, the idempotency cache, the metrics
-counters and the recent errors under `/var/run`, in directories of mode
-0700 with files of mode 0600. It uses one only when `state_dir.owned()`
-accepts it: a directory owned by the effective uid of the request process,
-that neither the group nor others can write. One of its own with another
-mode is narrowed to 0700, and each file is written through
-`state_dir.replace()`. A package install or upgrade
-removes the four directories, and the four that an older uapi kept in
-`/tmp` when root owns them, so none keeps a file that an older uapi wrote.
+counters, the recent errors and the last-used sentinels under `/var/run`,
+in directories of mode 0700 with files of mode 0600. It uses one only when
+`state_dir.owned()` accepts it: a directory owned by the effective uid of
+the request process, that neither the group nor others can write. One of
+its own with another mode is narrowed to 0700. A package install or
+upgrade, after its uhttpd restart, removes these five directories and the
+four that an older uapi kept in `/tmp`, each when it is a directory that
+root owns. A request of the older version still in flight at the restart
+can write one of them again.
 
 `/var/run` is tmpfs on OpenWrt, as `/var` is `/tmp`: rate-limit buckets,
-idempotency entries, metrics counters and recent errors reset on reboot.
-This is acceptable: operational counters that span uptime aren't a uapi
-responsibility - point a `node_exporter` or central collector at the box
-and aggregate there.
+idempotency entries, metrics counters, recent errors and sentinels reset on
+reboot. This is acceptable: operational counters that span uptime aren't a
+uapi responsibility - point a `node_exporter` or central collector at the
+box and aggregate there.

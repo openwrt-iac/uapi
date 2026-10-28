@@ -52,7 +52,7 @@ function sweep(now) {
 		let e = fs.stat(DIR + "/" + name);
 		if (e?.mtime != null && (now - e.mtime) > TTL_SECONDS) fs.unlink(DIR + "/" + name);
 	}
-	fs.writefile(mark, "");
+	state_dir.replace(mark + ".tmp", mark, "");
 }
 
 function lookup(token_name, key, body_text, now_epoch) {
