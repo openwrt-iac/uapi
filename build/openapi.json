@@ -29834,7 +29834,6 @@
 					},
 					"cell_density": {
 						"type": "integer",
-						"default": 0,
 						"minimum": 0,
 						"maximum": 3
 					},
