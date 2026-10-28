@@ -160,6 +160,9 @@ t.describe('packages.create_feed writes the feed file', () => {
 		s.r = p.create_feed(ctx(), { name: 'extra', url: 'https://example.com/extra' });
 		s.files = fs.lsdir(DIR);
 		s.feed = fs.readfile(DIR + '/extra.list');
+		// Before the asserts, because a failed one dies and would leave the directory in /tmp.
+		for (let f in s.files) fs.unlink(DIR + '/' + f);
+		fs.rmdir(DIR);
 		return s;
 	}
 
@@ -177,7 +180,6 @@ t.describe('packages.create_feed writes the feed file', () => {
 		t.assert_equal(s.r.body.code, 'internal_error');
 		t.assert_deep_equal(s.files, []);
 		t.assert_deep_equal(s.commands, []);
-		fs.rmdir(DIR);
 	});
 });
 

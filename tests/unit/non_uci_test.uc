@@ -103,15 +103,21 @@ t.describe('non_uci.read_file_if_present', () => {
 
 // ulimit -f fails a write to a regular file as a full filesystem does: 0 leaves the temp file
 // empty, and 1 cuts it short after one block. close() reports neither.
+// Each test reads what it checks and removes its files before it asserts, because a failed assert
+// dies and would leave them in /tmp.
 t.describe('non_uci.replace_private_file', () => {
 	const PATH = '/tmp/uapi-test-private';
 	const SCRIPT = '/tmp/uapi-test-private.uc';
+	function outcome(answer) {
+		let r = { answer, held: fs.readfile(PATH), tmp: fs.stat(PATH + '.uapi.tmp') };
+		for (let f in [ PATH, PATH + '.uapi.tmp', SCRIPT ]) fs.unlink(f);
+		return r;
+	}
 
 	t.it('replaces the file and leaves no temp file', () => {
 		fs.writefile(PATH, 'old\n');
-		t.assert_true(non_uci.replace_private_file(PATH, 'new\n'));
-		t.assert_equal(fs.readfile(PATH), 'new\n');
-		t.assert_equal(fs.stat(PATH + '.uapi.tmp'), null);
+		t.assert_deep_equal(outcome(non_uci.replace_private_file(PATH, 'new\n')),
+		                    { answer: true, held: 'new\n', tmp: null });
 	});
 
 	t.it('keeps the file and leaves no temp file when the filesystem cannot hold the new one', () => {
@@ -119,12 +125,10 @@ t.describe('non_uci.replace_private_file', () => {
 			fs.writefile(PATH, 'old\n');
 			fs.writefile(SCRIPT, sprintf("print(require('non_uci').replace_private_file(%J, %J));\n", PATH, c[1]));
 			let p = fs.popen(sprintf("trap '' XFSZ; ulimit -f %d; exec ucode -L src/lib %s", c[0], SCRIPT));
-			t.assert_equal(p.read('all'), 'false', sprintf('ulimit -f %d', c[0]));
+			let answer = p.read('all');
 			p.close();
-			t.assert_equal(fs.readfile(PATH), 'old\n');
-			t.assert_equal(fs.stat(PATH + '.uapi.tmp'), null);
+			t.assert_deep_equal(outcome(answer), { answer: 'false', held: 'old\n', tmp: null },
+			                    sprintf('ulimit -f %d', c[0]));
 		}
-		fs.unlink(SCRIPT);
-		fs.unlink(PATH);
 	});
 });

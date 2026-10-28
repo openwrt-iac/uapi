@@ -328,20 +328,25 @@ t.describe('wg with a preshared key', () => {
 
 	t.it('gives wg the key in a file and removes the file after', () => {
 		let key = key_file(false);
-		t.assert_equal(key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []), null);
+		let r = key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []);
+		let left = fs.stat(KEY_FILE);
+		fs.unlink(KEY_FILE);
+		t.assert_equal(r, null);
 		t.assert_deep_equal(key.commands, [ cmd([ 'wg', 'set', 'wg1', 'peer', PK, 'allowed-ips', '10.0.0.2/32',
 		                                          'persistent-keepalive', '0', 'preshared-key', PSK_PATH,
 		                                          'endpoint', '192.0.2.1:51820' ]) ]);
 		t.assert_equal(key.wrote, PSK + "\n");
-		t.assert_equal(fs.stat(KEY_FILE), null);
+		t.assert_equal(left, null);
 	});
 
 	t.it('fails the apply and removes the file when the tmpfs cannot hold the key', () => {
 		let key = key_file(true);
-		t.assert_match(key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []),
-		               /could not stage the preshared key/);
+		let r = key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []);
+		let left = fs.stat(KEY_FILE);
+		fs.unlink(KEY_FILE);
+		t.assert_match(r, /could not stage the preshared key/);
 		t.assert_deep_equal(key.commands, []);
-		t.assert_equal(fs.stat(KEY_FILE), null);
+		t.assert_equal(left, null);
 	});
 
 	// a and b have a key and no endpoint, and a write of b cannot stage b's key. Both the apply and
