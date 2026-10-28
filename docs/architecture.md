@@ -97,7 +97,9 @@ The interactions:
 
 All locks are non-blocking (`LOCK_NB`); contention surfaces as `423
 locked` so the client can decide whether to back off and retry. The HTTP
-worker never waits for a lock. It can sleep while it holds one: the stay-up
+worker never waits for a uapi lock, but libuci's own flocks on a package
+file block while LuCI or a shell holds them. It can sleep while it holds a
+uapi lock: the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks.
 
 Audit and verification: `docs/lock-state-audit.md` covers every site in
