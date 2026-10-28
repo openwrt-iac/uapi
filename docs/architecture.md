@@ -138,8 +138,11 @@ without uci state change.
    Nothing is staged outside the request process (see below). A PATCH skips
    a set of the value that uci already holds and a delete of an option that
    it does not hold, so a PATCH that changes nothing has nothing to commit.
-   The response body is `fromUci` of the section read back from that copy,
-   so a write answers the body and ETag that a GET then answers.
+   The response body is `fromUci` of the section read back from that copy.
+   So a write answers the body, apart from `runtime`, and the ETag that a GET
+   then answers, unless another writer commits to the package while the
+   request runs. `runtime` is read before the reload, and the commit replays
+   the writes over such a commit, which the body does not show.
 5. **Commit.** When the request wrote to the package, `uci_commit(<package>)`
    loads the package file again, replays the writes over it and writes it
    through libuci, so a commit by LuCI or a shell while the request ran is kept.
