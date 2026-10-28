@@ -1,7 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
-let as_list_or_null = values.as_list_or_null;
 let fs = require('fs');
 
 const LEASES4_PATH = "/tmp/dhcp.leases";
@@ -92,7 +91,8 @@ function fromUci(section, conn) {
 		// config_get and splits the words, and odhcpd takes the entries, or the words of an option,
 		// so the entries joined with spaces read the same to both.
 		domain: values.config_get(section.domain) ?? null,
-		dhcp_option: as_list_or_null(section.dhcp_option),
+		// dnsmasq.init passes each entry of a list whole, and splits an option into words.
+		dhcp_option: values.as_word_list_or_null(section.dhcp_option),
 		runtime: runtime,
 	};
 }

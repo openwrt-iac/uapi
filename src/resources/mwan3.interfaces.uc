@@ -90,7 +90,7 @@ return {
 	schema_properties: {
 		enabled:               { type: "boolean", default: false },
 		family:                { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_FAMILY),
-		                         description: "Address family this interface tracks." },
+		                         description: "Address family this interface tracks. A null removes the option, and mwan3 then uses ipv4." },
 		track_ip:              { type: ["array", "null"], items: { type: "string" },
 		                         description: "List of IPs to ping for reachability." },
 		track_method:          { type: ["string", "null"], enum: ["ping", "arping", "httping", "nping-tcp", "nping-udp", null] },

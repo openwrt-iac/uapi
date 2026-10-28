@@ -513,6 +513,30 @@ stale enough to be misleading:
   evidence that the tightening carve-out needs
   ([#251](https://github.com/openwrt-iac/uapi/issues/251)).
 
+- **`mwan3/interfaces.family` is required, or an unset one reads as `ipv4`.** mwan3 reads an
+  unset family as ipv4 (`mwan3.sh` and `mwan3track` both default it), and a read gives null. The
+  spec requires the key and takes null, and `validate()` does not require a value. So on the
+  stock `wan6`, which sets `family 'ipv6'`, `PATCH {"family": null}` answers 200, and mwan3 then
+  handles wan6 as IPv4 while the read says null. Since 3.2.0 the field description says that a
+  null removes the option and that mwan3 then uses ipv4. Refusing the null tightens what a write
+  takes, and reading `ipv4` changes what a read of an unset family gives, so either waits for
+  the major.
+
+- **A `wireless/interfaces` section with no `mode` reads as null instead of `ap`.** wifi-scripts
+  sets up nothing for such a section, because its switch on the mode skips an absent mode as it
+  skips any mode that it does not know (`mac80211.sh:260`). uapi reads the section as `ap`, so a
+  read reports an access point that does not exist. The read change is breaking, because the
+  Response then takes null and every such section reads differently.
+
+- **Whether to check every field at each save, as LuCI does.** LuCI validates each visible field
+  of a form when it saves, so a stored value that breaks a rule blocks every save of the section
+  until it is fixed. For the rules in `validate_new()`, uapi refuses a write only for an error
+  that the write adds (`new_errors()` in `src/lib/handler.uc`): one in a field that it changes,
+  one that the section did not have, or a dormant one that it makes live. So a write that leaves
+  a stored value alone passes, even one that only disables the section, and
+  `GET /api/v3/diagnostics?validate=1` lists the value. LuCI's model refuses writes that 3.1.0
+  accepts, so adopting it is breaking.
+
 ## Out of scope by design
 
 - **Localization of error `message` strings.** English-only; codes are
