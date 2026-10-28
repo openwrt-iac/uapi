@@ -122,8 +122,17 @@ function psk_file(value) {
 	let f = fs.open(PSK_PATH, "w");
 	if (!f) return null;
 	try { fs.chmod(PSK_PATH, 384); } catch (e) {}  // 0600
-	f.write(value + "\n");
+	// wg reads an empty key file as no key, so a write that the tmpfs cannot hold set the peer
+	// without its preshared key and answered 200. close() drops fclose's error, so only the flush
+	// reports it.
+	let content = value + "\n";
+	let written = f.write(content);
+	let flushed = f.flush();
 	f.close();
+	if (written != length(content) || !flushed) {
+		fs.unlink(PSK_PATH);
+		return null;
+	}
 	return PSK_PATH;
 }
 

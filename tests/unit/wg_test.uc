@@ -298,6 +298,48 @@ t.describe('wg.apply against logging wg and ip', () => {
 	});
 });
 
+// /var/run is root's, so the key file is kept in `key`. Its handle is a stub too, because the
+// ucode of the CI image returns null from a flush that worked and true from one that failed. On a
+// full tmpfs the open and the buffered write work, and only the flush fails.
+t.describe('wg.apply with a preshared key', () => {
+	const PSK_PATH = '/var/run/uapi.wg.psk';
+	function apply_with_key_file(flushed) {
+		let key = { commands: [] };
+		let wgmod = t.load_with_fs({ ...fs,
+			open: (p, m) => {
+				if (p != PSK_PATH) return fs.open(p, m);
+				key.exists = true;
+				return { write: (s) => { key.wrote = s; return length(s); }, flush: () => flushed, close: () => true };
+			},
+			chmod: (p, mode) => (p == PSK_PATH) || fs.chmod(p, mode),
+			unlink: (p) => { if (p == PSK_PATH) key.exists = false; return true; },
+			popen: (cmd) => { push(key.commands, cmd); return { read: () => "", close: () => 0 }; },
+		}, [ 'wg' ]);
+		let c = ubus.stub();
+		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
+		key.result = wgmod.apply(c, [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ],
+		                                preshared_key: PK2, endpoint_host: '192.0.2.1', endpoint_port: 51820 } ], []);
+		return key;
+	}
+
+	t.it('gives wg the key in a file and removes the file after', () => {
+		let key = apply_with_key_file(true);
+		t.assert_equal(key.result, null);
+		t.assert_deep_equal(key.commands, [ wg.command_line([ 'wg', 'set', 'wg1', 'peer', PK, 'allowed-ips', '10.0.0.2/32',
+		                                                      'persistent-keepalive', '0', 'preshared-key', PSK_PATH,
+		                                                      'endpoint', '192.0.2.1:51820' ]) + ' 2>&1' ]);
+		t.assert_equal(key.wrote, PK2 + "\n");
+		t.assert_false(key.exists);
+	});
+
+	t.it('fails the apply and removes the file when the tmpfs cannot hold the key', () => {
+		let key = apply_with_key_file(null);
+		t.assert_match(key.result, /could not stage the preshared key/);
+		t.assert_deep_equal(key.commands, []);
+		t.assert_false(key.exists);
+	});
+});
+
 t.describe('wg.reconcile against logging wg and ip', () => {
 	let reconcile = (uci, outputs) => run_wg(uci, "wg.reconcile(c, [ 'wg1' ])", outputs);
 

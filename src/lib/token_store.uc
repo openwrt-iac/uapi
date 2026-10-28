@@ -208,14 +208,15 @@ function remove(conn, name, tx_overrides) {
 			// charset refuses, so a revoke by position left the bucket behind.
 			let real = existing['.name'];
 			c.uci_delete(pkg, real);
-			// Inside the transaction so a rolled-back revoke does not lose the bucket,
-			// and best-effort because a revoke must not fail on a tmpfs hiccup.
-			try { ratelimit.forget(real); } catch (_) {}
 			return { ok: true, body: { deleted: real } };
 		},
 	};
 	for (let k in tx_overrides ?? {}) params[k] = tx_overrides[k];
-	return transaction.transaction(conn, params);
+	let r = transaction.transaction(conn, params);
+	// Not in fn, which runs before the commit: a revoke whose commit failed kept its token and
+	// gave it a full burst again.
+	if (r.ok) ratelimit.forget(r.body.deleted);
+	return r;
 }
 
 // update_last_used is best-effort: throttled to once per LAST_USED_THROTTLE_SECONDS

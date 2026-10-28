@@ -1,5 +1,7 @@
 let t = require('harness');
+let fs = require('fs');
 let bus = require('bus');
+let ratelimit = require('ratelimit');
 let token_store = require('token_store');
 
 function seed_tokens(c) {
@@ -222,5 +224,24 @@ t.describe('token_store.remove', () => {
 		let r = token_store.remove(c, "@token[0]", noop_tx());
 		t.assert_deep_equal(r.body, { deleted: "admin" });
 		t.assert_equal(c._state.uci.uapi.admin, null);
+	});
+
+	const BUCKET = "/tmp/uapi-ratelimit/admin.txt";
+
+	t.it('drops the rate-limit bucket of the token it revokes', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		ratelimit.check("admin", { now: 1 });
+		t.assert_true(token_store.remove(c, "admin", noop_tx()).ok);
+		t.assert_true(fs.stat(BUCKET) == null);
+	});
+
+	t.it('keeps the bucket when the revoke does not commit, as the token stays', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		ratelimit.check("admin", { now: 1 });
+		c.uci_commit = () => die("uci commit uapi: I/O error");
+		t.assert_throws(() => token_store.remove(c, "admin", noop_tx()));
+		let kept = fs.stat(BUCKET) != null;
+		ratelimit.forget("admin");
+		t.assert_true(kept);
 	});
 });

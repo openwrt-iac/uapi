@@ -31,13 +31,14 @@ function append(entry) {
 		push(existing, { ...entry,
 		                 message: length(m) > MAX_MESSAGE ? substr(m, 0, MAX_MESSAGE) + "..." : m });
 		while (length(existing) > CAP) shift(existing);
-		let tmp = PATH + ".tmp";
+		// One name per request process. Appends that shared one wrote through their own offsets
+		// into one file, which then held no JSON, and the ring read empty.
+		let tmp = PATH + "." + fs.readlink("/proc/self");
 		let f = fs.open(tmp, "w");
 		if (!f) return;
 		f.write(sprintf("%J", existing));
 		f.close();
-		try { fs.rename(tmp, PATH); }
-		catch (_) { try { fs.unlink(tmp); } catch (__) {} }
+		if (!fs.rename(tmp, PATH)) fs.unlink(tmp);
 	} catch (_) {}
 }
 

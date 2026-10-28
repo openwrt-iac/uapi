@@ -83,8 +83,9 @@ function _write_counter(path, value) {
 	if (!f) return false;
 	f.write("" + value + "\n");
 	f.close();
-	try { return fs.rename(tmp, path); }
-	catch (_) { try { fs.unlink(tmp); } catch (__) {} return false; }
+	if (fs.rename(tmp, path)) return true;
+	fs.unlink(tmp);
+	return false;
 }
 
 function inc(series, labels, by) {
