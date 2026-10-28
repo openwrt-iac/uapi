@@ -728,6 +728,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                [ 'PUT', () => h().replace(c, CTX, 'w1', put) ],
 		                [ 'JSON Patch remove', () => h().patch(c, jp, 'w1', [ { op: 'remove', path: '/mode' } ]) ],
 		                [ 'JSON Patch replace', () => h().patch(c, jp, 'w1', [ { op: 'replace', path: '/mode', value: null } ]) ],
+		                [ 'JSON Patch move', () => h().patch(c, jp, 'w1', [ { op: 'move', from: '/mode', path: '/network' } ]) ],
 		                [ 'create', () => h().create(c, CTX, { id: 'w2', device: 'radio0', ssid: 'x', mode: null }) ] ])
 			t.assert_deep_equal(map(w[1]().body.errors, (e) => [ e.field, e.code ]), [ [ 'mode', 'required' ] ], w[0]);
 		t.assert_equal(c._state.uci.wireless.w1.mode, 'sta');

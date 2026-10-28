@@ -170,9 +170,12 @@ null_mode "JSON Patch remove" "$(call -X PATCH -H 'Content-Type: application/jso
 	"$URL/wireless/interfaces/$stid" -d '[{"op":"remove","path":"/mode"}]')"
 null_mode "JSON Patch replace" "$(call -X PATCH -H 'Content-Type: application/json-patch+json' \
 	"$URL/wireless/interfaces/$stid" -d '[{"op":"replace","path":"/mode","value":null}]')"
+null_mode "JSON Patch move" "$(call -X PATCH -H 'Content-Type: application/json-patch+json' \
+	"$URL/wireless/interfaces/$stid" -d '[{"op":"move","from":"/mode","path":"/network"}]')"
 null_mode "POST" "$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" \
 	-d '{"device":"radio0","ssid":"uapi-test-nullmode","mode":null}')"
-[ "$($SSH "uci -q get wireless.$stid.mode")" = sta ] || fail "a refused null mode changed the stored mode"
+[ "$($SSH "uci -q get wireless.$stid.mode; uci -q get wireless.$stid.network" | tr '\n' ' ')" = "sta lan " ] \
+	|| fail "a refused null mode changed the stored mode or network"
 $SSH 'uci show wireless' | grep -q "uapi-test-nullmode" && fail "a refused POST stored a section"
 call -X DELETE "$URL/wireless/interfaces/$stid" | tail -1 | grep -q '^204$' || fail "station DELETE expected 204"
 

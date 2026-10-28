@@ -648,9 +648,13 @@ function patch_touched_fields(ops, patched) {
 		// A test op asserts a value without writing it, so it names nothing, even on the root.
 		if (type(op) == "object" && op.op == "test") continue;
 		if (type(op) != "object" || type(op.path) != "string" || op.path == "") return null;
-		let seg = split(op.path, "/")[1];
-		if (seg == null || seg == "") return null;
-		out[seg] = patched[seg];
+		// A move also removes the field that it reads from. Without it, a move out of `/mode` got
+		// past the refusal of a null mode on wireless/interfaces and stored mode ap.
+		for (let p in (op.op == "move") ? [ op.path, op.from ] : [ op.path ]) {
+			let seg = split(p, "/")[1];
+			if (seg == null || seg == "") return null;
+			out[seg] = patched[seg];
+		}
 	}
 	return out;
 }
