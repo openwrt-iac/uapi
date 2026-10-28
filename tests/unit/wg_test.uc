@@ -298,26 +298,26 @@ t.describe('wg.apply against logging wg and ip', () => {
 	});
 });
 
-// /var/run is root's, so the key file is kept in `key`. Its handle is a stub too, because the
-// ucode of the CI image returns null from a flush that worked and true from one that failed. On a
-// full tmpfs the open and the buffered write work, and only the flush fails.
+// /var/run is root's, so the key file is a file in /tmp. On a full tmpfs the open creates the file
+// and the write fails, so the full case creates the file and hands the module a handle on /dev/full.
 t.describe('wg with a preshared key', () => {
 	const PSK_PATH = '/var/run/uapi.wg.psk';
+	const KEY_FILE = '/tmp/uapi-test-wg.psk';
 	const PSK = 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWY=';
-	const WORKS = { write: (s) => length(s), flush: true };
-	const FULL = { write: (s) => length(s), flush: null };
-	const WRITE_FAILS = { write: (s) => null, flush: true };
-	function key_file(handle, uci) {
+	function key_file(full, uci) {
 		let key = { commands: [] };
+		let at = (p) => (p == PSK_PATH) ? KEY_FILE : p;
 		key.wg = t.load_with_fs({ ...fs,
 			open: (p, m) => {
-				if (p != PSK_PATH) return fs.open(p, m);
-				key.exists = true;
-				return { write: (s) => { key.wrote = s; return handle.write(s); }, flush: () => handle.flush, close: () => true };
+				let f = fs.open(at(p), m);
+				if (!full || p != PSK_PATH || f == null) return f;
+				f.close();
+				return fs.open('/dev/full', 'w');
 			},
-			chmod: (p, mode) => (p == PSK_PATH) || fs.chmod(p, mode),
-			unlink: (p) => { if (p == PSK_PATH) key.exists = false; return true; },
-			popen: (cmd) => { push(key.commands, cmd); return { read: () => "", close: () => 0 }; },
+			stat: (p) => fs.stat(at(p)),
+			chmod: (p, mode) => fs.chmod(at(p), mode),
+			unlink: (p) => fs.unlink(at(p)),
+			popen: (cmd) => { push(key.commands, cmd); key.wrote = fs.readfile(KEY_FILE); return { read: () => "", close: () => 0 }; },
 		}, [ 'wg' ]);
 		key.conn = ubus.stub({ uci: uci ?? {} });
 		key.conn.set_ubus_response('network.interface.wg1', 'status', { up: true });
@@ -327,30 +327,28 @@ t.describe('wg with a preshared key', () => {
 	let set_op = (extra) => ({ iface: 'wg1', action: 'set', allowed_ips: [ '10.0.0.2/32' ], preshared_key: PSK, ...extra });
 
 	t.it('gives wg the key in a file and removes the file after', () => {
-		let key = key_file(WORKS);
+		let key = key_file(false);
 		t.assert_equal(key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []), null);
 		t.assert_deep_equal(key.commands, [ cmd([ 'wg', 'set', 'wg1', 'peer', PK, 'allowed-ips', '10.0.0.2/32',
 		                                          'persistent-keepalive', '0', 'preshared-key', PSK_PATH,
 		                                          'endpoint', '192.0.2.1:51820' ]) ]);
 		t.assert_equal(key.wrote, PSK + "\n");
-		t.assert_false(key.exists);
+		t.assert_equal(fs.stat(KEY_FILE), null);
 	});
 
 	t.it('fails the apply and removes the file when the tmpfs cannot hold the key', () => {
-		for (let handle in [ FULL, WRITE_FAILS ]) {
-			let key = key_file(handle);
-			t.assert_match(key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []),
-			               /could not stage the preshared key/);
-			t.assert_deep_equal(key.commands, []);
-			t.assert_false(key.exists);
-		}
+		let key = key_file(true);
+		t.assert_match(key.wg.apply(key.conn, [ set_op({ public_key: PK, endpoint_host: '192.0.2.1', endpoint_port: 51820 }) ], []),
+		               /could not stage the preshared key/);
+		t.assert_deep_equal(key.commands, []);
+		t.assert_equal(fs.stat(KEY_FILE), null);
 	});
 
 	// a and b have a key and no endpoint, and a write of b cannot stage b's key. Both the apply and
 	// the restore removed a peer before they staged its key: the apply removed b, and the restore,
 	// which sets every peer of wg1 again, removed a, which the write did not name. Neither came back.
 	t.it('removes no peer when a key cannot be staged, in the apply or in the restore', () => {
-		let key = key_file(FULL, { network: { wg1: WG1,
+		let key = key_file(true, { network: { wg1: WG1,
 			a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: PSK }),
 			b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32', preshared_key: PSK }) } });
 		t.assert_match(key.wg.apply(key.conn, [ set_op({ public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] }) ], []), /could not stage/);
@@ -360,7 +358,7 @@ t.describe('wg with a preshared key', () => {
 
 	// The delete of a section that shares its key with b removed the key before b's key was staged.
 	t.it('keeps a key that another section holds when the key of that section cannot be staged', () => {
-		let key = key_file(FULL, { network: { wg1: WG1, b: peer({ public_key: PK, allowed_ips: '10.0.0.3/32', preshared_key: PSK }) } });
+		let key = key_file(true, { network: { wg1: WG1, b: peer({ public_key: PK, allowed_ips: '10.0.0.3/32', preshared_key: PSK }) } });
 		t.assert_match(key.wg.apply(key.conn, [ { iface: 'wg1', action: 'remove', public_key: PK } ], []), /could not stage/);
 		t.assert_deep_equal(key.commands, []);
 	});

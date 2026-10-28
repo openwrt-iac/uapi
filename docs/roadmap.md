@@ -284,7 +284,7 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   field that lands in the `dhcp-host` line.
 - **A full filesystem no longer empties `authorized_keys` or the crontab.** ucode's `close()`
   drops `fclose`'s error, so a write that ran out of space renamed an empty file over the old
-  one and answered 200. The shared writer now checks the flush.
+  one and answered 200. The shared writer now checks that the write reached the disk.
 - **Package installs survive a feed rebuild.** `apk add` refreshes a stale index on its own
   only after 4 hours, so an install now refreshes and retries once when it fails
   ([#191](https://github.com/openwrt-iac/uapi/issues/191)).

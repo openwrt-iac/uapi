@@ -74,13 +74,13 @@ function replace_private_file(path, content) {
 	let f = fs.open(tmp, "w");
 	if (!f) return false;
 	try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
-	let written = f.write(content);
-	// ucode's close() drops fclose's result, so a write the filesystem cannot hold shows up
-	// only here: without this check, the empty temp file was renamed over the original and
-	// the request answered 200. A short count covers content too large for one buffer.
-	let flushed = f.flush();
+	f.write(content);
 	f.close();
-	if (written != length(content) || !flushed) {
+	// ucode's close() drops fclose's result, and flush() answers inverted on the ucode that CI
+	// runs (docs/ucode-quirks.md), so a write the filesystem cannot hold shows up only in the size
+	// on disk. Without this check, the empty temp file was renamed over the original and the
+	// request answered 200.
+	if (fs.stat(tmp)?.size != length(content)) {
 		try { fs.unlink(tmp); } catch (e) {}
 		return false;
 	}

@@ -123,13 +123,12 @@ function psk_file(value) {
 	if (!f) return null;
 	try { fs.chmod(PSK_PATH, 384); } catch (e) {}  // 0600
 	// wg reads an empty key file as no key, so a write that the tmpfs cannot hold set the peer
-	// without its preshared key and answered 200. close() drops fclose's error, so only the flush
-	// reports it.
+	// without its preshared key and answered 200. close() drops fclose's error, and flush() answers
+	// inverted on the ucode that CI runs, so the size on disk is what shows it.
 	let content = value + "\n";
-	let written = f.write(content);
-	let flushed = f.flush();
+	f.write(content);
 	f.close();
-	if (written != length(content) || !flushed) {
+	if (fs.stat(PSK_PATH)?.size != length(content)) {
 		fs.unlink(PSK_PATH);
 		return null;
 	}

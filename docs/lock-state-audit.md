@@ -62,7 +62,7 @@ Every descriptor, pipe and lock below is released on every in-request exit path.
 | `src/lib/packages.uc` | 25-45 | pipe, `apk info` | A failed popen returns `[]`. Otherwise the pipe is closed right after the read. No lock. |
 | `src/lib/packages.uc` | 156-171 | fd per feed file | A failed open gives an empty URL. Otherwise the fd is closed after one line. No lock. |
 | `src/lib/packages.uc` | 173-186 | fd, one feed file | A failed open answers 404. Otherwise the fd is closed after one line. No lock. |
-| `src/lib/packages.uc` | 210-238 | fd, a new feed file, `wx` | Under the global EX. `O_EXCL` refuses a file another writer created after the `stat`, and a failed open answers 409 or 500. Otherwise the fd is closed before the write is judged. A short write or a failed flush unlinks the file and answers 500 before `apk update` runs, so a retry does not find the file. |
+| `src/lib/packages.uc` | 210-238 | fd, a new feed file, `wx` | Under the global EX. `O_EXCL` refuses a file another writer created after the `stat`, and a failed open answers 409 or 500. Otherwise the fd is closed before the write is judged. A size on disk short of the URL line unlinks the file and answers 500 before `apk update` runs, so a retry does not find the file. |
 | `src/lib/mgmt.uc` | 20-28 | pipe, `ip route get <addr>` | A failed popen returns null. Otherwise the pipe is closed after one line, and `ip` has exited or exits once it writes that line. A single write resolves this before its transaction. Inside `/batch` it runs under the batch's locks, because each sub-request runs inside `fn`. |
 | `src/lib/state_dir.uc` | 20-29 | fd and temp file, `replace()`, which the idempotency cache, the metrics, the rate limiter and the error ring write through | Each caller writes only into a directory that `state_dir.owned()` accepts: a directory owned by the effective uid of the process, that neither the group nor others can write, narrowed to 0700, and not one that it cannot narrow. A failed open returns false and holds nothing. The temp name is unlinked first, because `open()` gives its mode only to a file that it creates, so the file is created 0600. The fd is closed before the size on disk is compared with the text, which is how a full tmpfs shows. A short file or a failed rename unlinks the temp file and returns false, and the file that it would replace stays whole. |
 | `src/lib/idempotency.uc` | 58-84 | fd, a cache entry | A directory that `state_dir.owned()` does not accept is a miss, and a store into it stores nothing and returns false. A failed open is a miss. Otherwise the fd is closed before the JSON parse. A store writes through `state_dir.replace()` under a temp name of its own request process, `<hash>.json.<pid>`, so two stores of one key at the same moment each write a whole file, and the later rename wins. At most once an hour, a store also unlinks the files older than the TTL, a temp file that a killed request left included, and writes its sweep marker `.swept` through `state_dir.replace()`. A failed write of the marker leaves the old one, so the next store sweeps again. |
@@ -74,7 +74,7 @@ Every descriptor, pipe and lock below is released on every in-request exit path.
 | `src/lib/ratelimit.uc` | 15-32 | fd, one bucket | A directory that `state_dir.owned()` does not accept allows every request: a check reads and writes no file, and a reap unlinks nothing. Under `/var/run` only root can cause that, and refusing instead would answer 429 to every token. A failed open is no state, which is a full bucket, so the limit applies again once the bucket is written. Otherwise the fd is closed before the parse. A check writes through `state_dir.replace()` under `<token>.txt.tmp`, which two checks of one token share, so one of them can lose its write, as for the metrics. |
 | `src/lib/system_access.uc` | 48-56 | pipe, `busybox passwd`, write end | Under the global EX. A failed popen answers 500. Otherwise both writes run and `p.close()` yields the exit code. A `passwd` that exits early makes the writes fail with `EPIPE` rather than kill the request, because uhttpd ignores `SIGPIPE` and the request process inherits that. |
 | `src/lib/wg.uc` | 34-40 | pipe, `wg` and `ip` commands | A failed popen returns an error result. Otherwise `p.close()` always runs after the read. Runs under the transaction's lock for `network`. |
-| `src/lib/wg.uc` | 120-137 | fd and file, `/var/run/uapi.wg.psk` | See [the wireguard peer apply](#the-wireguard-peer-apply). The fd is closed before the write is judged. A short write or a failed flush unlinks the file and returns null, and `apply_peer()` then fails before it changes anything in the kernel. Otherwise `apply_peer()` unlinks the file once `wg` returns. |
+| `src/lib/wg.uc` | 120-136 | fd and file, `/var/run/uapi.wg.psk` | See [the wireguard peer apply](#the-wireguard-peer-apply). The fd is closed before the write is judged. A size on disk short of the key line unlinks the file and returns null, and `apply_peer()` then fails before it changes anything in the kernel. Otherwise `apply_peer()` unlinks the file once `wg` returns. |
 | `src/resources/dhcp.leases.uc` | 24-30 | fd, `/tmp/dhcp.leases` | A failed open reads as no leases. Otherwise the fd is closed before the parse. No lock. |
 | `src/resources/dhcp.leases6.uc` | 59-65 | fd, the odhcpd lease file | A failed open returns null, and the caller tries the other path. Otherwise the fd is closed before the parse. No lock. |
 | `src/resources/dhcp.servers.uc` | 10-16 | fd, a lease file | A failed open reads as empty. Otherwise the fd is closed before the count. No lock. |
@@ -125,10 +125,9 @@ try { fs.unlink(tmp); } catch (e) {}
 let f = fs.open(tmp, "w");
 if (!f) return false;
 try { fs.chmod(tmp, 384); } catch (e) {}  // 0600
-let written = f.write(content);
-let flushed = f.flush();
+f.write(content);
 f.close();
-if (written != length(content) || !flushed) {
+if (fs.stat(tmp)?.size != length(content)) {
 	try { fs.unlink(tmp); } catch (e) {}
 	return false;
 }
@@ -138,8 +137,8 @@ Four exit paths to verify, in order:
 
 1. `fs.open` returns null: early return. No fd held.
 2. `fs.chmod` fails: it returns null rather than throwing, and the `try` is only a guard. `f.write` and `f.close` still run on the next lines, so the fd is released. The tolerance is deliberate (some filesystems return EPERM): content correctness is the priority, and the file then gets the default umask permissions.
-3. Normal path: `f.write`, `f.flush` and `f.close` run unconditionally after the chmod, so the fd is released before the result is judged.
-4. Short or failed write: ucode's `close()` drops `fclose`'s result, so a filesystem that runs out of space shows up only as a short count or a failed `flush`. Either one unlinks the temp file and returns false. Until 3.1.0 nothing checked, and an empty temp file was renamed over the original.
+3. Normal path: `f.write` and `f.close` run unconditionally after the chmod, so the fd is released before the result is judged.
+4. Short or failed write: ucode's `close()` drops `fclose`'s result, and `flush()` answers inverted on the ucode that CI runs, so a filesystem that runs out of space shows up as a temp file on disk shorter than `content`. That unlinks the temp file and returns false. Until 3.1.0 nothing checked, and an empty temp file was renamed over the original.
 
 The following `fs.rename(tmp, path)` is checked: a failure unlinks `tmp` and returns false. The rename keeps the replacement atomic.
 
@@ -149,7 +148,7 @@ The following `fs.rename(tmp, path)` is checked: a failure unlinks `tmp` and ret
 - **pipe: popen / read / close.** Every `fs.popen` is followed by `.close()`, which both releases the pipe and yields the child's exit code.
 - **flock: acquire / try-fn / release / die-if-caught.** `transaction()`, `multi_transaction()` and `with_lock()` release OUTSIDE the try block, AFTER the catch, BEFORE the conditional `die(caught)`.
 - **2-level locks.** `default_acquire_pkg()` and `multi_transaction()` take the global SH, then each per-package EX in sorted order. A failure part way releases the per-package locks already held and the global one. The release runs in reverse order (per-package, then global).
-- **Temp file then rename.** `replace_private_file()`, the restore in `bus.uc` and `state_dir.replace()` check the rename and unlink the temp file when it fails. `state_dir.replace()`, which the idempotency cache, the metrics, the rate limiter and the error ring write through, also checks the size on disk and unlinks the temp file when it is short. The restore checks its data by reading the temp file back, because ucode's `close()` drops the result of `fclose` and `flush()` answers inverted on the ucode that CI runs (`docs/ucode-quirks.md`).
+- **Temp file then rename.** `replace_private_file()` and `state_dir.replace()`, which the idempotency cache, the metrics, the rate limiter and the error ring write through, check the size on disk and the rename, and unlink the temp file when either fails. The restore in `bus.uc` checks the rename too, and reads the temp file back in place of a size check. No site checks a `flush()`, because ucode's `close()` drops the result of `fclose` and `flush()` answers inverted on the ucode that CI runs (`docs/ucode-quirks.md`).
 
 ## The wireguard peer apply
 
