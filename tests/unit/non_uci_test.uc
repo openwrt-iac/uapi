@@ -1,4 +1,5 @@
 let t = require('harness');
+let fs = require('fs');
 let non_uci = require('non_uci');
 
 function ctx() { return { request_id: "01hxnonuci0000000000000000" }; }
@@ -97,5 +98,33 @@ t.describe('non_uci.read_file_if_present', () => {
 
 	t.it('fails on a path that exists but cannot be read, rather than reading it as empty', () => {
 		t.assert_throws(() => non_uci.read_file_if_present("tests/unit"));
+	});
+});
+
+// ulimit -f fails a write to a regular file as a full filesystem does: 0 leaves the temp file
+// empty, and 1 cuts it short after one block. close() reports neither.
+t.describe('non_uci.replace_private_file', () => {
+	const PATH = '/tmp/uapi-test-private';
+	const SCRIPT = '/tmp/uapi-test-private.uc';
+
+	t.it('replaces the file and leaves no temp file', () => {
+		fs.writefile(PATH, 'old\n');
+		t.assert_true(non_uci.replace_private_file(PATH, 'new\n'));
+		t.assert_equal(fs.readfile(PATH), 'new\n');
+		t.assert_equal(fs.stat(PATH + '.uapi.tmp'), null);
+	});
+
+	t.it('keeps the file and leaves no temp file when the filesystem cannot hold the new one', () => {
+		for (let c in [ [ 0, 'new\n' ], [ 1, sprintf('%5000s\n', '') ] ]) {
+			fs.writefile(PATH, 'old\n');
+			fs.writefile(SCRIPT, sprintf("print(require('non_uci').replace_private_file(%J, %J));\n", PATH, c[1]));
+			let p = fs.popen(sprintf("trap '' XFSZ; ulimit -f %d; exec ucode -L src/lib %s", c[0], SCRIPT));
+			t.assert_equal(p.read('all'), 'false', sprintf('ulimit -f %d', c[0]));
+			p.close();
+			t.assert_equal(fs.readfile(PATH), 'old\n');
+			t.assert_equal(fs.stat(PATH + '.uapi.tmp'), null);
+		}
+		fs.unlink(SCRIPT);
+		fs.unlink(PATH);
 	});
 });

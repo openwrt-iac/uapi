@@ -220,12 +220,12 @@ function create_feed_handler(ctx, body) {
 			return { ok: false, kind: "io_error" };
 		}
 		// An empty file left by a write that the overlay cannot hold read as a feed with no URL,
-		// and its name made every retry answer 409. close() drops fclose's error.
+		// and its name made every retry answer 409. close() drops fclose's error, and flush()
+		// answers inverted on the ucode that CI runs, so the size on disk is what shows it.
 		let content = url + "\n";
-		let written = fp.write(content);
-		let flushed = fp.flush();
+		fp.write(content);
 		fp.close();
-		if (written != length(content) || !flushed) {
+		if (fs.stat(path)?.size != length(content)) {
 			fs.unlink(path);
 			return { ok: false, kind: "io_error" };
 		}
