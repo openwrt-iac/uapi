@@ -40,6 +40,6 @@ return {
 	schema_properties: {
 		enabled:  { type: "boolean", default: false },
 		ext_line: { type: ["array", "null"], items: LINE_ITEM,
-		            description: "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200." },
+		            description: "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines." },
 	},
 };

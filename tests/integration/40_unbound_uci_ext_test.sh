@@ -80,10 +80,37 @@ done
 $SSH "grep -q 'unbound-uci-ext managed' /etc/unbound/unbound_srv.conf" \
 	|| fail "expected managed-region markers in unbound_srv.conf"
 
-echo "--- unbound-checkconf accepts the rendered config ---"
-# /usr/sbin/ may not be in non-login PATH on busybox sh; the absolute
-# path is set by the unbound-daemon package.
-$SSH "/usr/sbin/unbound-checkconf 2>&1 | tail -5" || fail "unbound-checkconf rejected the rendered config"
+unbound_running() {
+	$SSH "ubus call service list '{\"name\":\"unbound\"}'" | grep -q '"running": true'
+}
+
+echo "--- unbound runs with the rendered config ---"
+unbound_running || fail "unbound is not running after the PATCH that answered 200"
+
+echo "--- PATCH /unbound/srv with a line that unbound cannot parse -> 500, previous lines restored ---"
+resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/srv" \
+	-d '{"srv_line": ["harden-below-nxdomain: yes", "uapi-test-unknown-directive: yes"]}')
+status=$(echo "$resp" | tail -1)
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "500" ] || fail "expected 500 for a line that unbound refuses, got $status: $body"
+echo "$body" | grep -q '"code": "reload_failed_restored"' || fail "expected reload_failed_restored: $body"
+echo "$body" | grep -q 'unbound stopped after the reload' || fail "expected the stay-up error in reload_error: $body"
+[ "$($SSH "uci get unbound_srv.main.srv_line")" = "'harden-below-nxdomain: yes'" ] \
+	|| fail "srv_line not restored"
+$SSH "grep -q uapi-test-unknown-directive /etc/unbound/unbound_srv.conf" \
+	&& fail "the refused line is still in unbound_srv.conf"
+unbound_running || fail "unbound is not running after the restore"
+
+echo "--- the same refusal through /batch ---"
+resp=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d '{"operations": [
+	{"method": "PATCH", "path": "/unbound/ext", "body": {"enabled": true, "ext_line": ["uapi-test-unknown-clause:"]}}
+]}')
+status=$(echo "$resp" | tail -1)
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "500" ] || fail "expected 500 from /batch, got $status: $body"
+echo "$body" | grep -q '"code": "reload_failed_restored"' || fail "expected reload_failed_restored from /batch: $body"
+[ "$($SSH "uci -q get unbound_ext.main.enabled")" = "0" ] || fail "unbound_ext.main.enabled not restored"
+unbound_running || fail "unbound is not running after the /batch restore"
 
 echo "--- PATCH /unbound/ext writes a forward-zone clause ---"
 resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/ext" -d '{

@@ -589,3 +589,149 @@ t.describe('transaction kernel fields on a failed apply', () => {
 		t.assert_equal(r.kernel_applied, null);
 	});
 });
+
+// unbound refuses a line that it cannot parse only after its init script answered 0, so the reload
+// alone reports success for a write that leaves it down.
+t.describe('transaction, daemons that must keep running after the reload', () => {
+	function unbound(states) {
+		let n = 0;
+		let conn = ubus.stub({ uci: { unbound_srv: { main: { '.type': 'unbound_srv', enabled: '0' } } } });
+		conn.set_ubus_response("service", "list", function(args) {
+			let s = states[min(n++, length(states) - 1)];
+			return (s == null) ? {} : { [args.name]: { instances: { unbound: s } } };
+		});
+		return conn;
+	}
+	const UP = { running: true, pid: 10 }, UP2 = { running: true, pid: 11 }, DOWN = { running: false, exit_code: 1 };
+
+	t.it('watches unbound after a reload of unbound or unbound-uci-ext only', () => {
+		for (let svc in [ "unbound", "unbound-uci-ext" ])
+			t.assert_true(tx.default_watch(unbound([ UP ]), [ svc ], 0, 0) != null, svc);
+		let conn = unbound([ UP ]);
+		t.assert_equal(tx.default_watch(conn, [ "firewall", "network" ], 0, 0), null);
+		t.assert_equal(length(conn._state.ubus_calls), 0);
+	});
+
+	t.it('blames the write only when unbound ran before it', () => {
+		t.assert_equal(tx.default_watch(unbound([ DOWN ]), [ "unbound" ], 0, 0), null);
+		t.assert_equal(tx.default_watch(unbound([ null ]), [ "unbound" ], 0, 0), null);
+	});
+
+	t.it('passes while unbound runs, a new pid included, and fails when it stops', () => {
+		t.assert_equal(tx.default_watch(unbound([ UP, UP2 ]), [ "unbound" ], 0, 0)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], 0, 0)(),
+		               "unbound stopped after the reload, with exit code 1");
+		t.assert_equal(tx.default_watch(unbound([ UP, { running: false } ]), [ "unbound" ], 0, 0)(),
+		               "unbound stopped after the reload");
+	});
+
+	// `restart` is a stop and then a start, and procd lists no instance in between.
+	t.it('an instance that service list does not show is being restarted, not stopped', () => {
+		t.assert_equal(tx.default_watch(unbound([ UP, null ]), [ "unbound" ], 0, 0)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, null, UP2 ]), [ "unbound" ], 2, 1)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, null, DOWN ]), [ "unbound" ], 2, 1)(),
+		               "unbound stopped after the reload, with exit code 1");
+	});
+
+	t.it('polls until the end of the window, so a later stop counts', () => {
+		let conn = unbound([ UP, UP2, UP2, DOWN ]);
+		t.assert_equal(tx.default_watch(conn, [ "unbound-uci-ext" ], 2, 1)(),
+		               "unbound stopped after the reload, with exit code 1");
+		t.assert_equal(tx.default_watch(unbound([ UP, UP2, UP2, UP2, DOWN ]), [ "unbound" ], 2, 1)(), null);
+	});
+
+	function write(conn, states_of_check) {
+		let n = 0, reloads = 0;
+		return tx.transaction(conn, build_params({
+			package: "unbound_srv", reload_services: [ "unbound-uci-ext" ],
+			acquire: function() { return {}; }, release: function() {},
+			reload: function(s) { reloads++; return null; },
+			watch: function(c, s) { return () => states_of_check[n++]; },
+			fn: function(c, pkg) {
+				c.uci_set(pkg, "main", "enabled", "1");
+				return { ok: true, body: {} };
+			},
+		}));
+	}
+
+	t.it('a daemon that stops restores the previous config and reports reload_failed_restored', () => {
+		let conn = unbound([ UP ]);
+		let r = write(conn, [ "unbound stopped after the reload, with exit code 1", null ]);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(r.reload_error, "unbound stopped after the reload, with exit code 1");
+		t.assert_equal(conn._state.uci.unbound_srv.main.enabled, "0");
+	});
+
+	t.it('the restore runs the same check, so a daemon that stays down is unrecovered', () => {
+		let r = write(unbound([ UP ]), [ "unbound stopped after the reload", "unbound stopped after the reload" ]);
+		t.assert_equal(r.kind, "reload_failed_unrecovered");
+		t.assert_true(index(r.restore_error, "unbound stopped") >= 0);
+	});
+
+	t.it('a daemon that keeps running lets the write succeed', () => {
+		let r = write(unbound([ UP ]), [ null ]);
+		t.assert_true(r.ok);
+	});
+
+	// The state before the write is read before its reload, and the restore checks against it.
+	function daemon(conn, after_write, after_restore) {
+		let state = UP, reloads = 0;
+		conn.set_ubus_response("service", "list", (args) => ({ unbound: { instances: { unbound: state } } }));
+		return function(s) { state = (reloads++ == 0) ? after_write : after_restore; return null; };
+	}
+
+	t.it('reads the daemon before the reload, and the restore checks that it runs again', () => {
+		for (let c in [ [ UP2, "reload_failed_restored" ], [ DOWN, "reload_failed_unrecovered" ] ]) {
+			let conn = ubus.stub({ uci: { unbound_srv: { main: { '.type': 'unbound_srv', enabled: '0' } } } });
+			let r = tx.transaction(conn, build_params({
+				package: "unbound_srv", reload_services: [ "unbound-uci-ext" ],
+				acquire: function() { return {}; }, release: function() {},
+				reload: daemon(conn, DOWN, c[0]),
+				watch: (cn, s) => tx.default_watch(cn, s, 0, 0),
+			}));
+			t.assert_equal(r.kind, c[1]);
+		}
+	});
+
+	t.it('a write to unbound_srv or unbound_ext also takes the lock of the unbound package', () => {
+		for (let c in [ [ "unbound_srv", [ "unbound-uci-ext" ], [ "unbound" ] ], [ "unbound", [ "unbound" ], [] ],
+		                [ "firewall", [ "firewall" ], [] ] ]) {
+			let also = null;
+			tx.transaction(ubus.stub(), build_params({
+				package: c[0], reload_services: c[1],
+				acquire: function(p, a) { also = a; return {}; }, release: function() {},
+			}));
+			t.assert_deep_equal(also, c[2], c[0]);
+		}
+		let r = tx.transaction(ubus.stub(), build_params({
+			package: "unbound_ext", reload_services: [ "unbound-uci-ext" ],
+			acquire: function() { return { contention: "package", package: "unbound" }; }, release: function() {},
+		}));
+		t.assert_equal(r.kind, "locked");
+		t.assert_equal(r.package, "unbound");
+	});
+
+	t.it('a batch takes the lock of the unbound package and watches unbound too', () => {
+		let prefix = "/tmp/uapi-test-stayup-pkg.", global = "/tmp/uapi-test-stayup-global.lock";
+		let batch = function(conn, reload) {
+			return tx.multi_transaction(conn, {
+				packages: [ "unbound_srv" ], reload_services: [ "unbound-uci-ext" ],
+				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload,
+				watch: (cn, s) => tx.default_watch(cn, s, 0, 0),
+				fn: function(c) { c.uci_set("unbound_srv", "main", "enabled", "1"); return { ok: true }; },
+			});
+		};
+		let held = fs.open(prefix + "unbound.lock", "w+");
+		held.lock("xn");
+		let conn = ubus.stub({ uci: { unbound_srv: { main: { '.type': 'unbound_srv', enabled: '0' } } } });
+		let r = batch(conn, noop_reload);
+		t.assert_equal(r.kind, "locked");
+		t.assert_equal(r.package, "unbound");
+		held.lock("u"); held.close();
+
+		r = batch(conn, daemon(conn, DOWN, UP2));
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(conn._state.uci.unbound_srv.main.enabled, "0");
+		for (let f in [ global, prefix + "unbound.lock", prefix + "unbound_srv.lock" ]) fs.unlink(f);
+	});
+});

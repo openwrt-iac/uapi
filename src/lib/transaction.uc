@@ -62,6 +62,56 @@ function default_reload(services) {
 	return null;
 }
 
+// procd starts the daemon with its new config on its own, so the init script answers 0 before the
+// daemon has read that config. unbound exits within a few hundred ms on a line that it cannot parse,
+// and procd starts it again only 5 s later, to fail the same way. A reload of these services waits
+// for the daemons that ran before the write to keep running. Writes to two packages that restart
+// one daemon also take the lock of the package named after it, because a restart that one starts
+// would read as a stop to the other, and its config as the other's.
+const STAY_UP = { unbound: [ "unbound" ], "unbound-uci-ext": [ "unbound" ] };
+
+function stay_up_daemons(services) {
+	let daemons = {};
+	for (let svc in services)
+		for (let d in STAY_UP[svc] ?? []) daemons[d] = true;
+	return keys(daemons);
+}
+
+function instances(conn, daemons) {
+	let out = {};
+	for (let d in daemons) {
+		let r = null;
+		try { r = conn.call("service", "list", { name: d }); } catch (e) {}
+		for (let name, i in r?.[d]?.instances ?? {})
+			out[d + "/" + name] = i;
+	}
+	return out;
+}
+
+// The restore runs the same check, so it fails when the previous config does not bring the daemon
+// back either. An instance that `service list` does not show is being restarted, by `restart` or by
+// another writer, or the ubus call failed, so only one that procd reports as not running counts.
+function default_watch(conn, services, total_ms, step_ms) {
+	let names = stay_up_daemons(services);
+	if (length(names) == 0) return null;
+	let was = instances(conn, names);
+	let before = filter(keys(was), (k) => was[k].running);
+	if (length(before) == 0) return null;
+	return function() {
+		for (let waited = 0; ; waited += step_ms) {
+			let now = instances(conn, names);
+			for (let k in before)
+				if (now[k] != null && !now[k].running)
+					return sprintf("%s stopped after the reload%s", split(k, "/")[0],
+					               (now[k]?.exit_code != null) ? sprintf(", with exit code %d", now[k].exit_code) : "");
+			if (waited >= total_ms) return null;
+			sleep(step_ms);
+		}
+	};
+}
+
+const watch_stay_up = (conn, services) => default_watch(conn, services, 2000, 100);
+
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
 // non-blocking ("n" suffix). Returns the fd handle on success; null on lock
 // contention; { unavailable: <path> } on infrastructure failure (fs.open).
@@ -94,21 +144,28 @@ function default_release(handle) {
 //   { unavailable: <path> }   - file open failed (infrastructure)
 // The contention distinction feeds the 423 message identity so the
 // caller learns which lock blocked them.
-function default_acquire_pkg(global_path, package) {
+function default_acquire_pkg(global_path, package, also) {
 	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
 	let g = _lock_one(global_path ?? LOCK_PATH, "s");
 	if (g == null) return { contention: "global" };
 	if (type(g) == "object" && g.unavailable != null) return g;
-	let p = _lock_one(PKG_LOCK_PREFIX + package + ".lock", "x");
-	if (p == null) { _release_one(g); return { contention: "package" }; }
-	if (type(p) == "object" && p.unavailable != null) { _release_one(g); return p; }
-	return { _g: g, _p: p };
+	let held = [];
+	for (let name in [ package, ...(also ?? []) ]) {
+		let p = _lock_one(PKG_LOCK_PREFIX + name + ".lock", "x");
+		if (p == null || type(p) == "object" && p.unavailable != null) {
+			for (let h in held) _release_one(h);
+			_release_one(g);
+			return (p == null) ? { contention: "package", package: name } : p;
+		}
+		push(held, p);
+	}
+	return { _g: g, _p: held };
 }
 
 function default_release_pkg(handle) {
 	if (handle == null) return;
-	_release_one(handle._p);
+	for (let h in handle._p) _release_one(h);
 	_release_one(handle._g);
 }
 
@@ -169,9 +226,11 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 // re-apply, and report reload_failed_restored. `ops` is read here rather than
 // captured by value because the handler fills it while fn runs, and fn has
 // already returned by the time this is called.
-function _make_apply(conn, reload, services, wg_apply, ops, applied) {
+function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 	return function() {
+		watch.check = watch.start(conn, services);
 		let err = reload(services);
+		if (err == null && watch.check != null) err = watch.check();
 		if (err != null) return err;
 		return wg_apply(conn, ops, applied);
 	};
@@ -181,9 +240,10 @@ function _make_apply(conn, reload, services, wg_apply, ops, applied) {
 // apply several peers before failing on a later one, so replaying would reapply
 // the failure instead of undoing what landed. Reconciling each touched interface
 // against the restored uci converges from whatever state the kernel is in.
-function _make_restore(conn, reload, services, wg_reconcile, ops) {
+function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 	return function() {
 		let err = reload(services);
+		if (err == null && watch.check != null) err = watch.check();
 		if (err != null) return err;
 		return wg_reconcile(conn, wg.interfaces_of(ops));
 	};
@@ -194,7 +254,7 @@ function transaction(conn, params) {
 	let services = params.reload_services ?? [];
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
-	let acquire = params.acquire ?? function(p) { return default_acquire_pkg(p, pkg); };
+	let acquire = params.acquire ?? function(p, also) { return default_acquire_pkg(p, pkg, also); };
 	let release = params.release ?? default_release_pkg;
 	let reload = params.reload ?? default_reload;
 	let wg_apply = params.wg_apply ?? wg.apply;
@@ -202,6 +262,7 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
+	let watch = { start: params.watch ?? watch_stay_up };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
 	// snapshot, committing, or reloading. Used by /batch to compose many
@@ -216,7 +277,7 @@ function transaction(conn, params) {
 	if (cfg_err != null)
 		return { ok: false, kind: "config_missing", message: cfg_err };
 
-	let lock = acquire(path);
+	let lock = acquire(path, filter(stay_up_daemons(services), (d) => d != pkg));
 	// `null` means a test/legacy stub that pre-dates the contention sentinel;
 	// treat as per-package since that's the production-default flavour.
 	if (lock == null)
@@ -224,7 +285,7 @@ function transaction(conn, params) {
 	if (type(lock) == "object" && lock.contention != null) {
 		if (lock.contention == "global")
 			return { ok: false, kind: "locked", lock_kind: "global" };
-		return { ok: false, kind: "locked", lock_kind: "package", package: pkg };
+		return { ok: false, kind: "locked", lock_kind: "package", package: lock.package ?? pkg };
 	}
 	if (type(lock) == "object" && lock.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
@@ -240,8 +301,8 @@ function transaction(conn, params) {
 		conn.uci_unload(pkg);
 		let snapshot = conn.uci_export(pkg);
 		result = run_inner(conn, pkg, services, fn, snapshot,
-		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied),
-		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops),
+		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied, watch),
+		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops, watch),
 		                   wg_ops, wg_applied);
 	} catch (e) {
 		caught = e;
@@ -265,9 +326,10 @@ function multi_transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
-	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops, wg_applied);
+	let watch = { start: params.watch ?? watch_stay_up };
+	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
 	let restore_apply = _make_restore(conn, reload, services,
-	                                  params.wg_reconcile ?? wg.reconcile, wg_ops);
+	                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
 	let check_services = params.check_services ?? default_check_services;
 
 	let svc_err = check_services(services);
@@ -291,6 +353,11 @@ function multi_transaction(conn, params) {
 			return { ok: false, kind: "config_missing", message: cfg_err };
 	}
 
+	let locks = { ...unique };
+	for (let d in stay_up_daemons(services)) locks[d] = true;
+	locks = sort(keys(locks));
+	let lock_prefix = params.pkg_lock_prefix ?? PKG_LOCK_PREFIX;
+
 	let acquired = [];
 	let g = _lock_one(path, "s");
 	// Global SH contention means a non-uci writer holds EX (system/password,
@@ -299,8 +366,8 @@ function multi_transaction(conn, params) {
 	if (g == null) return { ok: false, kind: "locked", lock_kind: "global" };
 	if (type(g) == "object" && g.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: g.unavailable };
-	for (let pkg in sorted) {
-		let p = _lock_one(PKG_LOCK_PREFIX + pkg + ".lock", "x");
+	for (let pkg in locks) {
+		let p = _lock_one(lock_prefix + pkg + ".lock", "x");
 		if (p == null) {
 			for (let h in acquired) _release_one(h);
 			_release_one(g);
@@ -381,4 +448,4 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg,
-         default_check_services, default_reload };
+         default_check_services, default_reload, default_watch };
