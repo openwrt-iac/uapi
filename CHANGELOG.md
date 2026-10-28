@@ -934,6 +934,28 @@ All notable changes to this project will be documented in this file. Format foll
   null. So `PATCH {"family": null}` on the stock `wan6`, which sets `family 'ipv6'`, answers 200,
   and mwan3 then handles wan6 as IPv4 while the read says null. Only the description changes.
   `docs/roadmap.md` records the fix for the next major. (#274)
+- **A write of a curated resource answers the section that uci then holds, with the ETag that a GET
+  then answers.** The body of a create, PUT or PATCH was built from the options that the write sent
+  to uci, and a PATCH keeps an option that it does not name. So a PATCH answered null for such an
+  option when the read of the section before the write hid it. A PATCH that switched an interface
+  from proto `static` to `wireguard` with a hand-written `listen_port '51820'` answered
+  `listen_port: null`, with an ETag that no GET gave, while uci kept the port and a GET answered
+  51820. A client that stored the null saw drift at its next refresh, and its next apply deleted the
+  port, and an `If-Match` with that ETag answered 412. The body is now `fromUci` of the section that
+  the write staged, read back from the uci cursor of the request as a GET reads it. That is what
+  `docs/errors.md` already promises: the `ETag` of a write is the hash of the resource's own body.
+  It costs one read of the cursor's copy in memory per write, and no ubus call, because the old body
+  passed the same connection to `fromUci`. A PUT and a create answered the same body before, because
+  uci then holds what the write sent. Under `docs/versioning.md` this is a bug fix with no surface
+  change: no field, type or status changes, and a PATCH response that disagreed with the next GET
+  now agrees with it. (#275)
+- **A PATCH that changes nothing no longer rewrites the package of a section that holds a write-only
+  field.** A read masks `private_key` on `network/interfaces`, `preshared_key` on
+  `network/wireguard_peers`, `key`, `r0kh` and `r1kh` on `wireless/interfaces`, and `key`,
+  `tls_auth` and `pkcs12` on `openvpn/instances`, and a write carries the stored value back. So
+  every PATCH of a section that holds one set it again to the value that uci held. The bus counts
+  that as a write, so the commit rewrote the package, which drops its comments. A PATCH now skips a
+  set of the value that uci already holds. No request, response or header changes. (#275)
 
 ### Security
 

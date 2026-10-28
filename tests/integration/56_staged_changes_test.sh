@@ -14,10 +14,16 @@ fail() { echo "FAIL: $*"; exit 1; }
 # refused deleted it. LuCI keeps its staged changes in a directory per session.
 
 $SSH 'uci -q revert firewall; cp -p /etc/config/firewall /tmp/uapi-staged-before'
+$SSH 'uci -q revert network; cp -p /etc/config/network /tmp/uapi-staged-network'
 cleanup() {
 	$SSH 'uci -q revert firewall
 	      if [ -f /tmp/uapi-staged-before ]; then
 	          cp -p /tmp/uapi-staged-before /etc/config/firewall && rm -f /tmp/uapi-staged-before
+	      fi
+	      uci -q revert network
+	      if [ -f /tmp/uapi-staged-network ]; then
+	          cp -p /tmp/uapi-staged-network /etc/config/network && rm -f /tmp/uapi-staged-network
+	          /etc/init.d/network reload
 	      fi' || true
 }
 trap cleanup EXIT INT TERM
@@ -84,5 +90,25 @@ status=$(curl -sS -o /tmp/uapi_staged_patch.json -w '%{http_code}' -H "$ADMIN" \
 [ "$status" = 200 ] || { cat /tmp/uapi_staged_patch.json; fail "PATCH of an unchanged drop_invalid returned $status"; }
 $SSH 'grep -q "^# kept by a write that changes nothing" /etc/config/firewall' \
 	|| fail "a write that changed nothing rewrote /etc/config/firewall"
+
+# A PATCH that names nothing wrote the private_key of a wireguard interface again, because the read
+# masks it, and on a lookup rule it deleted an `action` that the rule does not hold. The bus counted
+# each as a write, so the commit rewrote the package. The interface stays disabled, so netifd does
+# not set it up.
+echo "--- a PATCH that names nothing leaves /etc/config/network as it is, for a wireguard interface and a lookup rule ---"
+$SSH "uci set network.uapi56wg=interface; uci set network.uapi56wg.proto=wireguard; uci set network.uapi56wg.disabled=1
+	uci set network.uapi56wg.private_key=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+	uci add_list network.uapi56wg.addresses=10.98.56.1/30
+	uci set network.uapi56rule=rule; uci set network.uapi56rule.src=10.98.56.0/30; uci set network.uapi56rule.lookup=100
+	uci commit network
+	{ echo '# kept by a PATCH that names nothing'; cat /etc/config/network; } > /tmp/uapi-staged-net &&
+	cat /tmp/uapi-staged-net > /etc/config/network && rm -f /tmp/uapi-staged-net"
+for path in interfaces/uapi56wg rules/uapi56rule; do
+	status=$(curl -sS -o /tmp/uapi_staged_patch.json -w '%{http_code}' -H "$ADMIN" \
+		-H 'Content-Type: application/json' -X PATCH "$URL/network/$path" -d '{}')
+	[ "$status" = 200 ] || { cat /tmp/uapi_staged_patch.json; fail "an empty PATCH of network/$path returned $status"; }
+	$SSH 'grep -q "^# kept by a PATCH that names nothing" /etc/config/network' \
+		|| fail "an empty PATCH of network/$path rewrote /etc/config/network"
+done
 
 echo "a change that a shell staged stays out of uapi's reads and writes until the shell commits it."

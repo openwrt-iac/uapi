@@ -521,3 +521,29 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		t.assert_equal(disk.files.fw.d.forward, 'REJECT');
 	});
 });
+
+// The bus commits only a package that the request wrote, and a write of the value that uci holds
+// still counts. A PATCH that names nothing wrote each stored secret again, because the read masks
+// it, so on any section with one the commit rewrote the package and dropped its comments.
+t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
+	let handler = require('handler');
+	let fx = require('resource_fixtures');
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null,
+	           wg_apply: () => null, wg_reconcile: () => null };
+	for (let id in [ "wg0", "p1", "w1", "vpn0", "nr1" ]) {
+		let c = filter(fx.CASES, (x) => x.id == id)[0];
+		t.it(sprintf("%s/%s", c.file, id), () => {
+			let files = fx.world();
+			files[c.pkg] = { ...(files[c.pkg] ?? {}), [id]: { ...c.section } };
+			let disk = { files, staged: {} };
+			let dir = temp_dir();
+			for (let pkg in files) fs.writefile(dir + "/" + pkg, "");
+			let conn = connect_to(disk, { config_dir: dir });
+			let r = handler.make(loadfile('src/resources/' + c.file)(), { tx })
+			               .patch(conn, { request_id: "01hx0000000000000000000000" }, id, {});
+			system([ "rm", "-rf", dir ]);
+			t.assert_equal(r.status, 200, r.body);
+			t.assert_equal(disk.commits, null);
+		});
+	}
+});
