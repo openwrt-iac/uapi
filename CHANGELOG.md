@@ -759,11 +759,14 @@ All notable changes to this project will be documented in this file. Format foll
   write. On a full `/tmp`, the preshared key file stayed empty, and `wg` reads an empty key file
   as no key: a peer write set the kernel peer without its preshared key and answered 200 with
   `X-Kernel-Status: ok`, and the tunnel stopped handshaking with a peer that uses the key. Such a
-  write now fails its kernel apply and restores the previous config. It answers `500
-  reload_failed_restored`, or `reload_failed_unrecovered` when the restore cannot stage a key
-  either. On a full overlay, `POST /packages/feeds` left an empty `<name>.list` and answered 200,
-  a read then showed an empty URL, and a retry answered 409 because the file existed. It now
-  removes the file and answers 500. No request or response field changes. (#267)
+  write now fails its kernel apply, and uci gets its previous config back. uapi stages a key
+  before it changes the peer in the kernel, so a peer whose key cannot be staged stays as the
+  kernel holds it, and no peer is removed for it. The restore sets every peer of the interface
+  again and stages each key, so on a full `/tmp` it answers `500 reload_failed_unrecovered` when
+  a peer of that interface has a key, and `500 reload_failed_restored` when none has one. On a
+  full overlay, `POST /packages/feeds` left an empty `<name>.list` and answered 200, a read then
+  showed an empty URL, and a retry answered 409 because the file existed. It now removes the file
+  and answers 500. No request or response field changes. (#267)
 - **`/diagnostics` keeps its recent errors when several requests fail at the same moment.** Every
   append to the error ring wrote through one temp file name, so two appends at once wrote into
   one file, which then held a short array followed by the tail of a longer one. That is not JSON,

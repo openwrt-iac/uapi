@@ -1,4 +1,5 @@
 let t = require('harness');
+let fs = require('fs');
 
 t.describe('harness self-test', () => {
 	t.it('assert_equal passes on equal', () => {
@@ -25,5 +26,21 @@ t.describe('harness self-test', () => {
 		t.assert_false(0);
 		t.assert_false("");
 		t.assert_false(null);
+	});
+});
+
+t.describe('load_with_fs', () => {
+	t.it('puts fs back in the module cache when a load throws', () => {
+		t.assert_throws(() => t.load_with_fs({}, [ 'no_such_module' ]));
+		t.assert_true(global.modules.fs === fs, "the module cache still holds the stub");
+	});
+
+	t.it('drops a module that the call loaded for the first time', () => {
+		let had = global.modules.values;
+		delete global.modules.values;
+		t.load_with_fs({ ...fs }, [ 'wg' ]);
+		let left = 'values' in global.modules;
+		if (had != null) global.modules.values = had;
+		t.assert_false(left);
 	});
 });
