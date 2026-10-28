@@ -6,8 +6,10 @@ set -eu
 # untouched and `/etc/init.d/network reload` converges nothing. Before 2.4.1 a
 # peer was committed to uci, answered 200, and never reached the kernel, and a
 # DELETE answered 204 while the peer stayed live: revoking access through the API
-# did not revoke it. Every assertion below is against `wg show`, never against
-# uci, and no ifup appears anywhere in the sequence.
+# did not revoke it. The peer steps check the kernel with `wg show` and `ip route`,
+# and no ifup runs between a peer write and its check. The last steps check what a
+# write of network/interfaces refuses for a stored value that wg cannot use, and
+# bring the interface up by hand to show that wg would fail on that value.
 
 . tests/integration/lib/install_uapi.sh
 install_uapi
@@ -411,8 +413,8 @@ done
 
 # The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
 # gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. Either way out
-# that the message gives works: a null in the switch removes the option, and so does a null sent
-# after a switch with disabled true.
+# that the message gives works: a null in the switch removes the option, and so does a JSON Patch
+# that removes it after a switch with disabled true.
 echo "--- a switch to wireguard refuses a hand-written listen_port that does not resolve, which keeps the interface down ---"
 up3() { $SSH "ubus call network.interface.$IFACE3 status" 2>/dev/null | grep -q '"up": true'; }
 wait_up3() {
@@ -437,10 +439,13 @@ $SSH "uci set network.$IFACE3.disabled=0; uci commit network; /etc/init.d/networ
 sleep 10
 up3 && fail "$IFACE3 came up with a listen_port that wg cannot resolve, so the refusal guards nothing"
 $SSH "uci set network.$IFACE3.disabled=1; uci commit network; /etc/init.d/network reload"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"disabled":false,"listen_port":null}')
-[ "$(status_of "$r")" = "200" ] || fail "enabling with listen_port null: $(body_of "$r")"
-$SSH "uci -q get network.$IFACE3.listen_port" && fail "listen_port null after the disabled switch kept the option"
-wait_up3 "once listen_port null removed the option"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "enabling with the stored listen_port expected 422, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/interfaces/$IFACE3" \
+	-d '[{"op":"replace","path":"/disabled","value":false},{"op":"remove","path":"/listen_port"}]')
+[ "$(status_of "$r")" = "200" ] || fail "enabling with a JSON Patch that removes /listen_port: $(body_of "$r")"
+$SSH "uci -q get network.$IFACE3.listen_port" && fail "the JSON Patch remove of /listen_port kept the option"
+wait_up3 "once the JSON Patch removed listen_port"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"proto":"static","ipaddrs":["10.98.96.1/30"]}')
 [ "$(status_of "$r")" = "200" ] || fail "switch $IFACE3 back to static: $(body_of "$r")"
 $SSH "uci set network.$IFACE3.listen_port=nosuchservice; uci commit network"
