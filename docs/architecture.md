@@ -101,9 +101,9 @@ worker never waits for a uapi lock, but libuci's own flocks on a package
 file block while LuCI or a shell holds them. It can sleep while it holds a
 uapi lock: the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks.
-The restore after a failed reload also waits for libuci's flock on the package
-file, as libuci itself does, and a `uci commit` holds that only while it writes
-the file.
+The restore after a failed reload also waits, for up to 5 s, for libuci's flock
+on the package file. A load holds that flock while it parses the file, and a
+`uci commit` while it reads the file again, writes its temp file and syncs it.
 
 Audit and verification: `docs/lock-state-audit.md` covers every site in
 `src/` and `cli/` that takes an fd, a pipe, a lock, a ubus connection or a uci
@@ -136,9 +136,9 @@ without uci state change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
    Nothing is staged outside the request process (see below).
-5. **Commit.** `uci_commit(<package>)` loads the package file again, replays
-   the writes over it and writes it through libuci, so a commit by LuCI or a
-   shell while the request ran is kept.
+5. **Commit.** When the request wrote to the package, `uci_commit(<package>)`
+   loads the package file again, replays the writes over it and writes it
+   through libuci, so a commit by LuCI or a shell while the request ran is kept.
 6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, via
    `fs.popen`, exit code checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
@@ -159,18 +159,24 @@ without uci state change.
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
    leaves the peer in uci alone and a caller otherwise cannot tell that from a
    write that reached the kernel.
-8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>, snapshot)` →
-   `uci_commit(<package>)` → reload, then **reconcile** each touched interface
+8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>, snapshot)`
+   when step 5 wrote the package → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the
    captured stderr/exit summary. If the restore itself fails,
-   `500 reload_failed_unrecovered`. `uci_import` writes the snapshot the way
-   libuci commits: to `/etc/config/.<package>.uapi-restore`, under libuci's
-   flock on the package file, then a rename over the package. It reads the temp
-   file back before the rename, because ucode reports no error from `close()`.
-   A kill or a full overlay leaves the package whole, and a restore that cannot
-   write or rename the file answers `reload_failed_unrecovered` with a
-   `restore_error` that names the file. ucode has no `fsync`, so the
-   `uci_commit` that follows is what makes libuci sync the restored file.
+   `500 reload_failed_unrecovered`. `uci_import` writes the snapshot to
+   `.<package>.uapi-restore` beside the file that the package names, the target
+   of a symlink included, reads it back, because ucode reports no error from
+   `close()`, and renames it over that file. A kill or a full overlay leaves the
+   package whole, and a restore that cannot write or rename the file answers
+   `reload_failed_unrecovered` with a `restore_error` that names the file.
+   Before it writes, the restore takes libuci's flock on the package file, which
+   waits for a load or a commit in progress, and gives up after 5 s. That orders
+   nothing after it: libuci releases the flock before its own rename, so a LuCI
+   commit that held the lock, or waited on it with the old file open, can rename
+   its file over the restored one, as one libuci commit can over another. ucode
+   has no `fsync`, so the rename holds against a kill but not against a power
+   cut on a filesystem that writes data back later than the rename, such as
+   ubifs.
 9. **On success:** `200` with the refreshed resource.
 
 ### Changes that another writer staged
@@ -185,10 +191,25 @@ ucode cannot. So `bus.uc` loads each package by its path, which reads the file
 alone. A uapi write then neither commits nor deletes what a shell staged, and a
 later `uci commit` in the shell replays it over what uapi committed.
 
+This also differs from libuci in one place. A load by name reads
+`/var/run/uci/<package>`, libuci's override directory, in place of
+`/etc/config/<package>` when that file exists, and a commit by name writes there.
+uapi reads, writes and restores `/etc/config/<package>` only. Among the package
+files of the OpenWrt feeds, only procd's `reload_config` reads `/var/run/uci`,
+and nothing writes it. A package that does not load by its path fails the call
+rather than fall back to a load by name: a read answers null and a write fails.
+That includes a name that libuci does not load by name, one that starts with a
+dot or holds a slash, so the temp files of libuci and of the restore are no
+packages.
+
 libuci commits a package loaded by path by writing the copy that the cursor
 holds, without reading the file again. The commit of step 5 therefore reloads the
 file and replays the request's writes, which keeps a commit by another writer
-that landed while the request ran, as libuci's own replay of a delta does.
+that landed while the request ran, as libuci's own replay of a delta does. A
+replay that no longer applies, because another writer deleted a section that the
+request wrote into, fails the commit with a message that names the package. A
+package that the request did not write is not committed, as libuci skips a
+commit with no changes, so its comments stay, and it gets no restore.
 `uci_revert` and `uci_unload` drop the copy and the writes, which is the whole
 of what the request staged.
 
@@ -297,7 +318,11 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    with the failing sub's status.
 7. All sub-requests 2xx → `uci_commit()` each package, run the union of
    reload services, then the collected kernel operations. Same failure recipe
-   as the single-package transaction. Sub-requests accumulate into one ordered
+   as the single-package transaction, and a commit that fails part way counts as
+   a failed reload. Either way only the packages that the batch committed are
+   restored: the snapshot of another one would undo what LuCI or a shell
+   committed to it since, such as the delete that made the replay of the batch
+   fail. Sub-requests accumulate into one ordered
    operation list shared through their sub-context, so a batch touching the same
    peer twice ends on its last state, and the restore reconciles rather than
    replaying, since a batch can apply several peers before failing on a later

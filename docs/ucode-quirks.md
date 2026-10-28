@@ -104,13 +104,13 @@ To get the option dict, use `cursor.get_all(pkg, sect)`. This codebase wraps the
 
 ### `cursor.export` / `cursor.import` do not exist in ucode-mod-uci
 
-The snapshot/restore mechanism in `transaction.uc` uses file IO on `/etc/config/<pkg>`: the `uci_export` of `bus.connect()` reads the file, and its `uci_import` writes a temp file beside it and renames it over the package, as libuci commits. If you need a snapshot somewhere new, use the existing helpers.
+The snapshot/restore mechanism in `transaction.uc` uses file IO on `/etc/config/<pkg>`: the `uci_export` of `bus.connect()` reads the file, and its `uci_import` writes a temp file beside the file that the package names and renames it over that file. libuci writes its temp file in the config directory instead, and renames it after it releases its flock on the package. If you need a snapshot somewhere new, use the existing helpers.
 
 ### A delta directory passed to `cursor()` does not hide what `uci set` staged
 
 `uci.cursor(null, dir)` makes `dir` the directory that the cursor saves its changes in, and adds it to libuci's search path for delta files. `/tmp/.uci` stays in that path, and ucode offers no call that removes it. So a package that the cursor loads by name, including the load that `get()` or `set()` do on first use, still carries what a shell staged with `uci set`, and a `commit()` stores it while `/tmp/.uci` keeps it staged. rpcd clears the list in C. Measured with libuci 2025.12.02 and ucode 2026.01.16 of the OpenWrt 25.12 SDK.
 
-`cursor.load("/etc/config/<pkg>")` loads the package by its path, and libuci applies no delta file to it. Later calls find it by its name. Two things change for such a package: `revert()` answers `Invalid argument`, and `commit()` writes the copy that the cursor holds instead of reading the file again and replaying the delta. `bus.uc` replays the writes of a request itself for that reason.
+`cursor.load("/etc/config/<pkg>")` loads the package by its path, and libuci applies no delta file to it. Later calls find it by its name. Two things change for such a package: `revert()` answers `Invalid argument`, and `commit()` writes the copy that the cursor holds instead of reading the file again and replaying the delta. `bus.uc` replays the writes of a request itself for that reason. A load by path also skips two checks of a load by name: it takes a name that starts with a dot, such as libuci's temp file `.firewall.uci-XXXXXX`, and it ignores an override in `/var/run/uci/<pkg>`.
 
 ### `ucode-mod-digest` exports `digest.sha256(s)` directly
 

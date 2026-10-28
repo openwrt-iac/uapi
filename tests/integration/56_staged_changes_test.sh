@@ -74,4 +74,15 @@ body=$(curl -sS -H "$ADMIN" "$URL/firewall/defaults")
 [ "$(echo "$body" | jq -r .input)" = "$STAGED" ] || fail "GET did not see the input that the shell committed"
 [ "$(echo "$body" | jq -r .drop_invalid)" = "$flip" ] || fail "the shell commit lost the drop_invalid that uapi committed"
 
+# libuci skips a commit with no changes. uapi rewrote the package anyway, which dropped its
+# comments and could drop a commit that landed during the request.
+echo "--- a write that changes nothing leaves the file as it is ---"
+$SSH '{ echo "# kept by a write that changes nothing"; cat /etc/config/firewall; } > /tmp/uapi-staged-fw &&
+      cat /tmp/uapi-staged-fw > /etc/config/firewall && rm -f /tmp/uapi-staged-fw'
+status=$(curl -sS -o /tmp/uapi_staged_patch.json -w '%{http_code}' -H "$ADMIN" \
+	-H 'Content-Type: application/json' -X PATCH "$URL/firewall/defaults" -d "{\"drop_invalid\": $flip}")
+[ "$status" = 200 ] || { cat /tmp/uapi_staged_patch.json; fail "PATCH of an unchanged drop_invalid returned $status"; }
+$SSH 'grep -q "^# kept by a write that changes nothing" /etc/config/firewall' \
+	|| fail "a write that changed nothing rewrote /etc/config/firewall"
+
 echo "a change that a shell staged stays out of uapi's reads and writes until the shell commits it."
