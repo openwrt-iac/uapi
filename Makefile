@@ -190,8 +190,6 @@ gate-selftest:
 lint-doc-refs:
 	@$(UCODE) tests/lint_doc_refs.uc
 
-# Runs the reproduction command of docs/lock-state-audit.md and fails on a site no row covers,
-# a row that holds no site, or a stale "covers all N sites" count.
 lint-lock-audit:
 	@$(UCODE) tests/lint_lock_audit.uc
 
