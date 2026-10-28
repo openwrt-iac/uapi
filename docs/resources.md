@@ -161,6 +161,8 @@ Reload: `dnsmasq`, except `dhcp/odhcpd`, which declares `odhcpd`.
 | `openvpn/instances` | `config openvpn` | Per-instance OpenVPN config. `key`, `tls_auth` and `pkcs12` are write-only; responses carry `has_key` / `has_tls_auth` / `has_pkcs12`. |
 | `usteer/config` (singleton) | `config usteer` | Band-steering and roaming thresholds for the usteer daemon. |
 
+When unbound runs, a write to one of the three unbound resources waits 2 s after the reload. If unbound stops in that time, the write answers `500 reload_failed_restored` and restores the previous config. unbound stops for a line of `srv_line` or `ext_line` that it cannot parse. Two of these writes at the same time answer `423 locked` for the second, because each restarts unbound.
+
 ## Packages (non-uci)
 
 | Path | Source of truth | Notes |

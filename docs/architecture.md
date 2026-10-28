@@ -74,6 +74,7 @@ Two flock files, used in three patterns:
 | Read (any)         | none  | none                                       |
 | Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
+| uci write that restarts unbound (`unbound_srv`, `unbound_ext`) | SH | EX on that pkg and on `unbound` |
 | uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
 | Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
 
@@ -84,6 +85,10 @@ The interactions:
 - Two writes against the same package: both take SH on the global,
   contend on the per-package EX → the second's `LOCK_NB` attempt fails, so
   it returns `423 locked` with `Retry-After: 1`.
+- Two writes that restart unbound, such as one to `unbound_srv` and one to
+  `unbound_ext`, contend on the EX of `unbound` the same way. Otherwise the
+  restart of one would read as a stop to the stay-up check of the other,
+  and a line that unbound refuses in one would fail the other too.
 - A non-uci write (apk install / authorized_keys write) takes EX on the
   global → refused with `423 locked` while any uci transaction is in flight
   (any package), and refuses new ones the same way until it is done. Apk's
@@ -127,7 +132,15 @@ without uci state change.
 6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, via
    `fs.popen`, exit code checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
-   real child gives back the actual exit bit.
+   real child gives back the actual exit bit. procd starts the daemon with
+   its new config on its own, so the init script exits 0 before the daemon
+   has read that config, and a daemon that refuses it stops later. For the
+   reloads that `STAY_UP` in `src/lib/transaction.uc` lists, which are
+   `unbound` and `unbound-uci-ext`, the write then watches the procd
+   instances of the daemon that ran before it. It polls `service list`
+   every 100 ms for 2 s, and an instance that procd reports as not running
+   counts as a failed reload. An instance that `service list` does not show
+   is being restarted, and does not count. The restore runs the same check.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. Runs only after the reload returned zero, and reports the
@@ -136,7 +149,7 @@ without uci state change.
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
    leaves the peer in uci alone and a caller otherwise cannot tell that from a
    write that reached the kernel.
-8. **On reload or apply non-zero:** `uci_import(<package>, snapshot)` →
+8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>, snapshot)` →
    `uci_commit(<package>)` → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the
    captured stderr/exit summary. If the restore itself fails,

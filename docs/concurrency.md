@@ -56,6 +56,7 @@ Two lock files, in three patterns:
 | `/var/lock/uapi.lock` (SH) | every uci transaction | lets multiple uci writes run in parallel ON DIFFERENT PACKAGES, while still serializing against the global EX |
 | `/var/lock/uapi.lock` (EX) | non-uci writes (apk, system passwords) | blocks all uci transactions for the duration of the non-uci op |
 | `/var/lock/uapi.pkg.<package>.lock` (EX) | a uci transaction on `<package>` | serializes writes to the same package; cross-package writes do not collide |
+| `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext` | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another |
 
 This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead.
 

@@ -47,7 +47,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 423  | `locked`                        | Another write transaction holds a lock on the same package (or the global lock for a non-uci writer); retry. The response message names the specific lock. |
 | 429  | `too_many_requests`             | Per-token rate limit exceeded                                |
 | 500  | `internal_error`                | Bug or unexpected condition                                  |
-| 500  | `reload_failed_restored`        | Daemon reload failed; uapi rolled back the uci change        |
+| 500  | `reload_failed_restored`        | Daemon reload failed, or a daemon that uapi watches stopped after it. uapi rolled back the uci change |
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |

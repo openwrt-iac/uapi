@@ -655,8 +655,19 @@ All notable changes to this project will be documented in this file. Format foll
   196, so the 6 GHz channels that LuCI offers can be written. (#257)
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
-  restarts, and a line that it cannot parse makes it refuse its whole config and stay down, while
-  the write answers 200. (#257)
+  restarts, and a line that it cannot parse makes it refuse its whole config. (#257)
+- **A write that makes unbound stop answers `500 reload_failed_restored` and restores the previous
+  config.** procd starts unbound with its new config on its own, so the init script exited 0, and
+  unbound then exited on a `srv_line` or `ext_line` that it cannot parse. DNS stayed down while the
+  write answered 200. When unbound runs, a write that reloads `unbound` or `unbound-uci-ext` now
+  waits 2 s for each unbound instance to keep running. The restore runs the same check, so a
+  restore that does not bring unbound back answers `reload_failed_unrecovered`. This applies to
+  `unbound/server`, `unbound/srv`, `unbound/ext`, a `/batch` that holds one of them, and a raw
+  write to the `unbound` package. These writes take 2 s longer. A write to `unbound_srv` or
+  `unbound_ext` also takes the lock of the `unbound` package, so two writes that restart unbound at
+  the same time answer `423 locked` for the second, as two writes to one package do. A write that
+  answered 200 and left unbound down now answers 500, which is the tightening carve-out of
+  `docs/versioning.md`. (#259)
 - **A PATCH body no longer has to carry the fields that a create requires.** The spec declared the
   `application/json` body of each PATCH as an `allOf` of the Request schema, with its `required`
   list and its conditionals. The server checks the required fields after it merges the body into

@@ -58,6 +58,6 @@ return {
 		interface_outgoing: { type: ["array", "null"], items: LINE_ITEM,
 		                      description: "Source addresses for upstream recursion (multi-WAN egress)." },
 		srv_line:           { type: ["array", "null"], items: LINE_ITEM,
-		                      description: "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200." },
+		                      description: "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines." },
 	},
 };

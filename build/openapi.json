@@ -33494,7 +33494,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200."
+						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
 					},
 					"runtime": {
 						"type": "object",
@@ -33554,7 +33554,7 @@
 							"type": "string",
 							"pattern": "^[^\n]+$"
 						},
-						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200."
+						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
 					}
 				}
 			},
@@ -33584,7 +33584,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200."
+						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
 					},
 					"runtime": {
 						"type": "object",
@@ -33615,7 +33615,7 @@
 							"type": "string",
 							"pattern": "^[^\n]+$"
 						},
-						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts. A line that it cannot parse makes it refuse its whole config and stay down, and the write still answers 200."
+						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
 					}
 				}
 			},

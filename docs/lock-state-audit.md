@@ -37,11 +37,11 @@ as an audit of the transaction and token paths, not of the tree.
 | `src/main.uc` | 787-791 | fd (read openapi.json) | same shape |
 | `src/main.uc` | 250-257 | ubus conn | `bus.connect()` failure caught; nothing held on error |
 | `src/main.uc` | 835-840 | ubus conn | same |
-| `src/lib/transaction.uc` | 59-65 | flock acquire | success returns fd for explicit release; failure closes fd before returning sentinel |
-| `src/lib/transaction.uc` | 67-69 | flock release | null-safe; unlocks before close |
-| `src/lib/transaction.uc` | 88-98 | per-package 2-level acquire | releases global on per-package acquire failure |
-| `src/lib/transaction.uc` | 183-234 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
-| `src/lib/transaction.uc` | 335-353 | lock + `with_lock` | same try/release/die shape |
+| `src/lib/transaction.uc` | 118-124 | flock acquire | success returns fd for explicit release; failure closes fd before returning sentinel |
+| `src/lib/transaction.uc` | 126-128 | flock release | null-safe; unlocks before close |
+| `src/lib/transaction.uc` | 147-164 | per-package 2-level acquire | releases the global and the per-package locks it holds when one per-package acquire fails |
+| `src/lib/transaction.uc` | 252-313 | lock + transaction | `release()` called outside try/catch, before `die(caught)` |
+| `src/lib/transaction.uc` | 428-446 | lock + `with_lock` | same try/release/die shape |
 | `src/lib/non_uci.uc` | 23-48 | delegates to `transaction.with_lock` | inherits the explicit-release pattern |
 | `src/lib/non_uci.uc` | 71-94 | fd (`replace_private_file`) | atomic-rename pattern (see below) |
 | `src/lib/ids.uc` | 21-27 | fd (`/dev/urandom`) | `if (!f) die(...)` before deref; close on success |
@@ -81,7 +81,7 @@ Subsequent `fs.rename(tmp, path)` is also wrapped in try/catch; failure cleans u
 - **fd: open / use / close.** Every `fs.open` is followed by either an early return (when open returned null) or an unconditional `.close()` on the success path. No site holds an fd across a return without closing.
 - **pipe: popen / read / close.** Every `fs.popen` is followed by `.close()` (which both releases and yields the child exit code).
 - **flock: acquire / try-fn / release / die-if-caught.** `transaction.uc::transaction()` and `with_lock()` release the lock OUTSIDE the try block, AFTER catch, BEFORE the conditional `die(caught)`.
-- **2-level locks.** `default_acquire_pkg()` releases the global lock if the per-package acquire fails. `default_release_pkg()` releases in reverse order (per-package, then global).
+- **2-level locks.** `default_acquire_pkg()` takes the per-package lock of the write and, for a write that restarts unbound, the one of `unbound`. If one of them fails, it releases the per-package locks that it holds and the global lock. `default_release_pkg()` releases in reverse order (per-package, then global).
 
 ## The wireguard peer apply
 
