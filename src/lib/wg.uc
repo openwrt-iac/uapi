@@ -164,18 +164,6 @@ function set_peer_argv(iface, peer, psk_path) {
 	return argv;
 }
 
-function set_peer(iface, peer) {
-	let psk_path = null;
-	if (peer.preshared_key != null && peer.preshared_key != "") {
-		psk_path = psk_file(peer.preshared_key);
-		if (psk_path == null)
-			return { ok: false, output: "could not stage the preshared key" };
-	}
-	let r = run(set_peer_argv(iface, peer, psk_path));
-	if (psk_path != null) fs.unlink(psk_path);
-	return r;
-}
-
 function remove_peer(iface, pubkey) {
 	return run([ "wg", "set", iface, "peer", pubkey, "remove" ]);
 }
@@ -325,6 +313,16 @@ function apply_peer(iface, peer) {
 	// the peer, and the kernel keeps its endpoint.
 	let keep_endpoint = host != "" && peer.endpoint_port === 0;
 
+	// The key is staged before anything changes in the kernel. Staged after the remove below, a key
+	// that the tmpfs could not hold left the peer removed and not set again, and the restore did the
+	// same to the first such peer of the interface, one that the write may not have named.
+	let psk_path = null;
+	if (psk) {
+		psk_path = psk_file(psk);
+		if (psk_path == null)
+			return sprintf("could not stage the preshared key of a peer on %s", iface);
+	}
+
 	// `wg set` cannot unset an endpoint, so clearing one means removing the peer
 	// and setting it fresh. Safe only in this direction: with no endpoint there is
 	// no name to resolve, so the following set cannot fail the way it could if it
@@ -332,7 +330,8 @@ function apply_peer(iface, peer) {
 	if (host == "")
 		remove_peer(iface, key);
 
-	let r = set_peer(iface, { ...peer, public_key: key, preshared_key: psk, endpoint_host: keep_endpoint ? null : host });
+	let r = run(set_peer_argv(iface, { ...peer, public_key: key, endpoint_host: keep_endpoint ? null : host }, psk_path));
+	if (psk_path != null) fs.unlink(psk_path);
 	if (!r.ok)
 		return sprintf("wg set on %s failed: %s", iface, r.output);
 	return null;
@@ -423,14 +422,19 @@ function apply(conn, ops, applied) {
 			let keys = kernel_keys(op.public_key);
 			if (keys === false)
 				return sprintf("refusing to remove a public key with a backslash on %s", iface);
+			// The kernel holds one peer per key, so another section that holds the key is set again,
+			// in uci order as ifup sets them, and the last wins. apply_peer() sets it over the peer
+			// that the kernel holds, so the key is not removed here: a remove here dropped the peer
+			// when that section's preshared key could not be staged.
+			let again = filter(peer_sections(conn, iface), (s) => index(keys, kernel_key(s.public_key)) >= 0);
+			let held = {};
+			for (let s in again) held[kernel_key(s.public_key)] = true;
 			for (let key in keys) {
+				if (held[key]) continue;
 				let r = remove_peer(iface, key);
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
 			}
-			// The kernel holds one peer per key, so the remove also dropped the peer of another
-			// section that holds the key. ifup sets such sections in uci order, and the last wins.
-			for (let s in peer_sections(conn, iface)) {
-				if (index(keys, kernel_key(s.public_key)) < 0) continue;
+			for (let s in again) {
 				let err = apply_peer(iface, to_peer(s));
 				if (err != null) return err;
 			}

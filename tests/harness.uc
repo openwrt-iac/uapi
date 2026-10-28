@@ -87,18 +87,23 @@ function assert_match(str, pattern, msg) {
 
 // Loads the modules of src/lib named in `names`, in order, against `stub` in place of fs, and
 // returns the last one. Each is cached under its name while the next loads, so that one's
-// require() finds the copy that uses `stub`. The cache is put back afterwards.
+// require() finds the copy that uses `stub`. The cache is put back afterwards, also when a load
+// throws, and a module that the call loaded for the first time leaves it: run_unit.uc runs every
+// test file in one process, so either would hand the stub to the files after this one.
 function load_with_fs(stub, names) {
 	let cache = global.modules;
-	let saved = {};
-	for (let n in [ "fs", ...names ]) saved[n] = cache[n];
+	let before = { ...cache };
 	cache.fs = stub;
-	let mod;
-	for (let n in names) mod = cache[n] = loadfile(`src/lib/${n}.uc`)();
-	for (let n in keys(saved)) {
-		if (saved[n] == null) delete cache[n];
-		else cache[n] = saved[n];
+	let mod, caught = null;
+	try {
+		for (let n in names) mod = cache[n] = loadfile(`src/lib/${n}.uc`)();
+	} catch (e) {
+		caught = e;
 	}
+	for (let n in keys(cache))
+		if (!(n in before)) delete cache[n];
+	for (let n, m in before) cache[n] = m;
+	if (caught != null) die(caught);
 	return mod;
 }
 
