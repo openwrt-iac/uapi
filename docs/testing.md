@@ -149,7 +149,7 @@ Six resource families remain uncovered because their packages stay outside the i
 
 ## OpenAPI emission
 
-Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The package carries it without whitespace, and `make stage` fails unless that copy parses to the same JSON value as `build/openapi.json`, key order included (see `docs/packaging.md`). The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
+Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The uapi release APK and the test VM carry it without whitespace, and `make stage` fails unless that copy parses to the same JSON value as `build/openapi.json`, key order included (see `docs/packaging.md`). The uapi package of the OpenWrt packages feed copies `build/openapi.json` as it is, so it installs the indented file until its Makefile runs `tools/compact_json.py`. The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
 
 `make openapi-check` regenerates the spec into a temp file and diffs against the committed `build/openapi.json`. CI runs this as a sanity gate; if it fails, the committed spec is out of sync with the resource modules and one of them has to give.
 

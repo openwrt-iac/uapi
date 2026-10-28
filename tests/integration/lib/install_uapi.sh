@@ -4,9 +4,11 @@ UAPI_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
 # Everything the box runs. Named once so the push and the fingerprint below
 # cannot drift apart and start attesting to a different set of files than the
 # one actually installed. The spec goes over on its own, as the compact copy
-# that the package installs, and the fingerprint covers what that copy is made of.
+# that the release APK installs, so its source and the tool that compacts it
+# are named apart.
 PUSH_PATHS="src/main.uc src/raw.uc VERSION cli/uapi-token src/lib src/resources"
-SPEC_INPUTS="build/openapi.json tools/compact_json.py"
+SPEC_SOURCE=build/openapi.json
+SPEC_TOOL=tools/compact_json.py
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -32,13 +34,13 @@ ensure_wireless_radio() {
 # fingerprint across runs.
 source_fingerprint() {
 	# shellcheck disable=SC2086
-	find $PUSH_PATHS $SPEC_INPUTS -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
+	find $PUSH_PATHS $SPEC_SOURCE $SPEC_TOOL -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
 }
 
 # Bootstrap: install deps, push every source file in a single tar stream and
-# the compact spec after it, wire the uhttpd prefix, restart. Each request to /api/v3 forks a fresh ucode child
-# that reads the on-disk source, so per-test isolation only needs a clean token
-# store, not a re-copy of the source tree.
+# the compact spec after it, wire the uhttpd prefix, restart. Each request to
+# /api/v3 forks a fresh ucode child that reads the on-disk source, so per-test
+# isolation only needs a clean token store, not a re-copy of the source tree.
 #
 # The sentinel records WHICH tree is installed, not merely that something is.
 # A bare "have we bootstrapped" flag lives in tmpfs and so outlives the session
@@ -74,7 +76,7 @@ bootstrap_uapi() {
 		fail "pushing the uapi source to the test box failed; the box still runs whatever it had"
 	fi
 	spec=$(mktemp)
-	if ! python3 tools/compact_json.py build/openapi.json "$spec" \
+	if ! python3 "$SPEC_TOOL" "$SPEC_SOURCE" "$spec" \
 		|| ! push_file_to_vm "$spec" /usr/share/uapi/openapi.json
 	then
 		rm -f "$spec"

@@ -1,7 +1,4 @@
-# Writes the JSON document SRC to DST without whitespace, and fails unless DST parses to the
-# same value as SRC. The package installs the spec this way: main.uc reads it whole into every
-# request process that serves it, and uhttpd does not compress it, while build/openapi.json
-# stays indented because reviews read its diffs.
+# Why the spec is installed compact: docs/packaging.md, step 2 of the build.
 import json
 import sys
 

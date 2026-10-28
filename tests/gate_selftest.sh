@@ -573,7 +573,7 @@ probe lint-doc-refs      "a claim no test prints"               "no test prints 
 probe lint-doc-refs      "an error code nothing emits"         "nothing in src/ emits it"          mut_code_unemitted
 probe lint-doc-refs      "an enum code nothing documents"      "appears nowhere in docs/errors.md" mut_code_undocumented
 probe openapi-check      "a schema change not regenerated"     ""                                  mut_stale_spec
-probe stage              "a compact spec with its keys reordered" "does not parse to the same JSON value" mut_compact_reorders
+probe stage              "a compact spec with its keys sorted" "parse to the same JSON value"       mut_compact_reorders
 probe coverage           "a module import nothing reads"    "DEAD MODULE IMPORTS"               mut_dead_import
 probe coverage           "a lib export nothing uses"           "DEAD LIB EXPORTS"                  mut_dead_export
 
