@@ -437,6 +437,15 @@ Cache hits skip the entire handler stack except auth and the rate limiter -
 the resource handler never runs. A client retrying a network-blipped POST
 gets the original response back, never a duplicate resource.
 
+An entry can carry a secret, and other daemons of the box run as other users
+and can create a directory in `/tmp` first. So uapi uses the cache only in a
+directory that it owns, with mode 0700, and writes each entry 0600. A package
+install or upgrade removes the directory, so no entry of an older version
+stays. At most once an hour, a store removes the entries older than the TTL,
+so the directory holds the writes of about one TTL. A `POST /batch` that only
+reads stores no entry: replaying a read gives nothing that running it again
+does not give.
+
 ## Audit and request_id
 
 Every response carries `X-Request-Id` (a ULID by default; client-supplied
@@ -471,7 +480,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
 | Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Reaped on revoke, else until reboot |
-| Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, until reboot |
+| Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, removed by the next store after that |
 | Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot      |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until reboot      |
 | Apk install lock             | (apk-internal)                              | Per-operation     |

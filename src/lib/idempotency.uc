@@ -2,6 +2,7 @@ let fs = require('fs');
 
 const DIR = "/tmp/uapi-idempotency";
 const TTL_SECONDS = 86400;
+const SWEEP_SECONDS = 3600;
 const KEY_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$/;
 
 let _digest = null;
@@ -41,7 +42,33 @@ function validate_key(key) {
 	return !!match(key, KEY_RE);
 }
 
+// An entry holds a whole response, which can carry a secret, while other daemons of the box run as
+// other users and can create a directory in /tmp first, after a reboot. So the cache is used only
+// in a directory that this process owns, with mode 0700, which also keeps the entries of an older
+// uapi out of reach.
+function private_dir() {
+	fs.mkdir(DIR, 448);
+	let st = fs.lstat(DIR);
+	let uid = match(fs.readfile("/proc/self/status") ?? "", /\nUid:\s+\d+\s+(\d+)/)?.[1];
+	if (st?.type != "directory" || uid == null || st.uid != +uid) return false;
+	if ((st.mode & 511) != 448) fs.chmod(DIR, 448);
+	return true;
+}
+
+// The sweep runs at most once an hour, because it stats every entry.
+function sweep(now) {
+	let mark = DIR + "/.swept";
+	let st = fs.stat(mark);
+	if (st?.mtime != null && (now - st.mtime) < SWEEP_SECONDS) return;
+	for (let name in fs.lsdir(DIR) ?? []) {
+		let e = fs.stat(DIR + "/" + name);
+		if (e?.mtime != null && (now - e.mtime) > TTL_SECONDS) fs.unlink(DIR + "/" + name);
+	}
+	fs.writefile(mark, "");
+}
+
 function lookup(token_name, key, body_text, now_epoch) {
+	if (!private_dir()) return { state: "miss" };
 	let path = _key_path(token_name, key);
 	let st;
 	try { st = fs.stat(path); } catch (_) { st = null; }
@@ -68,8 +95,9 @@ function lookup(token_name, key, body_text, now_epoch) {
 	}};
 }
 
-function store(token_name, key, body_text, response) {
-	try { fs.mkdir(DIR); } catch (_) {}
+function store(token_name, key, body_text, response, now_epoch) {
+	if (!private_dir()) return false;
+	sweep(now_epoch ?? time());
 	let path = _key_path(token_name, key);
 	let entry = {
 		fingerprint: _fp_inputs(token_name, key, body_text),
@@ -77,13 +105,17 @@ function store(token_name, key, body_text, response) {
 		headers: response.headers,
 		body: response.body,
 	};
-	let tmp = path + ".tmp";
-	let f = fs.open(tmp, "w");
+	// stdio buffers a small entry, so a full /tmp shows only at the close, which ucode does not
+	// report. The size on disk does.
+	let text = sprintf("%J", entry), tmp = path + ".tmp";
+	fs.unlink(tmp);
+	let f = fs.open(tmp, "w", 384);
 	if (!f) return false;
-	f.write(sprintf("%J", entry));
+	f.write(text);
 	f.close();
-	try { return fs.rename(tmp, path); }
-	catch (_) { try { fs.unlink(tmp); } catch (__) {} return false; }
+	if (fs.stat(tmp)?.size == length(text) && fs.rename(tmp, path)) return true;
+	fs.unlink(tmp);
+	return false;
 }
 
 return { validate_key, lookup, store };

@@ -91,6 +91,25 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	}')
 [ "$status" = "400" ] || fail "bad idempotency key expected 400, got $status"
 
+echo "--- the idempotency cache is private, and a batch that only reads leaves no entry ---"
+[ "$($SSH 'ls -ld /tmp/uapi-idempotency' | cut -c1-10)" = "drwx------" ] || fail "the idempotency directory is not 0700"
+[ -z "$($SSH 'ls -l /tmp/uapi-idempotency' | grep -v -e '^total' -e '^-rw------- ')" ] || fail "an idempotency entry is not 0600"
+before=$($SSH 'ls /tmp/uapi-idempotency | wc -l')
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch?idempotency_key=idem-$(date +%s)-read" \
+	-d '{"operations": [{"method": "GET", "path": "/firewall/rules"}]}')
+[ "$status" = "207" ] || fail "a batch that only reads expected 207, got $status"
+[ "$($SSH 'ls /tmp/uapi-idempotency | wc -l')" = "$before" ] || fail "a batch that only reads left an idempotency entry"
+key_w="idem-$(date +%s)-write"
+batch_w='{"operations": [{"method": "PATCH", "path": "/firewall/rules/'"$id1"'", "body": {"name": "idem-test-1b"}}]}'
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w")
+[ "$status" = "207" ] || fail "a batch that writes expected 207, got $status"
+[ "$($SSH 'ls /tmp/uapi-idempotency | wc -l')" = "$((before + 1))" ] || fail "a batch that writes left no idempotency entry"
+curl -sS -o /dev/null -D /tmp/uapi_idem_batch.h -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w"
+grep -i '^idempotent-replayed:' /tmp/uapi_idem_batch.h >/dev/null || fail "the replay of a batch that writes is not marked replayed"
+
 echo "--- pagination: ?limit=N returns a partial page + Link/X-Next-Cursor ---"
 # firewall/rules typically has zero managed entries on a clean install.
 # Use raw to count anything, then test pagination on a real busy resource.

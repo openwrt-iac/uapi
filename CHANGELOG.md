@@ -757,6 +757,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Security
 
+- **The idempotency cache keeps its entries private and bounded.** It uses only a directory that
+  uapi owns with mode 0700 and writes each entry with mode 0600, a package install or upgrade
+  removes the directory, a store removes the entries older than the 24 h TTL at most once an hour,
+  and a `POST /batch` that only reads stores no entry. (#266)
 - **A stored `persistent_keepalive` no longer runs as a root shell command.** `src/lib/wg.uc`
   put a peer's `persistent_keepalive` into the `wg set` command without quoting it. The restore
   after a failed peer write reapplies the interface's peers from uci, and that path read the raw
