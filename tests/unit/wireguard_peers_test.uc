@@ -519,6 +519,15 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_equal(h.patch(world(STATIC, BAD), ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
 	});
 
+	// wg cannot parse such an allowed IP, and a peer write refuses it on every write.
+	t.it('a switch to wireguard also refuses a stored allowed IP that wg cannot parse, on a peer that wg reads', () => {
+		let r = h.patch(world(STATIC, { g_ip: { allowed_ips: [ '10.42.0.2/32', 'foo' ] } }), ctx(), 'wg1', WG);
+		t.assert_deep_equal(errs(r), [ [ 'proto', 'conflict' ] ]);
+		t.assert_true(index(r.body.errors[0].message, 'g_ip (allowed_ips[1])') >= 0, r.body.errors[0].message);
+		for (let off in [ { disabled: '1' }, { public_key: null } ])
+			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ], ...off } }), ctx(), 'wg1', WG).status, 200, off);
+	});
+
 	t.it('the way out that the message gives works: switch disabled, fix the peer, enable', () => {
 		let ph = handler.make(wgp, { tx: {
 			acquire: function() { return {}; }, release: function() {},
