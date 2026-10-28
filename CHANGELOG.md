@@ -724,8 +724,8 @@ All notable changes to this project will be documented in this file. Format foll
   `wireless/interfaces` PATCH without `device`. The body of a CRUD PATCH is now `<Name>Patch`. It
   has the properties of `<Name>Request` with the same types and patterns. It has no `required` and
   no conditionals, also on a nested object such as `match`, and no defaults. A singleton PATCH body
-  is `<Name>Request` itself, which has no `required` and no conditionals. This only widens the
-  request schemas of PATCH, so it is not breaking under `docs/versioning.md`. (#258)
+  is a `<Name>Patch` built the same way (#263). This only widens the request schemas of PATCH, so it
+  is not breaking under `docs/versioning.md`. (#258)
 - **A PATCH body takes null on the fields that the server removes for a null.** A merge patch
   (RFC 7396) removes a field with null. The server skips a null in its type check, the merge sets
   the field to null, and `toUci` leaves the option out, so the write removes it. But the PATCH
