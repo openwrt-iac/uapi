@@ -135,6 +135,8 @@ fd.lock("u")    // LOCK_UN
 
 Returns `true` on success, `null` on `EWOULDBLOCK` (with `fs.error()` set). See `transaction.uc::_lock_one()`.
 
+An flock belongs to the open file description, and `fs.open` does not set `O_CLOEXEC` unless the mode carries `e` (`"w+e"`). Without it every child that `fs.popen` starts holds a copy of the descriptor, and so holds the lock until it exits. The ucode of the OpenWrt 25.12.5 SDK (2026.01.16) maps `e` to `O_CLOEXEC` in `uc_fs_open()`. With ucode 0.0.20250529, a child of `fs.popen` lists in `/proc/self/fd` a descriptor that was opened `w+`, and none that was opened `w+e`.
+
 ### `network.interface.<x>` `renew` re-applies the config the handler already had
 
 netifd gives a proto handler a copy of the interface config taken when the proto state was attached, and `renew` does not refresh it. A renew issued after a uci write therefore re-applies what was already running, and returns success. netifd also tears the interface down and back up for any proto-config change, so editing a wireguard peer destroys a working tunnel before the new peer list has been validated. uapi applies wireguard peers with `wg` directly for both reasons; see `src/lib/wg.uc`.

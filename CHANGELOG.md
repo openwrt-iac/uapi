@@ -808,6 +808,31 @@ All notable changes to this project will be documented in this file. Format foll
   a staged change to `uapi.logging` or `uapi.ratelimit` applies once committed. uapi also reads,
   writes and restores `/etc/config/<package>` only, and ignores an override that libuci reads in
   its place from `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
+- **A token minted per run no longer adds files to tmpfs, which is RAM, until a reboot.** The metric
+  series that carry `token_id`, in `uapi_requests_total` and `uapi_rate_limit_drops_total`, and the
+  last-used marker in `/var/run/uapi-token-update/` kept a file per token name, and nothing removed
+  them. So a client that mints a token per run, as the Terraform provider's ephemeral `uapi_token`
+  does, added files with every run. A mint and a revoke, over HTTP and with `uapi-token`, now run a
+  reap after their commit. It removes the rate-limit bucket and the marker of every token that no
+  longer authenticates, because it is revoked, expired or deleted by hand, and it folds each series
+  of such a token into the series with the same other labels and `token_id="-retired"`, which no
+  token can be named. The count is added there, so a sum over `token_id` never falls, and the
+  requests of a token that no scrape saw twice still reach Prometheus. The metrics output changes: a
+  scrape after a fold no longer shows the series of the token and shows a `-retired` series, and
+  `rate()` reads the fold as requests at that moment, so a `sum(rate())` over `token_id` shows a
+  spike after a mint or a revoke. `docs/operations.md` § Metrics has the details. A token with no
+  expiry that is never revoked keeps its files. The reap runs after the commit and under the `uapi`
+  lock. No request, response or header changes. (#269)
+- **A request that uhttpd kills no longer leaves its lock to the processes it started.** The lock
+  files were opened without `O_CLOEXEC`, so every child started under a lock, such as an init
+  script, `apk`, `passwd`, `wg` or `ip`, held a copy of the descriptor, and an flock belongs to the
+  open file description. uhttpd sends `SIGKILL` when the client goes away before the response and
+  when `script_timeout` runs out. The lock then stayed taken until that child exited, or for as long
+  as a daemon that the child started outside procd ran, and every write behind the lock answered
+  `423 locked` until then. The lock files are now opened with `O_CLOEXEC`, so the kill releases the
+  lock. The child runs on, so the next write can now start while the reload or `apk` of a killed
+  request still runs. A kill between the commit and the reload still leaves the write half done,
+  which `docs/roadmap.md` records. No request, response or header changes. (#269)
 
 ### Security
 

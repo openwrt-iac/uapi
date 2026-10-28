@@ -115,8 +115,14 @@ const watch_stay_up = (conn, services) => default_watch(conn, services, 2000, 10
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
 // non-blocking ("n" suffix). Returns the fd handle on success; null on lock
 // contention; { unavailable: <path> } on infrastructure failure (fs.open).
+//
+// "e" is O_CLOEXEC. An flock belongs to the open file description, and without "e" every
+// child started under the lock (an init script, apk, passwd, wg) held a copy of it. A request
+// that uhttpd killed then left its lock held until that child exited, or for as long as a
+// daemon that the child started outside procd ran. With no copy, the close in _release_one(),
+// or the exit of a killed request, releases the lock.
 function _lock_one(path, mode) {
-	let fd = fs.open(path, "w+");
+	let fd = fs.open(path, "w+e");
 	if (!fd) return { unavailable: "" + path };
 	let r = fd.lock(mode + "n");
 	if (r !== true) { fd.close(); return null; }
@@ -124,7 +130,7 @@ function _lock_one(path, mode) {
 }
 
 function _release_one(fd) {
-	if (fd) { fd.lock("u"); fd.close(); }
+	if (fd) fd.close();
 }
 
 // Default global-exclusive lock; used by non-uci writes (apk, system/access).

@@ -420,6 +420,32 @@ is unresolvable.
   release time. Deciding needs a few runs' worth of variance data across runners,
   which nobody has gathered. Until then the tree says measurement, not gate.
 
+- **A request that uhttpd kills after its commit leaves the write half done.** uhttpd
+  sends `SIGKILL` to the request process, and to no other, when the client closes the
+  connection before the response and when `script_timeout` runs out (60 s unless set). A
+  Terraform interrupt or a client-side timeout does the first. No ucode code runs after a
+  `SIGKILL`. `transaction()` commits, then reloads, runs the stay-up watch and the kernel
+  apply, and after a failure restores the snapshot and reloads again, all in that process.
+  A kill after the commit leaves uci with the new config, runs no check and no restore, and
+  answers nothing. The reload that the request started runs on, and since the lock fds
+  close on exec the kill also releases the lock, so the next write can commit and reload
+  beside it. `multi_transaction()` and the crontab apply in `crontab.uc` have the same
+  shape. The steps after the commit are not short: each reload, the stay-up watch, which
+  waits up to 2 s and again on a restore, and the kernel apply.
+  Nothing inside the request can close this, so it needs a design change. The shapes seen
+  so far, none chosen:
+  - A record of the write in flight, written before the commit and removed when the
+    recipe ends, which the next request that takes the lock of the package finds. It could
+    report the interrupted write, which adds wire surface, or finish it, which needs a
+    decision on whether one request may restore a write that is not its own.
+  - The steps after the commit in a process that uhttpd does not kill. That is work that
+    outlives the request, which `docs/concurrency.md` rules out, and the client still gets
+    no answer.
+  - A change to uhttpd to send `SIGTERM` and wait before `SIGKILL`, so that a request can
+    ignore it with ucode's `signal()` until its recipe ends. That is upstream work, and the
+    wait would bound how long a recipe may take.
+  The details are under Open findings in `docs/lock-state-audit.md`.
+
 - **Reporting-surface consumption is the provider's.** `X-Kernel-Status`,
   `management_path` and `?validate=1` are all emitted and documented here, and
   `terraform-provider-uapi` consumes none of them. That is the provider's call, not a gap
@@ -455,7 +481,9 @@ stale enough to be misleading:
   ring, the rename checks of the error ring and the metrics, which never ran, and a
   revoke that dropped its rate-limit bucket before the commit are fixed (#267). The
   restore replaces the package with a rename, and the uci cursor no longer reads or
-  commits what a shell staged (#268).
+  commits what a shell staged (#268). The lock files close on exec, so a request that
+  uhttpd kills no longer leaves its lock to the children it started, and a mint or a
+  revoke reaps the files in tmpfs of the tokens that no longer authenticate (#269).
 
 ## Objectives for the next major
 

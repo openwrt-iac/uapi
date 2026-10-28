@@ -110,9 +110,9 @@ function effective_limits(global, token_record) {
 // files against 4 live tokens after one session of testing. The provider's ephemeral
 // uapi_token mints one per Terraform run, so on a router with months of uptime that is
 // unbounded tmpfs, which is RAM.
-function forget(token_id) {
-	if (token_id == null || !match(token_id, SAFE_NAME_RE)) return false;
-	try { return fs.unlink(DIR + "/" + token_id + ".txt"); } catch (_) { return false; }
+function reap(live) {
+	for (let name in fs.lsdir(DIR) ?? [])
+		if (!live[split(name, ".")[0]]) fs.unlink(DIR + "/" + name);
 }
 
-return { check, load_config, effective_limits, forget };
+return { check, load_config, effective_limits, reap };

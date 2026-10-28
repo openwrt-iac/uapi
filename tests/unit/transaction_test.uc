@@ -772,3 +772,50 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		for (let f in [ global, prefix + "unbound.lock", prefix + "unbound_srv.lock" ]) fs.unlink(f);
 	});
 });
+
+// uhttpd SIGKILLs a request when its client goes away or its script timeout runs out, so no
+// release runs. A child that the request started under the lock had a copy of the lock fd, and
+// the lock stayed taken until that child exited. A release only closes the fd, as an exit does,
+// so a lock that is free after the release, while the child still runs, is free after a kill.
+t.describe('transaction, a child started under a lock', () => {
+	function background_child() {
+		let p = fs.popen("sleep 10 >/dev/null 2>&1 & echo $!", "r");
+		let pid = trim(p.read("all"));
+		p.close();
+		return pid;
+	}
+
+	function free(path) {
+		let fd = fs.open(path, "r");
+		let ok = fd.lock("xn") === true;
+		fd.close();
+		return ok;
+	}
+
+	t.it('does not keep the global lock of with_lock', () => {
+		let path = "/tmp/uapi-test-cloexec-global.lock";
+		let pid;
+		tx.with_lock({ lock_path: path, fn: () => { pid = background_child(); } });
+		let ok = free(path);
+		system("kill " + pid);
+		fs.unlink(path);
+		t.assert_true(ok, "the child still holds the lock");
+	});
+
+	t.it('does not keep the global or package locks of multi_transaction', () => {
+		let global = "/tmp/uapi-test-cloexec-g.lock", prefix = "/tmp/uapi-test-cloexec-pkg.";
+		let pid;
+		let r = tx.multi_transaction(ubus.stub({ uci: { firewall: { d: { '.type': 'defaults' } } } }), {
+			packages: [ "firewall" ], lock_path: global, pkg_lock_prefix: prefix,
+			check_services: noop_check,
+			reload: function() { pid = background_child(); return null; },
+			fn: (c) => ({ ok: true }),
+		});
+		t.assert_true(r.ok);
+		let ok = { global: free(global), firewall: free(prefix + "firewall.lock") };
+		system("kill " + pid);
+		fs.unlink(global);
+		fs.unlink(prefix + "firewall.lock");
+		t.assert_deep_equal(ok, { global: true, firewall: true }, "the child still holds a lock");
+	});
+});
