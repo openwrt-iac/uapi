@@ -25,7 +25,7 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
 /usr/share/uapi/lib/*.uc                 every module in src/lib (the install globs
                                           the directory, so this needs no list here)
 /usr/share/uapi/resources/*.uc           curated resource modules
-/usr/share/uapi/openapi.json             generated OpenAPI 3.1 spec
+/usr/share/uapi/openapi.json             generated OpenAPI 3.1 spec, without whitespace
 /usr/bin/uapi-token                      token CLI
 /etc/config/uapi                         conffile (mode 0600, conffile-marked)
 /etc/uci-defaults/99-uapi                one-shot install hook
@@ -71,6 +71,8 @@ Adjust `targets/x86/64` for your target architecture if cross-compiling for some
 make openapi   # regenerate build/openapi.json
 make stage     # populate build/openwrt/uapi/files/
 ```
+
+`make stage` needs `python3`, which the OpenWrt SDK requires on the host too. `tools/compact_json.py` writes the spec into the package without whitespace, and the stage fails unless that copy parses to the same JSON value as `build/openapi.json`, with the keys in the same order. `main.uc` reads the file whole into every request process that serves `GET /api/v3/openapi.json`, and uhttpd does not compress it. The compact copy is about 30% smaller. `build/openapi.json` stays indented in the repository, because reviews read its diffs.
 
 ### 3. Build inside the SDK
 

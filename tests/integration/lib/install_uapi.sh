@@ -3,8 +3,10 @@ UAPI_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
 
 # Everything the box runs. Named once so the push and the fingerprint below
 # cannot drift apart and start attesting to a different set of files than the
-# one actually installed.
-PUSH_PATHS="src/main.uc src/raw.uc build/openapi.json VERSION cli/uapi-token src/lib src/resources"
+# one actually installed. The spec goes over on its own, as the compact copy
+# that the package installs, and the fingerprint covers what that copy is made of.
+PUSH_PATHS="src/main.uc src/raw.uc VERSION cli/uapi-token src/lib src/resources"
+SPEC_INPUTS="build/openapi.json tools/compact_json.py"
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -30,11 +32,11 @@ ensure_wireless_radio() {
 # fingerprint across runs.
 source_fingerprint() {
 	# shellcheck disable=SC2086
-	find $PUSH_PATHS -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
+	find $PUSH_PATHS $SPEC_INPUTS -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
 }
 
-# Bootstrap: install deps, push every source file in a single tar stream, wire
-# the uhttpd prefix, restart. Each request to /api/v3 forks a fresh ucode child
+# Bootstrap: install deps, push every source file in a single tar stream and
+# the compact spec after it, wire the uhttpd prefix, restart. Each request to /api/v3 forks a fresh ucode child
 # that reads the on-disk source, so per-test isolation only needs a clean token
 # store, not a re-copy of the source tree.
 #
@@ -45,7 +47,7 @@ source_fingerprint() {
 # that way looked exactly like a real pass. Recording the fingerprint also
 # makes an edit-then-rerun cycle correct rather than merely fast.
 bootstrap_uapi() {
-	local want installed
+	local want installed spec
 	want=$(source_fingerprint)
 	installed=$($SSH 'cat /var/run/uapi-bootstrapped 2>/dev/null' 2>/dev/null || true)
 	if [ "$want" = "$installed" ] && [ -z "${UAPI_FORCE_BOOTSTRAP:-}" ]; then
@@ -61,7 +63,6 @@ bootstrap_uapi() {
 			tar x -C /tmp/uapi-bundle &&
 			cp /tmp/uapi-bundle/src/main.uc /usr/share/uapi/main.uc &&
 			cp /tmp/uapi-bundle/src/raw.uc /usr/share/uapi/raw.uc &&
-			cp /tmp/uapi-bundle/build/openapi.json /usr/share/uapi/openapi.json &&
 			cp /tmp/uapi-bundle/VERSION /usr/share/uapi/VERSION &&
 			cp /tmp/uapi-bundle/src/lib/*.uc /usr/share/uapi/lib/ &&
 			cp /tmp/uapi-bundle/src/resources/*.uc /usr/share/uapi/resources/ &&
@@ -72,6 +73,14 @@ bootstrap_uapi() {
 	then
 		fail "pushing the uapi source to the test box failed; the box still runs whatever it had"
 	fi
+	spec=$(mktemp)
+	if ! python3 tools/compact_json.py build/openapi.json "$spec" \
+		|| ! push_file_to_vm "$spec" /usr/share/uapi/openapi.json
+	then
+		rm -f "$spec"
+		fail "pushing the compact spec to the test box failed, so the box still serves whatever spec it had"
+	fi
+	rm -f "$spec"
 
 	# The fingerprint is written last and only on success, so a push that dies
 	# halfway leaves no claim about what is installed and the next run retries.

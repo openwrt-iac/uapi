@@ -83,7 +83,7 @@ stage:
 	@cp src/main.uc src/raw.uc      build/openwrt/uapi/files/usr/share/uapi/
 	@cp src/lib/*.uc                build/openwrt/uapi/files/usr/share/uapi/lib/
 	@cp src/resources/*.uc          build/openwrt/uapi/files/usr/share/uapi/resources/
-	@cp build/openapi.json          build/openwrt/uapi/files/usr/share/uapi/openapi.json
+	@python3 tools/compact_json.py build/openapi.json build/openwrt/uapi/files/usr/share/uapi/openapi.json
 	@cp VERSION                     build/openwrt/uapi/files/usr/share/uapi/VERSION
 	@cp VERSION                     build/openwrt/uapi/files/VERSION
 	@cp cli/uapi-token              build/openwrt/uapi/files/usr/bin/uapi-token
