@@ -663,8 +663,8 @@ All notable changes to this project will be documented in this file. Format foll
   waits 2 s for each unbound instance to keep running. The restore runs the same check, so a
   restore that does not bring unbound back answers `reload_failed_unrecovered`. This applies to
   `unbound/server`, `unbound/srv`, `unbound/ext`, a `/batch` that holds one of them, and a raw
-  write to the `unbound` package. These writes take 2 s longer. A write to `unbound_srv` or
-  `unbound_ext` also takes the lock of the `unbound` package, so two writes that restart unbound at
+  write to the `unbound` package. These writes take 2 s longer. A write to `unbound/srv` or
+  `unbound/ext` also takes the lock of the `unbound` package, so two writes that restart unbound at
   the same time answer `423 locked` for the second, as two writes to one package do. A write that
   answered 200 and left unbound down now answers 500, which is the tightening carve-out of
   `docs/versioning.md`. (#259)
