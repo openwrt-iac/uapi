@@ -45,7 +45,10 @@ All notable changes to this project will be documented in this file. Format foll
   limit of NAS-Identifier, on an EAP access point. It refuses a `mobility_domain` other than 4 hex
   digits, an `r1_key_holder` other than 12, and an entry that hostapd cannot parse while hostapd
   reads the key holder lists, which it does with owe too. hostapd refuses its whole config for any
-  of these three. It refuses `ieee80211r` with owe on an access point: owe gets no fast transition, and
+  of these three. hostapd needs the form of `mobility_domain` only with 802.11r. With `fils`, which
+  uapi does not model, wifi-scripts also gives the value to hostapd as the EAP domain of an access
+  point, which takes any form, so a newline or a length in it counts there too, and its form does
+  not (#273). It refuses `ieee80211r` with owe on an access point: owe gets no fast transition, and
   wifi-scripts reports the setup as failed unless both key holder lists are set. wifi-scripts stops
   the setup of the radio, with all its SSIDs, for a `reassociation_deadline` outside 1000 to 65535
   on any enabled SSID that it sets up, so a write refuses such a value, and a negative
@@ -885,14 +888,6 @@ All notable changes to this project will be documented in this file. Format foll
   sent that delete even when the section did not hold the option. The bus counts a delete as a
   write, so the commit wrote the package again, which drops its comments. A PATCH now skips the
   delete of an option that the section does not hold. No request, response or header changes. (#272)
-- **A stored `wireless/interfaces.mobility_domain` that is not 4 hex digits blocks a write only with
-  802.11r.** Enabling an EAP access point that held such a value with 802.11r off answered 422
-  `invalid_format`. hostapd needs 4 hex digits only for the mobility domain of 802.11r. With `fils`,
-  which uapi does not model, wifi-scripts also gives the value to hostapd as the EAP domain of an
-  access point, which takes any form. LuCI offers the field only with 802.11r. A write that sends a
-  value in another form is still refused, and a stored newline or a value over 1024 bytes still
-  blocks an EAP access point. This only widens what a write takes, and the field is new in this
-  release. (#273)
 - **A write that sends `wireless/interfaces.mode` as null answers 422 `required`.** In 3.1.0, a
   merge PATCH of `{"mode": null}`, a PUT with a null mode, or a JSON Patch that removes `/mode` or
   replaces it with null removed the mode. wifi-scripts then set up no interface, while every read
