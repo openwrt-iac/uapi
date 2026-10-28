@@ -816,13 +816,35 @@ All notable changes to this project will be documented in this file. Format foll
   reap after their commit. It removes the rate-limit bucket and the marker of every token that no
   longer authenticates, because it is revoked, expired or deleted by hand, and it folds each series
   of such a token into the series with the same other labels and `token_id="-retired"`, which no
-  token can be named. The count is added there, so a sum over `token_id` never falls, and the
-  requests of a token that no scrape saw twice still reach Prometheus. The metrics output changes: a
-  scrape after a fold no longer shows the series of the token and shows a `-retired` series, and
-  `rate()` reads the fold as requests at that moment, so a `sum(rate())` over `token_id` shows a
-  spike after a mint or a revoke. `docs/operations.md` § Metrics has the details. A token with no
-  expiry that is never revoked keeps its files. The reap runs after the commit and under the `uapi`
-  lock. No request, response or header changes. (#269)
+  token can be named. The count is added there, and the series of the token is deleted once that
+  count is on disk. So a sum over `token_id` keeps its value across a fold, except in a scrape that
+  overlaps the fold and in the cases that `docs/operations.md` § Metrics lists, and the requests of
+  a token that no scrape saw twice reach Prometheus once a `-retired` series exists for their
+  labels. The metrics output changes: a scrape after a fold no longer shows the series of the token
+  and shows a `-retired` series, and `rate()` reads the fold as requests at that moment, so a
+  `sum(rate())` over `token_id` shows a spike after a mint or a revoke. A token with no expiry that
+  is never revoked keeps its files. The reap runs after the commit and under the `uapi` lock. No
+  request, response or header changes. (#269)
+- **A metrics counter that a full `/tmp` could not write no longer reads 0 until a reboot.** The
+  write of a counter checked only its rename, and ucode does not report the failed close, so on a
+  full `/tmp` the rename put an empty file over the counter. The counter then read as NaN, printed
+  as 0, and every later increment wrote NaN again. A counter is now renamed into place only when its
+  size on disk is the size of its line, a counter file that holds no count is left out of a scrape
+  and starts again at its next increment, which Prometheus reads as a reset, and a fold into
+  `token_id="-retired"` deletes the series of a token only once its count is added. (#269)
+- **Every path that no route serves is recorded as `path="unmatched"` in the metrics.** A request
+  with no token could add metric files in `/tmp/uapi-metrics`, which is RAM, until a reboot. The
+  `path` label now names the route that serves a path, with `:id` for each parameter, a `/raw` path
+  keeps its package only when `/etc/config` holds it, and every other path has the one label
+  `unmatched`. The label of each route is the one it had. The metrics output changes for the paths
+  that no route serves, such as `/` and `/auth`, which had their own label. (#269)
+- **`uapi-token create` and `revoke` take the lock of the `uapi` package.** A write of `uapi-token`
+  and a write of the HTTP path to `/etc/config/uapi` at the same moment could lose one of them, a
+  revoke included. Both commands now take the locks that an HTTP write of the token store takes,
+  load the package only then, and wait up to 10 s for the locks. When a lock is still held after 10
+  s, the command names it and exits 75 (`EX_TEMPFAIL`), having written nothing. `uapi-token create`
+  prints the bearer before its reap, so an interrupt during the reap cannot lose the bearer of a
+  committed token. `docs/tokens.md` has the details. (#269)
 - **A request that uhttpd kills no longer leaves its lock to the processes it started.** The lock
   files were opened without `O_CLOEXEC`, so every child started under a lock, such as an init
   script, `apk`, `passwd`, `wg` or `ip`, held a copy of the descriptor, and an flock belongs to the

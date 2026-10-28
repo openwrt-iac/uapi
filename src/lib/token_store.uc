@@ -166,11 +166,12 @@ function reap_state(tokens, now) {
 		if (!live[name]) fs.unlink(LAST_USED_DIR + "/" + name);
 }
 
-// The reap runs as the reload, which is the step after the commit and under the uapi lock.
-// Before the commit, a commit that fails would lose the state of a token that still
-// authenticates. Outside the lock, two reaps could fold into one counter at once and lose a
-// count. A throw would answer 500 for a write that is committed, and the next mint or revoke
-// reaps what this one left, so it is swallowed.
+// The reap runs as the reload, which is the step after the commit and under the uapi lock,
+// which uapi-token takes too. Before the commit, a commit that fails would lose the state of a
+// token that still authenticates. Outside the lock, two reaps could both read a series before
+// either unlinks it and count it twice, or lose an update of -retired, which then falls, and
+// Prometheus reads a fall as a reset. A throw would answer 500 for a write that is committed,
+// and the next mint or revoke reaps what this one left, so it is swallowed.
 function reap_on_commit(conn, now) {
 	return function() {
 		try { reap_state(list_public(conn), now); } catch (_) {}

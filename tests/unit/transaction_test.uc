@@ -773,49 +773,74 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 	});
 });
 
+function lock_is_free(path) {
+	let fd = fs.open(path, "r");
+	let ok = fd.lock("xn") === true;
+	fd.close();
+	return ok;
+}
+
 // uhttpd SIGKILLs a request when its client goes away or its script timeout runs out, so no
-// release runs. A child that the request started under the lock had a copy of the lock fd, and
-// the lock stayed taken until that child exited. A release only closes the fd, as an exit does,
-// so a lock that is free after the release, while the child still runs, is free after a kill.
-t.describe('transaction, a child started under a lock', () => {
-	function background_child() {
-		let p = fs.popen("sleep 10 >/dev/null 2>&1 & echo $!", "r");
-		let pid = trim(p.read("all"));
-		p.close();
-		return pid;
-	}
+// release runs. A child that the request started under the locks had a copy of their fds, and
+// the locks stayed taken until that child exited. This kills a process inside fn, as uhttpd
+// does, and looks at the locks while the child it started still runs.
+t.describe('transaction, a request killed under its locks', () => {
+	t.it('leaves no lock to the child it started', () => {
+		let global = "/tmp/uapi-test-kill-g.lock", prefix = "/tmp/uapi-test-kill-pkg.";
+		let script = "/tmp/uapi-test-kill.uc", pidfile = "/tmp/uapi-test-kill.pid";
+		fs.unlink(pidfile);
+		fs.writefile(script, join("\n", [
+			"let tx = require('transaction'), bus = require('bus');",
+			sprintf("let paths = %J;", { global, prefix, pidfile }),
+			"tx.multi_transaction(bus.stub({ uci: { firewall: { d: { '.type': 'defaults' } } } }), {",
+			"	packages: [ 'firewall' ], lock_path: paths.global, pkg_lock_prefix: paths.prefix,",
+			"	check_services: () => null, reload: () => null,",
+			"	fn: () => system('sleep 30 >/dev/null 2>&1 & echo $! > ' + paths.pidfile + '; kill -9 $PPID'),",
+			"});",
+		]) + "\n");
+		system("ucode -L src/lib " + script + " >/dev/null 2>&1");
+		let pid = trim(fs.readfile(pidfile) ?? "");
+		let free = { global: lock_is_free(global), firewall: lock_is_free(prefix + "firewall.lock") };
+		if (pid != "") system("kill " + pid);
+		for (let f in [ script, pidfile, global, prefix + "firewall.lock" ]) fs.unlink(f);
+		t.assert_true(pid != "", "the killed process started no child");
+		t.assert_deep_equal(free, { global: true, firewall: true }, "the child still holds a lock");
+	});
+});
 
-	function free(path) {
-		let fd = fs.open(path, "r");
-		let ok = fd.lock("xn") === true;
-		fd.close();
-		return ok;
-	}
+t.describe('transaction.acquire_pkg_waiting', () => {
+	let global = "/tmp/uapi-test-wait-g.lock", prefix = "/tmp/uapi-test-wait-pkg.";
 
-	t.it('does not keep the global lock of with_lock', () => {
-		let path = "/tmp/uapi-test-cloexec-global.lock";
-		let pid;
-		tx.with_lock({ lock_path: path, fn: () => { pid = background_child(); } });
-		let ok = free(path);
-		system("kill " + pid);
-		fs.unlink(path);
-		t.assert_true(ok, "the child still holds the lock");
+	t.it('waits for a lock that its holder lets go', () => {
+		let script = "/tmp/uapi-test-wait-holder.uc";
+		fs.writefile(script, "let fs = require('fs'), f = fs.open(ARGV[0], 'w+');\n"
+			+ "f.lock('x'); print('held\\n'); fs.stdout.flush(); sleep(300);\n");
+		let holder = fs.popen("ucode " + script + " " + prefix + "uapi.lock", "r");
+		let held = holder.read("line");
+		let start = clock(true);
+		let lock = tx.acquire_pkg_waiting("uapi", 3000, global, prefix);
+		let end = clock(true);
+		holder.close();
+		fs.unlink(script);
+		let waited_ms = (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000;
+		tx.default_release_pkg(lock);
+		for (let f in [ global, prefix + "uapi.lock" ]) fs.unlink(f);
+		t.assert_equal(held, "held\n");
+		t.assert_true(lock._g != null, sprintf("the wait answered %J", lock));
+		t.assert_true(waited_ms >= 100, sprintf("the lock was free after %d ms", waited_ms));
 	});
 
-	t.it('does not keep the global or package locks of multi_transaction', () => {
-		let global = "/tmp/uapi-test-cloexec-g.lock", prefix = "/tmp/uapi-test-cloexec-pkg.";
-		let pid;
-		let r = tx.multi_transaction(ubus.stub({ uci: { firewall: { d: { '.type': 'defaults' } } } }), {
-			packages: [ "firewall" ], lock_path: global, pkg_lock_prefix: prefix,
-			check_services: noop_check,
-			reload: function() { pid = background_child(); return null; },
-			fn: (c) => ({ ok: true }),
-		});
-		t.assert_true(r.ok);
-		let ok = { global: free(global), firewall: free(prefix + "firewall.lock") };
-		system("kill " + pid);
-		fs.unlink(global);
-		fs.unlink(prefix + "firewall.lock");
-		t.assert_deep_equal(ok, { global: true, firewall: true }, "the child still holds a lock");
+	t.it('answers the contention once the wait has passed', () => {
+		let held = fs.open(prefix + "uapi.lock", "w+");
+		held.lock("xn");
+		let start = clock(true);
+		let lock = tx.acquire_pkg_waiting("uapi", 300, global, prefix);
+		let end = clock(true);
+		held.close();
+		tx.default_release_pkg(lock);
+		for (let f in [ global, prefix + "uapi.lock" ]) fs.unlink(f);
+		let waited_ms = (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000;
+		t.assert_deep_equal(lock, { contention: "package", package: "uapi" });
+		t.assert_true(waited_ms >= 300, sprintf("gave up after %d ms", waited_ms));
 	});
 });

@@ -131,6 +131,65 @@ t.describe('metrics.retire_tokens', () => {
 		t.assert_equal(requests_sum(out), 3, out);
 		t.assert_true(index(out, 'token_id="-retired"} 3\n') >= 0, out);
 	});
+
+	// ulimit -f 0 fails every write as a full /tmp does, and the close that would report it
+	// reports nothing. The rename then put an empty file over -retired, which read as 0.
+	t.it('keeps the series of a token when its count cannot be added to -retired', () => {
+		wipe();
+		for (let i = 0; i < 5; i++) metrics.record_request("GET", "/system", 200, 1, "run_0");
+		metrics.retire_tokens({});
+		metrics.record_request("GET", "/system", 200, 1, "run_1");
+		metrics.record_request("GET", "/system", 200, 1, "run_1");
+		let dir = "/tmp/uapi-metrics/uapi_requests_total/method=GET/path=%2Fsystem/status=200/";
+		let script = "/tmp/uapi-test-metrics-full.uc";
+		fs.writefile(script, "require('metrics').retire_tokens({});\n");
+		system("trap '' XFSZ; ulimit -f 0; exec ucode -L src/lib " + script + " >/dev/null 2>&1");
+		fs.unlink(script);
+		t.assert_equal(fs.readfile(dir + "token_id=-retired.txt"), "5\n");
+		t.assert_equal(fs.readfile(dir + "token_id=run_1.txt"), "2\n");
+		t.assert_equal(fs.stat(dir + "token_id=-retired.txt.tmp"), null);
+		metrics.retire_tokens({});
+		t.assert_equal(fs.readfile(dir + "token_id=-retired.txt"), "7\n");
+		t.assert_equal(fs.stat(dir + "token_id=run_1.txt"), null);
+	});
+});
+
+t.describe('metrics, a counter file that holds no count', () => {
+	t.it('is left out of the scrape and starts again at the next increment', () => {
+		wipe();
+		metrics.inc("c", { x: "a" }, 4);
+		fs.writefile("/tmp/uapi-metrics/c/x=a.txt", "NaN\n");
+		t.assert_equal(index(metrics.format_prometheus(), "c{"), -1);
+		metrics.inc("c", { x: "a" }, 1);
+		t.assert_true(index(metrics.format_prometheus(), 'c{x="a"} 1\n') >= 0);
+	});
+});
+
+t.describe('metrics.path_label', () => {
+	let routes = {
+		labels: { "/firewall/rules": true, "/firewall/rules/:id": true,
+		          "/firewall/rules/:id/adopt": true, "/tokens/:id": true },
+		raw_package: (p) => p == "firewall",
+	};
+	function label(path) {
+		return metrics.path_label(filter(split(path, "/"), (s) => s != ""), routes);
+	}
+
+	t.it('labels a route with each of its parameters as :id', () => {
+		t.assert_equal(label("/firewall/rules/r_01ABC"), "/firewall/rules/:id");
+		t.assert_equal(label("/firewall/rules/r_01ABC/adopt"), "/firewall/rules/:id/adopt");
+		t.assert_equal(label("/tokens/run_1"), "/tokens/:id");
+		t.assert_equal(label("/raw/firewall/cfg01"), "/raw/firewall/:id");
+	});
+
+	t.it('records one label set for paths that no route serves', () => {
+		wipe();
+		for (let p in [ "/nope_1", "/nope_2/x", "/raw/nope/x", "/firewall/rules/x/y", "/tokens/a/b", "/" ])
+			metrics.record_request("GET", label(p), 401, 1, null);
+		let lines = filter(split(metrics.format_prometheus(), "\n"), (l) => match(l, /^uapi_requests_total\{/));
+		t.assert_deep_equal(lines,
+			[ 'uapi_requests_total{method="GET",path="unmatched",status="401",token_id="-"} 6' ]);
+	});
 });
 
 t.describe('metrics.record_validate_error and record_lock_contention', () => {

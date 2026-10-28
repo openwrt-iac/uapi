@@ -482,8 +482,9 @@ stale enough to be misleading:
   revoke that dropped its rate-limit bucket before the commit are fixed (#267). The
   restore replaces the package with a rename, and the uci cursor no longer reads or
   commits what a shell staged (#268). The lock files close on exec, so a request that
-  uhttpd kills no longer leaves its lock to the children it started, and a mint or a
-  revoke reaps the files in tmpfs of the tokens that no longer authenticate (#269).
+  uhttpd kills no longer leaves its lock to the children it started, a mint or a revoke
+  reaps the files in tmpfs of the tokens that no longer authenticate, a path that no
+  route serves adds no metric files, and `uapi-token` takes the uapi lock (#269).
 
 ## Objectives for the next major
 

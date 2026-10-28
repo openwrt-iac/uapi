@@ -466,17 +466,27 @@ filenames safe; decoded back when emitting. Increments are read-modify-write
 with atomic rename; concurrent forks may lose increments under heavy
 contention - acceptable for operational metrics, not for billing.
 
-A token mint and a token revoke, after their commit and under the `uapi`
-lock, run `token_store.reap_state`: the bucket and the last-used sentinel of
-each token that no longer authenticates are unlinked, and each of its
-`uapi_requests_total` and `uapi_rate_limit_drops_total` files is added to the
-file with the same other labels and `token_id=-retired`, then unlinked.
+A token mint and a token revoke, over HTTP and with `uapi-token`, run
+`token_store.reap_state` after their commit and under the lock of the
+`uapi` package: the bucket and the last-used sentinel of each token that no
+longer authenticates are unlinked, and each of its `uapi_requests_total`
+and `uapi_rate_limit_drops_total` files is added to the file with the same
+other labels and `token_id=-retired`, then unlinked once the add is on
+disk. A token that revokes itself records its revoke after the fold, and a
+request of a token in flight at its revoke can write its bucket, sentinel
+or series after the reap, so those wait for the next mint or revoke.
 `docs/operations.md` § Metrics says what a scrape sees.
+
+A counter is written to a temp file, which is renamed over it only when
+its size on disk is the size of the line, and a counter file that holds no
+count is left out of a scrape and starts again at its next increment.
 
 `GET /metrics` walks the tree, decodes the labels, emits Prometheus 0.0.4
 text. Path templates are normalized (`/firewall/rules/:id` not
 `/firewall/rules/r_01HX...`) to keep cardinality bounded as clients
-create/destroy resources.
+create/destroy resources. A path that no route serves is recorded as
+`path="unmatched"`, and a `/raw` path keeps its package only when
+`/etc/config` holds it (`metrics.path_label`).
 
 ## Idempotency cache
 
@@ -543,10 +553,10 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
-| Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Until the first mint or revoke after the token is revoked or expires, else until reboot |
+| Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
 | Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, removed by the next store after that |
-| Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires |
-| Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot |
+| Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
+| Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |

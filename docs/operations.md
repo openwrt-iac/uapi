@@ -167,7 +167,7 @@ Series:
 
 | Series | Type | Labels |
 |---|---|---|
-| `uapi_requests_total` | counter | `method`, `path` (template, e.g. `/firewall/rules/:id`), `status`, `token_id` (`-` if pre-auth, `-retired` for tokens that no longer authenticate) |
+| `uapi_requests_total` | counter | `method`, `path` (template, e.g. `/firewall/rules/:id`, or `unmatched`), `status`, `token_id` (`-` if pre-auth, `-retired` for tokens that no longer authenticate) |
 | `uapi_request_duration_seconds_bucket` | histogram | `method`, `path`, `le` |
 | `uapi_request_duration_seconds_count` | counter | `method`, `path` |
 | `uapi_rate_limit_drops_total` | counter | `token_id` (`-retired` as above) |
@@ -176,33 +176,57 @@ Series:
 
 Path templates are normalized (`/firewall/rules/:id` not the concrete
 ULID) to keep label cardinality bounded as clients create/destroy
-resources. Pre-auth failures (401 before authorize completes) carry
-`token_id="-"` so the series row still aggregates.
+resources. A path that no route serves records `path="unmatched"`, and a
+`/raw` path keeps its package only when `/etc/config` holds it. Pre-auth
+failures (401 before authorize completes) carry `token_id="-"` so the
+series row still aggregates. A counter file that holds no count, which a
+full `/tmp` could leave behind, is left out of a scrape and starts again
+at its next increment.
 
 The `token_id` label is not bounded by the operator, because a client can
 mint a token per run, as the Terraform provider's ephemeral `uapi_token`
-does. A mint and a revoke bound it, over HTTP and with `uapi-token`. After
-its commit, each one folds every series of a token that no longer
-authenticates (revoked, expired, or deleted from `/etc/config/uapi` by hand)
-into the series with the same other labels and `token_id="-retired"`, which
-no token can be named. The count is added there and the token's file is
-deleted. The values of `token_id` are then the tokens that still
-authenticated at the last mint or revoke, plus `-` and `-retired`. A client that mints tokens with no expiry and
-never revokes them keeps every one of them live, and nothing bounds those.
+does. A mint and a revoke bound it, over HTTP and with `uapi-token`, under
+the lock of the `uapi` package. After its commit, each one folds every
+series of a token that no longer authenticates (revoked, expired, or
+deleted from `/etc/config/uapi` by hand) into the series with the same
+other labels and `token_id="-retired"`, which no token can be named. The
+count is added there, and the token's file is deleted once the added count
+is on disk. The values of `token_id` are then the tokens that still
+authenticated at the last mint or revoke, `-` and `-retired`, and two kinds
+that the next mint or revoke folds: a token that revoked itself, as its
+revoke is recorded after the fold, and a token with a request in flight
+at its revoke. A client that mints tokens with no expiry and never revokes
+them keeps every one of them live, and nothing bounds those.
 
 What a scrape sees at a fold: the token's series is gone, and the
 `-retired` series of the same method, path and status has grown by the
-token's count. A sum over `token_id`, such as
-`sum without (token_id) (uapi_requests_total)`, never falls, and the
-requests of a token that a scrape saw once or never, which is usual for a
-token per run, reach Prometheus through `-retired`. The cost is with
-`rate()`: it reads the fold as requests at the moment of the fold, so
-`sum(rate(uapi_requests_total[5m]))` shows a spike after a mint or a revoke, and
-counts a second time the part of a token's requests that its own series
-already showed. For a long-lived token that is revoked, that is most of its
-history at once. Deleting the series instead would have kept the requests of
-a short-lived token out of `rate()`, and made each sum fall at a revoke,
-which a recording rule that sums before `rate()` reads as a counter reset.
+token's count. Folds run one at a time under the lock, so none of them
+loses an update of `-retired`. A sum over `token_id`, such as
+`sum without (token_id) (uapi_requests_total)`, keeps its value across a
+fold, with three exceptions:
+
+- A scrape that overlaps a fold can count the token twice, or leave it
+  out, and a recording rule that sums before `rate()` reads the second
+  case as a counter reset.
+- A request of the token that is in flight at its revoke can write the
+  token's series again after the fold, and the next fold adds that count
+  again, so it is counted twice.
+- A kill between the add and the delete counts the token twice at the
+  next fold in the same way.
+
+The requests of a token that a scrape saw once or never, which is usual
+for a token per run, reach Prometheus through `-retired`, but only once
+that series exists. The first fold into a label set creates the `-retired`
+series at the token's count, and `rate()` does not count the first value
+of a series, so those requests show only in the sum. The cost is with
+`rate()`: it reads each later fold as requests at the moment of the fold,
+so `sum(rate(uapi_requests_total[5m]))` shows a spike after a mint or a
+revoke, and counts a second time the part of a token's requests that its
+own series already showed. For a long-lived token that is revoked, that is
+most of its history at once. Deleting the series instead would have kept
+the requests of a short-lived token out of `rate()`, and made each sum
+fall at a revoke, which a recording rule that sums before `rate()` reads
+as a counter reset.
 
 Sample Prometheus scrape config:
 

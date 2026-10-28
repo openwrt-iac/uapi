@@ -13,13 +13,27 @@ SSH="tests/vm/ssh.sh"
 cleanup_tokens() {
 	$SSH 'uapi-token revoke api_minted 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_shortlived 2>/dev/null || true'
+	$SSH 'uapi-token revoke api_shortlived_b 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_lan_only 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_rate_limited 2>/dev/null || true'
 	$SSH 'uapi-token revoke api_strict_rl 2>/dev/null || true'
 	$SSH 'uapi-token revoke cli_rl 2>/dev/null || true'
+	$SSH 'uapi-token revoke cli_wait 2>/dev/null || true'
 }
 trap cleanup_tokens EXIT INT TERM
 cleanup_tokens
+
+requests() {
+	echo "$1" | awk -v s="token_id=\"$2\"}" \
+		'index($1, "uapi_requests_total{") == 1 && index($1, s) > 0 { n += $2 } END { print n + 0 }'
+}
+
+# A reap keeps the state of a token that still authenticates.
+live_kept() {
+	$SSH "test -e /var/run/uapi-token-update/$1" || fail "$2 removed the last-used marker of the live token $1"
+	curl -sS -H "$ADMIN" "$URL/metrics" | grep -q "token_id=\"$1\"" \
+		|| fail "$2 removed the series of the live token $1"
+}
 
 echo "--- GET /tokens (admin lists tokens) ---"
 status=$(curl -sS -o /tmp/uapi_tokens_list.json -w '%{http_code}' -H "$ADMIN" "$URL/tokens")
@@ -71,16 +85,20 @@ echo "--- a token read and revoked by position is named, and its bucket, marker 
 	|| fail "GET /tokens/@token[-1] did not name api_shortlived"
 $SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to reap"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" || fail "api_shortlived has no marker to reap"
-curl -sS -H "$ADMIN" "$URL/metrics" | grep -q 'token_id="api_shortlived"' \
-	|| fail "api_shortlived has no series to fold"
+# The mint of api_shortlived reaped every other token that no longer authenticates, so its
+# series are the only ones that this revoke folds.
+before=$(curl -sS -H "$ADMIN" "$URL/metrics")
+[ "$(requests "$before" api_shortlived)" -gt 0 ] || fail "api_shortlived has no series to fold"
+want=$(( $(requests "$before" api_shortlived) + $(requests "$before" -retired) ))
 status=$(curl -sS -g -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/tokens/@token[-1]")
 [ "$status" = "204" ] || fail "DELETE /tokens/@token[-1] expected 204, got $status"
 $SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" && fail "the revoke by position left the bucket"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" && fail "the revoke left the last-used marker"
-metrics=$(curl -sS -H "$ADMIN" "$URL/metrics")
-echo "$metrics" | grep -q 'token_id="api_shortlived"' && fail "the revoke left the series of the token"
-echo "$metrics" | grep -q 'uapi_requests_total{.*token_id="-retired"}' \
-	|| fail "the revoke folded no series into token_id=\"-retired\""
+after=$(curl -sS -H "$ADMIN" "$URL/metrics")
+echo "$after" | grep -q 'token_id="api_shortlived"' && fail "the revoke left the series of the token"
+[ "$(requests "$after" -retired)" = "$want" ] \
+	|| fail "token_id=\"-retired\" holds $(requests "$after" -retired) requests, expected $want"
+live_kept api_minted "the revoke of api_shortlived"
 
 echo "--- DELETE /tokens/<id> returns 204 ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
@@ -123,6 +141,7 @@ $SSH "test -e /tmp/uapi-ratelimit/api_shortlived_b.txt" && fail "the mint left t
 $SSH "test -e /var/run/uapi-token-update/api_shortlived_b" && fail "the mint left the marker of an expired token"
 curl -sS -H "$ADMIN" "$URL/metrics" | grep -q 'token_id="api_shortlived_b"' \
 	&& fail "the mint left the series of an expired token"
+live_kept test_admin "the mint of api_lan_only"
 $SSH 'uapi-token revoke api_shortlived_b 2>/dev/null || true'
 status=$(curl -sS -o /tmp/uapi_ip_body.json -w '%{http_code}' \
 	-H "Authorization: Bearer $ip_bearer" "$URL/firewall/rules")
@@ -210,11 +229,30 @@ after=$(curl -sS -H "$ADMIN" "$URL/metrics")
 echo "$after" | grep -q 'token_id="api_strict_rl"' && fail "uapi-token revoke left the series of the token"
 [ "$(drops "$after" -retired)" = "$want" ] \
 	|| fail "token_id=\"-retired\" holds $(drops "$after" -retired) drops, expected $want"
+live_kept test_admin "uapi-token revoke api_strict_rl"
 
 echo "--- uapi-token create --rate / --burst persists overrides via CLI ---"
 $SSH "uapi-token create --name cli_rl --scope '*:ro' --rate 5 --burst 9" >/dev/null
 [ "$($SSH 'uci get uapi.cli_rl.rate')" = "5" ] || fail "CLI --rate not persisted"
 [ "$($SSH 'uci get uapi.cli_rl.burst')" = "9" ] || fail "CLI --burst not persisted"
 $SSH "uapi-token revoke cli_rl 2>/dev/null || true"
+
+echo "--- uapi-token waits for the lock of the uapi package, and exits 75 when it stays held ---"
+$SSH 'flock -nx /var/lock/uapi.pkg.uapi.lock -c "sleep 2" >/dev/null 2>&1 &' &
+sleep 1
+$SSH "uapi-token create --name cli_wait --scope '*:ro'" >/dev/null 2>&1 \
+	|| fail "uapi-token create did not wait for the lock of the uapi package"
+wait
+[ "$($SSH 'uci -q get uapi.cli_wait')" = "token" ] || fail "uapi-token create stored no cli_wait"
+$SSH 'flock -nx /var/lock/uapi.pkg.uapi.lock -c "sleep 12" >/dev/null 2>&1 &' &
+sleep 1
+code=0
+$SSH 'uapi-token revoke cli_wait' >/tmp/uapi_cli_wait.out 2>&1 || code=$?
+[ "$code" = "75" ] || fail "uapi-token revoke under a held lock exited $code, expected 75"
+grep -q 'lock of the uapi package' /tmp/uapi_cli_wait.out \
+	|| fail "the exit 75 named no lock: $(cat /tmp/uapi_cli_wait.out)"
+[ "$($SSH 'uci -q get uapi.cli_wait')" = "token" ] || fail "the refused revoke removed cli_wait"
+wait
+$SSH 'uapi-token revoke cli_wait' >/dev/null 2>&1 || fail "uapi-token revoke failed once the lock was free"
 
 echo "tokens route + expiry + IP scoping + per-token rate/burst ok."

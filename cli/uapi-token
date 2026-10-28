@@ -10,6 +10,7 @@ let digest = require('digest');
 let scope = require('scope');
 let values = require('values');
 let token_store = require('token_store');
+let transaction = require('transaction');
 
 const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
@@ -84,10 +85,31 @@ function parse_args() {
 	return { cmd, opts };
 }
 
-// The reap that the HTTP mint and revoke run after their commit. This command writes through
-// its own uci cursor rather than token_store.create() and remove(), so that it works with ubus
-// down, and it takes no uapi lock, so a reap here and one over HTTP at the same moment can lose
-// a count of a folded series. A failed reap must not read as a failed revoke, and the next
+// The HTTP path writes /etc/config/uapi under the locks of a uci transaction on the package, and
+// a write here outside them could lose one of the two writes. So create and revoke take the same
+// locks before they create their cursor, which loads the package. An HTTP writer holds them for
+// milliseconds, which the wait covers. A writer that holds the global lock for longer, such as
+// apk, makes the command exit 75 (EX_TEMPFAIL), which a script can retry on, rather than hang a
+// shell with no output. A die() under the locks ends the process, and the exit releases them.
+const LOCK_WAIT_MS = 10000;
+
+function with_uapi_lock(fn) {
+	let lock = transaction.acquire_pkg_waiting(PACKAGE, LOCK_WAIT_MS);
+	if (lock.unavailable != null) die("uapi-token: cannot open the lock file " + lock.unavailable);
+	if (lock._g == null) {
+		fs.stderr.write(sprintf("uapi-token: %s, and it was still held after %d s. Try again.\n",
+			(lock.contention == "global") ? "a non-uci write holds the global write lock"
+			                              : "another write holds the lock of the uapi package",
+			LOCK_WAIT_MS / 1000));
+		exit(75);
+	}
+	fn();
+	transaction.default_release_pkg(lock);
+}
+
+// The reap that the HTTP mint and revoke run after their commit, under the same locks. This
+// command writes through its own uci cursor rather than token_store.create() and remove(), so
+// that it works with ubus down. A failed reap must not read as a failed revoke, and the next
 // mint or revoke reaps what it left.
 function reap(cursor) {
 	let tokens = [];
@@ -123,41 +145,46 @@ function cmd_create(opts) {
 			die(sprintf("uapi-token create: %J is not a valid IPv4 or IPv6 CIDR", c));
 	}
 
-	ensure_package();
-	let cursor = uci_mod.cursor();
+	with_uapi_lock(function() {
+		ensure_package();
+		let cursor = uci_mod.cursor();
 
-	let exists_already = false;
-	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
-		if (s['.name'] == opts.name) { exists_already = true; return false; }
+		let exists_already = false;
+		cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
+			if (s['.name'] == opts.name) { exists_already = true; return false; }
+		});
+		if (exists_already)
+			die(sprintf("uapi-token create: token %J already exists", opts.name));
+
+		let bearer = random_hex(16);
+		let salt = random_hex(8);
+		let hash = hash_bearer(salt, bearer);
+
+		cursor.set(PACKAGE, opts.name, TOKEN_TYPE);
+		cursor.set(PACKAGE, opts.name, "salt", salt);
+		cursor.set(PACKAGE, opts.name, "hash", hash);
+		cursor.set(PACKAGE, opts.name, "scopes", opts.scopes);
+		if (opts.expires_in_seconds != null) {
+			let now = time();
+			cursor.set(PACKAGE, opts.name, "expires_at", "" + (now + opts.expires_in_seconds));
+		}
+		if (length(opts.allowed_cidrs) > 0)
+			cursor.set(PACKAGE, opts.name, "allowed_cidrs", opts.allowed_cidrs);
+		if (opts.rate != null)
+			cursor.set(PACKAGE, opts.name, "rate", "" + opts.rate);
+		if (opts.burst != null)
+			cursor.set(PACKAGE, opts.name, "burst", "" + opts.burst);
+		cursor.commit(PACKAGE);
+
+		// Out before the reap, so that an interrupt there cannot lose the bearer of a token
+		// that is committed.
+		printf("%s\n", bearer);
+		fs.stdout.flush();
+		fs.stderr.write(sprintf(
+			"Token %J created. The cleartext value above is shown only once; store it now.\n",
+			opts.name));
+		reap(cursor);
 	});
-	if (exists_already)
-		die(sprintf("uapi-token create: token %J already exists", opts.name));
-
-	let bearer = random_hex(16);
-	let salt = random_hex(8);
-	let hash = hash_bearer(salt, bearer);
-
-	cursor.set(PACKAGE, opts.name, TOKEN_TYPE);
-	cursor.set(PACKAGE, opts.name, "salt", salt);
-	cursor.set(PACKAGE, opts.name, "hash", hash);
-	cursor.set(PACKAGE, opts.name, "scopes", opts.scopes);
-	if (opts.expires_in_seconds != null) {
-		let now = time();
-		cursor.set(PACKAGE, opts.name, "expires_at", "" + (now + opts.expires_in_seconds));
-	}
-	if (length(opts.allowed_cidrs) > 0)
-		cursor.set(PACKAGE, opts.name, "allowed_cidrs", opts.allowed_cidrs);
-	if (opts.rate != null)
-		cursor.set(PACKAGE, opts.name, "rate", "" + opts.rate);
-	if (opts.burst != null)
-		cursor.set(PACKAGE, opts.name, "burst", "" + opts.burst);
-	cursor.commit(PACKAGE);
-	reap(cursor);
-
-	printf("%s\n", bearer);
-	fs.stderr.write(sprintf(
-		"Token %J created. The cleartext value above is shown only once; store it now.\n",
-		opts.name));
 }
 
 function cmd_list() {
@@ -204,14 +231,16 @@ function cmd_scopes(opts) {
 function cmd_revoke(opts) {
 	let name = opts.positional[0];
 	if (!name) die("uapi-token revoke: name required");
-	let cursor = uci_mod.cursor();
-	let s = cursor.get_all(PACKAGE, name);
-	if (!s || s['.type'] != TOKEN_TYPE)
-		die(sprintf("uapi-token revoke: %J not found", name));
-	cursor.delete(PACKAGE, name);
-	cursor.commit(PACKAGE);
-	reap(cursor);
-	fs.stderr.write(sprintf("Revoked token %J\n", name));
+	with_uapi_lock(function() {
+		let cursor = uci_mod.cursor();
+		let s = cursor.get_all(PACKAGE, name);
+		if (!s || s['.type'] != TOKEN_TYPE)
+			die(sprintf("uapi-token revoke: %J not found", name));
+		cursor.delete(PACKAGE, name);
+		cursor.commit(PACKAGE);
+		fs.stderr.write(sprintf("Revoked token %J\n", name));
+		reap(cursor);
+	});
 }
 
 function print_help() {
