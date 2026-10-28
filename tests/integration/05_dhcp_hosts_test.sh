@@ -103,4 +103,22 @@ assert_dnsmasq_omits "set:a,ignore"
 assert_dnsmasq_loads
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$mt_id"
 
+echo "--- macs: a mac option reads as the words that dnsmasq.init splits it into ---"
+mm=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
+	"name": "multimac", "macs": ["aa:bb:cc:dd:ee:03"], "ip": "192.168.1.53"
+}')
+echo "$mm" | tail -1 | grep -q '^200$' || fail "POST for the macs case expected 200: $mm"
+mm_id=$(echo "$mm" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+$SSH "uci set dhcp.$mm_id.mac='00:11:22:33:44:55 00:11:22:33:44:66'; uci commit dhcp"
+view=$(call "$URL/dhcp/hosts/$mm_id" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '.macs')" = '["00:11:22:33:44:55","00:11:22:33:44:66"]' ] \
+	|| fail "the mac option read wrong: $view"
+put=$(call -X PUT -H 'Content-Type: application/json' "$URL/dhcp/hosts/$mm_id" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$put" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $put"
+stored=$($SSH "uci -q show dhcp.$mm_id.mac" || true)
+[ "$stored" = "dhcp.$mm_id.mac='00:11:22:33:44:55' '00:11:22:33:44:66'" ] || fail "PUT of the read stored $stored"
+assert_dnsmasq_emits "dhcp-host=00:11:22:33:44:55,00:11:22:33:44:66,192.168.1.53,multimac"
+assert_dnsmasq_loads
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$mm_id"
+
 echo "dhcp hosts CRUD ok"

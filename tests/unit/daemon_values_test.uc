@@ -191,3 +191,32 @@ t.describe('snmpd/accesses fields that snmpd.init needs', () => {
 		t.assert_equal(length(h().sweep(c)), 0);
 	});
 });
+
+// lldpd.init splits `interface` into words, and LuCI shows an option as its words. A read of
+// `option interface 'loopback lan'` as one entry broke the pattern of the field, so a JSON Patch
+// of any field of the singleton, and a merge PATCH of the read, answered 422.
+t.describe('lldpd/config interface held as one option', () => {
+	let lldpd = loadfile('src/resources/lldpd.config.uc')();
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make_singleton(lldpd, { tx });
+	const CTX = { request_id: "01hx0000000000000000000000" };
+	let stored = () => ubus.stub({ uci: { lldpd: {
+		config: { '.type': 'lldpd', '.anonymous': false, interface: 'loopback lan' },
+	} } });
+
+	t.it('reads as its words, and a JSON Patch or a merge PATCH of the read passes', () => {
+		let c = stored();
+		let body = h.get(c, CTX).body;
+		t.assert_deep_equal(body.interface, [ 'loopback', 'lan' ]);
+		t.assert_equal(h.patch(c, { ...CTX, json_patch: true },
+		                       [ { op: 'replace', path: '/enable_cdp', value: true } ]).status, 200);
+		delete body.runtime;
+		t.assert_equal(h.patch(c, CTX, body).status, 200);
+	});
+
+	t.it('stores a list when a write changes the entries', () => {
+		let c = stored();
+		t.assert_equal(h.patch(c, CTX, { interface: [ 'loopback', 'lan', 'wan' ] }).status, 200);
+		t.assert_deep_equal(c._state.uci.lldpd.config.interface, [ 'loopback', 'lan', 'wan' ]);
+	});
+});

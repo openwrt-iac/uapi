@@ -28,6 +28,17 @@ call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/$sid" -d '{
 # depend on the interface having an address.
 assert_dnsmasq_loads
 
+echo "--- dhcp/servers: a dhcp_option option reads as the words that dnsmasq.init splits it into ---"
+$SSH "uci set dhcp.$sid.dhcp_option='3,192.0.2.1 6,192.0.2.1'; uci commit dhcp"
+view=$(call "$URL/dhcp/servers/$sid" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '.dhcp_option')" = '["3,192.0.2.1","6,192.0.2.1"]' ] \
+	|| fail "the dhcp_option option read wrong: $view"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/dhcp/servers/$sid" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $r"
+stored=$($SSH "uci -q show dhcp.$sid.dhcp_option" || true)
+[ "$stored" = "dhcp.$sid.dhcp_option='3,192.0.2.1' '6,192.0.2.1'" ] || fail "PUT of the read stored $stored"
+assert_dnsmasq_loads
+
 echo "--- dhcp/servers: DELETE ---"
 call -X DELETE "$URL/dhcp/servers/$sid" | tail -1 | grep -q '^204$' || fail "DELETE servers expected 204"
 assert_dnsmasq_loads

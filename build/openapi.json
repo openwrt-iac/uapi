@@ -35947,7 +35947,7 @@
 							"ipv6",
 							null
 						],
-						"description": "Address family this interface tracks."
+						"description": "Address family this interface tracks. A null removes the option, and mwan3 then uses ipv4."
 					},
 					"track_ip": {
 						"type": [
@@ -36143,7 +36143,7 @@
 							"ipv6",
 							null
 						],
-						"description": "Address family this interface tracks."
+						"description": "Address family this interface tracks. A null removes the option, and mwan3 then uses ipv4."
 					},
 					"track_ip": {
 						"type": [

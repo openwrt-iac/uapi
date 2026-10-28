@@ -114,3 +114,29 @@ t.describe('dhcp.servers domain', () => {
 		t.assert_equal(c._state.uci.dhcp.lan.domain, 'lan home.arpa');
 	});
 });
+
+// dnsmasq.init splits an option into words and passes each entry of a list whole. A read of the
+// option as one entry made a PUT store it as one list entry, and dnsmasq refuses that line.
+t.describe('dhcp.servers dhcp_option', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(servers, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let stored = (v) => ubus.stub({ uci: {
+		dhcp: { lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', dhcp_option: v } },
+		network: { lan: { '.type': 'interface' } },
+	} });
+
+	t.it('reads an option as its words, and a PUT of the read stores them as a list', () => {
+		let c = stored('3,1.2.3.4 6,8.8.8.8');
+		let body = h.get_one(c, ctx, 'lan').body;
+		t.assert_deep_equal(body.dhcp_option, [ '3,1.2.3.4', '6,8.8.8.8' ]);
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx, 'lan', body).status, 200);
+		t.assert_deep_equal(c._state.uci.dhcp.lan.dhcp_option, [ '3,1.2.3.4', '6,8.8.8.8' ]);
+	});
+
+	t.it('reads each entry of a list whole', () => {
+		t.assert_deep_equal(h.get_one(stored([ '67,"a b"', '3,1.2.3.4' ]), ctx, 'lan').body.dhcp_option,
+		                    [ '67,"a b"', '3,1.2.3.4' ]);
+	});
+});

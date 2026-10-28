@@ -1,6 +1,5 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let as_list_or_null = values.as_list_or_null;
 let is_valid_ip = values.is_valid_ip;
 
 const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
@@ -22,7 +21,8 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		macs: as_list_or_null(section.mac),
+		// dnsmasq.init splits `mac` into words, so an option of several words holds several MACs.
+		macs: values.as_word_list_or_null(section.mac),
 		duid: section.duid ?? null,
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
@@ -45,7 +45,7 @@ function toUci(json) {
 	if (json.name != null) out.name = json.name;
 
 	// uci cannot hold a one-element list distinctly from a scalar, so a single mac is
-	// written as a scalar and read back through as_list_or_null as a one-element array.
+	// written as a scalar and read back through as_word_list_or_null as a one-element array.
 	if (type(json.macs) == "array" && length(json.macs) > 0)
 		out.mac = (length(json.macs) > 1) ? json.macs : json.macs[0];
 
