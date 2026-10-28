@@ -727,20 +727,22 @@ All notable changes to this project will be documented in this file. Format foll
   is `<Name>Request` itself, which has no `required` and no conditionals. This only widens the
   request schemas of PATCH, so it is not breaking under `docs/versioning.md`. (#258)
 - **A PATCH body takes null on the fields that the server removes for a null.** A merge patch
-  (RFC 7396) removes a field with null. The server skips a null in its type check, drops the field
-  in the merge and removes the uci option. But the PATCH bodies of the spec refused null on 100
-  fields, such as `enabled` of a firewall rule, its `match` and `match.family`, and the booleans
-  of the singletons. So a strict client refused a removal that the server accepts. Each
-  `<Name>Patch` now takes null on these fields, at the top level and in a nested object, and so
-  does the Request of each singleton, which is its PATCH body. An array still takes no null item,
-  because a merge patch replaces an array whole. Some fields keep their type, because a null does
-  not remove them. A PATCH ignores `id`. A null keeps a write-only secret, such as
-  `wireless/interfaces.key`. The server refuses a null with 422 for most fields that the Request
-  requires, such as `network/interfaces.proto`. A null `wireless/interfaces.mode` stores mode
-  `ap`. `<Name>Request` and `<Name>Response` of a CRUD resource do not change. This only widens
-  request schemas to bodies that the server already took with the same result, so it is not
-  breaking under `docs/versioning.md`. A generated client can get an optional type for the fields
-  of a singleton Request. (#263)
+  (RFC 7396) removes a field with null. The server skips a null in its type check, the merge sets
+  the field to null, and `toUci` leaves the option out, so the write removes it. But the PATCH
+  bodies of the spec refused null on 100 fields, such as `enabled` of a firewall rule, its `match`
+  and `match.family`, and the booleans of the singletons. So a strict client refused a removal
+  that the server accepts. Each `<Name>Patch` now takes null on these fields, at the top level and
+  in a nested object. A singleton now has a `<Name>Patch` too, built the same way, and it is the
+  PATCH body in place of `<Name>Request`, as #258 did for the CRUD resources. So a regenerated
+  client finds the PATCH type of a singleton under `<Name>Patch`. `<Name>Request` stays for a
+  client that names it. An array still takes no null item, because a merge patch replaces an array
+  whole. Some fields keep their Request type, because a null does not remove them. A PATCH ignores
+  `id`. A null keeps a write-only secret, such as `wireless/interfaces.key`. The server refuses a
+  null with 422 for a field that the Request requires, such as `network/interfaces.proto`, except
+  `mwan3/interfaces.family`, which its `validate()` does not require. A null
+  `wireless/interfaces.mode` stores mode `ap`. No `<Name>Request` and no `<Name>Response` changes.
+  Every PATCH body that was valid stays valid, so this is not breaking under `docs/versioning.md`.
+  (#263)
 
 ### Security
 

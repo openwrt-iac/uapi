@@ -3663,7 +3663,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/FirewallDefaultsRequest"
+								"$ref": "#/components/schemas/FirewallDefaultsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -10458,7 +10458,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/DhcpDnsmasqRequest"
+								"$ref": "#/components/schemas/DhcpDnsmasqPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -10637,7 +10637,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/DhcpOdhcpdRequest"
+								"$ref": "#/components/schemas/DhcpOdhcpdPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -10816,7 +10816,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/SystemRequest"
+								"$ref": "#/components/schemas/SystemPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -13543,7 +13543,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/UnboundServerRequest"
+								"$ref": "#/components/schemas/UnboundServerPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -13722,7 +13722,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/UnboundSrvRequest"
+								"$ref": "#/components/schemas/UnboundSrvPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -13901,7 +13901,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/UnboundExtRequest"
+								"$ref": "#/components/schemas/UnboundExtPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17265,7 +17265,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/SnmpdSystemRequest"
+								"$ref": "#/components/schemas/SnmpdSystemPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17444,7 +17444,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/LldpdConfigRequest"
+								"$ref": "#/components/schemas/LldpdConfigPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17623,7 +17623,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfigRequest"
+								"$ref": "#/components/schemas/PrometheusNodeExporterLuaConfigPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17802,7 +17802,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/VnstatConfigRequest"
+								"$ref": "#/components/schemas/VnstatConfigPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -17981,7 +17981,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/Mwan3GlobalsRequest"
+								"$ref": "#/components/schemas/Mwan3GlobalsPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -20708,7 +20708,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/UsteerConfigRequest"
+								"$ref": "#/components/schemas/UsteerConfigPatch"
 							}
 						},
 						"application/json-patch+json": {
@@ -26703,20 +26703,105 @@
 						]
 					},
 					"syn_flood": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable SYN flood protection"
+					},
+					"drop_invalid": {
+						"type": "boolean",
+						"default": false,
+						"description": "Drop packets with invalid conntrack state"
+					},
+					"synflood_burst": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000000
+					},
+					"synflood_rate": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 1000000
+					},
+					"tcp_syncookies": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable kernel TCP SYN cookies"
+					},
+					"flow_offloading": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable software flow offloading"
+					},
+					"flow_offloading_hw": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable hardware flow offloading (requires NIC support)"
+					}
+				}
+			},
+			"FirewallDefaultsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of FirewallDefaultsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"input": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP",
+							null
+						]
+					},
+					"output_policy": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP",
+							null
+						]
+					},
+					"forward": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ACCEPT",
+							"REJECT",
+							"DROP",
+							null
+						]
+					},
+					"syn_flood": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false,
-						"description": "Enable SYN flood protection"
+						]
 					},
 					"drop_invalid": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false,
-						"description": "Drop packets with invalid conntrack state"
+						]
 					},
 					"synflood_burst": {
 						"type": [
@@ -26738,25 +26823,19 @@
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false,
-						"description": "Enable kernel TCP SYN cookies"
+						]
 					},
 					"flow_offloading": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false,
-						"description": "Enable software flow offloading"
+						]
 					},
 					"flow_offloading_hw": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false,
-						"description": "Enable hardware flow offloading (requires NIC support)"
+						]
 					}
 				}
 			},
@@ -31905,25 +31984,134 @@
 						"description": "Local domain pattern (e.g. /lan/) resolved authoritatively"
 					},
 					"noresolv": {
+						"type": "boolean",
+						"default": false
+					},
+					"rebind_protection": {
+						"type": "boolean",
+						"default": true
+					},
+					"expandhosts": {
+						"type": "boolean",
+						"default": false
+					},
+					"cachesize": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 1000000
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"domainneeded": {
+						"type": "boolean",
+						"default": true
+					},
+					"boguspriv": {
+						"type": "boolean",
+						"default": true
+					},
+					"filterwin2k": {
+						"type": "boolean",
+						"default": false
+					},
+					"authoritative": {
+						"type": "boolean",
+						"default": true
+					},
+					"readethers": {
+						"type": "boolean",
+						"default": true
+					},
+					"leasefile": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r\"*?[]*$"
+					},
+					"resolvfile": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^ \t\n\r\"*?[]*$"
+					},
+					"server": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
+						}
+					},
+					"address": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
+						}
+					},
+					"nonwildcard": {
+						"type": "boolean",
+						"default": true
+					}
+				}
+			},
+			"DhcpDnsmasqPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DhcpDnsmasqRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
+					},
+					"noresolv": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false
+						]
 					},
 					"rebind_protection": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					},
 					"expandhosts": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false
+						]
 					},
 					"cachesize": {
 						"type": [
@@ -31945,36 +32133,31 @@
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					},
 					"boguspriv": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					},
 					"filterwin2k": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": false
+						]
 					},
 					"authoritative": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					},
 					"readethers": {
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					},
 					"leasefile": {
 						"type": [
@@ -32014,8 +32197,7 @@
 						"type": [
 							"boolean",
 							"null"
-						],
-						"default": true
+						]
 					}
 				}
 			},
@@ -32078,10 +32260,7 @@
 						]
 					},
 					"maindhcp": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Use odhcpd as the IPv4 DHCP server too"
 					},
@@ -32107,6 +32286,44 @@
 						"minimum": 0,
 						"maximum": 7,
 						"description": "syslog priority (0=emerg .. 7=debug)"
+					}
+				}
+			},
+			"DhcpOdhcpdPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DhcpOdhcpdRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"maindhcp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"leasefile": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"leasetrigger": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"loglevel": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 7
 					}
 				}
 			},
@@ -32265,10 +32482,7 @@
 						"description": "Remote syslog transport (udp or tcp)"
 					},
 					"log_remote": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"urandom_seed": {
@@ -32277,6 +32491,80 @@
 							"null"
 						],
 						"description": "Path the entropy seed is saved to and restored from"
+					}
+				}
+			},
+			"SystemPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SystemRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"hostname": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$"
+					},
+					"description": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"notes": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"timezone": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"zonename": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log_size": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"log_ip": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log_proto": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"log_remote": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"urandom_seed": {
+						"type": [
+							"string",
+							"null"
+						]
 					}
 				}
 			},
@@ -33519,10 +33807,7 @@
 						"description": "How aggressively to add WAN FQDNs (0..4)"
 					},
 					"dnssec_enabled": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"recursion": {
@@ -33570,10 +33855,7 @@
 						]
 					},
 					"query_minimize": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"manual_conf": {
@@ -33666,6 +33948,192 @@
 					}
 				}
 			},
+			"UnboundServerPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UnboundServerRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"listen_port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"dhcp_link": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"none",
+							"odhcpd",
+							"dnsmasq",
+							null
+						]
+					},
+					"add_local_fqdn": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 4
+					},
+					"add_wan_fqdn": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 4
+					},
+					"dnssec_enabled": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"recursion": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"passive",
+							"aggressive",
+							null
+						]
+					},
+					"resource_limits": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"tiny",
+							"small",
+							"medium",
+							"large",
+							"big",
+							"huge",
+							null
+						]
+					},
+					"protocol": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"mixed",
+							"ip4_only",
+							"ip6_only",
+							"ip6_local",
+							"ip6_prefer",
+							null
+						]
+					},
+					"query_minimize": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"manual_conf": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"extended_stats": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"interface_auto": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"localservice": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"hide_binddata": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"rebind_protection": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"0",
+							"1",
+							"2",
+							null
+						]
+					},
+					"num_threads": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 64
+					},
+					"ttl_min": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 86400
+					},
+					"domain": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^([A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*)?$"
+					},
+					"domain_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"deny",
+							"refuse",
+							"static",
+							"transparent",
+							"redirect",
+							"nodefault",
+							"typetransparent",
+							"inform",
+							"inform_deny",
+							null
+						]
+					}
+				}
+			},
 			"UnboundSrvResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci unbound_srv.unbound_srv",
@@ -33738,10 +34206,7 @@
 						]
 					},
 					"enabled": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"ip_transparent": {
@@ -33783,6 +34248,60 @@
 							"pattern": "^[^\n]+$"
 						},
 						"description": "Verbatim passthrough lines inserted inside unbound's `server:` clause. One uci entry per rendered line. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
+					}
+				}
+			},
+			"UnboundSrvPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UnboundSrvRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"enabled": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"ip_transparent": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"interface_bind": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^\n]+$"
+						}
+					},
+					"interface_outgoing": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^\n]+$"
+						}
+					},
+					"srv_line": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^\n]+$"
+						}
 					}
 				}
 			},
@@ -33831,10 +34350,7 @@
 						]
 					},
 					"enabled": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"ext_line": {
@@ -33847,6 +34363,34 @@
 							"pattern": "^[^\n]+$"
 						},
 						"description": "Verbatim lines rendered into `/etc/unbound/unbound_ext.conf` (outside the `server:` clause). One uci entry per rendered line. Build whole `forward-zone:`, `view:`, `stub:` or `remote-control:` clauses by listing them in order. unbound parses the lines when it restarts, and a line that it cannot parse makes it refuse its whole config and stop. If unbound ran before the write and stops within 2 s of the restart, the write answers 500 `reload_failed_restored` and restores the previous lines."
+					}
+				}
+			},
+			"UnboundExtPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UnboundExtRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"enabled": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"ext_line": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^\n]+$"
+						}
 					}
 				}
 			},
@@ -34803,6 +35347,61 @@
 					}
 				}
 			},
+			"SnmpdSystemPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of SnmpdSystemRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"sys_location": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"sys_contact": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"sys_name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"sys_services": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 127
+					},
+					"sys_descr": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"sys_object_id": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					}
+				}
+			},
 			"LldpdConfigResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci lldpd.lldpd",
@@ -34890,34 +35489,22 @@
 						]
 					},
 					"enable_cdp": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Emit Cisco Discovery Protocol frames"
 					},
 					"enable_fdp": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Emit Foundry Discovery Protocol frames"
 					},
 					"enable_sonmp": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Emit Nortel SONMP frames"
 					},
 					"enable_edp": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Emit Extreme Discovery Protocol frames"
 					},
@@ -34938,10 +35525,7 @@
 						"description": "System description advertised in LLDP frames"
 					},
 					"lldp_capabilities": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": true,
 						"description": "Advertise the system capabilities TLV"
 					},
@@ -34952,6 +35536,80 @@
 						],
 						"pattern": "^[^\n\r\"\\\\]*$",
 						"description": "Management IP advertised in LLDP frames"
+					},
+					"interface": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"pattern": "^[^ \t\n\r\"'\\\\#]*$"
+						}
+					}
+				}
+			},
+			"LldpdConfigPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of LldpdConfigRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"enable_cdp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"enable_fdp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"enable_sonmp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"enable_edp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"lldp_class": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 4
+					},
+					"lldp_description": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r\"\\\\]*$"
+					},
+					"lldp_capabilities": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"lldp_mgmt_ip": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r\"\\\\]*$"
 					},
 					"interface": {
 						"type": [
@@ -35029,6 +35687,32 @@
 					}
 				}
 			},
+			"PrometheusNodeExporterLuaConfigPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of PrometheusNodeExporterLuaConfigRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"listen_interface": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"listen_port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 65535
+					}
+				}
+			},
 			"VnstatConfigResponse": {
 				"type": "object",
 				"description": "uapi resource backed by uci vnstat.vnstat",
@@ -35078,6 +35762,27 @@
 							"type": "string"
 						},
 						"description": "Devices vnstat tracks, as the kernel names them (`br-lan`, `eth0`), not uci interface names. This is the only vnstat option any shipped code reads; see docs/deprecations.md for why `vnstat/interfaces` is being removed in favour of it."
+					}
+				}
+			},
+			"VnstatConfigPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of VnstatConfigRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"interfaces": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
 					}
 				}
 			},
@@ -35150,10 +35855,7 @@
 						"description": "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)."
 					},
 					"logging": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false,
 						"description": "Enable mwan3 daemon logging via logread."
 					},
@@ -35174,6 +35876,48 @@
 							null
 						],
 						"description": "syslog facility level (notice/info/debug/etc.)."
+					}
+				}
+			},
+			"Mwan3GlobalsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of Mwan3GlobalsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"mmx_mask": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^0x[0-9A-Fa-f]+$"
+					},
+					"logging": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"loglevel": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"emerg",
+							"alert",
+							"crit",
+							"err",
+							"warn",
+							"notice",
+							"info",
+							"debug",
+							null
+						]
 					}
 				}
 			},
@@ -36523,10 +37267,7 @@
 						]
 					},
 					"enabled": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": true
 					},
 					"network": {
@@ -36537,10 +37278,7 @@
 						"description": "Network interface usteer listens on for peer announcements."
 					},
 					"syslog": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": true
 					},
 					"debug_level": {
@@ -36552,10 +37290,7 @@
 						"maximum": 3
 					},
 					"ipv6": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"sta_block_timeout": {
@@ -36639,10 +37374,7 @@
 						"minimum": 0
 					},
 					"assoc_steering": {
-						"type": [
-							"boolean",
-							"null"
-						],
+						"type": "boolean",
 						"default": false
 					},
 					"min_connect_snr": {
@@ -36746,6 +37478,233 @@
 							"type": "string"
 						},
 						"description": "Filter usteer's action to these SSIDs (empty = all)."
+					}
+				}
+			},
+			"UsteerConfigPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of UsteerConfigRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"enabled": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"network": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"syslog": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"debug_level": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 3
+					},
+					"ipv6": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"sta_block_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"local_sta_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"local_sta_update": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"max_neighbor_reports": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"max_retry_band": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"seen_policy_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"measurement_report_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"load_balancing_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"band_steering_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 255
+					},
+					"remote_update_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"remote_node_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"assoc_steering": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"min_connect_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"min_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"min_snr_kick_delay": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_kick_delay": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_process_timeout": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_scan_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"roam_scan_tries": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_scan_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"roam_trigger_snr": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"roam_trigger_interval": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"signal_diff_threshold": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"node_up_script": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"event_log_types": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
+					},
+					"ssid_list": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						}
 					}
 				}
 			},

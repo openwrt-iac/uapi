@@ -239,18 +239,28 @@ t.describe('property: a PATCH that names nothing leaves uci as stored', () => {
 	}
 });
 
-// The merge-patch body takes null on a field unless the module or a rule of the generator says a
-// null is not a removal there, so the server has to remove the field for each null that the body
-// takes. A toUci that writes a value for a null, as wireless/interfaces does for `mode`, breaks
-// that unless the module names the field in openapi_patch_non_null. A seed that stores the field
-// shows it.
+// Each field of a merge-patch body goes to the server as null, sorted by the rule of
+// nullable_properties in build/gen_openapi.uc. Where the body takes the null, the PATCH answers
+// 422, or it removes each stored option that toUci leaves out for the null and writes nothing else.
+// A kept field answers 422 or removes nothing. So a toUci that writes a value for a null, as
+// wireless/interfaces does for `mode`, fails unless the module names the field in
+// openapi_patch_non_null, and so does a merge that skips a null.
 const SPEC = json(fs.readfile("build/openapi.json")).components.schemas;
 
-function takes_null(s) {
-	let t = s?.type;
-	return (t == null || t == "null" || (type(t) == "array" && index(t, "null") >= 0))
-	       && (type(s?.enum) != "array" || index(s.enum, null) >= 0);
-}
+// Stored for this property only, so that it sees the removal: no seed stores the last three, and
+// the SNAT target of n1 cannot go while its snat_ip stays. A null removes the option from the seed.
+const NULL_SEEDS = {
+	"firewall.nat.uc/n1": { target: "ACCEPT", snat_ip: null },
+	"firewall.rules.uc/r1": { family: "ipv4" },
+	"firewall.redirects.uc/d1": { family: "ipv4" },
+	"network.interfaces.uc/wg0": { nohostroute: "1" },
+};
+
+// A field that the Request requires and that a null removes, which the spec cannot say, because
+// the Patch keeps the Request type of a required field. validate() does not require `family`.
+const REQUIRED_NULL_REMOVES = { "mwan3.interfaces.uc/mwan": [ "family" ] };
+
+function cleared(v) { return v == null || (type(v) == "array" && length(v) == 0); }
 
 t.describe('property: a null that a merge-patch body takes removes the field', () => {
 	for (let c in CASES) {
@@ -260,25 +270,54 @@ t.describe('property: a null that a merge-patch body takes removes the field', (
 			                    : handler.make(mod, { tx: tx_stub() });
 			let name = "";
 			for (let w in split(replace(c.file, /\.uc$/, ""), /[._]/)) name += uc(substr(w, 0, 1)) + substr(w, 1);
-			let bodies = [];
-			for (let k, p in SPEC[name + (c.singleton ? "Request" : "Patch")].properties) {
+			let request = SPEC[name + "Request"];
+			let keep = [ "id", ...(request.required ?? []), ...(mod.openapi_patch_non_null ?? []) ];
+			let fields = [];
+			for (let k, p in SPEC[name + "Patch"].properties) {
 				for (let n, q in p.properties ?? {})
-					if (takes_null(q)) push(bodies, { [k]: { [n]: null } });
-				if (takes_null(p)) push(bodies, { [k]: null });
+					push(fields, { at: [ k, n ], kept: q.writeOnly === true
+					               || index(request.properties[k].required ?? [], n) >= 0 });
+				push(fields, { at: [ k ], kept: p.writeOnly === true || index(keep, k) >= 0 });
 			}
-			let wrote = [];
-			for (let b in bodies) {
-				let conn = seeded(c);
+			let section = { ...c.section };
+			for (let o, v in NULL_SEEDS[c.file + "/" + c.id] ?? {}) {
+				if (v == null) delete section[o];
+				else section[o] = v;
+			}
+
+			let wrong = [], kept_removed = [];
+			for (let f in fields) {
+				let conn = seeded({ ...c, section });
 				let patch = (body) => c.singleton ? h.patch(conn, ctx(), body) : h.patch(conn, ctx(), c.id, body);
 				patch({});
+				let view = (c.singleton ? h.get(conn, ctx()) : h.get_one(conn, ctx(), c.id)).body;
+				let body = { [f.at[0]]: null }, nulled = { ...view, [f.at[0]]: null };
+				if (length(f.at) == 2) {
+					body[f.at[0]] = { [f.at[1]]: null };
+					nulled[f.at[0]] = { ...view[f.at[0]], [f.at[1]]: null };
+				}
 				let before = json(sprintf("%J", conn._state.uci[c.pkg][c.id]));
-				let r = patch(b);
+				let r = patch(body);
 				if (r.status == 422) continue;
-				if (r.status != 200) push(wrote, sprintf("%J answered %d", b, r.status));
-				for (let o, v in conn._state.uci[c.pkg][c.id])
-					if (!ph.json_eq(before[o], v)) push(wrote, sprintf("%J wrote %s: %J -> %J", b, o, before[o], v));
+				if (r.status != 200) {
+					push(wrong, sprintf("%J answered %d", body, r.status));
+					continue;
+				}
+				let after = conn._state.uci[c.pkg][c.id];
+				if (f.kept) {
+					for (let o in before)
+						if (!exists(after, o)) push(kept_removed, join(".", f.at));
+					continue;
+				}
+				let want = mod.toUci(view), got = mod.toUci(nulled);
+				for (let o, v in want)
+					if (exists(before, o) && exists(after, o) && !cleared(v) && cleared(got[o]))
+						push(wrong, sprintf("%J left %s: %J", body, o, after[o]));
+				for (let o, v in after)
+					if (!ph.json_eq(before[o], v)) push(wrong, sprintf("%J wrote %s: %J -> %J", body, o, before[o], v));
 			}
-			t.assert_deep_equal(wrote, []);
+			t.assert_deep_equal(wrong, []);
+			t.assert_deep_equal(kept_removed, REQUIRED_NULL_REMOVES[c.file + "/" + c.id] ?? []);
 		});
 	}
 });
