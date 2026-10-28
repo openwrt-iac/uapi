@@ -777,6 +777,26 @@ All notable changes to this project will be documented in this file. Format foll
 - **A revoke whose commit fails keeps the rate-limit bucket of its token.** `DELETE
   /tokens/{id}` dropped the bucket before it committed the delete, so a commit that failed kept
   the token and gave it a full burst again. The bucket is now dropped after the commit. (#267)
+- **The restore after a failed reload no longer leaves the package empty or cut short.** It wrote
+  the snapshot over `/etc/config/<package>` in place and did not check the write. A kill or a
+  power cut between the truncation and the write left the package empty, a full overlay left it cut
+  short while the write answered `500 reload_failed_restored`, and a `uci commit` by LuCI or a shell
+  during the restore could read the half-written file. The restore now writes the snapshot to a
+  temp file beside the package, reads it back, and renames it over the package under libuci's
+  flock on the file, as libuci commits. A restore that cannot write or rename the file answers
+  `500 reload_failed_unrecovered`, and its `restore_error` names the file. Measured with the ucode
+  of the OpenWrt 25.12 SDK on a full tmpfs: the old restore kept 4096 of 10600 bytes and reported
+  nothing. (#268)
+- **A read no longer shows a change that another writer staged and did not commit, and a write no
+  longer commits or deletes it.** `uci set` in a shell stages a change in `/tmp/.uci`, and libuci
+  applies that directory to every cursor that loads a package by name, uapi's included. So a GET
+  reported a value that neither the file nor the daemon held, and its ETag changed with it. The
+  next uapi write of the package committed the change, and a write that uapi refused deleted every
+  staged change of the package. uapi now loads each package by its path, which reads the file
+  alone, and its commit reloads the file and replays the writes of the request, so a commit by
+  LuCI or a shell during the request is still kept. LuCI was not affected, because rpcd keeps a
+  delta directory per session. A read changes only on a router where a shell staged a change and
+  did not commit it, and no field, type or status changes. (#268)
 
 ### Security
 

@@ -12,14 +12,79 @@ function deepcopy(v) {
 	return v;
 }
 
+// libuci replaces a package by renaming a temp file from the same directory over it, under an
+// flock on the package file, and the restore writes the same way. A reader sees the old file or
+// the new one, a kill or a full overlay leaves the old one whole, and the restore waits for a
+// `uci commit` that is writing the package, as another commit would. ucode has no fsync: the
+// commit that follows a restore rewrites the file through libuci, which syncs it.
+function replace_config(fs_mod, file, content) {
+	let path = fs_mod.realpath(file);
+	let st = (path != null) ? fs_mod.stat(path) : null;
+	let lock = (st != null) ? fs_mod.open(path, "r") : null;
+	if (lock == null) die(sprintf("restore of %s: cannot open it", file));
+	let tmp = sprintf("%s/.%s.uapi-restore", fs_mod.dirname(path), fs_mod.basename(path));
+	let err = null;
+	if (!lock.lock("x"))
+		err = "cannot lock it: " + fs_mod.error();
+	else {
+		// A fixed name, so a restore killed before its rename leaves one file that the next
+		// restore of the package removes. uapi's lock of the package keeps two from sharing it.
+		fs_mod.unlink(tmp);
+		let f = fs_mod.open(tmp, "wx", 0o600);
+		if (f == null)
+			err = "cannot create " + tmp;
+		else {
+			f.write(content);
+			f.close();
+			// close() drops the result of fclose, and flush() answers inverted on the ucode
+			// that CI runs (docs/ucode-quirks.md), so the file is read back instead.
+			let held = fs_mod.readfile(tmp) ?? "";
+			if (held != content)
+				err = sprintf("cannot write %s: it holds %d of %d bytes", tmp, length(held), length(content));
+			else if (!fs_mod.chmod(tmp, st.mode) || !fs_mod.rename(tmp, path))
+				err = sprintf("cannot rename %s over it: %s", tmp, fs_mod.error());
+			if (err != null) fs_mod.unlink(tmp);
+		}
+	}
+	lock.lock("u");
+	lock.close();
+	if (err != null) die(sprintf("restore of %s: %s", file, err));
+}
+
 function connect(opts) {
-	let ubus_mod = require('ubus');
-	let uci_mod = require('uci');
-	let fs_mod = require('fs');
+	let ubus_mod = opts?.ubus ?? require('ubus');
+	let uci_mod = opts?.uci ?? require('uci');
+	let fs_mod = opts?.fs ?? require('fs');
+	let config_dir = opts?.config_dir ?? "/etc/config";
 	let conn = ubus_mod.connect();
 	if (!conn) die("ubus: connect failed");
-	let cursor = uci_mod.cursor();
-	let debug = (opts != null && opts.debug) ? require('log') : null;
+	let cursor = uci_mod.cursor(config_dir);
+	let debug = opts?.debug ? require('log') : null;
+
+	// libuci gives a package that it loads by name the delta file of that name in each directory
+	// of its search path, and /tmp/.uci, where `uci set` stages, is always one of them: cursor()
+	// adds a directory but cannot remove that one, which is why rpcd clears the list itself. So
+	// the cursor loads each package by its path, which reads the file alone.
+	//
+	// libuci commits a package loaded by path by writing the copy that it holds, where it reads a
+	// package loaded by name again and replays the delta. So the commit reloads the file and
+	// replays the writes kept here, and a commit by LuCI or a shell while the request ran stays.
+	let writes = {};
+	function load(pkg) {
+		if (writes[pkg] == null && cursor.load(config_dir + "/" + pkg))
+			writes[pkg] = [];
+	}
+	function drop(pkg) {
+		cursor.unload(pkg);
+		delete writes[pkg];
+		return true;
+	}
+	function write(pkg, op) {
+		load(pkg);
+		let r = op();
+		push(writes[pkg], op);
+		return r;
+	}
 
 	// The cursor reports a failed write by returning null and raises nothing: on a missing
 	// package, `set` and `commit` both answer null with "Entry not found", so a write that stored
@@ -49,6 +114,7 @@ function connect(opts) {
 			return r;
 		},
 		uci_get: function(pkg, section, option) {
+			load(pkg);
 			if (option != null)
 				return cursor.get(pkg, section, option);
 			return cursor.get_all(pkg, section);
@@ -62,49 +128,47 @@ function connect(opts) {
 		// accepted create into a 500.
 		uci_set: function(pkg, section, option, value) {
 			if (type(value) == "array" && length(value) == 0)
-				return removed(pkg, cursor.delete(pkg, section, option));
-			return wrote("set", pkg, cursor.set(pkg, section, option, value));
+				return write(pkg, () => removed(pkg, cursor.delete(pkg, section, option)));
+			return write(pkg, () => wrote("set", pkg, cursor.set(pkg, section, option, value)));
 		},
 		uci_create_section: function(pkg, name, sec_type) {
-			return wrote("set", pkg, cursor.set(pkg, name, sec_type));
+			return write(pkg, () => wrote("set", pkg, cursor.set(pkg, name, sec_type)));
 		},
 		uci_rename: function(pkg, section, new_name) {
-			return wrote("rename", pkg, cursor.rename(pkg, section, new_name));
+			return write(pkg, () => wrote("rename", pkg, cursor.rename(pkg, section, new_name)));
 		},
 		uci_delete: function(pkg, section, option) {
-			return removed(pkg, option != null
+			return write(pkg, () => removed(pkg, option != null
 				? cursor.delete(pkg, section, option)
-				: cursor.delete(pkg, section));
+				: cursor.delete(pkg, section)));
 		},
 		uci_commit: function(pkg) {
+			let ops = writes[pkg] ?? [];
+			drop(pkg);
+			load(pkg);
+			for (let op in ops) op();
 			return wrote("commit", pkg, cursor.commit(pkg));
 		},
 		uci_package_exists: function(pkg) {
-			return fs_mod.stat("/etc/config/" + pkg) != null;
+			return fs_mod.stat(config_dir + "/" + pkg) != null;
 		},
-		uci_revert: function(pkg) {
-			return cursor.revert(pkg);
-		},
-		uci_unload: function(pkg) {
-			return cursor.unload(pkg);
-		},
+		// cursor.revert() refuses a package loaded by path, and the writes of a request live
+		// only in the cursor's copy, so dropping the copy reverts them.
+		uci_revert: drop,
+		uci_unload: drop,
 		uci_export: function(pkg) {
-			let f = fs_mod.open("/etc/config/" + pkg, "r");
+			let f = fs_mod.open(config_dir + "/" + pkg, "r");
 			if (!f) return "";
 			let content = f.read("all") ?? "";
 			f.close();
 			return content;
 		},
 		uci_import: function(pkg, snapshot) {
-			let f = fs_mod.open("/etc/config/" + pkg, "w");
-			if (!f) die("uci_import: cannot open /etc/config/" + pkg);
-			f.write(snapshot);
-			f.close();
-			cursor.unload(pkg);
-			cursor.load(pkg);
-			return true;
+			replace_config(fs_mod, config_dir + "/" + pkg, snapshot);
+			return drop(pkg);
 		},
 		uci_foreach: function(pkg, sec_type, fn) {
+			load(pkg);
 			return cursor.foreach(pkg, sec_type, fn);
 		},
 	};

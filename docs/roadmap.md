@@ -453,7 +453,9 @@ stale enough to be misleading:
   found that are not fixed yet are recorded there under Open findings. The unchecked
   writes of a preshared key file and of a feed file, the shared temp file of the error
   ring, the rename checks of the error ring and the metrics, which never ran, and a
-  revoke that dropped its rate-limit bucket before the commit are fixed (#267).
+  revoke that dropped its rate-limit bucket before the commit are fixed (#267). The
+  restore replaces the package with a rename, and the uci cursor no longer reads or
+  commits what a shell staged (#268).
 
 ## Objectives for the next major
 

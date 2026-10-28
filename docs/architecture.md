@@ -101,6 +101,9 @@ worker never waits for a uapi lock, but libuci's own flocks on a package
 file block while LuCI or a shell holds them. It can sleep while it holds a
 uapi lock: the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks.
+The restore after a failed reload also waits for libuci's flock on the package
+file, as libuci itself does, and a `uci commit` holds that only while it writes
+the file.
 
 Audit and verification: `docs/lock-state-audit.md` covers every site in
 `src/` and `cli/` that takes an fd, a pipe, a lock, a ubus connection or a uci
@@ -131,8 +134,11 @@ without uci state change.
    the errors that the write adds (`docs/adding-a-resource.md`). Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
-   cursor (staging only).
-5. **Commit.** `uci_commit(<package>)` writes the package file.
+   cursor's copy of the package, and `bus.uc` keeps the writes in order.
+   Nothing is staged outside the request process (see below).
+5. **Commit.** `uci_commit(<package>)` loads the package file again, replays
+   the writes over it and writes it through libuci, so a commit by LuCI or a
+   shell while the request ran is kept.
 6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, via
    `fs.popen`, exit code checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
@@ -157,8 +163,34 @@ without uci state change.
    `uci_commit(<package>)` → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the
    captured stderr/exit summary. If the restore itself fails,
-   `500 reload_failed_unrecovered`.
+   `500 reload_failed_unrecovered`. `uci_import` writes the snapshot the way
+   libuci commits: to `/etc/config/.<package>.uapi-restore`, under libuci's
+   flock on the package file, then a rename over the package. It reads the temp
+   file back before the rename, because ucode reports no error from `close()`.
+   A kill or a full overlay leaves the package whole, and a restore that cannot
+   write or rename the file answers `reload_failed_unrecovered` with a
+   `restore_error` that names the file. ucode has no `fsync`, so the
+   `uci_commit` that follows is what makes libuci sync the restored file.
 9. **On success:** `200` with the refreshed resource.
+
+### Changes that another writer staged
+
+A read reports what the package file holds, and a write commits only its own
+changes. A shell stages with `uci set` in `/tmp/.uci`, and LuCI stages in a
+directory per session, `/var/run/rpcd/uci-<session>`. libuci overlays onto a
+package that it loads by name the delta file of that name in each directory of
+its search path, and `/tmp/.uci` is always in that path: ucode's `cursor()` adds
+a delta directory but cannot remove that one. rpcd clears the list itself, which
+ucode cannot. So `bus.uc` loads each package by its path, which reads the file
+alone. A uapi write then neither commits nor deletes what a shell staged, and a
+later `uci commit` in the shell replays it over what uapi committed.
+
+libuci commits a package loaded by path by writing the copy that the cursor
+holds, without reading the file again. The commit of step 5 therefore reloads the
+file and replays the request's writes, which keeps a commit by another writer
+that landed while the request ran, as libuci's own replay of a delta does.
+`uci_revert` and `uci_unload` drop the copy and the writes, which is the whole
+of what the request staged.
 
 ### Why step 7 exists, and why it shells out to `wg`
 
