@@ -287,10 +287,12 @@ All notable changes to this project will be documented in this file. Format foll
   the lldpd 1.0.20 source, which OpenWrt 25.12 ships. That tightening uses the carve-out in
   `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
   loudly. No value in the uci configs of the OpenWrt feeds is refused. The read of an `interface`
-  that uci holds as one option, such as `option interface 'loopback lan'`, changes from one entry to
-  its words, as the init splits it and LuCI shows it (#274). Read as one entry, as 3.1.0 read it,
-  the option would break the new pattern and make a JSON Patch of any field, or a merge PATCH of the
-  read, answer 422. (#254)
+  that uci holds as one option of several words, such as `option interface 'loopback lan'`, or as a
+  list entry of several words, changes from one entry to its words, because the init joins the
+  entries and splits them into words (#274). LuCI shows the option as its words and a list entry
+  whole, and uapi follows the daemon. Read as one entry, as 3.1.0 read it, such a value would break
+  the new pattern and make a JSON Patch of any field, or a merge PATCH of the read, answer 422.
+  (#254)
 - **`snmpd/accesses` refuses an access without `context`, `version`, `level`, `prefix`, `read`,
   `write` or `notify`, with 422 `required`.** snmpd.init skips an access that does not set each
   of these, so such a write answered 200 and snmpd did not use the access. The init tests
@@ -908,18 +910,25 @@ All notable changes to this project will be documented in this file. Format foll
   a write that changed the list, stored the whole value as one entry of a list. The init then wrote
   it on one line, such as `dhcp-option=lan,3,1.2.3.4 6,8.8.8.8`, which dnsmasq refuses as a bad IPv4
   address, so DHCP and DNS stopped on the whole router after a write that answered 200. Such an
-  option now reads as its words, and a write stores them as the entries of a list. A list reads as
-  before. The read changes only on a router that holds the option form with several words, from one
-  entry to its words, which is how dnsmasq.init and LuCI read it. The type of the field does not
-  change. (#274)
-- **`dhcp/hosts.macs` reads a `mac` option as its words, as dnsmasq.init does.** The init splits
-  `option mac` into words and gives dnsmasq each word as a MAC of the reservation. LuCI shows such
-  an option as its words too. uapi read the option as one entry, which fails the MAC check, so every
-  write to a host with `option mac '00:11:22:33:44:55 00:11:22:33:44:66'` answered 422 on `macs[0]`,
-  a PUT of the read included. Such an option now reads as its words, a PUT of the read stores them
-  as the entries of a list, and a PATCH that leaves `macs` out keeps the option. The read changes
-  only on a router that holds the option form with several MACs, from one entry to its words, which
-  is how dnsmasq.init and LuCI read it. The type of the field does not change. (#274)
+  option now reads as its words. A PUT of the read, or a PATCH that changes the field, stores them
+  as the entries of a list, and a PATCH that leaves the field out or unchanged keeps the option. A
+  list reads as before. The read changes only on a router that holds the option form with several
+  words, from one entry to its words, which is how dnsmasq.init and LuCI read it. The type of the
+  field does not change. A word can break the pattern of the field:
+  `option dhcp_option '3,1.2.3.4 6,"a b"'` now reads `["3,1.2.3.4","6,\"a","b\""]`, so a JSON Patch
+  of any field of that server, and a PUT of the read, answer 422 where they answered 200. The init
+  gives dnsmasq the same words, and dnsmasq refuses `6,"a` as a string that does not close, so that
+  router already had no DHCP and no DNS. (#274)
+- **`dhcp/hosts.macs` reads a `mac` option or list entry of several MACs as its words, as
+  dnsmasq.init does.** The init joins the entries of `mac` with spaces, splits them into words, and
+  gives dnsmasq each word as a MAC of the reservation. uapi read such a value as one entry, which
+  fails the MAC check, so every write to a host with
+  `option mac '00:11:22:33:44:55 00:11:22:33:44:66'`, or with that value as a list entry, answered
+  422 on `macs[0]`, a PUT of the read included. Such a value now reads as its words. A PUT of the
+  read, or a PATCH that changes `macs`, stores them as the entries of a list, and a PATCH that
+  leaves `macs` out or unchanged keeps what uci holds. LuCI shows the option as its words and a list
+  entry whole, and uapi follows the daemon. The read changes only on a router that holds such a
+  value, from one entry to its words. The type of the field does not change. (#274)
 - **The description of `mwan3/interfaces.family` says that a null removes the option, and that mwan3
   then uses ipv4.** The spec requires the key and takes null, and a read of an unset family gives
   null. So `PATCH {"family": null}` on the stock `wan6`, which sets `family 'ipv6'`, answers 200,

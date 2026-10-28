@@ -1,14 +1,13 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
-let as_word_list_or_null = values.as_word_list_or_null;
 
 // lldpd.init writes each value between double quotes on one lldpcli command line, so a
 // newline adds a command and a quote ends the argument. lldpcli reads a backslash as an escape
 // inside quotes too: it drops the backslash, and a final one leaves the quote open, so lldpcli
 // skips the line.
 const LLDP_TEXT_RE = "^[^\n\r\"\\\\]*$";
-// lldpd.init splits `interface` on whitespace, so an option reads as its words, as LuCI shows it.
+// lldpd.init reads `interface` with config_get and splits it into words: see config_get_words().
 // The init writes each word unquoted, where lldpcli also reads a quote, a backslash and a `#` as
 // syntax. When lldpcli skips that line, lldpd listens on every interface.
 const LLDP_IFACE_RE = "^[^ \t\n\r\"'\\\\#]*$";
@@ -30,7 +29,7 @@ function fromUci(section) {
 		lldp_capabilities: shell_bool(section.lldp_capability_advertisements
 		                              ?? section.lldp_capabilities, true),
 		lldp_mgmt_ip: section.lldp_mgmt_ip ?? null,
-		interface: as_word_list_or_null(section.interface),
+		interface: values.config_get_words(section.interface),
 		runtime: {},
 	};
 }

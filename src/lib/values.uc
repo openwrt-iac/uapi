@@ -167,6 +167,18 @@ function as_word_list_or_null(v) {
 	return length(out) > 0 ? out : null;
 }
 
+// An init script that reads a list with config_get and loops over it unquoted gets the entries
+// joined with spaces, split at the shell's IFS, so `list mac 'a b'` is two MACs to it. LuCI shows
+// such an entry whole, and uapi reads what the daemon gets.
+const SHELL_IFS_RE = regexp("[ \t\n]+");
+
+function config_get_words(v) {
+	v = config_get(v);
+	if (v == null) return null;
+	let out = filter(split("" + v, SHELL_IFS_RE), (t) => t != "");
+	return length(out) > 0 ? out : null;
+}
+
 // Single-line passthrough validation shared by resources that mirror
 // unbound-uci-ext's seam-file generator. The regex pattern uses a literal
 // newline in the character class because ucode's regex parser treats `\n`
@@ -751,8 +763,8 @@ function section_index(conn, pkg, sec_type, key, filter) {
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
-	strict_bool, as_list, as_list_or_null, as_word_list_or_null, as_int, netifd_int, rt_table_id,
-	config_get, service_port, wg_line, wg_keepalive, ucode_int,
+	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
+	rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,
