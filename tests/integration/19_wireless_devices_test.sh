@@ -96,7 +96,7 @@ done
 $SSH 'test ! -e /etc/config/wireless' || fail "a refused write created /etc/config/wireless"
 restore_wireless
 
-echo "--- the installed bus raises on a uci write that stores nothing, and not on a delete of nothing ---"
+echo "--- the installed bus raises on a uci set that stores nothing, and not on a commit with nothing to write or a delete of nothing ---"
 $SSH 'cat > /tmp/uapi19-bus.uc' <<'UC'
 let b = require("bus").connect();
 let out = [];
@@ -112,6 +112,6 @@ for (let op in [ "set", "commit", "delete" ]) {
 print(join(" ", out), "\n");
 UC
 out=$($SSH 'ucode -L /usr/share/uapi/lib /tmp/uapi19-bus.uc; rm -f /tmp/uapi19-bus.uc')
-[ "$out" = "set=died commit=died delete=ok" ] || fail "bus checks: $out"
+[ "$out" = "set=died commit=ok delete=ok" ] || fail "bus checks: $out"
 
 echo "wireless.devices CRUD ok."
