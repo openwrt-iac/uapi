@@ -51,10 +51,11 @@ All notable changes to this project will be documented in this file. Format foll
   on any enabled SSID that it sets up, so a write refuses such a value, and a negative
   `r0_key_lifetime`. A write is refused for such a value only when it adds the error, for example
   when it changes the field, enables the SSID or turns fast transition on. So a PUT or a JSON Patch
-  that keeps a stored value passes, as a merge PATCH does. Enabling the radio of the SSID, or moving
-  the SSID to another radio, is not checked. `GET /api/v3/diagnostics?validate=1` lists every SSID
-  that holds such a value. The request schema declares the limits of `nasid` and the form of the key
-  holder entries only for a body that names `mode` `ap`, because a merge PATCH that leaves `mode`
+  that keeps a stored value passes, as a merge PATCH does. Turning the radio of the SSID on, or
+  moving the SSID from a radio that is off or missing to an enabled one, is refused too. `GET
+  /api/v3/diagnostics?validate=1` lists every SSID that holds such a value. The request schema
+  declares the limits of `nasid` and the form of the key holder entries only for a body that
+  names `mode` `ap`, because a merge PATCH that leaves `mode`
   out keeps the stored one. `reassociation_deadline` and `r0_key_lifetime` read the number that
   wifi-scripts reads from the stored text, as ucode converts it: ` 500` is 500, `0x10` is 16, a
   fraction is cut, and other text is 0, as hostapd reads it. Only the whole group keeps fast roaming
@@ -329,6 +330,25 @@ All notable changes to this project will be documented in this file. Format foll
   domains. A domain name cannot hold these characters. That tightening uses the carve-out in
   `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
   loudly. (#257)
+- **`wireless/devices` refuses a write that turns a radio on while an enabled SSID of the radio
+  holds a value that wifi-scripts or a daemon refuses, with 422 `conflict` on `disabled`.**
+  wifi-scripts sets up an SSID only while the SSID and its radio are enabled, so the daemons read
+  its values only then. `wireless/interfaces` refused a write that enabled an SSID with such a
+  value, but not a write that turned its radio on or moved it to another radio. Such a write
+  answered 200, and the daemon got the value: a key with a newline added a line to hostapd's config,
+  and a `reassociation_deadline` outside 1000 to 65535 stopped the radio. A create turns the radio
+  on unless it sends `disabled: true`. The message names each such SSID and its fields, and quotes
+  no value. A write that leaves a radio on, or off, is not checked. A write to `wireless/interfaces`
+  that moves an enabled SSID with such a value from a radio that is off or missing to an enabled one
+  is refused too. A move between two enabled radios is not checked, as before. An SSID is on each
+  radio that `device` names, as a list or as words, as netifd reads it, and a radio is off when its
+  `disabled` is `1` or `true`. The other way round, a write to an SSID whose radio is off or missing
+  is no longer refused for a stored value that it leaves as it is, so enabling the SSID there
+  passes, and the validation sweep lists the value with `live: false`. The refusals use the
+  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on,
+  because such a write gave wifi-scripts or a daemon a value that it refuses, and they fail loudly.
+  The rest only widens what a write takes. LuCI checks no SSID when it turns a radio on. A radio and
+  its SSID as `wifi config` writes them, on 2g, 5g and 6g, take the enable. (#260)
 
 ### Deprecated
 
@@ -678,9 +698,10 @@ All notable changes to this project will be documented in this file. Format foll
   encryption, because another writer can enable the SSID or change its encryption later. A write
   that makes the daemon read a stored key with a newline, by enabling the SSID or changing its mode
   or encryption, is refused too. Any other write is not refused for the newline, and `GET
-  /api/v3/diagnostics?validate=1` lists the SSID. Enabling its radio, or moving it to another radio,
-  is not checked. That tightening uses the carve-out in `docs/versioning.md` for payloads that
-  produced a state no caller can rely on, and it fails loudly. LuCI's key field takes one line only.
+  /api/v3/diagnostics?validate=1` lists the SSID. Turning its radio on, or moving it from a radio
+  that is off or missing to an enabled one, is refused too. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. LuCI's key field takes one line only.
   (#246)
 
 - **A WireGuard peer's `allowed_ips` ran a command as root.** `is_valid_ipv6_cidr` read the prefix

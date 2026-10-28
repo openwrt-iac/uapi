@@ -177,6 +177,32 @@ echo "$r" | jq -e '.ft_psk_generate_local == false' >/dev/null || fail "ft_psk_g
 [ "$daemon" = 0 ] || wait_for "hostapd did not get the key holders that wifi-scripts derives" \
 	"$SSH 'cat /var/run/hostapd-*.conf' | grep -q '^r0kh=ff:ff:ff:ff:ff:ff \*'"
 
+# netifd sets up no SSID of a disabled radio, so a stored value that wifi-scripts refuses is dormant
+# there, and the write that turns the radio on is the one that makes the daemon read it.
+echo "--- a radio does not come on while an enabled SSID of it holds a value that wifi-scripts refuses ---"
+$SSH 'cp /etc/config/wireless /tmp/uapi20-radio.bak'
+restore_radio() { $SSH 'test -e /tmp/uapi20-radio.bak && mv /tmp/uapi20-radio.bak /etc/config/wireless && ubus call network reload' || true; }
+trap 'restore_radio; cleanup' EXIT INT TERM
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":true}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH radio0 disabled: $r"
+$SSH "uci set wireless.uapi20r=wifi-iface; uci set wireless.uapi20r.device=radio0; uci set wireless.uapi20r.mode=ap
+      uci set wireless.uapi20r.network=lan; uci set wireless.uapi20r.ssid=uapi-test-radio
+      uci set wireless.uapi20r.encryption=none; uci set wireless.uapi20r.disabled=1
+      uci set wireless.uapi20r.reassociation_deadline=500; uci commit wireless"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/uapi20r" -d '{"disabled":false}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "enabling an SSID on a disabled radio: $r"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
+echo "$r" | tail -1 | grep -q '^422$' || fail "turning radio0 on expected 422: $r"
+echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["disabled", "conflict"]]
+	and (.errors[0].message | contains("uapi20r (reassociation_deadline)"))' >/dev/null || fail "turning radio0 on: $r"
+[ "$($SSH 'uci get wireless.radio0.disabled')" = 1 ] || fail "a refused PATCH turned radio0 on"
+$SSH 'uci delete wireless.uapi20r.reassociation_deadline; uci commit wireless'
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "turning radio0 on with a clean SSID: $r"
+[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for uapi20r" '[ -n "$(up_ifname uapi20r)" ]'
+restore_radio
+trap cleanup EXIT INT TERM
+
 echo "--- DELETE all three ---"
 call -X DELETE "$URL/wireless/interfaces/$nid" | tail -1 | grep -q '^204$' || fail "no-mode DELETE expected 204"
 call -X DELETE "$URL/wireless/interfaces/$sid" | tail -1 | grep -q '^204$' || fail "secured DELETE expected 204"

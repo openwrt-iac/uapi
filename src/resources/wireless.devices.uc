@@ -50,7 +50,29 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+// Beside this file: src/resources in the tests, /usr/share/uapi/resources on the router.
+const IFACES = sourcepath(0, true) + "/wireless.interfaces.uc";
+
+// wifi-scripts sets up the enabled SSIDs of a radio that a write turns on, so a value that
+// wireless/interfaces refuses on one of them goes live with this write. The view masks the
+// write-only fields, which the rules check, so they come from uci as on a write. A message never
+// quotes a value, because the key and the key holder lists are secrets.
+function ssid_errors(conn, radio) {
+	// loadfile compiles in the mode of the running program, which is a template under uhttpd.
+	let wiface = loadfile(IFACES, { raw_mode: true })();
+	let out = [];
+	conn.uci_foreach("wireless", "wifi-iface", function(s) {
+		if (index(wiface.radios(s.device), radio) < 0) return;
+		let view = wiface.fromUci(s, null);
+		for (let k, p in wiface.schema_properties)
+			if (p.writeOnly && s[k] != null) view[k] = s[k];
+		let fields = uniq(map(filter(wiface.rules(view, true), (e) => e.live), (e) => e.field));
+		if (length(fields) > 0) push(out, sprintf("%s (%s)", s['.name'], join(", ", fields)));
+	});
+	return out;
+}
+
+function validate(json, conn, id) {
 	let errs = [];
 
 	if (values.require_present(errs, json, "type")
@@ -62,6 +84,15 @@ function validate(json) {
 		push(errs, { field: "band", code: "not_in_enum",
 		             message: "must be one of 2g, 5g, 6g, 60g" });
 
+	let name = id ?? json.id;
+	if (conn == null || name == null || json.disabled === true) return errs;
+	// Validation runs before the write is staged, so uci still holds the radio as it was.
+	let was = conn.uci_get("wireless", name);
+	// Only a create makes a radio that uci does not hold: a PUT or a PATCH of one answers 404.
+	let bad = ((was == null && id == null) || (was != null && platform_bool(was.disabled, false))) ? ssid_errors(conn, name) : [];
+	if (length(bad) > 0)
+		push(errs, { field: "disabled", code: "conflict",
+		             message: "must be true while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses: " + join(", ", bad) });
 	return errs;
 }
 
@@ -120,6 +151,6 @@ return {
 		legacy_rates: { type: "boolean", default: false,
 		            description: "Allow the legacy 802.11b rates" },
 		disabled: { type: "boolean", default: false,
-		            description: "Disable this radio at boot" },
+		            description: "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio. A write that turns the radio on, such as a create without `disabled: true`, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio" },
 	},
 };
