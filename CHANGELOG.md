@@ -135,8 +135,12 @@ All notable changes to this project will be documented in this file. Format foll
 - **`NetworkWireguardPeersResponse.endpoint_port` declares minimum 0.** A read of 0 means a port
   name that does not resolve, a number above 65535, or a stored `'0'`, which LuCI's form allows,
   so the old minimum of 1 did not describe the read. That is branch (b) of the type carve-out in
-  `docs/versioning.md`. The Request keeps minimum 1, as in 3.1.0, so a write of 0 still answers
-  422. A peer with an endpoint host and a port of 0 is no longer applied to the kernel. (#219)
+  `docs/versioning.md`. The Request keeps minimum 1, as in 3.1.0, so a write that changes the port
+  to 0 still answers 422. A write that leaves a stored 0 as it is passes, unless it enables the peer
+  or sets its host, because the peer then uses port 0. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. A write that passes sets the rest of the peer in the kernel, which keeps its endpoint,
+  where 3.1.0 gave the kernel port 0. (#219)
 - **`network/interfaces.mtu` and `network/devices.mtu` refuse a value below 68, with 422
   `out_of_range`.** netifd applies a device mtu only from 68 up and ignores a smaller one
   without a log, so such a write answered 200 with no effect. On proto wireguard,
@@ -159,13 +163,14 @@ All notable changes to this project will be documented in this file. Format foll
   with `OPTION_ERROR`, without retrying. (#224)
 - **`NetworkInterfacesResponse.listen_port` declares minimum -1.** -1 is what a port name that does
   not resolve reads, since 0 asks the kernel to pick a port, and wg then cannot bring the interface
-  up. The old minimum of 0 did not describe the read either: a hand-written `option listen_port
-  '-1'` already read -1, and `'65536'` read 65536 above the maximum. That is branch (b) of the type
-  carve-out in `docs/versioning.md`. The Request keeps minimum 0, as in 3.1.0, so a write of -1
-  answers 422. LuCI writes only 0 to 65535, so only a hand edit or another tool reaches -1. Every
-  write to an interface that stores such a value now answers 422 until it is fixed, which uses the
-  tightening carve-out for payloads that produced a state no caller can rely on, and fails loudly.
-  (#225)
+  up. The old minimum of 0 did not describe the read either: a hand-written
+  `option listen_port '-1'` already read -1, and `'65536'` read 65536 above the maximum. That is
+  branch (b) of the type carve-out in `docs/versioning.md`. The Request keeps minimum 0, as in
+  3.1.0, so a write of -1 answers 422. LuCI writes only 0 to 65535, so only a hand edit or another
+  tool reaches -1. A write that brings up an interface that stores such a value, by a switch to
+  wireguard or by enabling it, also answers 422, which uses the tightening carve-out for payloads
+  that produced a state no caller can rely on, and fails loudly. A PATCH that leaves the value as it
+  is passes. (#225)
 - **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
   of a read.** A request inherited the read bounds, so it declared values that every write
   refuses. `NetworkInterfacesRequest.mtu` now starts at 68, or takes 128 to 16384 on proto `ppp`
@@ -246,13 +251,13 @@ All notable changes to this project will be documented in this file. Format foll
   The old minimum of 0 did not describe the read: a hand-written `'-1'` already read -1, and
   `'65536'` read 65536 above the maximum. That is branch (b) of the type carve-out in
   `docs/versioning.md`. A stored `'off'` now reads 0 instead of null, which is silent for a script.
-  The Request keeps minimum 0, so a write of -1 answers 422. As for
-  `network/interfaces.listen_port`, a peer that stores such a value answers 422 to every write
-  until a write sends a real value, and `GET /api/v3/diagnostics?validate=1` lists it. That uses the
-  carve-out for payloads that produced a state no caller can rely on, and it fails loudly. The
-  restore after a failed write still sets such a peer, and leaves its keepalive as the kernel holds
-  it, so the peers after it in uci are set too. LuCI's form takes a decimal such as `25.5`, which wg
-  refuses. (#253)
+  The Request keeps minimum 0, so a write that changes the keepalive to -1 answers 422. A write that
+  leaves such a stored value as it is passes, and a PUT of the read stores -1, which wg refuses as
+  it refuses the stored value. A write that enables the peer answers 422 for it, which uses the
+  carve-out for payloads that produced a state no caller can rely on, and fails loudly.
+  `GET /api/v3/diagnostics?validate=1` lists the peer. The kernel apply of a write and the restore
+  after a failed write set such a peer, and leave its keepalive as the kernel holds it, so the peers
+  after it in uci are set too. LuCI's form takes a decimal such as `25.5`, which wg refuses. (#253)
 - **`dhcp/dnsmasq` and `dhcp/servers` refuse a double quote and a `#` after whitespace, with 422
   `invalid_format`.** The init script copies these values into dnsmasq's config without quotes.
   There, a double quote opens a string. When the string does not close, dnsmasq refuses to start,
@@ -349,6 +354,28 @@ All notable changes to this project will be documented in this file. Format foll
   because such a write gave wifi-scripts or a daemon a value that it refuses, and they fail loudly.
   The rest only widens what a write takes. LuCI checks no SSID when it turns a radio on. A radio and
   its SSID as `wifi config` writes them, on 2g, 5g and 6g, take the enable. (#260)
+- **A write of `network/interfaces` that makes the stored peers of a WireGuard interface live
+  refuses a peer that a peer write refuses to enable, with 422 `conflict`.** wireguard.sh gives
+  every enabled peer of the interface to one `wg syncconf`, and wg refuses the whole config for one
+  peer that it cannot read, so the interface stays down. A peer write checks only its own peer. So a
+  write that switched an enabled interface to proto `wireguard`, enabled a wireguard interface, or
+  created one under the name of stored peers answered 200, and the tunnel did not come up. Such a
+  write now answers 422 on `proto`, or on `disabled` when it enables the interface. The message
+  names each such peer and its fields, and no value. A peer write needs its parent on proto
+  `wireguard`, so a switch can send `disabled: true`, and the interface is enabled once its peers
+  are fixed or disabled. The peer rules are the ones that a write of `network/wireguard_peers`
+  checks when it enables the peer: the keys, the endpoint host, the port, the keepalive, and a
+  prefix length with a leading zero when the peer routes its allowed IPs, which wg takes and the
+  route reads in another way. A write of an interface that is already live on wireguard, or that
+  stays disabled, does not check the peers, and neither does the validation sweep. That tightening
+  uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely
+  on, and it fails loudly. LuCI checks no peer when it switches the proto. (#261)
+- **A stored `network/wireguard_peers` value that wg refuses is live only on a peer with a public
+  key.** wireguard.sh writes no `[Peer]` block for a peer without a key, so wg never reads its other
+  values. `GET /api/v3/diagnostics?validate=1` reports the error of such a value with `live: false`,
+  and a write that sets the key answers 422 for it. A port name that does not resolve keeps a second
+  error there, because a PUT of the read is refused for it. The routes of `route_allowed_ips` do not
+  need the key, so a prefix length with a leading zero stays live without one. (#261)
 
 ### Deprecated
 
@@ -475,10 +502,12 @@ All notable changes to this project will be documented in this file. Format foll
   write pushed port 0, while wireguard.sh used 443. A read now gives the port that wg uses, and both
   apply paths push it. A name that does not resolve reads 0, which wg cannot use either, and so does
   a number above 65535, which read above the declared maximum. A peer that stores such a name read
-  null in 3.1.0 and passed a PATCH, and now answers 422 to every write until the port is fixed. That
-  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
-  can rely on, and it fails loudly. `persistent_keepalive` now reads with whitespace removed, as wg
-  reads it, so `'25 '` reads 25 where it read null. (#219)
+  null in 3.1.0, and a write that leaves it as it is still passes. A write that enables the peer or
+  sets its host answers 422 for it, and so does a PUT of the read, with `conflict`, because it would
+  store port 0, which wg takes where it cannot resolve the name. That tightening uses the carve-out
+  in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. `persistent_keepalive` now reads with whitespace removed, as wg reads it, so `'25 '` reads
+  25 where it read null. (#219)
 - **The `network/interfaces.mtu` description says where netifd applies it.** netifd applies an
   interface's `mtu` to its device only when that device has no `config device` section of its
   own, as `br-lan` has in the stock configuration, and to every device that joins the interface
@@ -493,8 +522,10 @@ All notable changes to this project will be documented in this file. Format foll
   and a PUT of the read removed the option, so the tunnel then listened on a random port. A read
   now gives the port that wg uses. A PUT of the read writes the number, which netifd sees as a
   change, so it restarts the interface once and drops the tunnel briefly. A PATCH keeps the
-  stored name and restarts nothing. netifd itself reads the option as an integer and does not restart the interface
-  when it changes to a name, so a name takes effect at the next ifup. Measured on OpenWrt
+  stored name and restarts nothing, also for a name that does not resolve, which reads -1. A write
+  that sends -1 answers 422, so a PUT of such a read is refused. netifd itself reads the option as
+  an integer and does not restart the interface when it changes to a name, so a name takes effect
+  at the next ifup. Measured on OpenWrt
   25.12.5: `listen_port 'openvpn'` listens on 1194 and reads 1194, and
   `listen_port 'nosuchservice'` leaves the interface down and reads -1. (#225)
 - **A `network/interfaces` read of a proto that uapi does not model conforms to the Response

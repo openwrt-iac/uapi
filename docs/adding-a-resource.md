@@ -222,7 +222,10 @@ value. Two lists are the same only entry by entry, because a daemon can read eac
 of its own. So a write that leaves a field alone is refused for an error that the field already
 had only when the write makes the error live, for example by enabling the section. The sweep runs
 `validate_new()` on every stored section and lists its errors with their `live` flag, merged with
-the others as in a 422. `validate()` and the schema check run as before: `validate()` sees the
+the others as in a 422. A write of one resource can make the stored values of another live:
+`validate()` of `network/interfaces` runs `validate_new()` of `network/wireguard_peers` over the
+peers of an interface that a write switches to wireguard or enables, and refuses their live
+errors. `validate()` and the schema check run as before: `validate()` sees the
 whole section, and the schema check sees what the caller sent, which for a JSON Patch is the read
 with the operations applied. The schema check does not see a write-only field that the handler
 carries from uci, because uci can hold it in a shape that the schema does not declare, such as an
