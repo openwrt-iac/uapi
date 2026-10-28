@@ -569,6 +569,59 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_equal(h.patch(world({ ...WG, listen_port: '65536', disabled: '1' }), ctx(), 'wg1', { mtu: 1400 }).status, 200);
 	});
 
+	// The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
+	// gave wireguard.sh a port name that wg cannot resolve, and the interface did not come up.
+	const HAND = { proto: 'static', ipaddr: [ '10.9.0.1/24' ], listen_port: 'nosuchservice' };
+	const TO_WG = { proto: 'wireguard', private_key: WG.private_key, addresses: [ '10.9.0.1/24' ] };
+	t.it('a PATCH that switches to wireguard is refused for a stored listen_port that the old read hides and that reads -1', () => {
+		let c = world(HAND);
+		let r = h.patch(c, ctx(), 'wg1', TO_WG);
+		t.assert_deep_equal(errs(r), [ [ 'listen_port', 'conflict' ] ]);
+		let m = r.body.errors[0].message;
+		t.assert_true(index(m, 'disabled true') >= 0 && index(m, 'null') >= 0 && index(m, 'nosuchservice') < 0, m);
+		t.assert_equal(c._state.uci.network.wg1.proto, 'static');
+		let jp = { ...ctx(), json_patch: true };
+		t.assert_deep_equal(errs(h.patch(world(HAND), jp, 'wg1', [ { op: 'replace', path: '/proto', value: 'wireguard' },
+		                                                           { op: 'add', path: '/private_key', value: WG.private_key },
+		                                                           { op: 'add', path: '/addresses', value: TO_WG.addresses } ])),
+		                    [ [ 'listen_port', 'conflict' ] ]);
+	});
+
+	t.it('the switch passes with a port or null, and a null removes the stored option', () => {
+		let c = world(HAND);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...TO_WG, listen_port: null }).status, 200);
+		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
+		c = world(HAND);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...TO_WG, listen_port: 51820 }).status, 200);
+		t.assert_equal(c._state.uci.network.wg1.listen_port, '51820');
+	});
+
+	t.it('the switch passes with disabled true, and the interface is enabled once the port is sent', () => {
+		let c = world(HAND);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...TO_WG, disabled: true }).status, 200);
+		t.assert_deep_equal(errs(h.patch(c, ctx(), 'wg1', { disabled: false })), [ [ 'listen_port', 'out_of_range' ] ]);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { disabled: false, listen_port: null }).status, 200);
+		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
+	});
+
+	// A PUT removes every option that it does not write, so it does not bring up the stored value.
+	t.it('the switch passes for a stored port that resolves, which it keeps, and a PUT, which removes the option', () => {
+		let c = world({ ...HAND, listen_port: '51820' });
+		t.assert_equal(h.patch(c, ctx(), 'wg1', TO_WG).status, 200);
+		t.assert_equal(c._state.uci.network.wg1.listen_port, '51820');
+		c = world(HAND);
+		t.assert_equal(h.replace(c, ctx(), 'wg1', TO_WG).status, 200);
+		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
+	});
+
+	// toUci clears listen_port when a write sends it as null, and a wireguard read without the option
+	// reads null, so every PATCH would delete an option that is not there.
+	t.it('a PATCH of a wireguard interface without listen_port does not write listen_port', () => {
+		let c = world(WG);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', { mtu: 1400 }).status, 200);
+		t.assert_deep_equal(filter(c._state.uci_ops, (op) => op[3] == 'listen_port'), []);
+	});
+
 	t.it('the sweep reports nothing for the peers of a live or disabled wireguard interface', () => {
 		for (let iface in [ WG, { ...WG, disabled: '1' } ])
 			t.assert_deep_equal(h.sweep(world(iface, BAD)), [], iface);

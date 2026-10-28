@@ -21,7 +21,7 @@ return {
     reload: ["<service>"],             // ubus services to reload on write
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
-    validate: function(json, conn, id, delta) { ... return []; }, // {field, code, message}[]
+    validate: function(json, conn, id, delta, partial) { ... return []; }, // {field, code, message}[]
     validate_new: function(json, conn) { ... return []; }, // optional: see "Rules that a stored value can fail"
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
 
@@ -170,13 +170,18 @@ a merge-patch body, or the paths of a JSON Patch without its `test`
 operations. Check a rule against `json` when it describes the section as
 stored, for example a required field or a reference to another section.
 Check it against `delta` when only the request can be at fault.
+`partial` is true for a PATCH, which keeps a stored option that the request
+leaves out, where a PUT removes it.
 
 `network.interfaces` refuses a field that the proto does not take only when
 `delta` names it. A PATCH that switches the proto still carries the old
 proto's fields in `json`, and `toUci` drops them. `firewall.rules` checks
 `json` instead, so a target switch has to send `null` for the old target's
 fields. The sweep behind `GET /diagnostics?validate=1` passes the `fromUci`
-read as `delta`, so an option that the read hides never flags.
+read as `delta`, so an option that the read hides never flags. A PATCH that
+switches to wireguard keeps a `listen_port` that the read of the old proto
+hides, so `network.interfaces` checks the stored option only when `partial`
+is true.
 
 `schema_properties` is the source of truth for type/enum/min/max/pattern/items
 shape checks - the central `handler.check_schema_types` walks this on every

@@ -315,7 +315,9 @@ function new_errors(resource, after, before, conn) {
 // `delta` is what the request itself named, for checks that must not fire on a field the caller
 // never sent: a PATCH that switches network/interfaces away from static still carries the old
 // addresses in its merged view, and refusing them there would make the switch impossible.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before) {
+// `partial` is true for a PATCH, which keeps a stored option that the request leaves out, where a
+// PUT removes it.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before, partial) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -328,7 +330,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta);
+	let val_errs = resource.validate(validate_body, conn, id, delta, partial);
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -591,9 +593,13 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		//
 		// Null and the empty list are how toUci says "this key should not be there", so
 		// neither is ever a skip: unbound clears the legacy name with `[]`, and comparing two
-		// sentinels equal would have left the operator's stale key in place.
+		// sentinels equal would have left the operator's stale key in place. A clear of a key that
+		// the section does not hold is skipped, because the bus counts the delete as a write and
+		// commits, which rewrites the package.
 		let nv = new_opts[k];
 		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
+		if (clearing && !exists(existing, k))
+			continue;
 		let unchanged = exists(old_opts, k) && sprintf("%J", old_opts[k]) == sprintf("%J", nv);
 		let is_default = (defaults != null) && exists(defaults, k)
 		                 && sprintf("%J", defaults[k]) == sprintf("%J", nv);
@@ -917,7 +923,8 @@ function make(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null);
+				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
+				                                 true);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1149,7 +1156,8 @@ function make_singleton(resource, opts) {
 				if (!r.ok) return r;
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null);
+				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
+				                                 true);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

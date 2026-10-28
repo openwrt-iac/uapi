@@ -1878,6 +1878,18 @@ t.describe('clearing a list option actually clears it', () => {
 		t.assert_equal(r.status, 200);
 		t.assert_equal(conn._state.uci.dhcp.hnew.tag, null);
 	});
+
+	// The bus counts a delete as a write, so the clear that toUci sends for a key the section does
+	// not hold made a PATCH that changed nothing commit, and the commit rewrote the package.
+	t.it('a PATCH that changes nothing clears no key that the section does not hold', () => {
+		let rules = handler.make(loadfile('src/resources/network.rules.uc')(), { tx: tx_ok() });
+		let conn = ubus.stub({ uci: { network: { r1: { '.type': 'rule', '.anonymous': false, src: '10.0.0.0/24', lookup: '100' } } } });
+		t.assert_equal(rules.patch(conn, ctx(), 'r1', {}).status, 200);
+		let lldpd = handler.make_singleton(loadfile('src/resources/lldpd.config.uc')(), { tx: tx_ok() });
+		let conn2 = ubus.stub({ uci: { lldpd: { config: { '.type': 'lldpd', '.anonymous': false } } } });
+		t.assert_equal(lldpd.patch(conn2, ctx(), {}).status, 200);
+		t.assert_deep_equal(filter([ ...conn._state.uci_ops, ...conn2._state.uci_ops ], (op) => op[0] != 'commit'), []);
+	});
 });
 
 // RFC 9110 13.1.2: a false If-None-Match is 304 for GET and HEAD, and 412 for everything

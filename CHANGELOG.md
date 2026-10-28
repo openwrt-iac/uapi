@@ -170,8 +170,8 @@ All notable changes to this project will be documented in this file. Format foll
   tool reaches -1. A write that brings up an interface that stores such a value, by a switch to
   wireguard or by enabling it, also answers 422, which uses the tightening carve-out for payloads
   that produced a state no caller can rely on, and fails loudly. A PATCH that leaves the value as it
-  is passes. A switch from a proto whose read does not show `listen_port`, such as static, does not
-  check an option that a hand edit left there. (#225)
+  is passes. A switch from a proto whose read does not show `listen_port`, such as static, is
+  checked too (#272). (#225)
 - **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
   of a read.** A request inherited the read bounds, so it declared values that every write
   refuses. `NetworkInterfacesRequest.mtu` now starts at 68, or takes 128 to 16384 on proto `ppp`
@@ -405,6 +405,20 @@ All notable changes to this project will be documented in this file. Format foll
   Makefile runs `tools/compact_json.py`. `make stage` now needs `python3`, which the OpenWrt SDK
   requires on the host too, and fails unless the installed copy parses to the same value as
   `build/openapi.json`, which stays indented in the repository. (#264)
+- **A PATCH that switches an enabled `network/interfaces` to proto `wireguard` refuses a
+  hand-written `listen_port` that does not resolve, with 422 `conflict` on `listen_port`.** The read
+  of a proto that takes no `listen_port`, such as `static`, does not show the option, and a PATCH
+  keeps an option that it leaves out, so the check of #225 could not see a value such as
+  `nosuchservice` that a hand edit left there. wireguard.sh wrote it after `ListenPort=`, wg refused
+  it, and the interface did not come up, while the PATCH answered 200. Such a PATCH now passes when
+  it sends a port or `null`, and a `null` now removes the option. It removed nothing before, because
+  a PATCH deletes only the options that the read of the old proto shows. A switch with
+  `disabled: true` passes too, and a write that sends a port or `null` can then enable the
+  interface. A PUT removes every option that it does not write, so the check does not apply to it.
+  That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, and it fails loudly. LuCI saves such a switch, and its wireguard form refuses
+  the value at the next save, so uapi refuses earlier, at the write that makes wg fail. No stock
+  `/etc/config/network` holds a `listen_port`. (#272)
 
 ### Deprecated
 
@@ -854,6 +868,23 @@ All notable changes to this project will be documented in this file. Format foll
   lock. The child runs on, so the next write can now start while the reload or `apk` of a killed
   request still runs. A kill between the commit and the reload still leaves the write half done,
   which `docs/roadmap.md` records. No request, response or header changes. (#269)
+- **The restore after a failed peer write no longer stops at a WireGuard peer without a public key
+  or without allowed IPs.** wireguard.sh writes no `[Peer]` for a section without a key, and no
+  `AllowedIPs` line for a peer without allowed IPs, which LuCI leaves optional, so ifup takes both.
+  The restore sets every peer of an up interface again from uci and refused both, so any failed
+  write of `network/wireguard_peers` on such an interface answered `500 reload_failed_unrecovered`,
+  and the peers after it in uci were not set again. The restore now skips a section without a key,
+  as wireguard.sh does, and sets a peer without allowed IPs with an empty `allowed-ips`, which
+  clears the list in the kernel. A write that removes a peer from the kernel, such as a DELETE, sets
+  again each other enabled section with the same key, and refused such a section in the same way. A
+  write of `network/wireguard_peers` still requires `allowed_ips`. No request, response or header
+  changes. (#272)
+- **A PATCH that changes nothing no longer rewrites the package of `network/rules`, `lldpd/config`,
+  `snmpd/system` or `unbound/server`.** Each write of these clears an option, `action` of a lookup
+  or goto rule, or the legacy `lldp_capabilities`, `sysServices` or `dnssec_enabled`, and a PATCH
+  sent that delete even when the section did not hold the option. The bus counts a delete as a
+  write, so the commit wrote the package again, which drops its comments. A PATCH now skips the
+  clear of an option that the section does not hold. No request, response or header changes. (#272)
 
 ### Security
 

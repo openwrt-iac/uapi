@@ -35,6 +35,7 @@ fi
 
 IFACE=wgpa
 IFACE2=wgpb
+IFACE3=wgpc
 PRIV='yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk='
 PEER1='xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg='
 PEER2='TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0='
@@ -44,7 +45,7 @@ PEER4='TWlzY2VsbGFuZW91c1BlZXJLZXlGb3JUZXN0aW5nMD0='
 # Peers outlive their parent in uci, and a peer section whose interface is gone
 # would be left behind for every later run to trip over, so they go first.
 cleanup() {
-	for i in $IFACE $IFACE2; do
+	for i in $IFACE $IFACE2 $IFACE3; do
 		$SSH "ifdown $i >/dev/null 2>&1 || true
 		      for s in \$(uci show network | sed -n \"s/^network\\.\\([^.]*\\)=wireguard_$i\$/\\1/p\"); do
 		          uci -q delete network.\$s
@@ -161,6 +162,33 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 $SSH "uci delete network.uapi45sib2; uci commit network"
 $SSH "[ ! -e /tmp/uapi45_ep ]" || fail "a stored endpoint_host ran as a shell command"
+
+# wireguard.sh writes no [Peer] for a section without a key, and no AllowedIPs line for a peer
+# without allowed IPs, which LuCI leaves optional, so ifup takes both. The restore stopped at the
+# first of them, answered reload_failed_unrecovered, and set none of the peers after it. The kernel
+# holds an allowed IP for the peer that uci holds none for, so the restore has to clear the list,
+# which it does with `wg set <if> peer <key> allowed-ips ""`. The peer has an endpoint, so the
+# restore sets it without removing it first, and only that argument can clear the list.
+echo "--- a restore skips a peer without a key, clears the allowed IPs of a peer without any, and sets the peers after them ---"
+NOIPS=$($SSH 'wg genkey | wg pubkey')
+AFTER=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45nokey=wireguard_$IFACE; uci add_list network.uapi45nokey.allowed_ips=10.98.99.64/32
+	uci set network.uapi45noips=wireguard_$IFACE; uci set network.uapi45noips.public_key='$NOIPS'
+	uci set network.uapi45noips.endpoint_host=198.51.100.7; uci set network.uapi45noips.endpoint_port=51820
+	uci set network.uapi45after=wireguard_$IFACE; uci set network.uapi45after.public_key='$AFTER'
+	uci add_list network.uapi45after.allowed_ips=10.98.99.65/32; uci commit network
+	wg set $IFACE peer '$NOIPS' allowed-ips 10.98.99.66/32"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
+	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+noips=$($SSH "wg show $IFACE allowed-ips" | awk -v k="$NOIPS" '$1 == k { print $2 }')
+after=$(has_peer "$AFTER" && echo yes || echo no)
+$SSH "uci delete network.uapi45nokey; uci delete network.uapi45noips; uci delete network.uapi45after; uci commit network
+	wg set $IFACE peer '$NOIPS' remove; wg set $IFACE peer '$AFTER' remove"
+[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore did not recover: $(body_of "$r")"
+[ "$noips" = "(none)" ] || fail "the peer without allowed IPs holds '$noips' in the kernel, not (none)"
+[ "$after" = "yes" ] || fail "the restore did not set the peer after the peer without a key"
 
 # Rotating a key leaves the kernel holding the previous peer under the old key
 # unless the old one is removed first, which would keep its access alive.
@@ -380,6 +408,46 @@ n=0
 until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
 	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with its fixed peer"; sleep 1
 done
+
+# The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
+# gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. Either way out
+# that the message gives works: a null in the switch removes the option, and so does a null sent
+# after a switch with disabled true.
+echo "--- a switch to wireguard refuses a hand-written listen_port that does not resolve, which keeps the interface down ---"
+up3() { $SSH "ubus call network.interface.$IFACE3 status" 2>/dev/null | grep -q '"up": true'; }
+wait_up3() {
+	n=0
+	until up3; do n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE3 did not come up $1"; sleep 1; done
+}
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
+	-d "{\"proto\":\"static\",\"id\":\"$IFACE3\",\"ipaddrs\":[\"10.98.96.1/30\"]}")
+[ "$(status_of "$r")" = "200" ] || fail "POST $IFACE3: $(body_of "$r")"
+$SSH "uci set network.$IFACE3.listen_port=nosuchservice; uci commit network"
+PRIV3=$($SSH 'wg genkey')
+TO_WG3="{\"proto\":\"wireguard\",\"private_key\":\"$PRIV3\",\"addresses\":[\"10.98.96.1/30\"]"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d "$TO_WG3}")
+[ "$(status_of "$r")" = "422" ] || fail "switch with a listen_port that does not resolve expected 422, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"field": "listen_port"' || fail "the 422 is not on listen_port: $(body_of "$r")"
+body_of "$r" | grep -q '"code": "conflict"' || fail "the 422 is not a conflict: $(body_of "$r")"
+body_of "$r" | grep -q 'nosuchservice' && fail "the 422 quotes the stored value: $(body_of "$r")"
+[ "$($SSH "uci get network.$IFACE3.proto")" = "static" ] || fail "the refused switch changed the proto"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d "$TO_WG3,\"disabled\":true}")
+[ "$(status_of "$r")" = "200" ] || fail "switch with disabled true: $(body_of "$r")"
+$SSH "uci set network.$IFACE3.disabled=0; uci commit network; /etc/init.d/network reload"
+sleep 10
+up3 && fail "$IFACE3 came up with a listen_port that wg cannot resolve, so the refusal guards nothing"
+$SSH "uci set network.$IFACE3.disabled=1; uci commit network; /etc/init.d/network reload"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"disabled":false,"listen_port":null}')
+[ "$(status_of "$r")" = "200" ] || fail "enabling with listen_port null: $(body_of "$r")"
+$SSH "uci -q get network.$IFACE3.listen_port" && fail "listen_port null after the disabled switch kept the option"
+wait_up3 "once listen_port null removed the option"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"proto":"static","ipaddrs":["10.98.96.1/30"]}')
+[ "$(status_of "$r")" = "200" ] || fail "switch $IFACE3 back to static: $(body_of "$r")"
+$SSH "uci set network.$IFACE3.listen_port=nosuchservice; uci commit network"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d "$TO_WG3,\"listen_port\":null}")
+[ "$(status_of "$r")" = "200" ] || fail "switch with listen_port null: $(body_of "$r")"
+$SSH "uci -q get network.$IFACE3.listen_port" && fail "listen_port null in the switch kept the option"
+wait_up3 "after the switch with listen_port null"
 
 echo "--- a peer written to a down tunnel is accepted, and applies on ifup ---"
 $SSH "ifdown $IFACE"; sleep 2
