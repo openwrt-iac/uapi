@@ -130,6 +130,66 @@ EOF
 
 mut_doc_bad_claim() { printf '\nIt claims "no test prints this line".\n' >> docs/testing.md; }
 
+mut_lock_audit_missing_row() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('docs/lock-state-audit.md'); lines = p.read_text().split('\n')
+kept = [l for l in lines if not l.startswith('| `src/lib/mgmt.uc` |')]
+assert len(kept) == len(lines) - 1, 'mgmt.uc row not found'
+p.write_text('\n'.join(kept))
+EOF
+}
+
+mut_lock_audit_new_site() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('src/lib/mgmt.uc'); s = p.read_text()
+a = 'function inbound_interface('
+assert a in s, 'anchor not found'
+p.write_text(s.replace(a, 'function probe_site() {\n\tlet f = fs.open("/dev/null", "r");\n\tif (f) f.close();\n}\n\n' + a, 1))
+EOF
+}
+
+mut_lock_audit_wrong_range() {
+	python3 - <<'EOF'
+import pathlib, re
+p = pathlib.Path('docs/lock-state-audit.md'); s = p.read_text()
+s, n = re.subn(r'^(\| `src/lib/mgmt\.uc` \| )[0-9]+-[0-9]+', r'\g<1>1-3', s, count=1, flags=re.M)
+assert n == 1, 'mgmt.uc row not found'
+p.write_text(s)
+EOF
+}
+
+mut_lock_audit_double_row() {
+	python3 - <<'EOF'
+import pathlib, re
+p = pathlib.Path('docs/lock-state-audit.md'); s = p.read_text()
+m = re.search(r'^\| `src/lib/mgmt\.uc` \|.*$', s, flags=re.M)
+assert m, 'mgmt.uc row not found'
+p.write_text(s[:m.end()] + '\n' + m.group(0) + s[m.end():])
+EOF
+}
+
+mut_lock_audit_stale_count() {
+	python3 - <<'EOF'
+import pathlib, re
+p = pathlib.Path('docs/lock-state-audit.md'); s = p.read_text()
+s, n = re.subn(r'covers all ([0-9]+) sites', lambda m: 'covers all %d sites' % (int(m.group(1)) - 1), s, count=1)
+assert n == 1, 'count claim not found'
+p.write_text(s)
+EOF
+}
+
+mut_lock_audit_blind_command() {
+	python3 - <<'EOF'
+import pathlib, re
+p = pathlib.Path('docs/lock-state-audit.md'); s = p.read_text()
+s, n = re.subn(r"^grep -rnE '[^']+' src/ cli/$", "grep -rnE 'probe_matches_nothing_zz' src/ cli/", s, count=1, flags=re.M)
+assert n == 1, 'reproduction command not found'
+p.write_text(s)
+EOF
+}
+
 mut_code_unemitted() {
 	python3 - <<'EOF'
 import pathlib
@@ -572,6 +632,12 @@ probe lint-doc-refs      "a deprecation the spec omits"         "ledger announce
 probe lint-doc-refs      "a claim no test prints"               "no test prints this claim"         mut_doc_bad_claim
 probe lint-doc-refs      "an error code nothing emits"         "nothing in src/ emits it"          mut_code_unemitted
 probe lint-doc-refs      "an enum code nothing documents"      "appears nowhere in docs/errors.md" mut_code_undocumented
+probe lint-lock-audit    "a site whose audit row is deleted"   "is not in docs/lock-state-audit.md" mut_lock_audit_missing_row
+probe lint-lock-audit    "a new site with no audit row"        "is not in docs/lock-state-audit.md" mut_lock_audit_new_site
+probe lint-lock-audit    "an audit range that holds no site"   "holds no acquisition"              mut_lock_audit_wrong_range
+probe lint-lock-audit    "a site covered by two audit rows"    "is covered by 2 rows"              mut_lock_audit_double_row
+probe lint-lock-audit    "a stale audit site count"            "the command finds"                 mut_lock_audit_stale_count
+probe lint-lock-audit    "an audit command that finds nothing" "found no site"                     mut_lock_audit_blind_command
 probe openapi-check      "a schema change not regenerated"     ""                                  mut_stale_spec
 probe stage              "a compact spec with its keys sorted" "parse to the same JSON value"       mut_compact_reorders
 probe coverage           "a module import nothing reads"    "DEAD MODULE IMPORTS"               mut_dead_import

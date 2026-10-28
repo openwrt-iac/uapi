@@ -420,15 +420,6 @@ is unresolvable.
   release time. Deciding needs a few runs' worth of variance data across runners,
   which nobody has gathered. Until then the tree says measurement, not gate.
 
-- **Finish the lock-state audit.** `docs/lock-state-audit.md` covers 16 of the 36
-  sites its own reproduction command finds, and roughly seven of its line ranges have
-  drifted. Nine modules are absent entirely: `error_ring`, `idempotency`, `metrics`,
-  `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6`, `dhcp.servers`. The
-  doc no longer claims completeness, so this is a coverage gap rather than a false
-  statement, but the missing sites are real fd and lock acquisitions with no release
-  proof written down. Re-run the command, audit each site, and consider whether the count
-  can be checked mechanically the way the read-honesty case list is.
-
 - **Reporting-surface consumption is the provider's.** `X-Kernel-Status`,
   `management_path` and `?validate=1` are all emitted and documented here, and
   `terraform-provider-uapi` consumes none of them. That is the provider's call, not a gap
@@ -454,6 +445,12 @@ stale enough to be misleading:
   `unbound.srv` and `unbound.ext` unfuzzed. `tests/unit/read_honesty_test.uc`
   walks the same directory, but only to check that its hand-written cases cover
   every writable module.
+- The lock-state audit is complete. It covered 16 of the 36 sites its command found,
+  and that command missed every ubus connection, every uci cursor and the lock
+  acquisitions of `multi_transaction()`. `docs/lock-state-audit.md` now has a release
+  proof for each site the wider command finds, and `make lint-lock-audit` fails when a
+  site is missing from its table or a range no longer holds one. The defects the audit
+  found are recorded there under Open findings, not fixed.
 
 ## Objectives for the next major
 

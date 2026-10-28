@@ -17,8 +17,8 @@
 //     gate and verify-arch-build cited real artifacts, so no reference check reaches them.
 //     Roughly 46 such claims exist and hand review is still the only instrument.
 //   - Modal invariants: never, cannot, atomic, guarantees. Roughly 160 tokens.
-//   - Line numbers. docs/lock-state-audit.md is the one place that cites ranges and about
-//     seven have drifted; nothing here reads them.
+//   - Line numbers. docs/lock-state-audit.md is the one place that cites ranges, and
+//     tests/lint_lock_audit.uc is what checks them.
 //   - Prose that names a resource path (`network/interfaces`), a uci option or an absolute
 //     runtime path (`/etc/config/dhcp`). Those are not repo files and are skipped by the
 //     first-segment test below.

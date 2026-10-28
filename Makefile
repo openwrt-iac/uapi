@@ -1,4 +1,4 @@
-.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs gate-selftest
+.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs lint-lock-audit gate-selftest
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -20,6 +20,7 @@ help:
 	@echo "  lint-defaults      verify every fromUci default is annotated in schema_properties"
 	@echo "  lint-wire-names    verify every API name that differs from its uci key is accounted for"
 	@echo "  lint-doc-refs      fail on doc references that do not resolve (paths, exports, targets, codes)"
+	@echo "  lint-lock-audit    fail on a resource site that docs/lock-state-audit.md does not cover"
 	@echo "  gate-selftest      break each gate on purpose and assert it fails"
 	@echo "  lint-openapi-shape structural checks a conformance validator does not make"
 	@echo "  openapi            regenerate build/openapi.json from resource modules"
@@ -116,7 +117,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability
+lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability lint-lock-audit
 
 # Tracked files only, via git rather than a hand-kept directory list. The list had
 # gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
@@ -188,6 +189,11 @@ gate-selftest:
 # the two shapes that are mechanically checkable.
 lint-doc-refs:
 	@$(UCODE) tests/lint_doc_refs.uc
+
+# Runs the reproduction command of docs/lock-state-audit.md and fails on a site no row covers,
+# a row that holds no site, or a stale "covers all N sites" count.
+lint-lock-audit:
+	@$(UCODE) tests/lint_lock_audit.uc
 
 # Verifies every fromUci unconditional default has a matching
 # `default: V` in schema_properties. Catches the drift case where a new
