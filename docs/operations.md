@@ -28,8 +28,10 @@ unbound is the exception. When unbound runs, a write that reloads `unbound`
 or `unbound-uci-ext` waits 2 s for each unbound instance to keep running. If
 one stops, the write answers `500 reload_failed_restored`, and its
 `reload_error` reads `unbound stopped after the reload, with exit code 1`. So
-a 2xx on these writes also means that unbound, if it ran before the write, ran
-2 s after the reload. A daemon that stops later than that still answers 2xx.
+a 2xx on these writes also means that procd did not report unbound as stopped
+in the 2 s after the reload. An instance that `service list` does not show,
+because something restarts it or the ubus call fails, does not count, and a
+daemon that stops later than 2 s still answers 2xx.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block

@@ -138,9 +138,12 @@ function default_release(handle) {
 }
 
 // Per-package uci-transaction lock. Holds SH on the global, EX on the
-// per-package file. Returns the fd handle on success, or one of:
+// per-package file of `package` and of each package in `also`, taken in
+// sorted order as multi_transaction takes them. Returns { _g, _p } on
+// success, or one of:
 //   { contention: "global" }  - non-uci writer holds the global EX
-//   { contention: "package" } - another uci writer holds this package's EX
+//   { contention: "package", package } - another uci writer holds the EX
+//                                        of that package
 //   { unavailable: <path> }   - file open failed (infrastructure)
 // The contention distinction feeds the 423 message identity so the
 // caller learns which lock blocked them.
@@ -151,7 +154,7 @@ function default_acquire_pkg(global_path, package, also) {
 	if (g == null) return { contention: "global" };
 	if (type(g) == "object" && g.unavailable != null) return g;
 	let held = [];
-	for (let name in [ package, ...(also ?? []) ]) {
+	for (let name in sort([ package, ...(also ?? []) ])) {
 		let p = _lock_one(PKG_LOCK_PREFIX + name + ".lock", "x");
 		if (p == null || type(p) == "object" && p.unavailable != null) {
 			for (let h in held) _release_one(h);
