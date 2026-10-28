@@ -640,8 +640,7 @@ All notable changes to this project will be documented in this file. Format foll
   the section name, on raw, on the curated resources and on `/tokens`. `id` is now the section
   name, and a write by position acts on that section. A curated PUT by position no longer refuses
   a unique field, such as the `name` of a firewall zone or the `ip` of a DHCP host, as taken by the
-  section itself, and a token revoked by position no longer leaves its rate-limit bucket in
-  `/tmp/uapi-ratelimit/`. (#242)
+  section itself, and a token revoked by position no longer leaves its rate-limit bucket. (#242)
 - **A raw PATCH removes the reload fields that a write stored as options before 3.2.0**, as it
   removes a stored `managed`. Only a PUT removed them, and a write response showed a stored
   `reload_note` next to a fresh `reloaded`. (#242)
@@ -833,7 +832,7 @@ All notable changes to this project will be documented in this file. Format foll
   and starts again at its next increment, which Prometheus reads as a reset, and a fold into
   `token_id="-retired"` deletes the series of a token only once its count is added. (#269)
 - **Every path that no route serves is recorded as `path="unmatched"` in the metrics.** A request
-  with no token could add metric files in `/tmp/uapi-metrics`, which is RAM, until a reboot. The
+  with no token could add metric files in tmpfs, which is RAM, until a reboot. The
   `path` label now names the route that serves a path, with `:id` for each parameter, a `/raw` path
   keeps its package only when `/etc/config` holds it, and every other path has the one label
   `unmatched`. The label of each route is the one it had. The metrics output changes for the paths
@@ -858,10 +857,20 @@ All notable changes to this project will be documented in this file. Format foll
 
 ### Security
 
+- **The metrics, the rate-limit buckets, the error ring and the idempotency cache keep their files
+  private under `/var/run`.** They were in `/tmp`. Each now keeps its files in a directory of mode
+  0700, `/var/run/uapi-metrics`, `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring` or
+  `/var/run/uapi-idempotency`, with files of mode 0600. A package install or upgrade removes these
+  four directories, and the four that an older uapi kept in `/tmp` when root owns them, so the
+  counters start again from zero, which Prometheus reads as a reset. The buckets and the ring now
+  check the size on disk before the rename, as the cache and the counters do, so a full tmpfs no
+  longer empties the ring or refills a bucket. Two idempotency stores of one key at the same moment
+  no longer share a temp file, which could leave an entry that read as a miss. No request, response
+  or header changes. (#270)
 - **The idempotency cache keeps its entries private and bounded.** It uses only a directory that
   uapi owns with mode 0700 and writes each entry with mode 0600, a package install or upgrade
-  removes the directory, a store removes the entries older than the 24 h TTL at most once an hour,
-  and a `POST /batch` that only reads stores no entry. (#266)
+  removes the directory when root owns it, a store removes the entries older than the 24 h TTL at
+  most once an hour, and a `POST /batch` that only reads stores no entry. (#266)
 - **A stored `persistent_keepalive` no longer runs as a root shell command.** `src/lib/wg.uc`
   put a peer's `persistent_keepalive` into the `wg set` command without quoting it. The restore
   after a failed peer write reapplies the interface's peers from uci, and that path read the raw

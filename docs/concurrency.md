@@ -19,7 +19,7 @@ Consequences:
 - **Compute static tables at startup.** `RESOURCES`, `SINGLETONS`, `KNOWN_PATHS`, all the resource module return-objects are built once and treated as read-only.
 - **Read uci on every request.** uci reads are millisecond-scale and the request volume is low. There is no benefit to caching uci state in memory across requests, and the integration test for the parent-fork model would catch you if you tried.
 - **Acquire flocks before writing.** Use `transaction.transaction()` for single-package uci writes; it takes SH on the global lock + EX on the per-package lock. Use `transaction.with_lock()` for non-uci writes; it takes EX on the global. Use `transaction.multi_transaction()` for cross-package atomic writes (`/batch`).
-- **Use file-backed state for cross-request data.** The token-bucket rate limiter writes to `/tmp/uapi-ratelimit/<token>.txt`. The idempotency cache writes to `/tmp/uapi-idempotency/`. File IO + atomic rename + flock is the cross-fork channel.
+- **Use file-backed state for cross-request data.** The token-bucket rate limiter writes to `/var/run/uapi-ratelimit/<token>.txt`. The idempotency cache writes to `/var/run/uapi-idempotency/`. File IO + atomic rename + flock is the cross-fork channel.
 
 ## What you cannot do
 

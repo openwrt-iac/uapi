@@ -63,9 +63,14 @@ define Package/uapi/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 [ -x /etc/uci-defaults/99-uapi ] && /etc/uci-defaults/99-uapi && rm -f /etc/uci-defaults/99-uapi
-# An older uapi left the idempotency cache readable to other users, and the cache is only a
-# 24 h replay window, so it starts empty in a directory that uapi creates private.
-rm -rf /tmp/uapi-idempotency
+# These hold a 24 h replay window and state that a reboot clears too, so each starts empty at an
+# install or upgrade and keeps no file that an older version wrote. An older uapi kept them in
+# /tmp, 0755 with files 0644. Only a directory that root owns is removed.
+for d in /var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit \
+	/var/run/uapi-error-ring /tmp/uapi-idempotency /tmp/uapi-metrics /tmp/uapi-ratelimit \
+	/tmp/uapi-error-ring; do
+	[ -O "$$d" ] && rm -rf "$$d"
+done
 # uhttpd-mod-ucode compiles main.uc at parent startup and caches the VM. A
 # plain "reload" does not re-read the script, so upgrades that overwrite
 # /usr/share/uapi/*.uc would otherwise keep serving the previous version's

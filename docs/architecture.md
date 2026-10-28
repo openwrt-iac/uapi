@@ -421,7 +421,7 @@ the headers still works via the header path.
 
 ## Rate limit token bucket
 
-Per-token bucket, file-backed at `/tmp/uapi-ratelimit/<token-id>.txt`
+Per-token bucket, file-backed at `/var/run/uapi-ratelimit/<token-id>.txt`
 containing a float and an integer: `<tokens_remaining> <last_refill_epoch_ms>`.
 
 On each authed request:
@@ -446,11 +446,11 @@ the bucket at 100/s. Steady-state: 100/s through, 150/s rate-limited → 429.
 
 ## Metrics
 
-File-backed under `/tmp/uapi-metrics/`. One file per (series, label-set)
+File-backed under `/var/run/uapi-metrics/`. One file per (series, label-set)
 combination:
 
 ```
-/tmp/uapi-metrics/
+/var/run/uapi-metrics/
   uapi_requests_total/
     method=GET/path=%2Ffirewall%2Frules/status=200/token_id=tf_prod.txt   "1247\n"
     method=POST/path=%2Ffirewall%2Frules/status=422/token_id=tf_prod.txt  "13\n"
@@ -495,7 +495,7 @@ are deduplicated for 24 h:
 
 ```
 key = sha256(token_name || "|" || key)
-file: /tmp/uapi-idempotency/<key>.json
+file: /var/run/uapi-idempotency/<key>.json
 contents: {
     fingerprint: sha256(token || "|" || key || "|" || body_text),
     status, headers, body
@@ -511,14 +511,15 @@ Cache hits skip the entire handler stack except auth and the rate limiter -
 the resource handler never runs. A client retrying a network-blipped POST
 gets the original response back, never a duplicate resource.
 
-An entry can carry a secret, and other daemons of the box run as other users
-and can create a directory in `/tmp` first. So uapi uses the cache only in a
-directory that it owns, with mode 0700, and writes each entry 0600. A package
-install or upgrade removes the directory, so no entry of an older version
-stays. At most once an hour, a store removes the entries older than the TTL,
-so the directory holds the writes of about one TTL. A `POST /batch` that only
-reads stores no entry: replaying a read gives nothing that running it again
-does not give.
+An entry can carry a secret, so it is written 0600 into a private
+directory, see [Where state lives](#where-state-lives). A store writes its
+entry under a temp name of its own request process before the rename, so
+two stores of one key at the same moment each write a whole entry. A
+package install or upgrade removes the directory, so no entry of an older
+version stays. At most once an hour, a store removes the entries
+older than the TTL, so the directory holds the writes of about one TTL. A
+`POST /batch` that only reads stores no entry: replaying a read gives
+nothing that running it again does not give.
 
 ## Audit and request_id
 
@@ -553,15 +554,27 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
-| Rate-limit buckets           | `/tmp/uapi-ratelimit/`                      | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
-| Idempotency cache            | `/tmp/uapi-idempotency/`                    | 24 h, removed by the next store after that |
-| Metrics counters             | `/tmp/uapi-metrics/`                        | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
+| Rate-limit buckets           | `/var/run/uapi-ratelimit/`                  | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
+| Idempotency cache            | `/var/run/uapi-idempotency/`                | 24 h, removed by the next store after that |
+| Metrics counters             | `/var/run/uapi-metrics/`                    | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
+| Recent errors                | `/var/run/uapi-error-ring/`                 | The last 20, until reboot |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
 
-`/tmp` is tmpfs on OpenWrt: rate-limit buckets, idempotency entries, and
-metrics counters reset on reboot. This is acceptable: operational
-counters that span uptime aren't a uapi responsibility - point a
-`node_exporter` or central collector at the box and aggregate there.
+uapi keeps the rate-limit buckets, the idempotency cache, the metrics
+counters and the recent errors under `/var/run`, in directories of mode
+0700 with files of mode 0600. It uses one only when `state_dir.owned()`
+accepts it: a directory owned by the effective uid of the request process,
+that neither the group nor others can write. One of its own with another
+mode is narrowed to 0700, and each file is written through
+`state_dir.replace()`. A package install or upgrade
+removes the four directories, and the four that an older uapi kept in
+`/tmp` when root owns them, so none keeps a file that an older uapi wrote.
+
+`/var/run` is tmpfs on OpenWrt, as `/var` is `/tmp`: rate-limit buckets,
+idempotency entries, metrics counters and recent errors reset on reboot.
+This is acceptable: operational counters that span uptime aren't a uapi
+responsibility - point a `node_exporter` or central collector at the box
+and aggregate there.

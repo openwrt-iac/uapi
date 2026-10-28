@@ -2,7 +2,7 @@ let t = require('harness');
 let fs = require('fs');
 let metrics = require('metrics');
 
-// Each test isolates itself by writing to /tmp/uapi-metrics, then wiping it.
+// Each test isolates itself by writing to /var/run/uapi-metrics, then wiping it.
 // We rely on metrics.uc using that exact path - if it changes, this breaks.
 function wipe() {
 	function rm_rf(p) {
@@ -18,7 +18,7 @@ function wipe() {
 			try { fs.unlink(p); } catch (_) {}
 		}
 	}
-	rm_rf("/tmp/uapi-metrics");
+	rm_rf("/var/run/uapi-metrics");
 }
 
 t.describe('metrics.inc', () => {
@@ -49,10 +49,10 @@ t.describe('metrics.inc', () => {
 
 	t.it('removes its temp file when the rename fails', () => {
 		wipe();
-		fs.mkdir("/tmp/uapi-metrics");
-		fs.mkdir("/tmp/uapi-metrics/c.txt");
+		fs.mkdir("/var/run/uapi-metrics");
+		fs.mkdir("/var/run/uapi-metrics/c.txt");
 		metrics.inc("c", {}, 1);
-		let left = fs.stat("/tmp/uapi-metrics/c.txt.tmp") != null;
+		let left = fs.stat("/var/run/uapi-metrics/c.txt.tmp") != null;
 		wipe();
 		t.assert_false(left);
 	});
@@ -140,7 +140,7 @@ t.describe('metrics.retire_tokens', () => {
 		metrics.retire_tokens({});
 		metrics.record_request("GET", "/system", 200, 1, "run_1");
 		metrics.record_request("GET", "/system", 200, 1, "run_1");
-		let dir = "/tmp/uapi-metrics/uapi_requests_total/method=GET/path=%2Fsystem/status=200/";
+		let dir = "/var/run/uapi-metrics/uapi_requests_total/method=GET/path=%2Fsystem/status=200/";
 		let script = "/tmp/uapi-test-metrics-full.uc";
 		fs.writefile(script, "require('metrics').retire_tokens({});\n");
 		system("trap '' XFSZ; ulimit -f 0; exec ucode -L src/lib " + script + " >/dev/null 2>&1");
@@ -158,10 +158,28 @@ t.describe('metrics, a counter file that holds no count', () => {
 	t.it('is left out of the scrape and starts again at the next increment', () => {
 		wipe();
 		metrics.inc("c", { x: "a" }, 4);
-		fs.writefile("/tmp/uapi-metrics/c/x=a.txt", "NaN\n");
+		fs.writefile("/var/run/uapi-metrics/c/x=a.txt", "NaN\n");
 		t.assert_equal(index(metrics.format_prometheus(), "c{"), -1);
 		metrics.inc("c", { x: "a" }, 1);
 		t.assert_true(index(metrics.format_prometheus(), 'c{x="a"} 1\n') >= 0);
+	});
+});
+
+t.describe('metrics, a directory that is not uapi\'s own', () => {
+	// A fold unlinks a file that holds no count without adding anything, so the increment's own
+	// check does not cover it.
+	t.it('is not used: it takes no count, shows no series and folds none', () => {
+		wipe();
+		metrics.record_request("GET", "/system", 200, 1, "run_1");
+		let file = "/var/run/uapi-metrics/uapi_requests_total/method=GET/path=%2Fsystem/status=200/token_id=run_1.txt";
+		fs.writefile(file, "");
+		fs.chmod("/var/run/uapi-metrics", 0o777);
+		t.assert_false(metrics.inc("c", {}, 1));
+		t.assert_equal(fs.stat("/var/run/uapi-metrics/c.txt"), null);
+		t.assert_equal(metrics.format_prometheus(), "\n");
+		metrics.retire_tokens({});
+		t.assert_equal(fs.readfile(file), "");
+		fs.chmod("/var/run/uapi-metrics", 0o700);
 	});
 });
 

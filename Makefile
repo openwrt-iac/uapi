@@ -31,14 +31,21 @@ help:
 
 test: lint test-unit
 
+# The rate limiter, the metrics, the error ring and the idempotency cache keep their state under
+# /var/run, which only root can write. CI runs the suite as root, and anyone else runs it as root
+# of a user namespace that has a /var/run of its own.
+UNIT_RUN = $(UCODE) $(UNIT_PATHS) tests/run_unit.uc
+AS_ROOT = if [ "$$(id -u)" = 0 ]; then $(1); \
+	else unshare -rm sh -c 'mount -t tmpfs uapi-test /var/run && exec $(1)'; fi
+
 test-unit:
-	@$(UCODE) $(UNIT_PATHS) tests/run_unit.uc
+	@$(call AS_ROOT,$(UNIT_RUN))
 
 # High-iteration property/fuzz pass. Default 1000/resource (vs 200 in
 # `make test`) so a regression in fuzz coverage shows up as a distinct
 # CI step rather than vanishing into the unit-test output.
 test-property:
-	@PROPERTY_ITERS=$${PROPERTY_ITERS:-1000} $(UCODE) $(UNIT_PATHS) tests/run_unit.uc
+	@export PROPERTY_ITERS=$${PROPERTY_ITERS:-1000}; $(call AS_ROOT,$(UNIT_RUN))
 
 coverage:
 	@$(UCODE) $(UNIT_PATHS) tests/coverage.uc

@@ -1,9 +1,10 @@
 let fs = require('fs');
+let state_dir = require('state_dir');
 
 // Last 20 error envelopes surfaced via /diagnostics.
 // Best-effort: any fs failure is swallowed because logging must never
 // disrupt the actual response.
-const DIR = "/tmp/uapi-error-ring";
+const DIR = "/var/run/uapi-error-ring";
 const PATH = DIR + "/ring.json";
 const CAP = 20;
 // The ring outlives the request in tmpfs, and the 400 for a control character in a body
@@ -12,6 +13,7 @@ const CAP = 20;
 const MAX_MESSAGE = 512;
 
 function read() {
+	if (!state_dir.owned(DIR)) return [];
 	let f = fs.open(PATH, "r");
 	if (!f) return [];
 	let raw = f.read("all") ?? "";
@@ -23,9 +25,8 @@ function read() {
 }
 
 function append(entry) {
-	if (type(entry) != "object") return;
+	if (type(entry) != "object" || !state_dir.owned(DIR)) return;
 	try {
-		try { fs.mkdir(DIR); } catch (_) {}
 		let existing = read();
 		let m = entry.message;
 		push(existing, { ...entry,
@@ -33,12 +34,7 @@ function append(entry) {
 		while (length(existing) > CAP) shift(existing);
 		// One name per request process. Appends that shared one wrote through their own offsets
 		// into one file, which then held no JSON, and the ring read empty.
-		let tmp = PATH + "." + fs.readlink("/proc/self");
-		let f = fs.open(tmp, "w");
-		if (!f) return;
-		f.write(sprintf("%J", existing));
-		f.close();
-		if (!fs.rename(tmp, PATH)) fs.unlink(tmp);
+		state_dir.replace(PATH + "." + fs.readlink("/proc/self"), PATH, sprintf("%J", existing));
 	} catch (_) {}
 }
 

@@ -1,7 +1,8 @@
 let fs = require('fs');
+let state_dir = require('state_dir');
 
 // Atomic tmpfile+rename writes; no flock (every authed request passes here).
-const DIR = "/tmp/uapi-ratelimit";
+const DIR = "/var/run/uapi-ratelimit";
 const DEFAULT_RATE = 100;
 const DEFAULT_BURST = 200;
 const SAFE_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$/;
@@ -31,17 +32,8 @@ function _read_state(token_id) {
 }
 
 function _write_state(token_id, state) {
-	try { fs.mkdir(DIR); } catch (_) {}
 	let path = DIR + "/" + token_id + ".txt";
-	let tmp  = path + ".tmp";
-	let f = fs.open(tmp, "w");
-	if (!f) return false;
-	f.write(sprintf("%.4f %d\n", state.tokens, state.last_ms));
-	f.close();
-	let ok;
-	try { ok = fs.rename(tmp, path); } catch (_) { ok = false; }
-	if (!ok) try { fs.unlink(tmp); } catch (_) {}
-	return ok;
+	return state_dir.replace(path + ".tmp", path, sprintf("%.4f %d\n", state.tokens, state.last_ms));
 }
 
 function check(token_id, opts) {
@@ -49,7 +41,10 @@ function check(token_id, opts) {
 	let rate = o.rate ?? DEFAULT_RATE;
 	let burst = o.burst ?? DEFAULT_BURST;
 	let now_ms = _now_ms(o.now);
-	if (token_id == null || !match(token_id, SAFE_NAME_RE) || now_ms == null)
+	// A directory that is not this process's own holds no bucket, the same as a bucket that
+	// cannot be read.
+	if (token_id == null || !match(token_id, SAFE_NAME_RE) || now_ms == null
+	    || !state_dir.owned(DIR))
 		return { allowed: true, retry_after_seconds: 0 };
 
 	let state = _read_state(token_id);
@@ -105,12 +100,13 @@ function effective_limits(global, token_record) {
 	return { rate: r, burst: b };
 }
 
-// The bucket outlives its token otherwise. Nothing swept /tmp/uapi-ratelimit, so a file
+// The bucket outlives its token otherwise. Nothing swept the buckets, so a file
 // accumulated for every token that ever authenticated and stayed until reboot: measured 106
 // files against 4 live tokens after one session of testing. The provider's ephemeral
 // uapi_token mints one per Terraform run, so on a router with months of uptime that is
 // unbounded tmpfs, which is RAM.
 function reap(live) {
+	if (!state_dir.owned(DIR)) return;
 	for (let name in fs.lsdir(DIR) ?? [])
 		if (!live[split(name, ".")[0]]) fs.unlink(DIR + "/" + name);
 }

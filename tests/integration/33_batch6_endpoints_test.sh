@@ -10,7 +10,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
 
 # Wipe per-test state so a previous run doesn't poison this one.
-$SSH 'rm -rf /tmp/uapi-metrics /tmp/uapi-idempotency /tmp/uapi-ratelimit' >/dev/null 2>&1 || true
+$SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring' >/dev/null 2>&1 || true
 
 echo "--- /metrics returns Prometheus text under *:ro ---"
 # Generate a couple of requests so there's data to scrape.
@@ -104,23 +104,30 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 [ "$status" = "400" ] || fail "bad idempotency key expected 400, got $status"
 
 echo "--- the idempotency cache is private, and a batch that only reads leaves no entry ---"
-[ "$($SSH 'ls -ld /tmp/uapi-idempotency' | cut -c1-10)" = "drwx------" ] || fail "the idempotency directory is not 0700"
-[ -z "$($SSH 'ls -l /tmp/uapi-idempotency' | grep -v -e '^total' -e '^-rw------- ')" ] || fail "an idempotency entry is not 0600"
-before=$($SSH 'ls /tmp/uapi-idempotency | wc -l')
+[ "$($SSH 'ls -ld /var/run/uapi-idempotency' | cut -c1-10)" = "drwx------" ] || fail "the idempotency directory is not 0700"
+[ -z "$($SSH 'ls -l /var/run/uapi-idempotency' | grep -v -e '^total' -e '^-rw------- ')" ] || fail "an idempotency entry is not 0600"
+before=$($SSH 'ls /var/run/uapi-idempotency | wc -l')
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/batch?idempotency_key=idem-$(date +%s)-read" \
 	-d '{"operations": [{"method": "GET", "path": "/firewall/rules"}]}')
 [ "$status" = "207" ] || fail "a batch that only reads expected 207, got $status"
-[ "$($SSH 'ls /tmp/uapi-idempotency | wc -l')" = "$before" ] || fail "a batch that only reads left an idempotency entry"
+[ "$($SSH 'ls /var/run/uapi-idempotency | wc -l')" = "$before" ] || fail "a batch that only reads left an idempotency entry"
 key_w="idem-$(date +%s)-write"
 batch_w='{"operations": [{"method": "PATCH", "path": "/firewall/rules/'"$id1"'", "body": {"name": "idem-test-1b"}}]}'
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w")
 [ "$status" = "207" ] || fail "a batch that writes expected 207, got $status"
-[ "$($SSH 'ls /tmp/uapi-idempotency | wc -l')" = "$((before + 1))" ] || fail "a batch that writes left no idempotency entry"
+[ "$($SSH 'ls /var/run/uapi-idempotency | wc -l')" = "$((before + 1))" ] || fail "a batch that writes left no idempotency entry"
 curl -sS -o /dev/null -D /tmp/uapi_idem_batch.h -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w"
 grep -i '^idempotent-replayed:' /tmp/uapi_idem_batch.h >/dev/null || fail "the replay of a batch that writes is not marked replayed"
+
+echo "--- the metrics, the rate-limit buckets and the error ring are private ---"
+for d in /var/run/uapi-metrics /var/run/uapi-ratelimit /var/run/uapi-error-ring; do
+	[ "$($SSH "ls -ld $d" | cut -c1-10)" = "drwx------" ] || fail "$d is not 0700"
+done
+[ -z "$($SSH 'ls -l /var/run/uapi-ratelimit /var/run/uapi-error-ring' | grep '^-' | grep -v '^-rw------- ')" ] \
+	|| fail "a bucket or the error ring is not 0600"
 
 echo "--- pagination: ?limit=N returns a partial page + Link/X-Next-Cursor ---"
 # firewall/rules typically has zero managed entries on a clean install.
