@@ -84,7 +84,6 @@ function base_encryption(e) {
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
 // section with no mode reads as mode ap, as fromUci() reads it.
 const BELOW_WPA2 = { "none": true, "wep": true, "psk": true, "wpa": true };
-// With fils, which uapi does not model, ap.uc writes mobility_domain as erp_domain on an EAP SSID.
 const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
 const ROAMING_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !BELOW_WPA2[base_encryption(e)]);
@@ -204,10 +203,16 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	values.require_present(errs, json, "device");
+
+	// Removing the mode leaves an SSID that wifi-scripts never sets up, and storing ap for the null
+	// would turn a station into an access point that broadcasts the station's SSID and key.
+	if (exists(delta, "mode") && delta.mode == null)
+		push(errs, { field: "mode", code: "required",
+		             message: "must not be null: wifi-scripts sets up no interface without a mode. Leave mode out of a PATCH to keep it, or out of a create or a PUT to store ap" });
 
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",
@@ -235,7 +240,9 @@ function validate(json) {
 // there adds the error. See new_errors() in the handler. wireless/devices runs the rules with the
 // radio on for a write that turns the radio on. Only a newline ends a line in hostapd's and
 // wpa_supplicant's config readers, and each problem is its own error, so that one cannot hide
-// another.
+// another. With fils, which uapi does not model, ap.uc also writes mobility_domain as the
+// erp_domain of an EAP access point, so a newline or a length in it is live there too. erp_domain
+// takes any domain, so the form of 4 hex digits is live only with 802.11r.
 function rules(json, radio_on) {
 	let errs = [];
 	let on = radio_on && json.disabled !== true;
@@ -312,10 +319,9 @@ function rules(json, radio_on) {
 		err("r0_key_lifetime", "out_of_range", "must be at least 0", on && r.key_holders);
 
 	if (type(md) == "string") {
-		let live = on && (r.roams || (mode == "ap" && EAP[base]));
-		line("mobility_domain", md, live);
+		line("mobility_domain", md, on && (r.roams || (mode == "ap" && EAP[base])));
 		if (!match(md, MD_RE))
-			err("mobility_domain", "invalid_format", "must be 4 hex digits: hostapd refuses its whole config for another mobility domain", live);
+			err("mobility_domain", "invalid_format", "must be 4 hex digits: hostapd refuses its whole config for another mobility domain", on && r.roams);
 	}
 	if (type(r1) == "string") {
 		line("r1_key_holder", r1, on && r.key_holders);
@@ -378,7 +384,7 @@ return {
 	radios: radios,
 	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
-	// toUci stores ap for a null mode, so a null is not a removal.
+	// validate() refuses a null mode, so a null is not a removal.
 	openapi_patch_non_null: ["mode"],
 	openapi_conditional: [
 		{ if:   { properties: { encryption: { enum: KEY_ENCRYPTION } },
@@ -417,7 +423,7 @@ return {
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), "x-uapi-write": { enum: WRITE_MODES }, default: "ap",
-		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
+		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
 		ssid:       { type: ["string", "null"], "x-uapi-write": { maxLength: SSID_MAX },
 		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
@@ -438,7 +444,7 @@ return {
 		ft_psk_generate_local: { "x-uapi-read-nullable": true, type: "boolean",
 		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. A stored value other than 1, true, 0 or false reads as false, as wifi-scripts takes it. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all" },
 		mobility_domain: { type: ["string", "null"], "x-uapi-write": { pattern: MD_PATTERN },
-		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ieee80211r on" },
+		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it with 802.11r, for example by setting the SSID up or turning ieee80211r on" },
 		nasid:      { type: ["string", "null"], "x-uapi-write": { maxLength: LINE_MAX },
 		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than %d on an EAP access point, the limit of the RADIUS attribute. A write that leaves nasid as it is is refused for a problem that nasid already had only when it sets the SSID up or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX, RADIUS_NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], "x-uapi-write": { minimum: 1000, maximum: 65535 },

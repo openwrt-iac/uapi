@@ -619,6 +619,16 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 	});
 
+	// erp_domain takes any domain, so only the mobility domain of 802.11r needs 4 hex digits.
+	t.it('a stored mobility_domain in another form blocks an EAP access point only with 802.11r', () => {
+		let c = stored({ disabled: '1', encryption: 'wpa2', mobility_domain: 'xyz' });
+		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 200);
+		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code, e.live ]),
+		                    [ [ 'mobility_domain', 'invalid_format', false ] ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'mobility_domain', 'invalid_format' ] ]);
+	});
+
 	// wifi-scripts joins the entries of a list that uci holds for a text option with spaces.
 	t.it('a text option that uci holds as a list is checked as its joined entries', () => {
 		let c = stored({ disabled: '1', nasid: [ 'ap1', 'x\nssid2="x"' ] });
@@ -707,6 +717,21 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		c = stored({ mode: 'sta' });
 		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'psk2' }).status, 200);
 		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
+	});
+
+	// Storing ap for the null turned a station into an access point that broadcast its SSID and key.
+	t.it('a write that sends mode as null answers 422 and keeps the stored mode', () => {
+		let c = stored({ mode: 'sta' });
+		let put = { ...read_back(c), mode: null };
+		let jp = { ...CTX, json_patch: true };
+		for (let w in [ [ 'merge PATCH', () => h().patch(c, CTX, 'w1', { mode: null }) ],
+		                [ 'PUT', () => h().replace(c, CTX, 'w1', put) ],
+		                [ 'JSON Patch remove', () => h().patch(c, jp, 'w1', [ { op: 'remove', path: '/mode' } ]) ],
+		                [ 'JSON Patch replace', () => h().patch(c, jp, 'w1', [ { op: 'replace', path: '/mode', value: null } ]) ],
+		                [ 'create', () => h().create(c, CTX, { id: 'w2', device: 'radio0', ssid: 'x', mode: null }) ] ])
+			t.assert_deep_equal(map(w[1]().body.errors, (e) => [ e.field, e.code ]), [ [ 'mode', 'required' ] ], w[0]);
+		t.assert_equal(c._state.uci.wireless.w1.mode, 'sta');
+		t.assert_equal(c._state.uci.wireless.w2, null);
 	});
 
 	t.it('refuses mode wds on write, and reads a stored one', () => {

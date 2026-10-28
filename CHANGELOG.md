@@ -763,10 +763,10 @@ All notable changes to this project will be documented in this file. Format foll
   whole. Some fields keep their Request type, because a null does not remove them. A PATCH ignores
   `id`. A null keeps a write-only secret, such as `wireless/interfaces.key`. The server refuses a
   null with 422 for a field that the Request requires, such as `network/interfaces.proto`, except
-  `mwan3/interfaces.family`, which its `validate()` does not require. A null
-  `wireless/interfaces.mode` stores mode `ap`. No `<Name>Request` and no `<Name>Response` changes.
-  Every PATCH body that was valid stays valid, so this is not breaking under `docs/versioning.md`.
-  (#263)
+  `mwan3/interfaces.family`, which its `validate()` does not require. It also refuses a null
+  `wireless/interfaces.mode` with 422, although the Request does not require `mode` (#273). No
+  `<Name>Request` and no `<Name>Response` changes. Every PATCH body that was valid stays valid, so
+  this is not breaking under `docs/versioning.md`. (#263)
 - **A WireGuard peer write and a feed create no longer answer 200 when the filesystem cannot hold
   the file that they write.** ucode's `close()` drops the write error, and uapi did not check the
   write. On a full `/tmp`, the preshared key file stayed empty, and `wg` reads an empty key file
@@ -885,6 +885,24 @@ All notable changes to this project will be documented in this file. Format foll
   sent that delete even when the section did not hold the option. The bus counts a delete as a
   write, so the commit wrote the package again, which drops its comments. A PATCH now skips the
   delete of an option that the section does not hold. No request, response or header changes. (#272)
+- **A stored `wireless/interfaces.mobility_domain` that is not 4 hex digits blocks a write only with
+  802.11r.** Enabling an EAP access point that held such a value with 802.11r off answered 422
+  `invalid_format`. hostapd needs 4 hex digits only for the mobility domain of 802.11r. With `fils`,
+  which uapi does not model, wifi-scripts also gives the value to hostapd as the EAP domain of an
+  access point, which takes any form. LuCI offers the field only with 802.11r. A write that sends a
+  value in another form is still refused, and a stored newline or a value over 1024 bytes still
+  blocks an EAP access point. This only widens what a write takes, and the field is new in this
+  release. (#273)
+- **A write that sends `wireless/interfaces.mode` as null answers 422 `required`.** In 3.1.0, a
+  merge PATCH of `{"mode": null}`, a PUT with a null mode, or a JSON Patch that removes `/mode` or
+  replaces it with null removed the mode. wifi-scripts then set up no interface, while every read
+  reported `ap`. Storing `ap` for the null, as a create without a mode does, would turn a station
+  into an access point that broadcasts the station's SSID and key. So each of these writes, and a
+  create with a null mode, now answers 422 on `mode`. A create or a PUT that leaves `mode` out
+  stores `ap`, and a PATCH that leaves it out keeps the stored mode. LuCI cannot remove the mode.
+  The Request and Patch schemas already refused a null `mode`. The 3.1.0 result was an SSID that
+  never came up, which no caller can rely on, so this is the tightening carve-out of
+  `docs/versioning.md`, and it fails loudly. (#273)
 
 ### Security
 

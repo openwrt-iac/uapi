@@ -242,9 +242,9 @@ t.describe('property: a PATCH that names nothing leaves uci as stored', () => {
 // Each field of a merge-patch body goes to the server as null, sorted by the rule of
 // nullable_properties in build/gen_openapi.uc. Where the body takes the null, the PATCH answers
 // 422, or it removes each stored option that toUci leaves out for the null and writes nothing else.
-// A kept field answers 422 or removes nothing. So a toUci that writes a value for a null, as
-// wireless/interfaces does for `mode`, fails unless the module names the field in
-// openapi_patch_non_null, and so does a merge that skips a null.
+// A kept field answers 422 or removes nothing. So a toUci that writes a value for a null fails
+// unless validate() refuses the null or the module names the field in openapi_patch_non_null, and
+// so does a merge that skips a null.
 const SPEC = json(fs.readfile("build/openapi.json")).components.schemas;
 
 // Stored for this property only, so that it sees the removal: no seed stores the last three, and

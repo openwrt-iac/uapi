@@ -32,7 +32,7 @@ return {
           then: { required: ["addresses"] } },
     ],
     openapi_write_conditional: [ ... ],           // same shape, emitted on the *Request schema only
-    openapi_patch_non_null: ["mode"],             // fields that toUci does not remove for a null, so
+    openapi_patch_non_null: ["mode"],             // fields whose null is not a removal, so
                                                   // they keep their Request type in *Patch.
                                                   // List each in tests/lint_openapi_shape.uc
                                                   // and tests/merge_patch_bodies.py too
