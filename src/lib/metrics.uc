@@ -11,6 +11,8 @@ const HIST_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 // filename layout (label values become path components). HTTP method, status,
 // path templates, and resource keys all fall safely inside this set.
 const LABEL_RE = /^[A-Za-z0-9_:.\/-]+$/;
+const TOKEN_SERIES = [ "uapi_requests_total", "uapi_rate_limit_drops_total" ];
+const RETIRED = "-retired";
 
 function _mkdir_p(path) {
 	let parts = split(path, "/");
@@ -111,8 +113,8 @@ function observe(series, labels, value) {
 
 // token_id is optional: null for pre-auth failures (401 invalid_token before
 // authorize completes) and folds to "-" so the series row still aggregates.
-// Cardinality stays bounded because token_id ranges over operator-configured
-// tokens (a small set), not request paths.
+// A client can mint a token per run, so the token set is not small, and
+// retire_tokens() is what bounds these series.
 function record_request(method, path_template, status, duration_ms, token_id) {
 	let m = _safe_label(method);
 	let p = _safe_label(path_template);
@@ -174,6 +176,28 @@ function _path_to_series_and_labels(path) {
 	return { series, labels };
 }
 
+// A token's series stop growing once it no longer authenticates, and its files stay in tmpfs,
+// which is RAM, until a reboot. They are folded into RETIRED, which no token can be named,
+// rather than deleted. A deletion makes a sum over token_id fall, and drops from every query
+// the requests of a token minted per run, whose series a scrape often sees once or never.
+function retire_tokens(live) {
+	for (let series in TOKEN_SERIES) {
+		let files = [];
+		_walk(DIR + "/" + series, files);
+		for (let p in files) {
+			let m = _path_to_series_and_labels(p);
+			let id = m.labels.token_id;
+			if (id == null || id == "-" || id == RETIRED || live[id]) continue;
+			let n = _read_counter(p);
+			m.labels.token_id = RETIRED;
+			// Before the unlink, so that a kill between the two counts the series twice rather
+			// than losing it: a counter may jump, it must not fall.
+			if (n > 0) inc(series, m.labels, n);
+			fs.unlink(p);
+		}
+	}
+}
+
 function _format_labels(labels) {
 	let keys_sorted = [];
 	for (let k in labels) push(keys_sorted, k);
@@ -202,5 +226,5 @@ return {
 	inc, observe,
 	record_request, record_rate_limit_drop,
 	record_lock_contention, record_validate_error,
-	format_prometheus,
+	retire_tokens, format_prometheus,
 };

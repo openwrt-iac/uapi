@@ -92,27 +92,17 @@ t.describe('ratelimit.effective_limits', () => {
 	});
 });
 
-// The bucket file outlived its token: nothing swept /tmp/uapi-ratelimit, so one accumulated per
-// token that ever authenticated and stayed until reboot. Measured 106 files against 4 live
-// tokens, and the provider's ephemeral uapi_token mints one per Terraform run, so on a router
-// with long uptime that is unbounded tmpfs, which is RAM.
-t.describe('ratelimit.forget', () => {
-	// Asserting only that a traversal name returns false proves nothing: unlink on a path that
-	// does not exist returns false whether or not the name was checked. This plants a file the
-	// traversal would actually delete and asserts it survives, which fails if the guard goes.
-	t.it('refuses a name that could escape the directory', () => {
-		let victim = "/tmp/uapi-rl-traversal-victim.txt";
-		let f = fs.open(victim, "w");
-		f.write("keep");
+t.describe('ratelimit.reap', () => {
+	t.it('removes the bucket and the temp file of a token that is not live, and keeps the others', () => {
+		let live = fresh_token(), dead = fresh_token();
+		ratelimit.check(live, { now: 1000 });
+		ratelimit.check(dead, { now: 1000 });
+		let f = fs.open("/tmp/uapi-ratelimit/" + dead + ".txt.tmp", "w");
 		f.close();
-		t.assert_false(ratelimit.forget("../uapi-rl-traversal-victim"));
-		t.assert_true(fs.stat(victim) != null);
-		fs.unlink(victim);
-		t.assert_false(ratelimit.forget("a/b"));
-		t.assert_false(ratelimit.forget(null));
-	});
-
-	t.it('reports false for a token that has no bucket', () => {
-		t.assert_false(ratelimit.forget("nonexistent_token_xyz"));
+		ratelimit.reap({ [live]: true });
+		t.assert_true(fs.stat("/tmp/uapi-ratelimit/" + live + ".txt") != null);
+		t.assert_equal(fs.stat("/tmp/uapi-ratelimit/" + dead + ".txt"), null);
+		t.assert_equal(fs.stat("/tmp/uapi-ratelimit/" + dead + ".txt.tmp"), null);
+		clean(live);
 	});
 });

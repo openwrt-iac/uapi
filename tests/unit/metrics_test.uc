@@ -93,6 +93,46 @@ t.describe('metrics.record_request', () => {
 	});
 });
 
+t.describe('metrics.retire_tokens', () => {
+	function requests_sum(out) {
+		let n = 0;
+		for (let l in split(out, "\n"))
+			if (match(l, /^uapi_requests_total\{/)) n += int(split(l, " ")[1]);
+		return n;
+	}
+
+	t.it('folds the series of a token that is not live into token_id="-retired"', () => {
+		wipe();
+		metrics.record_request("GET", "/firewall/rules", 200, 1, "run_1");
+		metrics.record_request("GET", "/firewall/rules", 200, 1, "run_1");
+		metrics.record_request("GET", "/firewall/rules", 200, 1, "run_2");
+		metrics.record_request("GET", "/firewall/rules", 200, 1, "admin");
+		metrics.record_request("GET", "/firewall/rules", 401, 1, null);
+		metrics.record_rate_limit_drop("run_1");
+		metrics.retire_tokens({ admin: true });
+		let out = metrics.format_prometheus();
+		t.assert_true(index(out, 'uapi_requests_total{method="GET",path="/firewall/rules",status="200",token_id="-retired"} 3\n') >= 0, out);
+		t.assert_true(index(out, 'status="200",token_id="admin"} 1\n') >= 0, out);
+		t.assert_true(index(out, 'status="401",token_id="-"} 1\n') >= 0, out);
+		t.assert_true(index(out, 'uapi_rate_limit_drops_total{token_id="-retired"} 1\n') >= 0, out);
+		t.assert_equal(index(out, "run_"), -1, out);
+	});
+
+	// A Prometheus counter may reset but must not fall, and a sum over token_id is what a
+	// dashboard of all requests reads.
+	t.it('keeps the sum over token_id across two folds', () => {
+		wipe();
+		metrics.record_request("POST", "/tokens", 201, 1, "run_1");
+		metrics.record_request("POST", "/tokens", 201, 1, "run_1");
+		metrics.retire_tokens({});
+		metrics.record_request("POST", "/tokens", 201, 1, "run_2");
+		metrics.retire_tokens({});
+		let out = metrics.format_prometheus();
+		t.assert_equal(requests_sum(out), 3, out);
+		t.assert_true(index(out, 'token_id="-retired"} 3\n') >= 0, out);
+	});
+});
+
 t.describe('metrics.record_validate_error and record_lock_contention', () => {
 	t.it('record_validate_error counts per (resource, code)', () => {
 		wipe();

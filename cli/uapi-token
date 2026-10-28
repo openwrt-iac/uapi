@@ -9,6 +9,7 @@ let uci_mod = require('uci');
 let digest = require('digest');
 let scope = require('scope');
 let values = require('values');
+let token_store = require('token_store');
 
 const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
@@ -83,6 +84,19 @@ function parse_args() {
 	return { cmd, opts };
 }
 
+// The reap that the HTTP mint and revoke run after their commit. This command writes through
+// its own uci cursor rather than token_store.create() and remove(), so that it works with ubus
+// down, and it takes no uapi lock, so a reap here and one over HTTP at the same moment can lose
+// a count of a folded series. A failed reap must not read as a failed revoke, and the next
+// mint or revoke reaps what it left.
+function reap(cursor) {
+	let tokens = [];
+	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
+		push(tokens, { name: s['.name'], expires_at: values.as_int(s.expires_at) });
+	});
+	try { token_store.reap_state(tokens, time()); } catch (_) {}
+}
+
 function ensure_package() {
 	let path = "/etc/config/" + PACKAGE;
 	if (fs.stat(path) != null) return;
@@ -138,6 +152,7 @@ function cmd_create(opts) {
 	if (opts.burst != null)
 		cursor.set(PACKAGE, opts.name, "burst", "" + opts.burst);
 	cursor.commit(PACKAGE);
+	reap(cursor);
 
 	printf("%s\n", bearer);
 	fs.stderr.write(sprintf(
@@ -195,11 +210,7 @@ function cmd_revoke(opts) {
 		die(sprintf("uapi-token revoke: %J not found", name));
 	cursor.delete(PACKAGE, name);
 	cursor.commit(PACKAGE);
-	// The same reap the HTTP revoke does. This command keeps its own uci cursor rather than
-	// going through token_store.remove, deliberately, so it still works with ubus down, which
-	// means every side effect of revocation has to be repeated here. Measured: without this the
-	// bucket survived `uapi-token revoke` while the API path cleaned it up.
-	try { require('ratelimit').forget(name); } catch (_) {}
+	reap(cursor);
 	fs.stderr.write(sprintf("Revoked token %J\n", name));
 }
 

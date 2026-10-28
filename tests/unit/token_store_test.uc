@@ -2,6 +2,7 @@ let t = require('harness');
 let fs = require('fs');
 let bus = require('bus');
 let ratelimit = require('ratelimit');
+let metrics = require('metrics');
 let token_store = require('token_store');
 
 function seed_tokens(c) {
@@ -204,14 +205,14 @@ t.describe('token_store.create validation', () => {
 t.describe('token_store.remove', () => {
 	t.it('deletes an existing token', () => {
 		let c = bus.stub({}); seed_tokens(c);
-		let r = token_store.remove(c, "admin", noop_tx());
+		let r = token_store.remove(c, "admin", 1700000000, noop_tx());
 		t.assert_true(r.ok);
 		t.assert_equal(c._state.uci.uapi.admin, null);
 	});
 
 	t.it('returns not_found for unknown name', () => {
 		let c = bus.stub({}); seed_tokens(c);
-		let r = token_store.remove(c, "ghost", noop_tx());
+		let r = token_store.remove(c, "ghost", 1700000000, noop_tx());
 		t.assert_equal(r.kind, "not_found");
 	});
 
@@ -221,27 +222,89 @@ t.describe('token_store.remove', () => {
 		let get = c.uci_get;
 		c.uci_get = (p, s, o) => get(p, s == "@token[0]" ? "admin" : s, o);
 		t.assert_equal(token_store.get_public(c, "@token[0]").name, "admin");
-		let r = token_store.remove(c, "@token[0]", noop_tx());
+		let r = token_store.remove(c, "@token[0]", 1700000000, noop_tx());
 		t.assert_deep_equal(r.body, { deleted: "admin" });
 		t.assert_equal(c._state.uci.uapi.admin, null);
 	});
+});
 
-	const BUCKET = "/tmp/uapi-ratelimit/admin.txt";
+const BUCKETS = "/tmp/uapi-ratelimit/";
+const MARKERS = "/var/run/uapi-token-update/";
 
-	t.it('drops the rate-limit bucket of the token it revokes', () => {
+// /var/run belongs to root. CI runs the unit tests as root, and a developer who does not
+// leaves the markers unchecked.
+function plant_state(names) {
+	fs.mkdir(MARKERS);
+	let markers = true;
+	for (let n in names) {
+		ratelimit.check(n, { now: 1000 });
+		metrics.record_request("GET", "/system", 200, 1, n);
+		let f = fs.open(MARKERS + n, "w");
+		if (f) f.close();
+		else markers = false;
+	}
+	return markers;
+}
+
+function has_series(id) {
+	return index(metrics.format_prometheus(), sprintf('token_id="%s"', id)) >= 0;
+}
+
+t.describe('token_store, the tmpfs state of a token', () => {
+	t.it('a revoke reaps the bucket, the series and the marker of the token after its commit', () => {
 		let c = bus.stub({}); seed_tokens(c);
-		ratelimit.check("admin", { now: 1 });
-		t.assert_true(token_store.remove(c, "admin", noop_tx()).ok);
-		t.assert_true(fs.stat(BUCKET) == null);
+		let markers = plant_state([ "admin", "readonly" ]);
+		t.assert_true(token_store.remove(c, "admin", 1700000000, noop_tx()).ok);
+		t.assert_equal(fs.stat(BUCKETS + "admin.txt"), null);
+		t.assert_true(fs.stat(BUCKETS + "readonly.txt") != null);
+		t.assert_false(has_series("admin"));
+		t.assert_true(has_series("readonly"));
+		t.assert_true(has_series("-retired"));
+		if (markers) {
+			t.assert_equal(fs.stat(MARKERS + "admin"), null);
+			t.assert_true(fs.stat(MARKERS + "readonly") != null);
+		}
 	});
 
-	t.it('keeps the bucket when the revoke does not commit, as the token stays', () => {
+	t.it('a revoke whose commit fails keeps the state of the token', () => {
 		let c = bus.stub({}); seed_tokens(c);
-		ratelimit.check("admin", { now: 1 });
-		c.uci_commit = () => die("uci commit uapi: I/O error");
-		t.assert_throws(() => token_store.remove(c, "admin", noop_tx()));
-		let kept = fs.stat(BUCKET) != null;
-		ratelimit.forget("admin");
-		t.assert_true(kept);
+		plant_state([ "admin" ]);
+		c.uci_commit = function() { die("No space left on device"); };
+		let err = null;
+		try { token_store.remove(c, "admin", 1700000000, noop_tx()); } catch (e) { err = e; }
+		t.assert_true(err != null);
+		t.assert_true(fs.stat(BUCKETS + "admin.txt") != null);
+		t.assert_true(has_series("admin"));
+	});
+
+	t.it('a mint reaps the state of a token that expired or is gone, and keeps a live one', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		c._state.uci.uapi.old = { '.type': 'token', salt: 's', hash: 'h', scopes: [ '*:ro' ],
+		                          expires_at: '1700000000' };
+		let markers = plant_state([ "readonly", "old", "gone" ]);
+		t.assert_true(token_store.create(c, { name: "run_3", scopes: [ "*:ro" ] },
+		                                 [ "*:rw" ], 1700000000, noop_tx()).ok);
+		t.assert_true(fs.stat(BUCKETS + "readonly.txt") != null);
+		t.assert_equal(fs.stat(BUCKETS + "old.txt"), null);
+		t.assert_equal(fs.stat(BUCKETS + "gone.txt"), null);
+		t.assert_true(has_series("readonly"));
+		t.assert_false(has_series("old"));
+		t.assert_false(has_series("gone"));
+		if (markers) {
+			t.assert_true(fs.stat(MARKERS + "readonly") != null);
+			t.assert_equal(fs.stat(MARKERS + "old"), null);
+			t.assert_equal(fs.stat(MARKERS + "gone"), null);
+		}
+	});
+
+	t.it('reap_state keeps a token whose expiry is ahead, and one with no expiry', () => {
+		plant_state([ "later", "never", "past" ]);
+		token_store.reap_state([ { name: "later", expires_at: 1700000001 },
+		                         { name: "never", expires_at: null },
+		                         { name: "past", expires_at: 1699999999 } ], 1700000000);
+		t.assert_true(fs.stat(BUCKETS + "later.txt") != null);
+		t.assert_true(fs.stat(BUCKETS + "never.txt") != null);
+		t.assert_equal(fs.stat(BUCKETS + "past.txt"), null);
+		token_store.reap_state([], 1700000000);
 	});
 });

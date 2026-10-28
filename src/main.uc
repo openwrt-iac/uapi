@@ -998,7 +998,7 @@ function dispatch(env) {
 			let r = token_store.create(conn, body, token.scopes, now_epoch);
 			resp = tokens_translate(ctx, r);
 		} else if (method == "DELETE" && id != null) {
-			let r = token_store.remove(conn, id);
+			let r = token_store.remove(conn, id, now_epoch);
 			if (r.ok) resp = errors.no_content(ctx);
 			else resp = tokens_translate(ctx, r);
 		} else {

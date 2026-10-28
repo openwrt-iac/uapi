@@ -1,5 +1,6 @@
 let fs = require('fs');
 let ratelimit = require('ratelimit');
+let metrics = require('metrics');
 let transaction = require('transaction');
 let errors = require('errors');
 let values = require('values');
@@ -150,6 +151,33 @@ function _validate_create_body(body) {
 	return errs;
 }
 
+// The rate-limit buckets, the metric series and the last-used markers keep files per token
+// name in tmpfs, which is RAM, until a reboot, so a client that mints a token per run grows
+// them without bound. A token that no longer authenticates, revoked, expired or deleted by
+// hand, has nothing left to throttle, count or stamp. Expiry is tested as auth.authorize()
+// tests it.
+function reap_state(tokens, now) {
+	let live = {};
+	for (let t in tokens)
+		if (t.expires_at == null || now == null || now < t.expires_at) live[t.name] = true;
+	ratelimit.reap(live);
+	metrics.retire_tokens(live);
+	for (let name in fs.lsdir(LAST_USED_DIR) ?? [])
+		if (!live[name]) fs.unlink(LAST_USED_DIR + "/" + name);
+}
+
+// The reap runs as the reload, which is the step after the commit and under the uapi lock.
+// Before the commit, a commit that fails would lose the state of a token that still
+// authenticates. Outside the lock, two reaps could fold into one counter at once and lose a
+// count. A throw would answer 500 for a write that is committed, and the next mint or revoke
+// reaps what this one left, so it is swallowed.
+function reap_on_commit(conn, now) {
+	return function() {
+		try { reap_state(list_public(conn), now); } catch (_) {}
+		return null;
+	};
+}
+
 // Runs under the uapi-package transaction, so the lock held is the per-package flock plus a
 // snapshot, not a token-specific one.
 // No reload service - the token store is re-read by the HTTP path on every
@@ -160,6 +188,7 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 	let params = {
 		package: PACKAGE,
 		reload_services: [],
+		reload: reap_on_commit(conn, now),
 		fn: function(c, pkg) {
 			_ensure_uapi_file(c);
 			let errs = _validate_create_body(body);
@@ -195,28 +224,24 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 	return transaction.transaction(conn, params);
 }
 
-function remove(conn, name, tx_overrides) {
+function remove(conn, name, now, tx_overrides) {
 	let params = {
 		package: PACKAGE,
 		reload_services: [],
+		reload: reap_on_commit(conn, now),
 		fn: function(c, pkg) {
 			let existing = c.uci_get(pkg, name);
 			if (!existing || type(existing) != "object" || existing['.type'] != TOKEN_TYPE)
 				return { ok: false, kind: "not_found",
 				         message: sprintf("Token %J not found", name) };
-			// The name, not `name`: uci also resolves `@token[0]`, which the bucket's
-			// charset refuses, so a revoke by position left the bucket behind.
+			// uci also resolves `@token[0]`, so the body names the section it deleted.
 			let real = existing['.name'];
 			c.uci_delete(pkg, real);
 			return { ok: true, body: { deleted: real } };
 		},
 	};
 	for (let k in tx_overrides ?? {}) params[k] = tx_overrides[k];
-	let r = transaction.transaction(conn, params);
-	// Not in fn, which runs before the commit: a revoke whose commit failed kept its token and
-	// gave it a full burst again.
-	if (r.ok) ratelimit.forget(r.body.deleted);
-	return r;
+	return transaction.transaction(conn, params);
 }
 
 // update_last_used is best-effort: throttled to once per LAST_USED_THROTTLE_SECONDS
@@ -257,4 +282,5 @@ return {
 	create,
 	remove,
 	update_last_used,
+	reap_state,
 };
