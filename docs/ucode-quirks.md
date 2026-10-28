@@ -80,6 +80,14 @@ There is no type name for it: `type(null)` is the null value itself, so `type(x)
 
 `const X = ...` is parsed and enforced. Top-level data tables in this repo are mostly `const`.
 
+### `fs` calls return null on failure and do not throw
+
+`fs.rename`, `fs.unlink`, `fs.chmod` and the other `fs` calls report a failure by returning null and setting `fs.error()`. A `catch` around one never runs: the error ring and the metrics relied on one to remove the temp file after a failed rename, and left it behind. Test the return value.
+
+### `close()` drops the write error, and `flush()` reports it backwards on the CI image
+
+A small write only fills the stdio buffer, and a file's `close()` ignores the result of `fclose`, so a write that the filesystem cannot hold shows up only as a failed `flush()`. On OpenWrt 25.12 a failed flush returns null. ucode 0.0.20250529, which Alpine 3.24 ships and the unit job of CI runs, returns null from a flush that worked and true from one that failed. ucode fixed this on 2025-11-27, before OpenWrt 25.12.0-rc1. A unit test therefore cannot check a flush through a real handle: the tests of a full filesystem give the module a stub handle through `load_with_fs()` in `tests/harness.uc`.
+
 ## OpenWrt runtime integration
 
 ### uhttpd CGI Status header needs a reason phrase

@@ -754,6 +754,26 @@ All notable changes to this project will be documented in this file. Format foll
   `wireless/interfaces.mode` stores mode `ap`. No `<Name>Request` and no `<Name>Response` changes.
   Every PATCH body that was valid stays valid, so this is not breaking under `docs/versioning.md`.
   (#263)
+- **A WireGuard peer write and a feed create no longer answer 200 when the filesystem cannot hold
+  the file that they write.** ucode's `close()` drops the write error, and uapi did not check the
+  write. On a full `/tmp`, the preshared key file stayed empty, and `wg` reads an empty key file
+  as no key: a peer write set the kernel peer without its preshared key and answered 200 with
+  `X-Kernel-Status: ok`, and the tunnel stopped handshaking with a peer that uses the key. Such a
+  write now fails its kernel apply and restores the previous config. It answers `500
+  reload_failed_restored`, or `reload_failed_unrecovered` when the restore cannot stage a key
+  either. On a full overlay, `POST /packages/feeds` left an empty `<name>.list` and answered 200,
+  a read then showed an empty URL, and a retry answered 409 because the file existed. It now
+  removes the file and answers 500. No request or response field changes. (#267)
+- **`/diagnostics` keeps its recent errors when several requests fail at the same moment.** Every
+  append to the error ring wrote through one temp file name, so two appends at once wrote into
+  one file, which then held a short array followed by the tail of a longer one. That is not JSON,
+  so `recent_errors` read as empty right after a burst of errors, such as the 423s of a Terraform
+  apply at parallelism 10 on one package. Each request process now writes its own temp file, and
+  when two appends cross, the ring keeps the later one. An error ring append or a metrics counter
+  whose rename fails also no longer leaves its temp file in `/tmp`. (#267)
+- **A revoke whose commit fails keeps the rate-limit bucket of its token.** `DELETE
+  /tokens/{id}` dropped the bucket before it committed the delete, so a commit that failed kept
+  the token and gave it a full burst again. The bucket is now dropped after the commit. (#267)
 
 ### Security
 

@@ -219,8 +219,16 @@ function create_feed_handler(ctx, body) {
 			if (fs.stat(path) != null) return { ok: false, kind: "conflict" };
 			return { ok: false, kind: "io_error" };
 		}
-		fp.write(url + "\n");
+		// An empty file left by a write that the overlay cannot hold read as a feed with no URL,
+		// and its name made every retry answer 409. close() drops fclose's error.
+		let content = url + "\n";
+		let written = fp.write(content);
+		let flushed = fp.flush();
 		fp.close();
+		if (written != length(content) || !flushed) {
+			fs.unlink(path);
+			return { ok: false, kind: "io_error" };
+		}
 		let upd = apk_exec("update");
 		return { ok: true, update_ok: upd.ok, update_output: upd.output,
 		         update_exit: upd.exit_code };

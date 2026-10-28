@@ -10,7 +10,7 @@ Three layers, plus the harness and the load-bearing test inventory.
 
 ## ucode test harness
 
-Thin homegrown harness (`tests/harness.uc`, ~110 lines): `describe` / `it` / `assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1 on any failure.
+Thin homegrown harness (`tests/harness.uc`, ~125 lines): `describe` / `it` / `assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1 on any failure. `load_with_fs` loads modules of `src/lib` against a stub `fs`, for a failure that a test cannot cause on a real filesystem, such as a full one (see `docs/ucode-quirks.md` for why a real handle cannot stand in for it).
 
 ## Injectable ubus surface
 

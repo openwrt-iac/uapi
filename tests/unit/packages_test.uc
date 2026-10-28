@@ -1,4 +1,5 @@
 let t = require('harness');
+let fs = require('fs');
 
 let pkg = loadfile('src/lib/packages.uc')();
 
@@ -131,6 +132,50 @@ t.describe('packages.create_feed validation', () => {
 		t.assert_equal(r.status, 422);
 		t.assert_equal(r.body.errors[0].field, "name");
 		t.assert_equal(r.body.errors[0].code, "invalid_format");
+	});
+});
+
+// /etc/apk and /var/lock are root's, so the feed files are kept in `feeds` and the lock is a file
+// in /tmp. A feed file's handle is a stub, as in wg_test, because the ucode of the CI image inverts
+// what flush() returns.
+t.describe('packages.create_feed writes the feed file', () => {
+	const FEED = '/etc/apk/repositories.d/extra.list';
+	function create_with(written, flushed) {
+		let s = { feeds: {}, commands: [] };
+		let under = (path) => index(path, '/etc/apk/') == 0;
+		let p = t.load_with_fs({ ...fs,
+			stat: (path) => under(path) ? ((s.feeds[path] != null) ? { type: 'file' } : null) : fs.stat(path),
+			open: (path, m) => {
+				if (path == '/var/lock/uapi.lock') return fs.open('/tmp/uapi-test-packages.lock', m);
+				if (!under(path)) return fs.open(path, m);
+				s.feeds[path] = '';
+				return { write: (c) => { if (written && flushed) s.feeds[path] = c; return written ? length(c) : null; },
+				         flush: () => flushed, close: () => true };
+			},
+			unlink: (path) => { if (!under(path)) return fs.unlink(path); delete s.feeds[path]; return true; },
+			popen: (cmd) => { push(s.commands, cmd); return { read: () => '', close: () => 0 }; },
+		}, [ 'transaction', 'non_uci', 'packages' ]);
+		s.r = p.create_feed(ctx(), { name: 'extra', url: 'https://example.com/extra' });
+		return s;
+	}
+
+	t.it('writes the URL, then refreshes the index', () => {
+		let s = create_with(true, true);
+		t.assert_equal(s.r.status, 200);
+		t.assert_deep_equal(keys(s.feeds), [ FEED ]);
+		t.assert_equal(s.feeds[FEED], 'https://example.com/extra\n');
+		t.assert_deep_equal(s.commands, [ 'apk update 2>&1' ]);
+	});
+
+	// The flush fails for a URL that the stdio buffer holds, and the write for a longer one.
+	t.it('answers 500 and leaves no file when the overlay cannot hold the URL', () => {
+		for (let w in [ [ true, null ], [ null, true ] ]) {
+			let s = create_with(w[0], w[1]);
+			t.assert_equal(s.r.status, 500, sprintf('%J', w));
+			t.assert_equal(s.r.body.code, 'internal_error');
+			t.assert_deep_equal(s.feeds, {});
+			t.assert_deep_equal(s.commands, []);
+		}
 	});
 });
 

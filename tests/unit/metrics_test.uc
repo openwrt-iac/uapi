@@ -46,6 +46,16 @@ t.describe('metrics.inc', () => {
 		t.assert_true(index(out, "c{x=\"a\"} 1") >= 0);
 		t.assert_true(index(out, "c{x=\"b\"} 5") >= 0);
 	});
+
+	t.it('removes its temp file when the rename fails', () => {
+		wipe();
+		fs.mkdir("/tmp/uapi-metrics");
+		fs.mkdir("/tmp/uapi-metrics/c.txt");
+		metrics.inc("c", {}, 1);
+		let left = fs.stat("/tmp/uapi-metrics/c.txt.tmp") != null;
+		wipe();
+		t.assert_false(left);
+	});
 });
 
 t.describe('metrics.record_request', () => {

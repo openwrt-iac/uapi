@@ -450,7 +450,10 @@ stale enough to be misleading:
   acquisitions of `multi_transaction()`. `docs/lock-state-audit.md` now has a release
   proof for each site the wider command finds, and `make lint-lock-audit` fails when a
   site is missing from its table or a range no longer holds one. The defects the audit
-  found are recorded there under Open findings, not fixed.
+  found that are not fixed yet are recorded there under Open findings. The unchecked
+  writes of a preshared key file and of a feed file, the shared temp file of the error
+  ring, the rename checks of the error ring and the metrics, which never ran, and a
+  revoke that dropped its rate-limit bucket before the commit are fixed (#267).
 
 ## Objectives for the next major
 
