@@ -150,6 +150,25 @@ r=$(send PUT /uapi53t "$(body "$(call "$URL/network/interfaces/uapi53t")" | jq -
 [ "$(status "$r")" = 422 ] && body "$r" | jq -e '.errors | length == 1 and .[0].field == "proto" and .[0].code == "not_in_enum"' >/dev/null \
 	&& [ "$($SSH 'uci show network.uapi53t')" = "$before" ] || fail "a PUT of a 6in4 read was not refused on proto alone: $r"
 
+# A PATCH keeps an option that it does not name, and the read of proto static hides listen_port.
+# The response was built from what the write sent to uci, so it answered null for the port that uci
+# kept, with an ETag that no GET gives, and a client that stored the null deleted the port.
+echo "--- a switch to wireguard answers the listen_port that it keeps, with the body and ETag of a GET ---"
+$SSH "uci set network.uapi53x=interface; uci set network.uapi53x.proto=static; uci set network.uapi53x.auto=0
+	uci add_list network.uapi53x.ipaddr=10.253.53.1/24; uci set network.uapi53x.listen_port=51820; uci commit network"
+etag_of() { tr -d '\r' < "$1" | sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1; }
+r=$(call -D /tmp/uapi53x_patch.h -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi53x" \
+	-d "{\"proto\":\"wireguard\",\"private_key\":\"$WG_KEY\",\"addresses\":[\"10.253.53.1/24\"]}")
+[ "$(status "$r")" = 200 ] || fail "the switch of uapi53x to wireguard expected 200: $r"
+[ "$(uci_get uapi53x.listen_port)" = 51820 ] || fail "the switch did not keep listen_port in uci"
+body "$r" | jq -e '.listen_port == 51820' >/dev/null || fail "the switch answered a listen_port that uci does not hold: $r"
+curl -sS -H "$ADMIN" -D /tmp/uapi53x_get.h -o /tmp/uapi53x_get.json "$URL/network/interfaces/uapi53x"
+[ "$(body "$r" | jq -cS 'del(.runtime)')" = "$(jq -cS 'del(.runtime)' /tmp/uapi53x_get.json)" ] \
+	|| fail "the switch answered $(body "$r"), and a GET $(cat /tmp/uapi53x_get.json)"
+[ "$(etag_of /tmp/uapi53x_patch.h)" = "$(etag_of /tmp/uapi53x_get.h)" ] \
+	|| fail "the switch answered ETag $(etag_of /tmp/uapi53x_patch.h), and a GET $(etag_of /tmp/uapi53x_get.h)"
+rm -f /tmp/uapi53x_patch.h /tmp/uapi53x_get.h /tmp/uapi53x_get.json
+
 echo "--- every read validates against the published Response schema ---"
 r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,
 	\"peerdns\":false,\"reqprefix\":\"56\",\"sourcefilter\":false}")

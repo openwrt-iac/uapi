@@ -2072,3 +2072,34 @@ t.describe('handler ids by position', () => {
 		t.assert_equal(r.headers.ETag, rules.get_one(c, ctx(), "r1").headers.ETag);
 	});
 });
+
+// A PATCH keeps an option that it does not name, and the read of proto static hides listen_port.
+// The response was built from toUci's output, so it answered null for the port that uci kept, and
+// a client that stored the null deleted the port at its next apply.
+t.describe('a write answers the section that uci then holds', () => {
+	let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} });
+	const KEY = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+	let seed = () => ubus.stub({ uci: { network: { wg1: { '.type': 'interface', '.anonymous': false, proto: 'static',
+	                                                      ipaddr: [ '10.9.0.1/24' ], listen_port: '51820' } } } });
+	let switch_to_wg = { proto: 'wireguard', private_key: KEY, addresses: [ '10.9.0.1/24' ] };
+
+	t.it('a merge PATCH and a JSON Patch that switch static to wireguard answer the kept listen_port', () => {
+		let jp = [ { op: 'replace', path: '/proto', value: 'wireguard' }, { op: 'add', path: '/private_key', value: KEY },
+		           { op: 'add', path: '/addresses', value: switch_to_wg.addresses } ];
+		for (let w in [ [ ctx(), switch_to_wg ], [ { ...ctx(), json_patch: true }, jp ] ]) {
+			let c = seed();
+			let r = ifaces.patch(c, w[0], 'wg1', w[1]);
+			t.assert_equal(r.status, 200, r.body);
+			t.assert_equal(r.body.listen_port, 51820);
+			let got = ifaces.get_one(c, ctx(), 'wg1');
+			delete r.body.runtime;
+			delete got.body.runtime;
+			t.assert_deep_equal(r.body, got.body);
+			t.assert_equal(r.headers.ETag, got.headers.ETag);
+		}
+	});
+
+});

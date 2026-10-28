@@ -600,6 +600,10 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
 		if (clearing && !exists(existing, k))
 			continue;
+		// A value that uci already holds is no write either. A stored secret is one: the read masks
+		// it, so old_opts lacks it, and new_opts carries it back, so every PATCH wrote it again.
+		if (!clearing && exists(existing, k) && sprintf("%J", existing[k]) == sprintf("%J", nv))
+			continue;
 		let unchanged = exists(old_opts, k) && sprintf("%J", old_opts[k]) == sprintf("%J", nv);
 		let is_default = (defaults != null) && exists(defaults, k)
 		                 && sprintf("%J", defaults[k]) == sprintf("%J", nv);
@@ -716,6 +720,9 @@ function default_merge_for_patch(existing_json, body) {
 // `.name` comes from the cursor, not from `id`: uci also resolves `@rule[0]` and `@[-1]`, and
 // a read then named the section by that position instead of its name. A write takes the name
 // from here too, so its response, its ETag and its uniqueness check name the same section.
+// A write answers with the section as staged, read back through here, as a GET reads it. Built
+// from toUci's output, a PATCH answered null for an option that it kept and toUci does not emit,
+// such as a listen_port that the read of the old proto hides.
 function load_section(conn, pkg, id) {
 	let s = conn.uci_get(pkg, id);
 	return type(s) == "object" ? s : null;
@@ -826,11 +833,7 @@ function make(resource, opts) {
 				let resolved_type = create_type(body);
 				c.uci_create_section(p, new_id, resolved_type);
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
-				let view = { ...new_opts };
-				view['.name'] = new_id;
-				view['.anonymous'] = false;
-				view['.type'] = resolved_type;
-				let out = resource.fromUci(view, conn);
+				let out = resource.fromUci(load_section(c, p, new_id), conn);
 				collect_kernel_ops(kops, "create", new_opts, resolved_type, null);
 				return { ok: true, body: out };
 			},
@@ -888,11 +891,7 @@ function make(resource, opts) {
 
 				let new_opts = resource.toUci(write_body);
 				diff_apply(c, p, id, existing, new_opts);
-				let view = { ...new_opts };
-				view['.name'] = id;
-				view['.anonymous'] = false;
-				view['.type'] = existing['.type'];
-				let out = resource.fromUci(view, conn);
+				let out = resource.fromUci(load_section(c, p, id), conn);
 				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
 				return { ok: true, body: out };
 			},
@@ -946,11 +945,7 @@ function make(resource, opts) {
 				let old_opts = resource.toUci(existing_view);
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                 default_footprint(resource, existing, old_opts, new_opts));
-				let view = { ...new_opts };
-				view['.name'] = id;
-				view['.anonymous'] = false;
-				view['.type'] = existing['.type'];
-				let out = resource.fromUci(view, conn);
+				let out = resource.fromUci(load_section(c, p, id), conn);
 				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
 				return { ok: true, body: out };
 			},
@@ -1169,11 +1164,7 @@ function make_singleton(resource, opts) {
 				let old_opts = resource.toUci(existing_view);
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                 default_footprint(resource, existing, old_opts, new_opts));
-				let view = { ...new_opts };
-				view['.name'] = id;
-				view['.anonymous'] = !!existing['.anonymous'];
-				view['.type'] = sec_type;
-				return { ok: true, body: resource.fromUci(view, conn) };
+				return { ok: true, body: resource.fromUci(load_section(c, p, id), conn) };
 			},
 		}));
 

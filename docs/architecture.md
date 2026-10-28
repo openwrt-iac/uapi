@@ -135,7 +135,11 @@ without uci state change.
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
-   Nothing is staged outside the request process (see below).
+   Nothing is staged outside the request process (see below). A PATCH skips
+   a set of the value that uci already holds and a delete of an option that
+   it does not hold, so a PATCH that changes nothing has nothing to commit.
+   The response body is `fromUci` of the section read back from that copy,
+   so a write answers the body and ETag that a GET then answers.
 5. **Commit.** When the request wrote to the package, `uci_commit(<package>)`
    loads the package file again, replays the writes over it and writes it
    through libuci, so a commit by LuCI or a shell while the request ran is kept.
