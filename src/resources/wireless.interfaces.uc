@@ -225,17 +225,19 @@ function validate(json) {
 	return errs;
 }
 
-// The rules on the values that wifi-scripts or a daemon refuses or misreads. Another writer, such as
-// LuCI, can enable the SSID or change its mode or encryption later. So a rule on the value alone,
-// such as a newline or a length, reports its error in every mode, and marks it `live: false` when the
-// daemon does not read the value now. A rule of one mode or encryption, such as the 48-byte nasid of
-// fast transition, reports its error only there, and marks it `live: false` when the SSID is
-// disabled. A write that moves the SSID there adds the error. See new_errors() in the handler. Only
-// a newline ends a line in hostapd's and wpa_supplicant's config readers, and each problem is its own
-// error, so that one cannot hide another.
-function validate_new(json) {
+// The rules on the values that wifi-scripts or a daemon refuses or misreads. wifi-scripts sets up an
+// SSID only while the SSID and its radio are enabled, and another writer, such as LuCI, can enable
+// either or change the mode or encryption later. So a rule on the value alone, such as a newline or
+// a length, reports its error in every mode, and marks it `live: false` when the daemon does not read
+// the value now. A rule of one mode or encryption, such as the 48-byte nasid of fast transition,
+// reports its error only there, and marks it `live: false` when the SSID is not set up. A write that
+// moves the SSID there adds the error. See new_errors() in the handler. wireless/devices runs the
+// rules with the radio on for a write that turns the radio on. Only a newline ends a line in
+// hostapd's and wpa_supplicant's config readers, and each problem is its own error, so that one
+// cannot hide another.
+function rules(json, radio_on) {
 	let errs = [];
-	let on = json.disabled !== true;
+	let on = radio_on && json.disabled !== true;
 	let mode = json.mode ?? "ap";
 	let base = base_encryption(json.encryption);
 	let r = roaming(json);
@@ -348,6 +350,21 @@ function validate_new(json) {
 	return errs;
 }
 
+// netifd sets up an SSID on each radio that its device option names, as a list or as words, and
+// skips a radio that is disabled or that uci does not hold.
+function radios(device) {
+	return (type(device) == "array") ? device : split(device ?? "", /\s+/);
+}
+
+function validate_new(json, conn) {
+	if (conn == null) return rules(json, true);
+	let enabled = {};
+	conn.uci_foreach("wireless", "wifi-device", function(s) {
+		if (!platform_bool(s.disabled, false)) enabled[s['.name']] = true;
+	});
+	return rules(json, length(filter(radios(json.device), (r) => enabled[r])) > 0);
+}
+
 return {
 	package: "wireless",
 	type: "wifi-iface",
@@ -356,6 +373,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	validate_new: validate_new,
+	rules: rules,
+	radios: radios,
 	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
 	openapi_conditional: [
@@ -395,16 +414,16 @@ return {
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), "x-uapi-write": { enum: WRITE_MODES }, default: "ap",
-		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it enables the SSID. A create or a PUT that sends no mode stores ap. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
+		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
 		ssid:       { type: ["string", "null"], "x-uapi-write": { maxLength: SSID_MAX },
-		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it enables the SSID or moves it into a mode that the problem applies to", SSID_MAX) },
+		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
 		key:        { type: "string", writeOnly: true,
-		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it enables the SSID or changes its mode or encryption" },
+		              description: "Encryption passphrase; accepted on write, masked on read. Required when `encryption` is a PSK variant and no key is stored yet, which validate() enforces; it is not a schema conditional because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it sets the SSID up or changes its mode or encryption" },
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
-		              description: "Disable this iface at boot" },
+		              description: "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe" },
 		hidden:     { type: "boolean", default: false,
 		              description: "Suppress SSID in beacon frames" },
 		isolate:    { type: "boolean", default: false,
@@ -416,15 +435,15 @@ return {
 		ft_psk_generate_local: { "x-uapi-read-nullable": true, type: "boolean",
 		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. A stored value other than 1, true, 0 or false reads as false, as wifi-scripts takes it. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all" },
 		mobility_domain: { type: ["string", "null"], "x-uapi-write": { pattern: MD_PATTERN },
-		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by enabling the SSID or turning ieee80211r on" },
+		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ieee80211r on" },
 		nasid:      { type: ["string", "null"], "x-uapi-write": { maxLength: LINE_MAX },
-		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than %d on an EAP access point, the limit of the RADIUS attribute. A write that leaves nasid as it is is refused for a problem that nasid already had only when it enables the SSID or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX, RADIUS_NASID_MAX) },
+		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than %d on an EAP access point, the limit of the RADIUS attribute. A write that leaves nasid as it is is refused for a problem that nasid already had only when it sets the SSID up or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma", LINE_MAX, NASID_MAX, RADIUS_NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], "x-uapi-write": { minimum: 1000, maximum: 65535 },
-		              description: "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write that leaves a stored value as it is is refused for it only when it enables the SSID or moves it into one of these modes" },
+		              description: "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write that leaves a stored value as it is is refused for it only when it sets the SSID up or moves it into one of these modes" },
 		r0_key_lifetime: { type: ["integer", "null"], "x-uapi-write": { minimum: 0 },
 		              description: "802.11r lifetime of the PMK-R0 in minutes, 0 or more. Unset, hostapd uses 14 days (20160 minutes). 0 turns the timeout off. A read gives the number that wifi-scripts reads from the stored text, as for reassociation_deadline" },
 		r1_key_holder: { type: ["string", "null"], "x-uapi-write": { pattern: R1KH_ID_PATTERN },
-		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by enabling the SSID or turning ft_psk_generate_local off" },
+		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ft_psk_generate_local off" },
 		pmk_r1_push: { type: "boolean", default: false,
 		              description: "Push the PMK-R1 to the other key holders instead of waiting for them to pull it" },
 		r0kh:       { type: "array", items: { type: "string", "x-uapi-write": { maxLength: LINE_MAX } }, writeOnly: true,

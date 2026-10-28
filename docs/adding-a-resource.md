@@ -22,7 +22,7 @@ return {
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
     validate: function(json, conn, id, delta) { ... return []; }, // {field, code, message}[]
-    validate_new: function(json) { ... return []; }, // optional: see "Rules that a stored value can fail"
+    validate_new: function(json, conn) { ... return []; }, // optional: see "Rules that a stored value can fail"
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
 
     // OpenAPI hints (consumed by build/gen_openapi.uc, not by the runtime):
@@ -204,9 +204,11 @@ goes in `openapi_write_conditional`.
 value that a rule refuses blocks every write of the section until a write replaces it. That is
 right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi can break in uci,
 when the section must stay writable: disabling an SSID that holds an injected key has to work. Put
-such rules in `validate_new(json)`, which returns errors with a `live` flag: `false` when the
-daemon does not read the value yet, because the section is disabled or its mode does not use the
-field. Report the error either way, because another writer can enable the section later, and
+such rules in `validate_new(json, conn)`, which returns errors with a `live` flag: `false` when the
+daemon does not read the value yet, because the section is disabled, its mode does not use the
+field, or a section that it depends on is disabled, as the radio of an SSID can be. `conn` reads
+that section, and is null when a test calls the function directly. Report the error either way,
+because another writer can enable the section later, and
 report each problem of a value as its own error, so that one cannot hide another: the 422 keeps
 each of them, unless the schema check or `validate()` already reported its field and code.
 

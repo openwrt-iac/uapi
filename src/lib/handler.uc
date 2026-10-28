@@ -281,12 +281,12 @@ check_schema_types = function(schema_properties, body, prefix) {
 // was dormant and is now live. A resource marks an error `live: false` when the daemon does not
 // read the value yet, so a write that makes a stored value live, by enabling the section for
 // instance, adds an error. The sweep passes no `before`.
-function new_errors(resource, after, before) {
-	let errs = resource.validate_new(after) ?? [];
+function new_errors(resource, after, before, conn) {
+	let errs = resource.validate_new(after, conn) ?? [];
 	if (length(errs) > 0 && before != null) {
 		let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
 		let had = {};
-		for (let e in resource.validate_new(before) ?? []) had[id(e)] = had[id(e)] || e.live !== false;
+		for (let e in resource.validate_new(before, conn) ?? []) had[id(e)] = had[id(e)] || e.live !== false;
 		// An option is the list of its words, as netifd splits it. Two lists are the same only
 		// entry by entry, because wifi-scripts writes each entry as a line of its own.
 		let same = function(a, b) {
@@ -347,7 +347,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	}
 	// Two validate_new() rules on one field are two errors, so that one does not hide the other.
 	if (resource.validate_new != null)
-		for (let e in new_errors(resource, validate_body, before))
+		for (let e in new_errors(resource, validate_body, before, conn))
 			if (!seen[e.field + "|" + e.code]) push(merged, e);
 	return merged;
 }

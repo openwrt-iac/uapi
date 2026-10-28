@@ -509,6 +509,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	};
 	function stored(extra) {
 		return ubus.stub({ uci: { wireless: {
+			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211' },
 			w1: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0', mode: 'ap',
 			      ssid: 'home', encryption: 'psk2', key: 'correcthorse', ...extra },
 		} } });
@@ -907,11 +908,157 @@ t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
 	t.it('enables a radio that stores a value outside the write range, unless wifi-scripts stops it', () => {
 		for (let opts in [ { band: '6g', channel: '233', disabled: '1' }, { txpower: '40', disabled: '1' } ])
 			t.assert_equal(h.patch(radio(opts), ctx, 'radio0', { disabled: false }).status, 200, sprintf("%J", opts));
-		t.assert_equal(h.patch(radio({ cell_density: '4', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 422);
+		let c = radio({ cell_density: '4', disabled: '1' });
+		t.assert_equal(h.patch(c, ctx, 'radio0', { channel: 6 }).status, 200);
+		t.assert_deep_equal(map(h.patch(c, ctx, 'radio0', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'cell_density', 'out_of_range' ] ]);
 	});
 
 	t.it('takes a 6 GHz channel up to 233', () => {
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', band: '6g', channel: 233 }).status, 200);
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', band: '6g', channel: 234 }).status, 422);
+	});
+});
+
+// netifd skips a disabled SSID, and sets up no SSID of a radio that is disabled or missing, so the
+// daemons read the values of an SSID only while the SSID and its radio are enabled (#249).
+t.describe('wireless SSID values count while the SSID and its radio are enabled', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let ifaces = handler.make(wiface, { tx });
+	let radios = handler.make(widev, { tx });
+	const INJECTED = 'abcdefgh\nssid2="x"';
+	function box(radio1, ssids) {
+		return ubus.stub({ uci: { wireless: {
+			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211', band: '2g' },
+			radio1: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211', band: '5g', ...radio1 },
+			...ssids,
+		} } });
+	}
+	function ssid(extra) {
+		return { '.type': 'wifi-iface', '.anonymous': false, device: 'radio1', mode: 'ap', ssid: 'home',
+		         encryption: 'psk2', key: 'correcthorse', ...extra };
+	}
+	function fields(r) {
+		return map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
+	}
+
+	t.it('an SSID on a disabled or missing radio takes an enable, and still refuses a new bad value', () => {
+		for (let dev in [ 'radio1', 'radio9', 'w0' ]) {
+			let c = box({ disabled: '1' }, { w0: ssid({ device: 'radio0' }), w1: ssid({ device: dev, disabled: '1', key: INJECTED }) });
+			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, 200, dev);
+			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { key: 'abcdefgh\nssid3="y"' })),
+			                    [ [ 'key', 'invalid_format' ] ], dev);
+		}
+	});
+
+	t.it('moving an SSID with a stored bad value onto an enabled radio is refused, and off it is not', () => {
+		for (let dev in [ 'radio1', 'radio9' ]) {
+			let c = box({ disabled: '1' }, { w1: ssid({ device: dev, key: INJECTED }) });
+			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: 'radio0' })), [ [ 'key', 'invalid_format' ] ], dev);
+			t.assert_equal(c._state.uci.wireless.w1.device, dev);
+		}
+		let c = box({ disabled: '1' }, { w1: ssid({ device: 'radio0', key: INJECTED }) });
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { device: 'radio1' }).status, 200);
+	});
+
+	t.it('an SSID that names several radios, as words or as a list, counts while one of them is enabled', () => {
+		for (let p in [ [ 'radio1 radio0', 422 ], [ [ 'radio1', 'radio0' ], 422 ], [ 'radio1 radio9', 200 ] ]) {
+			let c = box({ disabled: '1' }, { w1: ssid({ device: p[0], disabled: '1', key: INJECTED }) });
+			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, p[1], p[0]);
+		}
+	});
+
+	t.it('reads the disabled option of the radio as netifd does', () => {
+		for (let p in [ [ 'true', 200 ], [ '0', 422 ], [ 'yes', 422 ] ]) {
+			let c = box({ disabled: p[0] }, { w1: ssid({ disabled: '1', key: INJECTED }) });
+			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, p[1], p[0]);
+		}
+	});
+
+	t.it('the sweep lists the SSID once, live only on an enabled radio, and no radio', () => {
+		for (let p in [ [ { disabled: '1' }, false ], [ {}, true ] ]) {
+			let c = box(p[0], { w1: ssid({ key: INJECTED }) });
+			t.assert_deep_equal(map(ifaces.sweep(c), (s) => [ s.id, map(s.errors, (e) => [ e.field, e.live ]) ]),
+			                    [ [ 'w1', [ [ 'key', p[1] ] ] ] ], p[0]);
+			t.assert_deep_equal(radios.sweep(c), [], p[0]);
+		}
+	});
+
+	t.it('turning a radio on is refused while an enabled SSID of it holds a value that a daemon refuses', () => {
+		let c = box({ disabled: '1' }, { w1: ssid({ key: INJECTED }), w2: ssid({ device: 'radio0 radio1', nasid: 'ap1\nx=1' }),
+		                                 w3: ssid({ device: 'radio0', key: INJECTED }) });
+		let r = radios.patch(c, ctx, 'radio1', { disabled: false });
+		t.assert_deep_equal(fields(r), [ [ 'disabled', 'conflict' ] ]);
+		t.assert_true(index(r.body.errors[0].message, ': w1 (key), w2 (nasid)') > 0, r.body.errors[0].message);
+		t.assert_equal(index(r.body.errors[0].message, 'w3'), -1);
+		t.assert_equal(c._state.uci.wireless.radio1.disabled, '1');
+	});
+
+	t.it('the refusal names SSIDs and fields, and no secret', () => {
+		const H32 = '00112233445566778899aabbccddeeff';
+		let c = box({ disabled: '1' }, { w1: ssid({ encryption: 'sae', key: 'hunter22\nssid2="x"', ieee80211r: '1', ft_psk_generate_local: '0',
+		                                            r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32 + '\nwpa_passphrase=topsecret' ] }) });
+		let m = radios.patch(c, ctx, 'radio1', { disabled: false }).body.errors[0].message;
+		t.assert_true(index(m, 'w1 (key, r0kh[0])') > 0, m);
+		for (let s in [ 'hunter22', 'topsecret', H32 ])
+			t.assert_equal(index(m, s), -1, s);
+	});
+
+	// A PUT validates before it looks the section up, and it cannot create the radio.
+	t.it('a PUT or a PATCH of a radio that uci does not hold answers 404, whatever its SSIDs hold', () => {
+		let c = box({}, { w1: ssid({ device: 'radio7', key: INJECTED }) });
+		t.assert_equal(radios.replace(c, ctx, 'radio7', { type: 'mac80211' }).status, 404);
+		t.assert_equal(radios.patch(c, ctx, 'radio7', { channel: 6 }).status, 404);
+		t.assert_deep_equal(fields(radios.create(c, ctx, { id: 'radio7', type: 'mac80211' })), [ [ 'disabled', 'conflict' ] ]);
+	});
+
+	t.it('turning a radio on passes when its SSIDs are disabled or clean, whatever another radio holds', () => {
+		for (let ssids in [ { w1: ssid({ disabled: '1', key: INJECTED }) }, { w1: ssid({}) },
+		                    { w1: ssid({ device: 'radio0', key: INJECTED }) } ]) {
+			let c = box({ disabled: '1' }, ssids);
+			t.assert_equal(radios.patch(c, ctx, 'radio1', { disabled: false }).status, 200, sprintf("%J", ssids));
+		}
+	});
+
+	t.it('a write that leaves a radio on, or off, is not checked against its SSIDs', () => {
+		for (let radio1 in [ {}, { disabled: '1' } ])
+			t.assert_equal(radios.patch(box(radio1, { w1: ssid({ key: INJECTED }) }), ctx, 'radio1', { channel: 36 }).status,
+			               200, sprintf("%J", radio1));
+	});
+
+	t.it('a PUT of the read that turns the radio on is checked', () => {
+		for (let p in [ [ INJECTED, [ 422, [ [ 'disabled', 'conflict' ] ] ] ], [ 'correcthorse', [ 200, [] ] ] ]) {
+			let c = box({ disabled: '1' }, { w1: ssid({ key: p[0] }) });
+			let body = radios.get_one(c, ctx, 'radio1').body;
+			for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+			body.disabled = false;
+			let r = radios.replace(c, ctx, 'radio1', body);
+			t.assert_deep_equal([ r.status, fields(r) ], p[1], p[0]);
+		}
+	});
+
+	// mac80211.uc writes the radio with no disabled option, here disabled as LuCI does when its last SSID
+	// goes, and the SSID with encryption none, or owe and country 00 on 6 GHz, and an empty key, which
+	// uci does not store.
+	t.it('a radio and its SSID as wifi config writes them take an enable of both, on every band', () => {
+		for (let b in [ [ '2g', 'HT20', 'none' ], [ '5g', 'VHT80', 'none' ], [ '6g', 'HE80', 'owe' ] ]) {
+			let c = ubus.stub({ uci: { wireless: {
+				radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211', path: 'platform/soc/18000000.wifi',
+				          band: b[0], channel: 'auto', htmode: b[1], ...((b[0] == '6g') ? { country: '00' } : {}), disabled: '1' },
+				default_radio0: { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0', network: 'lan', mode: 'ap',
+				                  ssid: 'OpenWrt', encryption: b[2], disabled: '1' },
+			} } });
+			t.assert_equal(ifaces.patch(c, ctx, 'default_radio0', { disabled: false }).status, 200, b[0]);
+			t.assert_equal(radios.patch(c, ctx, 'radio0', { disabled: false }).status, 200, b[0]);
+			t.assert_deep_equal(ifaces.sweep(c), [], b[0]);
+		}
+	});
+
+	t.it('a create of a radio that an enabled SSID names is checked, unless it disables the radio', () => {
+		let c = box({}, { w1: ssid({ device: 'radio2', key: INJECTED }) });
+		t.assert_deep_equal(fields(radios.create(c, ctx, { id: 'radio2', type: 'mac80211' })), [ [ 'disabled', 'conflict' ] ]);
+		t.assert_equal(c._state.uci.wireless.radio2, null);
+		t.assert_equal(radios.create(c, ctx, { id: 'radio2', type: 'mac80211', disabled: true }).status, 200);
 	});
 });

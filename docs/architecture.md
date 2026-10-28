@@ -118,7 +118,7 @@ without uci state change.
    read from that copy, so a commit by LuCI or a shell in between was invisible
    to the write.
 3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta)`
-   run inside the lock, and `validate_new(json)` where a resource has one, which refuses only
+   run inside the lock, and `validate_new(json, conn)` where a resource has one, which refuses only
    the errors that the write adds (`docs/adding-a-resource.md`). Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
