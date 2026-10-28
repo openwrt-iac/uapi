@@ -11,7 +11,7 @@ function fresh_token() {
 }
 
 function clean(token) {
-	try { fs.unlink("/tmp/uapi-ratelimit/" + token + ".txt"); } catch (_) {}
+	try { fs.unlink("/var/run/uapi-ratelimit/" + token + ".txt"); } catch (_) {}
 }
 
 t.describe('ratelimit.check, fresh bucket', () => {
@@ -52,6 +52,22 @@ t.describe('ratelimit.check, malformed inputs', () => {
 
 	t.it('allows when now is null (clockless router)', () => {
 		t.assert_true(ratelimit.check("any_tok", {}).allowed);
+	});
+});
+
+t.describe('ratelimit, a directory that is not uapi\'s own', () => {
+	t.it('is not used: no bucket is read, written or reaped', () => {
+		let tok = fresh_token();
+		t.assert_true(ratelimit.check(tok, { now: 1000, rate: 1, burst: 1 }).allowed);
+		let bucket = "/var/run/uapi-ratelimit/" + tok + ".txt";
+		let held = fs.readfile(bucket);
+		fs.chmod("/var/run/uapi-ratelimit", 0o777);
+		t.assert_true(ratelimit.check(tok, { now: 1000, rate: 1, burst: 1 }).allowed);
+		ratelimit.reap({});
+		t.assert_equal(fs.readfile(bucket), held);
+		fs.chmod("/var/run/uapi-ratelimit", 0o700);
+		t.assert_false(ratelimit.check(tok, { now: 1000, rate: 1, burst: 1 }).allowed);
+		clean(tok);
 	});
 });
 
@@ -97,12 +113,12 @@ t.describe('ratelimit.reap', () => {
 		let live = fresh_token(), dead = fresh_token();
 		ratelimit.check(live, { now: 1000 });
 		ratelimit.check(dead, { now: 1000 });
-		let f = fs.open("/tmp/uapi-ratelimit/" + dead + ".txt.tmp", "w");
+		let f = fs.open("/var/run/uapi-ratelimit/" + dead + ".txt.tmp", "w");
 		f.close();
 		ratelimit.reap({ [live]: true });
-		t.assert_true(fs.stat("/tmp/uapi-ratelimit/" + live + ".txt") != null);
-		t.assert_equal(fs.stat("/tmp/uapi-ratelimit/" + dead + ".txt"), null);
-		t.assert_equal(fs.stat("/tmp/uapi-ratelimit/" + dead + ".txt.tmp"), null);
+		t.assert_true(fs.stat("/var/run/uapi-ratelimit/" + live + ".txt") != null);
+		t.assert_equal(fs.stat("/var/run/uapi-ratelimit/" + dead + ".txt"), null);
+		t.assert_equal(fs.stat("/var/run/uapi-ratelimit/" + dead + ".txt.tmp"), null);
 		clean(live);
 	});
 });

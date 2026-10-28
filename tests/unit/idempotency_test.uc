@@ -3,7 +3,7 @@ let fs = require('fs');
 let idem = require('idempotency');
 
 function wipe() {
-	let dir = "/tmp/uapi-idempotency";
+	let dir = "/var/run/uapi-idempotency";
 	let entries;
 	try { entries = fs.lsdir(dir); } catch (_) { return; }
 	for (let n in entries ?? []) {
@@ -62,12 +62,12 @@ t.describe('idempotency.lookup + store round-trip', () => {
 
 // Other daemons of the box run as other users.
 t.describe('idempotency.store keeps its entries private and bounded', () => {
-	let dir = "/tmp/uapi-idempotency";
+	let dir = "/var/run/uapi-idempotency";
 	let resp = { status: 200, headers: {}, body: { token: "uapi_secret" } };
 	let mode = (p) => fs.stat(p).mode & 511;
-	let entries = () => filter(fs.lsdir(dir) ?? [], (n) => !match(n, /^\.|\.tmp$/));
+	let entries = () => filter(fs.lsdir(dir) ?? [], (n) => match(n, /\.json$/));
 
-	t.it('writes the directory 0700 and each entry 0600, also over a directory that an older uapi made 0755', () => {
+	t.it('writes the directory 0700 and each entry 0600, also over one of its own with mode 0755', () => {
 		wipe();
 		fs.mkdir(dir);
 		fs.chmod(dir, 493);
@@ -92,7 +92,7 @@ t.describe('idempotency.store keeps its entries private and bounded', () => {
 	});
 
 	t.it('stores and finds nothing when the path is not a directory that this process owns', () => {
-		let elsewhere = "/tmp/uapi-idempotency-elsewhere";
+		let elsewhere = "/var/run/uapi-idempotency-elsewhere";
 		if (fs.lstat(dir)?.type == "link") { fs.unlink(dir); fs.rename(elsewhere, dir); }
 		wipe();
 		t.assert_true(idem.store("test_token", "key_l", "{}", resp));
@@ -104,5 +104,31 @@ t.describe('idempotency.store keeps its entries private and bounded', () => {
 		t.assert_equal(length(fs.lsdir(elsewhere)), before);
 		fs.unlink(dir);
 		fs.rename(elsewhere, dir);
+	});
+});
+
+// The other store runs in a second process while this one holds its temp file open and has not
+// written yet. Under one shared name the other store took that name, and this one stored nothing.
+t.describe('idempotency.store, two stores of one key at the same moment', () => {
+	t.it('each writes a whole entry, and the later one stays', () => {
+		wipe();
+		let body = "{\"name\":\"x\"}";
+		let other = sprintf("require('idempotency').store('test_token', 'key_c', %J, %J)",
+			body, { status: 201, headers: {}, body: { id: "other", pad: sprintf("%300s", "y") } });
+		let ran = false;
+		let mod = t.load_with_fs({ ...fs, open: (p, m, perm) => {
+			let f = fs.open(p, m, perm);
+			if (m == "w" && !ran) {
+				ran = true;
+				system([ "ucode", "-L", "src/lib", "-e", other ]);
+			}
+			return f;
+		} }, [ "state_dir", "idempotency" ]);
+		t.assert_true(mod.store("test_token", "key_c", body,
+			{ status: 201, headers: {}, body: { id: "this" } }));
+		t.assert_true(ran);
+		let r = idem.lookup("test_token", "key_c", body, time());
+		t.assert_equal(r.state, "hit");
+		t.assert_equal(r.response.body.id, "this");
 	});
 });

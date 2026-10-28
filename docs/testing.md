@@ -4,7 +4,7 @@ Three layers, plus the harness and the load-bearing test inventory.
 
 ## Layers
 
-- **Unit tests** (pure ucode): schema validation, `fromUci`/`toUci`, scope matcher, ID generation, error envelope, transaction snapshot logic. Runs anywhere ucode runs. Sub-5s end-to-end.
+- **Unit tests** (pure ucode): schema validation, `fromUci`/`toUci`, scope matcher, ID generation, error envelope, transaction snapshot logic. Runs anywhere ucode runs. Sub-5s end-to-end. The rate limiter, the metrics, the error ring and the idempotency cache keep their state under `/var/run`, which only root can write, so the suite runs as root, as CI runs it. For anyone else `make test-unit` and `make test-property` run it with `unshare -rm`, as root of a user namespace with a `/var/run` of its own, which needs unprivileged user namespaces.
 - **Integration tests** (QEMU + official OpenWrt VM image): full transaction recipe against real ubus/uci, auth on the wire, audit log emission, snapshot-restore. ~1-2 min including boot.
 - **Contract / Terraform provider tests**: handled by `openwrt-iac/terraform-provider-uapi` against a running uapi. Seeded by the in-repo curl example suite (`examples/curl/`) and the emitted OpenAPI spec.
 

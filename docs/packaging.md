@@ -34,13 +34,16 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
 Runtime files created on first use (tmpfs, reset on reboot):
 
 ```
-/tmp/uapi-ratelimit/<token>.txt          per-token bucket state
-/tmp/uapi-idempotency/<sha>.json         per-key cached POST responses (24h TTL)
-/tmp/uapi-metrics/<series>/<labels>.txt  Prometheus counter/histogram store
-/var/run/uapi-token-update/<token>       last-used throttle sentinel
-/var/lock/uapi.lock                      global flock (SH for uci tx, EX for non-uci)
-/var/lock/uapi.pkg.<package>.lock        per-package EX flock
+/var/run/uapi-ratelimit/<token>.txt          per-token bucket state
+/var/run/uapi-idempotency/<sha>.json         per-key cached POST responses (24h TTL)
+/var/run/uapi-metrics/<series>/<labels>.txt  Prometheus counter/histogram store
+/var/run/uapi-error-ring/ring.json           the last 20 errors, for /diagnostics
+/var/run/uapi-token-update/<token>           last-used throttle sentinel
+/var/lock/uapi.lock                          global flock (SH for uci tx, EX for non-uci)
+/var/lock/uapi.pkg.<package>.lock            per-package EX flock
 ```
+
+The four `/var/run/uapi-*` directories of the rate limiter, the idempotency cache, the metrics and the error ring have mode 0700 and their files 0600, see `docs/architecture.md` § Where state lives.
 
 `/etc/config/uapi` is marked as a conffile, so upgrades preserve
 operator-created tokens.
@@ -108,6 +111,8 @@ The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live insta
 1. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
 2. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
 3. Commits the uhttpd config if either step changed something, and then reloads uhttpd if it is enabled.
+
+`postinst` then removes `/var/run/uapi-idempotency`, `/var/run/uapi-metrics`, `/var/run/uapi-ratelimit` and `/var/run/uapi-error-ring`, and the four that an older uapi kept in `/tmp` with mode 0755 and files 0644, each only when root owns it. They hold the 24 h replay window of the idempotency cache and state that a reboot clears too, so each starts empty in a directory that uapi creates 0700. The counters start again from zero, which Prometheus reads as a reset, every token has a full burst, and `recent_errors` is empty.
 
 `postinst` then restarts uhttpd, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
 

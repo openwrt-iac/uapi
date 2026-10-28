@@ -83,7 +83,7 @@ echo "--- a token read and revoked by position is named, and its bucket, marker 
 # api_shortlived is the last token in the file, and its request above created its state.
 [ "$(curl -sS -g -H "$ADMIN" "$URL/tokens/@token[-1]" | jq -r .name)" = "api_shortlived" ] \
 	|| fail "GET /tokens/@token[-1] did not name api_shortlived"
-$SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to reap"
+$SSH "test -e /var/run/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to reap"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" || fail "api_shortlived has no marker to reap"
 # The mint of api_shortlived reaped every other token that no longer authenticates, so its
 # series are the only ones that this revoke folds.
@@ -92,7 +92,7 @@ before=$(curl -sS -H "$ADMIN" "$URL/metrics")
 want=$(( $(requests "$before" api_shortlived) + $(requests "$before" -retired) ))
 status=$(curl -sS -g -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/tokens/@token[-1]")
 [ "$status" = "204" ] || fail "DELETE /tokens/@token[-1] expected 204, got $status"
-$SSH "test -e /tmp/uapi-ratelimit/api_shortlived.txt" && fail "the revoke by position left the bucket"
+$SSH "test -e /var/run/uapi-ratelimit/api_shortlived.txt" && fail "the revoke by position left the bucket"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" && fail "the revoke left the last-used marker"
 after=$(curl -sS -H "$ADMIN" "$URL/metrics")
 echo "$after" | grep -q 'token_id="api_shortlived"' && fail "the revoke left the series of the token"
@@ -125,7 +125,7 @@ status=$(curl -sS -o /tmp/uapi_expired_body.json -w '%{http_code}' \
 	-H "Authorization: Bearer $short_bearer" "$URL/firewall/rules")
 [ "$status" = "401" ] || fail "expired token still works: $status"
 grep -q 'Token expired' /tmp/uapi_expired_body.json || fail "expected expired message"
-$SSH "test -e /tmp/uapi-ratelimit/api_shortlived_b.txt" || fail "api_shortlived_b has no bucket to reap"
+$SSH "test -e /var/run/uapi-ratelimit/api_shortlived_b.txt" || fail "api_shortlived_b has no bucket to reap"
 
 echo "--- POST /tokens with allowed_cidrs that excludes local addr returns 401 on use ---"
 ip_scoped=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
@@ -137,7 +137,7 @@ ip_bearer=$(echo "$ip_scoped" | sed -n 's/.*"bearer": *"\([^"]*\)".*/\1/p')
 [ -n "$ip_bearer" ] || fail "no bearer for IP-scoped token"
 
 echo "--- that mint reaped the bucket, the marker and the series of the expired token ---"
-$SSH "test -e /tmp/uapi-ratelimit/api_shortlived_b.txt" && fail "the mint left the bucket of an expired token"
+$SSH "test -e /var/run/uapi-ratelimit/api_shortlived_b.txt" && fail "the mint left the bucket of an expired token"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived_b" && fail "the mint left the marker of an expired token"
 curl -sS -H "$ADMIN" "$URL/metrics" | grep -q 'token_id="api_shortlived_b"' \
 	&& fail "the mint left the series of an expired token"
@@ -222,9 +222,9 @@ drops() {
 before=$(curl -sS -H "$ADMIN" "$URL/metrics")
 [ "$(drops "$before" api_strict_rl)" -gt 0 ] || fail "api_strict_rl has no drops to fold"
 want=$(( $(drops "$before" api_strict_rl) + $(drops "$before" -retired) ))
-$SSH "test -e /tmp/uapi-ratelimit/api_strict_rl.txt" || fail "api_strict_rl has no bucket to reap"
+$SSH "test -e /var/run/uapi-ratelimit/api_strict_rl.txt" || fail "api_strict_rl has no bucket to reap"
 $SSH 'uapi-token revoke api_strict_rl' >/dev/null 2>&1 || fail "uapi-token revoke api_strict_rl failed"
-$SSH "test -e /tmp/uapi-ratelimit/api_strict_rl.txt" && fail "uapi-token revoke left the bucket"
+$SSH "test -e /var/run/uapi-ratelimit/api_strict_rl.txt" && fail "uapi-token revoke left the bucket"
 after=$(curl -sS -H "$ADMIN" "$URL/metrics")
 echo "$after" | grep -q 'token_id="api_strict_rl"' && fail "uapi-token revoke left the series of the token"
 [ "$(drops "$after" -retired)" = "$want" ] \

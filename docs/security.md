@@ -233,7 +233,7 @@ that intractable.
 
 ## Rate limit guarantees (and non-guarantees)
 
-- The token bucket is per-token, file-backed at `/tmp/uapi-ratelimit/`.
+- The token bucket is per-token, file-backed at `/var/run/uapi-ratelimit/`.
 - Under heavy concurrent load against the same token, two forks may race
   the read-modify-write and one increment may be lost. The worst case is
   one request's worth of bucket drift, bounded by the burst size.

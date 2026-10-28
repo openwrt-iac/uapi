@@ -228,7 +228,7 @@ t.describe('token_store.remove', () => {
 	});
 });
 
-const BUCKETS = "/tmp/uapi-ratelimit/";
+const BUCKETS = "/var/run/uapi-ratelimit/";
 const MARKERS = "/var/run/uapi-token-update/";
 
 // /var/run belongs to root. CI runs the unit tests as root, and a developer who does not
@@ -250,7 +250,7 @@ function has_series(id) {
 	return index(metrics.format_prometheus(), sprintf('token_id="%s"', id)) >= 0;
 }
 
-// /tmp/uapi-metrics is shared with the other suites, which leave -retired series behind, so
+// /var/run/uapi-metrics is shared with the other suites, which leave -retired series behind, so
 // this reads only the series that plant_state() writes.
 function requests_of(id) {
 	let s = sprintf('uapi_requests_total{method="GET",path="/system",status="200",token_id="%s"} ', id);

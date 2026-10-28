@@ -1,11 +1,12 @@
 let fs = require('fs');
+let state_dir = require('state_dir');
 
 // Each series is one file with the bare integer count. Histograms are
 // represented as one file per (series, le-bucket). Atomic increment uses
 // read+1+atomic-rename to avoid losing increments under concurrent forks.
 // Loss under hot races is acceptable - these are operational metrics, not a
 // billing source.
-const DIR = "/tmp/uapi-metrics";
+const DIR = "/var/run/uapi-metrics";
 const HIST_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 // Same charset uci package names follow; keeps label values from breaking the
 // filename layout (label values become path components). HTTP method, status,
@@ -78,26 +79,17 @@ function _read_counter(path) {
 	return match(s, /^[0-9]+$/) ? int(s) : null;
 }
 
-// stdio buffers the line, so a full /tmp shows only at the close, which ucode does not report,
-// and the rename then put an empty file over the counter. The size on disk does show it.
 function _write_counter(path, value) {
 	let dir_parts = split(path, "/");
 	pop(dir_parts);
 	_mkdir_p(join("/", dir_parts));
-	let text = "" + value + "\n", tmp = path + ".tmp";
-	let f = fs.open(tmp, "w");
-	if (!f) return false;
-	f.write(text);
-	f.close();
-	if (fs.stat(tmp)?.size == length(text) && fs.rename(tmp, path)) return true;
-	fs.unlink(tmp);
-	return false;
+	return state_dir.replace(path + ".tmp", path, "" + value + "\n");
 }
 
 // A counter that holds no count starts again at `by`, which Prometheus reads as a reset.
 function inc(series, labels, by) {
 	let path = _label_path(series, labels ?? {});
-	if (path == null) return false;
+	if (path == null || !state_dir.owned(DIR)) return false;
 	return _write_counter(path, (_read_counter(path) ?? 0) + (by ?? 1));
 }
 
@@ -200,6 +192,7 @@ function _path_to_series_and_labels(path) {
 // rather than deleted. A deletion makes a sum over token_id fall, and drops from every query
 // the requests of a token minted per run, whose series a scrape often sees once or never.
 function retire_tokens(live) {
+	if (!state_dir.owned(DIR)) return;
 	for (let series in TOKEN_SERIES) {
 		let files = [];
 		_walk(DIR + "/" + series, files);
@@ -209,7 +202,7 @@ function retire_tokens(live) {
 			if (id == null || id == "-" || id == RETIRED || live[id]) continue;
 			let n = _read_counter(p);
 			m.labels.token_id = RETIRED;
-			// The source goes only once its count is in RETIRED. A full /tmp keeps it for the
+			// The source goes only once its count is in RETIRED. A full tmpfs keeps it for the
 			// next reap, and a kill between the two counts it twice there rather than losing
 			// it: a counter may jump, it must not fall.
 			if (!n || inc(series, m.labels, n)) fs.unlink(p);
@@ -230,7 +223,7 @@ function _format_labels(labels) {
 
 function format_prometheus() {
 	let files = [];
-	_walk(DIR, files);
+	if (state_dir.owned(DIR)) _walk(DIR, files);
 	sort(files);
 	let lines = [];
 	for (let p in files) {

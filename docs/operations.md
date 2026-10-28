@@ -160,8 +160,10 @@ Leave these off unless you're debugging. They are noisy and will fill the in-mem
 
 `GET /api/v3/metrics` returns Prometheus 0.0.4 text. Scope: `uapi:metrics:ro`
 (covered by `*:ro`). Counters and histograms are file-backed under
-`/tmp/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
+`/var/run/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
 operational counters; aggregate longer-term retention server-side).
+A package install or upgrade resets them too, and Prometheus reads that
+as a counter reset.
 
 Series:
 
@@ -249,7 +251,7 @@ node_exporter's config separately.
 
 ## Rate limiting
 
-Per-token token-bucket, file-backed at `/tmp/uapi-ratelimit/<token>.txt`.
+Per-token token-bucket, file-backed at `/var/run/uapi-ratelimit/<token>.txt`.
 Defaults: **100 req/s, burst 200** per token. Tune globally via
 `/etc/config/uapi`:
 
@@ -366,7 +368,7 @@ not be checked must not be reported as clean.
 `dhcp/leases` and `dhcp/leases6` are not swept. They are read-only views of
 daemon state with no validation to run.
 
-The `recent_errors` ring is best-effort: writes to `/tmp/uapi-error-ring/`
+The `recent_errors` ring is best-effort: writes to `/var/run/uapi-error-ring/`
 must never disrupt the actual response, so a disk-full or permission
 failure simply produces an empty ring rather than a 5xx on the original
 request. The ring caps at 20 entries (oldest dropped first), and keeps the
