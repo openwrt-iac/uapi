@@ -29,6 +29,8 @@ uapi-token show <name>      # detailed view (scopes, expiry, cidrs, last_used_at
 uapi-token revoke <name>    # delete a token
 ```
 
+`uapi-token create` and `revoke` take the locks that an HTTP write of the token store takes, the global lock shared and the lock of the `uapi` package exclusive, so that a write of the CLI and one of the HTTP path to `/etc/config/uapi` cannot lose each other. An HTTP write holds these locks for milliseconds, and the CLI waits up to 10 s for them. A non-uci write, such as an `apk` run through `/packages/installed`, can hold the global lock for longer. When a lock is still held after 10 s, the command names it and exits 75 (`EX_TEMPFAIL`), having written nothing, so a retry is safe.
+
 ## Creating tokens (HTTP)
 
 A token holding `uapi:tokens:rw` (or `*:rw`) can mint other tokens over the

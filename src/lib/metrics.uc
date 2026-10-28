@@ -13,6 +13,7 @@ const HIST_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const LABEL_RE = /^[A-Za-z0-9_:.\/-]+$/;
 const TOKEN_SERIES = [ "uapi_requests_total", "uapi_rate_limit_drops_total" ];
 const RETIRED = "-retired";
+const UNMATCHED = "unmatched";
 
 function _mkdir_p(path) {
 	let parts = split(path, "/");
@@ -67,34 +68,37 @@ function _label_path(series, labels) {
 	return DIR + "/" + join("/", parts) + ".txt";
 }
 
+// null for a file that is gone or holds no count. int() turned such a file into NaN, which
+// printed as 0, and every later increment wrote NaN again.
 function _read_counter(path) {
 	let f = fs.open(path, "r");
-	if (!f) return 0;
-	let s = f.read("line") ?? "0";
+	if (!f) return null;
+	let s = trim(f.read("line") ?? "");
 	f.close();
-	let n = int(trim(s));
-	return n;
+	return match(s, /^[0-9]+$/) ? int(s) : null;
 }
 
+// stdio buffers the line, so a full /tmp shows only at the close, which ucode does not report,
+// and the rename then put an empty file over the counter. The size on disk does show it.
 function _write_counter(path, value) {
 	let dir_parts = split(path, "/");
 	pop(dir_parts);
 	_mkdir_p(join("/", dir_parts));
-	let tmp = path + ".tmp";
+	let text = "" + value + "\n", tmp = path + ".tmp";
 	let f = fs.open(tmp, "w");
 	if (!f) return false;
-	f.write("" + value + "\n");
+	f.write(text);
 	f.close();
-	if (fs.rename(tmp, path)) return true;
+	if (fs.stat(tmp)?.size == length(text) && fs.rename(tmp, path)) return true;
 	fs.unlink(tmp);
 	return false;
 }
 
+// A counter that holds no count starts again at `by`, which Prometheus reads as a reset.
 function inc(series, labels, by) {
 	let path = _label_path(series, labels ?? {});
-	if (path == null) return;
-	let n = _read_counter(path);
-	_write_counter(path, n + (by ?? 1));
+	if (path == null) return false;
+	return _write_counter(path, (_read_counter(path) ?? 0) + (by ?? 1));
 }
 
 function observe(series, labels, value) {
@@ -125,6 +129,21 @@ function record_request(method, path_template, status, duration_ms, token_id) {
 	inc("uapi_requests_total", labels, 1);
 	let no_status = { method: m, path: p };
 	observe("uapi_request_duration_seconds", no_status, duration_ms / 1000.0);
+}
+
+// A path is labelled with its route, a parameter as ":id", and a /raw path with its package
+// when routes.raw_package() knows it. Any other path records UNMATCHED, so that paths that no
+// route serves add no series.
+function path_label(parts, routes) {
+	let n = length(parts), segs = [];
+	for (let i = 0; i < n; i++) {
+		let named = i == 0 || (i == 1 && parts[0] != "tokens") || (i == 3 && parts[i] == "adopt");
+		push(segs, named ? parts[i] : ":id");
+	}
+	let label = "/" + join("/", segs);
+	if (routes.labels[label]) return label;
+	if (parts[0] == "raw" && (n == 2 || n == 3) && routes.raw_package(parts[1])) return label;
+	return UNMATCHED;
 }
 
 function record_rate_limit_drop(token_id) {
@@ -190,10 +209,10 @@ function retire_tokens(live) {
 			if (id == null || id == "-" || id == RETIRED || live[id]) continue;
 			let n = _read_counter(p);
 			m.labels.token_id = RETIRED;
-			// Before the unlink, so that a kill between the two counts the series twice rather
-			// than losing it: a counter may jump, it must not fall.
-			if (n > 0) inc(series, m.labels, n);
-			fs.unlink(p);
+			// The source goes only once its count is in RETIRED. A full /tmp keeps it for the
+			// next reap, and a kill between the two counts it twice there rather than losing
+			// it: a counter may jump, it must not fall.
+			if (!n || inc(series, m.labels, n)) fs.unlink(p);
 		}
 	}
 }
@@ -217,7 +236,8 @@ function format_prometheus() {
 	for (let p in files) {
 		let m = _path_to_series_and_labels(p);
 		let val = _read_counter(p);
-		push(lines, sprintf("%s%s %d", m.series, _format_labels(m.labels), val));
+		if (val != null)
+			push(lines, sprintf("%s%s %d", m.series, _format_labels(m.labels), val));
 	}
 	return join("\n", lines) + "\n";
 }
@@ -226,5 +246,5 @@ return {
 	inc, observe,
 	record_request, record_rate_limit_drop,
 	record_lock_contention, record_validate_error,
-	retire_tokens, format_prometheus,
+	path_label, retire_tokens, format_prometheus,
 };

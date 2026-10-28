@@ -58,7 +58,7 @@ Two lock files, in three patterns:
 | `/var/lock/uapi.pkg.<package>.lock` (EX) | a uci transaction on `<package>` | serializes writes to the same package; cross-package writes do not collide |
 | `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext` | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another |
 
-This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead.
+This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead. `uapi-token` writes `/etc/config/uapi` outside a request, so it takes the same locks as a uci transaction on `uapi` through `transaction.acquire_pkg_waiting()`, which polls for a bounded time rather than answer 423.
 
 Reading uci state acquires no lock. One thing rides along with a GET though: the
 last-used stamp on the presenting token is written through a real `uapi`-package transaction,

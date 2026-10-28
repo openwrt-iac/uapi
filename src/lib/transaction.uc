@@ -152,8 +152,9 @@ function default_release(handle) {
 //                                        of that package
 //   { unavailable: <path> }   - file open failed (infrastructure)
 // The contention distinction feeds the 423 message identity so the
-// caller learns which lock blocked them.
-function default_acquire_pkg(global_path, package, also) {
+// caller learns which lock blocked them. prefix is for the tests, as in
+// multi_transaction().
+function default_acquire_pkg(global_path, package, also, prefix) {
 	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
 	let g = _lock_one(global_path ?? LOCK_PATH, "s");
@@ -161,7 +162,7 @@ function default_acquire_pkg(global_path, package, also) {
 	if (type(g) == "object" && g.unavailable != null) return g;
 	let held = [];
 	for (let name in sort([ package, ...(also ?? []) ])) {
-		let p = _lock_one(PKG_LOCK_PREFIX + name + ".lock", "x");
+		let p = _lock_one((prefix ?? PKG_LOCK_PREFIX) + name + ".lock", "x");
 		if (p == null || type(p) == "object" && p.unavailable != null) {
 			for (let h in held) _release_one(h);
 			_release_one(g);
@@ -176,6 +177,17 @@ function default_release_pkg(handle) {
 	if (handle == null) return;
 	for (let h in handle._p) _release_one(h);
 	_release_one(handle._g);
+}
+
+// For a writer outside a request, such as uapi-token, which waits rather than answer 423.
+// Every acquire here is non-blocking, so it polls. Returns the locks, an unavailable path, or
+// the last contention once wait_ms has passed.
+function acquire_pkg_waiting(package, wait_ms, global_path, prefix) {
+	for (let waited = 0; ; waited += 100) {
+		let lock = default_acquire_pkg(global_path, package, null, prefix);
+		if (lock._g != null || lock.unavailable != null || waited >= wait_ms) return lock;
+		sleep(100);
+	}
 }
 
 // A write with no kernel path at all is distinct from one whose every target was
@@ -461,5 +473,5 @@ function with_lock(params) {
 
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
-         default_acquire_pkg, default_release_pkg,
+         default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
          default_check_services, default_reload, default_watch };

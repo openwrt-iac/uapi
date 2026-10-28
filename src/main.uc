@@ -396,47 +396,32 @@ function if_none_match_matches(if_none_match, current_etag) {
 	return false;
 }
 
-// path_template lowers a concrete request path to a label that does not
-// explode metric cardinality. Concrete segment values (ids, ULIDs, hex
-// digests) become `<id>`; named segments (resource, package, sub) pass
-// through. Without this, `uapi_requests_total` would grow unbounded as
-// clients create resources.
-function path_template(parts) {
-	if (length(parts) == 0) return "/";
-	let top = parts[0];
-	// Top-level resources whose second segment is the resource id (not a
-	// sub-resource name). Adding tokens/auth here collapses /tokens/<id> and
-	// /auth/<thing> into one metric series instead of one per id.
-	if (top == "tokens") {
-		if (length(parts) == 1) return "/tokens";
-		return "/tokens/:id";
-	}
-	if (top == "auth") {
-		if (length(parts) == 1) return "/auth";
-		if (parts[1] == "whoami") return "/auth/whoami";
-		return "/auth/:id";
-	}
-	let out = ["/" + top];
-	for (let i = 1; i < length(parts); i++) {
-		let p = parts[i];
-		if (i == 1 && (top == "raw" || top == "schema")) {
-			// /raw/:package/:id, /schema/:package/:resource
-			push(out, p);
-		} else if (p == "adopt" || p == "installed" || p == "feeds"
-			   || p == "password" || p == "authorized_keys") {
-			push(out, p);
-		} else if (i >= 2) {
-			push(out, ":id");
-		} else {
-			push(out, p);
-		}
-	}
-	return join("/", out);
+// The routes that dispatch() serves, as metrics.path_label() writes them. /raw takes any
+// package that /etc/config holds, so that one is looked up per request.
+const METRIC_ROUTES = {
+	labels: {},
+	raw_package: (p) => match(p, /^[A-Za-z0-9_-]+$/) && fs.stat("/etc/config/" + p)?.type == "file",
+};
+for (let l in [ "/openapi.json", "/healthz", "/metrics", "/batch", "/diagnostics", "/schema",
+                "/tokens", "/tokens/:id", "/auth/whoami", "/system/password" ])
+	METRIC_ROUTES.labels[l] = true;
+for (let l in [ "/packages/installed", "/packages/feeds",
+                "/system/authorized_keys", "/system/cron_jobs" ]) {
+	METRIC_ROUTES.labels[l] = true;
+	METRIC_ROUTES.labels[l + "/:id"] = true;
+}
+for (let k in SINGLETONS) METRIC_ROUTES.labels["/" + replace(k, ":", "/")] = true;
+for (let k in RESOURCES)
+	for (let s in [ "", "/:id", "/:id/adopt" ])
+		METRIC_ROUTES.labels["/" + replace(k, ":", "/") + s] = true;
+for (let k in RESOURCE_SOURCES) {
+	let d = split(k, ":");
+	METRIC_ROUTES.labels["/schema/" + d[0]] = true;
+	if (length(d) == 2) METRIC_ROUTES.labels["/schema/" + d[0] + "/:id"] = true;
 }
 
 function record_metrics_for(method, path, status, duration_ms, token) {
-	let parts = split_path(path);
-	let tpl = path_template(parts);
+	let tpl = metrics.path_label(split_path(path), METRIC_ROUTES);
 	if (tpl == "/healthz" || tpl == "/metrics") return;
 	let token_id = (token != null) ? token.name : null;
 	metrics.record_request(method, tpl, status, duration_ms, token_id);

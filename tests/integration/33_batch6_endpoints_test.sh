@@ -19,6 +19,18 @@ curl -sS -o /dev/null -H "$ADMIN" "$URL/system"
 body=$(curl -sS -H "$ADMIN" "$URL/metrics")
 echo "$body" | grep -q 'uapi_requests_total{' || fail "metrics: uapi_requests_total missing"
 echo "$body" | grep -q 'uapi_request_duration_seconds_bucket' || fail "metrics: histogram missing"
+echo "$body" | grep -q 'path="/firewall/rules",status="200"' || fail "metrics: a route lost its path label"
+
+echo "--- /metrics gives one path label to every path that no route serves ---"
+curl -sS -o /dev/null "$URL/nope_$(date +%s)_a/x"
+curl -sS -o /dev/null "$URL/raw/nope_$(date +%s)_b/x"
+curl -sS -o /dev/null -H "$ADMIN" "$URL/firewall/nope_$(date +%s)_c"
+body=$(curl -sS -H "$ADMIN" "$URL/metrics")
+echo "$body" | grep -q 'nope_' && fail "metrics: a path that no route serves has its own label"
+echo "$body" | grep -q 'path="unmatched",status="401",token_id="-"} 2$' \
+	|| fail "metrics: two unknown paths are not one unmatched series of 2"
+echo "$body" | grep -q 'path="unmatched",status="404",token_id="test_admin"} 1$' \
+	|| fail "metrics: the unknown path with a token is not one unmatched series"
 
 echo "--- /metrics rejected with insufficient_scope when token lacks ro ---"
 # A token with only firewall:ro should NOT be able to read metrics.

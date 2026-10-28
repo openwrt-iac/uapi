@@ -250,16 +250,26 @@ function has_series(id) {
 	return index(metrics.format_prometheus(), sprintf('token_id="%s"', id)) >= 0;
 }
 
+// /tmp/uapi-metrics is shared with the other suites, which leave -retired series behind, so
+// this reads only the series that plant_state() writes.
+function requests_of(id) {
+	let s = sprintf('uapi_requests_total{method="GET",path="/system",status="200",token_id="%s"} ', id);
+	for (let l in split(metrics.format_prometheus(), "\n"))
+		if (substr(l, 0, length(s)) == s) return int(substr(l, length(s)));
+	return 0;
+}
+
 t.describe('token_store, the tmpfs state of a token', () => {
 	t.it('a revoke reaps the bucket, the series and the marker of the token after its commit', () => {
 		let c = bus.stub({}); seed_tokens(c);
 		let markers = plant_state([ "admin", "readonly" ]);
+		let want = requests_of("-retired") + requests_of("admin");
 		t.assert_true(token_store.remove(c, "admin", 1700000000, noop_tx()).ok);
 		t.assert_equal(fs.stat(BUCKETS + "admin.txt"), null);
 		t.assert_true(fs.stat(BUCKETS + "readonly.txt") != null);
 		t.assert_false(has_series("admin"));
 		t.assert_true(has_series("readonly"));
-		t.assert_true(has_series("-retired"));
+		t.assert_equal(requests_of("-retired"), want);
 		if (markers) {
 			t.assert_equal(fs.stat(MARKERS + "admin"), null);
 			t.assert_true(fs.stat(MARKERS + "readonly") != null);
