@@ -151,17 +151,30 @@ t.describe('dhcp.servers dhcp_option', () => {
 		t.assert_true(index(r.body.errors[0].message, 'reads each entry as one option') >= 0);
 		t.assert_true(index(r.body.errors[0].message, 'its own entry') >= 0);
 		t.assert_deep_equal(c._state.uci.dhcp.lan.dhcp_option, [ '3,10.99.0.1' ]);
-		let opts = [ '3,10.99.0.1', '6,10.99.0.1', '15,my domain', '15,"my 6,domain"' ];
+		let opts = [ '3,10.99.0.1', '6,10.99.0.1', '15,my domain', '15,my 6,domain', '15,"a 6,b"' ];
 		t.assert_equal(h.patch(c, ctx, 'lan', { dhcp_option: opts }).status, 200);
 		t.assert_deep_equal(c._state.uci.dhcp.lan.dhcp_option, opts);
 	});
 
 	// LuCI stores any entry, so a section can hold one that the rule refuses.
 	t.it('takes a write that leaves such a stored entry as it is, and the sweep lists the entry', () => {
-		let c = stored([ '15,my 6,domain' ]);
+		let c = stored([ '3,10.99.0.1 6,10.99.0.1' ]);
 		t.assert_equal(h.patch(c, ctx, 'lan', { leasetime: '1h' }).status, 200);
-		t.assert_equal(h.patch(c, ctx, 'lan', { dhcp_option: [ '15,my 6,domain', '3,1.2.3.4' ] }).status, 422);
-		t.assert_deep_equal(map(h.sweep(c), (s) => [ s.id, map(s.errors, (e) => e.field) ]),
-		                    [ [ 'lan', [ 'dhcp_option[0]' ] ] ]);
+		t.assert_equal(h.patch(c, ctx, 'lan', { dhcp_option: [ '3,10.99.0.1 6,10.99.0.1', '3,1.2.3.4' ] }).status, 422);
+		t.assert_deep_equal(map(h.sweep(c), (s) => [ s.id, map(s.errors, (e) => [ e.field, e.live ]) ]),
+		                    [ [ 'lan', [ [ 'dhcp_option[0]', true ] ] ] ]);
+	});
+
+	// dnsmasq.init writes no option of an ignored section, so the entry does not stop dnsmasq until
+	// a write clears `ignore`.
+	t.it('refuses a write that clears ignore on a section that holds such an entry', () => {
+		let c = stored([ '3,10.99.0.1 6,10.99.0.1' ]);
+		c._state.uci.dhcp.lan.ignore = '1';
+		t.assert_equal(h.patch(c, ctx, 'lan', { leasetime: '1h' }).status, 200);
+		t.assert_deep_equal(map(h.sweep(c)[0].errors, (e) => e.live), [ false ]);
+		let r = h.patch(c, ctx, 'lan', { ignore: false });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'dhcp_option[0]');
+		t.assert_equal(c._state.uci.dhcp.lan.ignore, '1');
 	});
 });

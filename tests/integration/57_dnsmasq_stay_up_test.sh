@@ -85,12 +85,13 @@ assert_dnsmasq_omits "dhcp-option=tdhcp,3,not-an-address"
 dnsmasq_running || fail "dnsmasq is not running after the restore"
 assert_dnsmasq_loads
 
-echo "--- a valid option still answers 200 ---"
+echo "--- a valid option still answers 200, a text option with a space before 6, included ---"
 t=$(curl -sS -o /dev/null -w '%{http_code} %{time_total}' -H "$ADMIN" -X PATCH -H 'Content-Type: application/json' \
-	"$URL/dhcp/servers/tdhcp" -d '{"dhcp_option":["3,10.99.0.1","6,10.99.0.1","15,\"my domain\""]}')
+	"$URL/dhcp/servers/tdhcp" -d '{"dhcp_option":["3,10.99.0.1","6,10.99.0.1","15,my 6,domain"]}')
 [ "${t% *}" = "200" ] || fail "a valid option expected 200, got $t"
 echo "the write took ${t#* } s with dnsmasq running"
-assert_dnsmasq_emits 'dhcp-option=tdhcp,15,"my domain"'
+assert_dnsmasq_emits 'dhcp-option=tdhcp,15,my 6,domain'
 dnsmasq_running || fail "dnsmasq is not running after a valid option"
+assert_dnsmasq_loads
 
 echo "dhcp_option refusal and the dnsmasq stay-up watch ok."

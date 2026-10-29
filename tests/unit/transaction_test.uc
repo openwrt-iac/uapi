@@ -723,38 +723,38 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 
 	t.it('watches unbound after a reload of unbound or unbound-uci-ext only', () => {
 		for (let svc in [ "unbound", "unbound-uci-ext" ])
-			t.assert_true(tx.default_watch(unbound([ UP ]), [ svc ], { unbound: 0 }, 0) != null, svc);
+			t.assert_true(tx.default_watch(unbound([ UP ]), [ svc ], () => 0, 0) != null, svc);
 		let conn = unbound([ UP ]);
-		t.assert_equal(tx.default_watch(conn, [ "firewall", "network" ], { unbound: 0 }, 0), null);
+		t.assert_equal(tx.default_watch(conn, [ "firewall", "network" ], () => 0, 0), null);
 		t.assert_equal(length(conn._state.ubus_calls), 0);
 	});
 
 	t.it('blames the write only when unbound ran before it', () => {
-		t.assert_equal(tx.default_watch(unbound([ DOWN ]), [ "unbound" ], { unbound: 0 }, 0), null);
-		t.assert_equal(tx.default_watch(unbound([ null ]), [ "unbound" ], { unbound: 0 }, 0), null);
+		t.assert_equal(tx.default_watch(unbound([ DOWN ]), [ "unbound" ], () => 0, 0), null);
+		t.assert_equal(tx.default_watch(unbound([ null ]), [ "unbound" ], () => 0, 0), null);
 	});
 
 	t.it('passes while unbound runs, a new pid included, and fails when it stops', () => {
-		t.assert_equal(tx.default_watch(unbound([ UP, UP2 ]), [ "unbound" ], { unbound: 0 }, 0)(), null);
-		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], { unbound: 0 }, 0)(),
+		t.assert_equal(tx.default_watch(unbound([ UP, UP2 ]), [ "unbound" ], () => 0, 0)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], () => 0, 0)(),
 		               "unbound stopped after the reload, with exit code 1");
-		t.assert_equal(tx.default_watch(unbound([ UP, { running: false } ]), [ "unbound" ], { unbound: 0 }, 0)(),
+		t.assert_equal(tx.default_watch(unbound([ UP, { running: false } ]), [ "unbound" ], () => 0, 0)(),
 		               "unbound stopped after the reload");
 	});
 
 	// `restart` is a stop and then a start, and procd lists no instance in between.
 	t.it('an instance that service list does not show is being restarted, not stopped', () => {
-		t.assert_equal(tx.default_watch(unbound([ UP, null ]), [ "unbound" ], { unbound: 0 }, 0)(), null);
-		t.assert_equal(tx.default_watch(unbound([ UP, null, UP2 ]), [ "unbound" ], { unbound: 2 }, 1)(), null);
-		t.assert_equal(tx.default_watch(unbound([ UP, null, DOWN ]), [ "unbound" ], { unbound: 2 }, 1)(),
+		t.assert_equal(tx.default_watch(unbound([ UP, null ]), [ "unbound" ], () => 0, 0)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, null, UP2 ]), [ "unbound" ], () => 2, 1)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, null, DOWN ]), [ "unbound" ], () => 2, 1)(),
 		               "unbound stopped after the reload, with exit code 1");
 	});
 
 	t.it('polls until the end of the window, so a later stop counts', () => {
 		let conn = unbound([ UP, UP2, UP2, DOWN ]);
-		t.assert_equal(tx.default_watch(conn, [ "unbound-uci-ext" ], { unbound: 2 }, 1)(),
+		t.assert_equal(tx.default_watch(conn, [ "unbound-uci-ext" ], () => 2, 1)(),
 		               "unbound stopped after the reload, with exit code 1");
-		t.assert_equal(tx.default_watch(unbound([ UP, UP2, UP2, UP2, DOWN ]), [ "unbound" ], { unbound: 2 }, 1)(), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, UP2, UP2, UP2, DOWN ]), [ "unbound" ], () => 2, 1)(), null);
 	});
 
 	function write(conn, states_of_check) {
@@ -804,7 +804,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 				package: "unbound_srv", reload_services: [ "unbound-uci-ext" ],
 				acquire: function() { return {}; }, release: function() {},
 				reload: daemon(conn, DOWN, c[0]),
-				watch: (cn, s) => tx.default_watch(cn, s, { unbound: 0 }, 0),
+				watch: (cn, s) => tx.default_watch(cn, s, () => 0, 0),
 			}));
 			t.assert_equal(r.kind, c[1]);
 		}
@@ -834,7 +834,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 			return tx.multi_transaction(conn, {
 				packages: [ "unbound_srv" ], reload_services: { unbound_srv: [ "unbound-uci-ext" ] },
 				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload,
-				watch: (cn, s) => tx.default_watch(cn, s, { unbound: 0 }, 0),
+				watch: (cn, s) => tx.default_watch(cn, s, () => 0, 0),
 				fn: function(c) { c.uci_set("unbound_srv", "main", "enabled", "1"); return { ok: true }; },
 			});
 		};
@@ -872,13 +872,13 @@ t.describe('transaction, dnsmasq after the reload', () => {
 	let watch = (states, services, window_ms, step_ms) => tx.default_watch(fake(states), services, window_ms, step_ms);
 
 	t.it('watches dnsmasq after a reload of dnsmasq, when one of its instances ran before', () => {
-		t.assert_true(watch([ { dnsmasq: { main: UP } } ], [ "dnsmasq" ], { dnsmasq: 0 }, 0) != null);
-		t.assert_equal(watch([ { dnsmasq: { main: DOWN } } ], [ "dnsmasq" ], { dnsmasq: 0 }, 0), null);
-		t.assert_equal(watch([ {} ], [ "dnsmasq" ], { dnsmasq: 0 }, 0), null);
+		t.assert_true(watch([ { dnsmasq: { main: UP } } ], [ "dnsmasq" ], () => 0, 0) != null);
+		t.assert_equal(watch([ { dnsmasq: { main: DOWN } } ], [ "dnsmasq" ], () => 0, 0), null);
+		t.assert_equal(watch([ {} ], [ "dnsmasq" ], () => 0, 0), null);
 	});
 
 	t.it('counts an instance that ran before and that procd reports as not running', () => {
-		let check = (after) => watch([ { dnsmasq: { main: UP, guest: DOWN } }, after ], [ "dnsmasq" ], { dnsmasq: 0 }, 0)();
+		let check = (after) => watch([ { dnsmasq: { main: UP, guest: DOWN } }, after ], [ "dnsmasq" ], () => 0, 0)();
 		t.assert_equal(check({ dnsmasq: { main: UP2, guest: DOWN } }), null);
 		t.assert_equal(check({ dnsmasq: { guest: DOWN } }), null);
 		t.assert_equal(check({ dnsmasq: { main: DOWN, guest: UP } }), STOPPED);
@@ -887,7 +887,7 @@ t.describe('transaction, dnsmasq after the reload', () => {
 	t.it('polls for the window of dnsmasq, and for the longer window of unbound in the same write', () => {
 		const BOTH = { dnsmasq: { main: UP }, unbound: { unbound: UP } };
 		let late = [ BOTH, BOTH, BOTH, BOTH, { ...BOTH, dnsmasq: { main: DOWN } } ];
-		let windows = { dnsmasq: 2, unbound: 4 };
+		let windows = (d) => ({ dnsmasq: 2, unbound: 4 })[d];
 		t.assert_equal(watch(late, [ "dnsmasq" ], windows, 1)(), null);
 		t.assert_equal(watch(late, [ "dnsmasq", "unbound-uci-ext" ], windows, 1)(), STOPPED);
 		let unbound_down = map(late, (s) => ({ ...s, unbound: { unbound: DOWN } }));
@@ -902,7 +902,7 @@ t.describe('transaction, dnsmasq after the reload', () => {
 			package: "dhcp", reload_services: [ "dnsmasq" ],
 			acquire: function() { return {}; }, release: function() {},
 			reload: function(s) { state = (reloads++ == 0) ? after_write : after_restore; return null; },
-			watch: (cn, s) => tx.default_watch(cn, s, { dnsmasq: 0 }, 0),
+			watch: (cn, s) => tx.default_watch(cn, s, () => 0, 0),
 			fn: function(c, pkg) { c.uci_set(pkg, "lan", "leasetime", "1h"); return { ok: true, body: {} }; },
 		}));
 		return { r, leasetime: conn._state.uci.dhcp.lan.leasetime };
@@ -926,6 +926,24 @@ t.describe('transaction, dnsmasq after the reload', () => {
 			acquire: function(p, a) { also = a; return {}; }, release: function() {},
 		}));
 		t.assert_deep_equal(also, []);
+	});
+
+	t.it('a dhcp batch locks only dhcp', () => {
+		let prefix = "/tmp/uapi-test-dhcp-batch-pkg.", global = "/tmp/uapi-test-dhcp-batch-global.lock";
+		for (let f in fs.glob(prefix + "*")) fs.unlink(f);
+		let files = null;
+		let r = tx.multi_transaction(ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', leasetime: '12h' } } } }), {
+			packages: [ "dhcp" ], reload_services: { dhcp: [ "dnsmasq" ] },
+			lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload: noop_reload,
+			fn: function(c) {
+				files = sort(fs.glob(prefix + "*"));
+				c.uci_set("dhcp", "lan", "leasetime", "1h");
+				return { ok: true };
+			},
+		});
+		for (let f in [ global, ...files ]) fs.unlink(f);
+		t.assert_true(r.ok);
+		t.assert_deep_equal(files, [ prefix + "dhcp.lock" ]);
 	});
 });
 

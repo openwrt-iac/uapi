@@ -137,9 +137,12 @@ function validate(json, conn) {
 	return errs;
 }
 
-// LuCI's form takes any entry, and dnsmasq does not start on one that holds two address options,
-// so uapi refuses here what LuCI stores. LuCI and 3.1.0 can store such an entry, so a write that
-// leaves the list as it is still passes: see new_errors() in the handler.
+// LuCI's form takes any entry, and dnsmasq does not start on an address option in which an address
+// is followed by a second option, so uapi refuses here what LuCI stores. LuCI and 3.1.0 can store
+// such an entry, so a write that leaves the list as it is still passes: see new_errors() in the
+// handler.
+// dnsmasq.init writes no option of an ignored section. It also skips a section whose interface has
+// no device or is not static, which netifd decides at the reload, and uapi does not model that.
 function validate_new(json) {
 	let errs = [];
 	let opts = json.dhcp_option;
@@ -147,7 +150,8 @@ function validate_new(json) {
 	for (let i = 0; i < length(opts); i++) {
 		let p = (type(opts[i]) == "string") ? values.dnsmasq_option_problem(opts[i]) : null;
 		if (p != null)
-			push(errs, { field: sprintf("dhcp_option[%d]", i), code: "invalid_format", message: p });
+			push(errs, { field: sprintf("dhcp_option[%d]", i), code: "invalid_format", message: p,
+			             live: !json.ignore });
 	}
 	return errs;
 }
@@ -189,6 +193,6 @@ return {
 		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_WORDS_RE,
 		               description: "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces." },
 		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_OPTION_RE },
-		               description: "DHCP options that dnsmasq sends on this interface, one option per entry, in the form of a dnsmasq `dhcp-option` without its tag, such as `3,192.168.1.1`, `option:dns-server,192.168.1.1,192.168.1.2` or `15,\"my domain\"`. dnsmasq.init passes each entry to dnsmasq whole, so dnsmasq reads it as one option. An entry answers 422 `invalid_format` when whitespace outside a quoted string, after a character other than a comma, comes before the start of another option: a number and a comma, `option:`, `option6:`, `tag:`, `net:`, `set:`, `vendor:`, `encap:` or `vi-encap:`, as in `3,10.0.0.1 6,10.0.0.1`. If dnsmasq ran before the write and stops within 1 s of the reload, as it does for a value that it refuses such as `3,not-an-address`, the write answers 500 `reload_failed_restored` and restores the previous list." },
+		               description: "DHCP options that dnsmasq sends on this interface, one option per entry, in the form of a dnsmasq `dhcp-option` without its tag, such as `3,192.168.1.1`, `option:dns-server,192.168.1.1,192.168.1.2` or `15,\"my domain\"`. dnsmasq.init passes each entry to dnsmasq whole, so dnsmasq reads it as one option. An entry answers 422 `invalid_format` when, outside a quoted string, a field that reads as an address, such as `10.0.0.1`, `10.0.0.0/8` or `[::]`, is followed by whitespace and then by what starts a `dhcp-option` value: a number and a comma, `option:`, `option6:`, `tag:`, `net:`, `set:`, `vendor:`, `encap:` or `vi-encap:`, as in `3,10.0.0.1 6,10.0.0.1`. If dnsmasq ran before the write and stops within 1 s of the reload, as it does for a value that it refuses, such as `3,not-an-address`, in a section that it reads, which is one that is not ignored, on an interface that is up and static, the write answers 500 `reload_failed_restored` and restores the previous list." },
 	},
 };

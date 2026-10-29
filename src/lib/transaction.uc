@@ -65,29 +65,31 @@ function default_reload(services) {
 // procd starts the daemon with its new config on its own, so the init script answers 0 before the
 // daemon has read that config. A daemon that refuses the config exits soon after, and procd starts
 // it again only 5 s later, the default `respawn_timeout` of procd.sh, to fail the same way. A
-// reload of these services waits for the daemons that ran before the write to keep running.
-const STAY_UP = { unbound: [ "unbound" ], "unbound-uci-ext": [ "unbound" ], dnsmasq: [ "dnsmasq" ] };
-
-// Every write that reloads the daemon while it runs waits out its window. unbound exits within a
-// few hundred ms on a line that it cannot parse. dnsmasq parses its config before it opens a socket,
-// and exits on a line that it refuses within 2 ms of its start, measured with dnsmasq 2.93 on x86,
-// so most of its window is for procd to stop the old process and start the new one in ujail.
-const WINDOW_MS = { unbound: 2000, dnsmasq: 1000 };
-
+// reload of the daemon, by its own service or one in RESTARTS, waits for the instances that ran
+// before the write to keep running, for `window_ms`, which every such write waits out.
+// unbound exits within a few hundred ms on a line that it cannot parse. dnsmasq 2.93 exits in under
+// 2 ms on x86 on a bad config, and a watch of 1 s saw it stop on an OpenWrt 25.12.5 x86_64 VM.
 // A write that restarts a daemon also takes the lock of the package that holds its config, so that
 // writes to two packages that restart it run one at a time: a restart that one starts would read
 // as a stop to the other, and its config as the other's.
-const CONFIG_PACKAGE = { unbound: "unbound", dnsmasq: "dhcp" };
+const STAY_UP = {
+	unbound: { window_ms: 2000, package: "unbound" },
+	dnsmasq: { window_ms: 1000, package: "dhcp" },
+};
+// unbound-uci-ext renders the files that unbound reads, and restarts unbound.
+const RESTARTS = { "unbound-uci-ext": "unbound" };
 
 function stay_up_daemons(services) {
 	let daemons = {};
-	for (let svc in services)
-		for (let d in STAY_UP[svc] ?? []) daemons[d] = true;
+	for (let svc in services) {
+		let d = RESTARTS[svc] ?? svc;
+		if (STAY_UP[d] != null) daemons[d] = true;
+	}
 	return keys(daemons);
 }
 
 function stay_up_locks(services) {
-	return map(stay_up_daemons(services), (d) => CONFIG_PACKAGE[d]);
+	return map(stay_up_daemons(services), (d) => STAY_UP[d].package);
 }
 
 function instances(conn, daemons) {
@@ -104,13 +106,15 @@ function instances(conn, daemons) {
 // The restore runs the same check, so it fails when the previous config does not bring the daemon
 // back either. An instance that `service list` does not show is being restarted, by `restart` or by
 // another writer, or the ubus call failed, so only one that procd reports as not running counts.
+// An instance that did not run before the write is not watched, such as the one of a second
+// `config dnsmasq` section that the write adds.
 function default_watch(conn, services, window_ms, step_ms) {
 	let names = stay_up_daemons(services);
 	if (length(names) == 0) return null;
 	let was = instances(conn, names);
 	let before = filter(keys(was), (k) => was[k].running);
 	if (length(before) == 0) return null;
-	let total_ms = max(...map(before, (k) => window_ms[split(k, "/")[0]]));
+	let total_ms = max(...map(before, (k) => window_ms(split(k, "/")[0])));
 	return function() {
 		for (let waited = 0; ; waited += step_ms) {
 			let now = instances(conn, names);
@@ -124,7 +128,7 @@ function default_watch(conn, services, window_ms, step_ms) {
 	};
 }
 
-const watch_stay_up = (conn, services) => default_watch(conn, services, WINDOW_MS, 100);
+const watch_stay_up = (conn, services) => default_watch(conn, services, (d) => STAY_UP[d].window_ms, 100);
 
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
 // non-blocking ("n" suffix). Returns the fd handle on success; null on lock
