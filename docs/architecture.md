@@ -174,11 +174,17 @@ without uci state change.
    an instance, and on a slow machine that signal can stop the new process
    for 5 s with a config that dnsmasq takes. The init script writes the
    config of each instance before it returns. For each instance that
-   `service list` shows after the reload, the write runs its command with
-   `--test`, which reads the config and the files that it includes as a start
-   does, and a refusal counts as a failed reload. It skips an instance that
-   was listed and not running before the write, which the write did not
-   break. The restore runs the same check, and no write waits for dnsmasq.
+   `service list` shows before or after the reload, the write runs its
+   command with `--test`, and a refusal counts as a failed reload. That
+   includes an instance that is not running, which procd starts on that
+   config, so a config that dnsmasq refused before the write fails the
+   restore too, as `reload_failed_unrecovered`. `--test` parses the config
+   and the files that it includes, and exits. A config that dnsmasq parses
+   but cannot start with, such as two ports that conflict, a lease file in a
+   missing directory or a port that another daemon holds, still answers 2xx.
+   The restore runs the same check. No write waits for the daemon to start,
+   and each pays one parse of the whole config per instance, which grows with
+   its size, and again on a restore.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. Runs only after the reload returned zero, and reports the

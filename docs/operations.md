@@ -40,13 +40,19 @@ instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq
 refuses it, the write answers `500 reload_failed_restored`, and its
 `reload_error` reads, for example,
 `dnsmasq refuses its config cfg01411c: bad IP address at line 33 of /var/etc/dnsmasq.conf.cfg01411c`.
-The check covers an instance that ran before the write and one that the
-write adds. It skips an instance that was listed and not running before the
-write. No write waits for dnsmasq. `--test` reads the files of `conf-file` and
-`conf-dir`, and not those of `addn-hosts` and `servers-file`, which dnsmasq
-reads after it starts. OpenWrt's reload of dnsmasq can restart the daemon,
-which on a slow machine can leave it stopped for 5 s, and uapi does not report
-that restart.
+The check covers every instance, one that is not running included, since
+procd starts it on that config. So on a router whose dnsmasq config was
+refused before the write, a write that does not fix it answers
+`500 reload_failed_unrecovered`. `--test` parses the config and the files of
+`conf-file` and `conf-dir`, and exits. It does not read the files of
+`addn-hosts` and `servers-file`, which dnsmasq reads after it starts. A config
+that dnsmasq parses but cannot start with, such as `min-port` above
+`max-port`, a `dhcp-leasefile` in a missing directory or a port that another
+daemon holds, still answers 2xx. No write waits for the daemon to start. Each
+write pays one parse of the whole config per instance, which grows with its
+size, such as a `conf-dir` of adblock lists, and pays it again on a restore.
+OpenWrt's reload of dnsmasq can restart the daemon, which on a slow machine can
+leave it stopped for 5 s, and uapi does not report that restart.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block

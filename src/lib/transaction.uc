@@ -119,17 +119,23 @@ function run_test(argv) {
 
 // dnsmasq.init writes the config of each instance before it returns, and procd then restarts the
 // instance. A watch of the process cannot judge that config: reload_service() sends SIGHUP right
-// after the restart, and on a slow machine the signal can reach the new dnsmasq before it handles
-// it, so dnsmasq dies and procd starts it again 5 s later. `--test` reads the config and the files
-// that it includes, as a start does, without waiting. An instance that was listed and not running
-// before the write is skipped, because the write did not break it.
+// after the restart, and on a slow machine the signal can reach the new dnsmasq before it installs
+// its handler, so dnsmasq dies and procd starts it again 5 s later. `--test` parses the config and
+// the files that it includes, and exits: a config that dnsmasq parses but cannot start with, such
+// as one whose port another daemon holds, passes. Every instance is checked, one that the race
+// left stopped included, since procd starts it on that config. An instance that `service list`
+// does not show after the reload, which another writer restarts or a failed ubus call hides, is
+// checked with its command from before. A raw write to a package whose classic ucitrack lists
+// `affects dhcp` also reloads dnsmasq, without the dhcp lock, so a dhcp write at the same moment
+// can change the config that this check reads. OpenWrt 25.12 ships no /etc/config/ucitrack.
 function dnsmasq_check(conn, services, run) {
 	if (index(services, "dnsmasq") < 0) return null;
 	let was = instances(conn, [ "dnsmasq" ]);
 	return function() {
-		for (let k, i in instances(conn, [ "dnsmasq" ])) {
-			if (was[k] != null && !was[k].running) continue;
-			let r = run([ i.command[0], "--test", ...slice(i.command, 1) ]);
+		for (let k, i in { ...was, ...instances(conn, [ "dnsmasq" ]) }) {
+			let cmd = i.command;
+			if (type(cmd) != "array" || !match(cmd[0], /\/dnsmasq$/)) continue;
+			let r = run([ cmd[0], "--test", ...slice(cmd, 1) ]);
 			if (r.code != 0)
 				return sprintf("dnsmasq refuses its config %s: %s", split(k, "/")[1],
 				               replace(split(trim(r.output), "\n")[0], /^dnsmasq: /, ""));
