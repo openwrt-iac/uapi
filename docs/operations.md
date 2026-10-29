@@ -23,14 +23,19 @@ Two signals worth wiring into your automation:
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
 
-unbound is the exception. When unbound runs, a write that reloads `unbound`
-or `unbound-uci-ext` waits 2 s for each unbound instance to keep running. If
-one stops, the write answers `500 reload_failed_restored`, and its
-`reload_error` reads `unbound stopped after the reload, with exit code 1`. So
-a 2xx on these writes also means that procd did not report unbound as stopped
-in the 2 s after the reload. An instance that `service list` does not show,
-because something restarts it or the ubus call fails, does not count, and a
-daemon that stops later than 2 s still answers 2xx.
+unbound and dnsmasq are the exceptions. When unbound runs, a write that
+reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
+keep running. When dnsmasq runs, a write that reloads `dnsmasq`, as a write to
+`dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, the raw `dhcp` package or a
+`/batch` that holds one does, waits 1 s for each dnsmasq instance in the same
+way. These writes take that much longer, and the restore after a failure waits
+again. If an instance stops, the write answers `500 reload_failed_restored`,
+and its `reload_error` reads
+`unbound stopped after the reload, with exit code 1`, or the same for dnsmasq.
+So a 2xx on these writes also means that procd did not report the daemon as
+stopped in that time after the reload. An instance that `service list` does
+not show, because something restarts it or the ubus call fails, does not
+count, and a daemon that stops later still answers 2xx.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block

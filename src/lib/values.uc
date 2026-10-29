@@ -133,6 +133,22 @@ const DNSMASQ_TEXT_RE = "^#*(" + DNSMASQ_PLAIN + ")*$";
 // reads a quote right after a closing one as text.
 const DNSMASQ_STRING = "\"([^\"\\\\\n\r]|\\\\[^\n\r])*\"";
 const DNSMASQ_OPTION_RE = sprintf("^#*((%s)?(%s))*(%s)?$", DNSMASQ_STRING, DNSMASQ_PLAIN, DNSMASQ_STRING);
+// dnsmasq.init passes each entry of `list dhcp_option` whole, and dnsmasq reads it as one option:
+// `3,10.0.0.1 6,10.0.0.1` gives option 3 the address `10.0.0.1 6`, and dnsmasq does not start. A
+// text option takes whitespace, as in `15,my domain`, and so does a field after a comma, as in the
+// man page's `encap:175, 190, "iscsi-client0"`. So only whitespace outside a string that follows a
+// character other than a comma counts, and only before what parse_dhcp_opt() of dnsmasq 2.93 reads
+// as the start of an option: a number and its comma, `option:`, `option6:`, or a tag, vendor or
+// encap prefix.
+const DNSMASQ_STRINGS = regexp(DNSMASQ_STRING, "g");
+const DNSMASQ_NEXT_OPTION = /[^ \t,][ \t]+([0-9]+[ \t]*,|(option6?|tag|net|set|vendor|encap|vi-encap):)/;
+
+function dnsmasq_option_problem(v) {
+	if (!match(replace(v, DNSMASQ_STRINGS, '""'), DNSMASQ_NEXT_OPTION))
+		return null;
+	return "must hold one option: dnsmasq reads each entry as one option, and whitespace here comes before the start of another, such as '6,' or 'option:'. Each option needs its own entry. Put a text value that holds such a word between double quotes";
+}
+
 // dnsmasq.init splits the `domain` of a dhcp section into words without quotes, so the shell also
 // expands a glob in it to file names.
 const DNSMASQ_WORDS_RE = "^#*([^\"\n\r \t#*?[]#*|[ \t])*$";
@@ -765,7 +781,7 @@ return {
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
 	rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
-	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem,
+	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,

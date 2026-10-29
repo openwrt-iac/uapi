@@ -137,6 +137,21 @@ function validate(json, conn) {
 	return errs;
 }
 
+// LuCI's form takes any entry, and dnsmasq does not start on one that holds two address options,
+// so uapi refuses here what LuCI stores. LuCI and 3.1.0 can store such an entry, so a write that
+// leaves the list as it is still passes: see new_errors() in the handler.
+function validate_new(json) {
+	let errs = [];
+	let opts = json.dhcp_option;
+	if (type(opts) != "array") return errs;
+	for (let i = 0; i < length(opts); i++) {
+		let p = (type(opts[i]) == "string") ? values.dnsmasq_option_problem(opts[i]) : null;
+		if (p != null)
+			push(errs, { field: sprintf("dhcp_option[%d]", i), code: "invalid_format", message: p });
+	}
+	return errs;
+}
+
 return {
 	package: "dhcp",
 	type: "dhcp",
@@ -146,6 +161,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	validate_new: validate_new,
 	openapi_singular: "DHCP server",
 	openapi_required: ["interface"],
 	openapi_runtime: {
@@ -172,6 +188,7 @@ return {
 		               description: "0 default, 1 deprecate prefix, 2 advertise as router" },
 		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_WORDS_RE,
 		               description: "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces." },
-		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_OPTION_RE } },
+		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_OPTION_RE },
+		               description: "DHCP options that dnsmasq sends on this interface, one option per entry, in the form of a dnsmasq `dhcp-option` without its tag, such as `3,192.168.1.1`, `option:dns-server,192.168.1.1,192.168.1.2` or `15,\"my domain\"`. dnsmasq.init passes each entry to dnsmasq whole, so dnsmasq reads it as one option. An entry answers 422 `invalid_format` when whitespace outside a quoted string, after a character other than a comma, comes before the start of another option: a number and a comma, `option:`, `option6:`, `tag:`, `net:`, `set:`, `vendor:`, `encap:` or `vi-encap:`, as in `3,10.0.0.1 6,10.0.0.1`. If dnsmasq ran before the write and stops within 1 s of the reload, as it does for a value that it refuses such as `3,not-an-address`, the write answers 500 `reload_failed_restored` and restores the previous list." },
 	},
 };
