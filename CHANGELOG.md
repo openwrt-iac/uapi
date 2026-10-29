@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
-## [3.2.0] - 2026-10-28
+## [3.2.0] - 2026-10-29
 
 ### Added
 
@@ -58,24 +58,27 @@ All notable changes to this project will be documented in this file. Format foll
   enables the SSID or turns fast transition on. So a PUT or a JSON Patch that keeps a stored value
   passes, as a merge PATCH does. Turning the radio of the SSID on, or moving the SSID from a radio
   that is off or missing to an enabled one, is refused too. `GET /api/v3/diagnostics?validate=1`
-  lists every SSID that holds such a value. The request schema declares the limits of `nasid` and
-  the form of the key holder entries only for a body that names `mode` `ap`, because a merge PATCH
-  that leaves `mode` out keeps the stored one. `reassociation_deadline` and `r0_key_lifetime` read
-  the number that wifi-scripts reads from the stored text, as ucode converts it: ` 500` is 500,
-  `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. Only the whole group
-  keeps fast roaming working: with `ieee80211r` kept and the key holder lists dropped, wifi-scripts
-  derives lists that the other access points do not share. `ft_psk_generate_local` reads null when
-  unset, because wifi-scripts then picks it from `encryption`. A stored value other than `1`,
-  `true`, `0` or `false` reads false, as wifi-scripts takes it. Other options still go with a PUT,
-  such as `num_global_macaddr` on a radio and the 802.11k and 802.11v options of an SSID. Every
-  radio and SSID read gains the new fields, so its ETag changes once at the upgrade, and a write
-  with an `If-Match` from before the upgrade answers 412. A client that builds its PUT body from its
-  own model, such as terraform-provider-uapi 3.1.0, still deletes them. Upgrade the provider to a
-  release that models these fields together with uapi. (#239)
+  lists every SSID that holds such a value. These refusals use the carve-out in `docs/versioning.md`
+  for payloads that produced a state no caller can rely on, and they fail loudly. The request schema
+  declares the limits of `nasid` and the form of the key holder entries only for a body that names
+  `mode` `ap`, because a merge PATCH that leaves `mode` out keeps the stored one.
+  `reassociation_deadline` and `r0_key_lifetime` read the number that wifi-scripts reads from the
+  stored text, as ucode converts it: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text
+  is 0, as hostapd reads it. Only the whole group keeps fast roaming working: with `ieee80211r` kept
+  and the key holder lists dropped, wifi-scripts derives lists that the other access points do not
+  share. `ft_psk_generate_local` reads null when unset, because wifi-scripts then picks it from
+  `encryption`. A stored value other than `1`, `true`, `0` or `false` reads false, as wifi-scripts
+  takes it. Other options still go with a PUT, such as `num_global_macaddr` on a radio and the
+  802.11k and 802.11v options of an SSID. Every radio and SSID read gains the new fields, so its
+  ETag changes once at the upgrade, and a write with an `If-Match` from before the upgrade
+  answers 412. A client that builds its PUT body from its own model, such as terraform-provider-uapi
+  3.1.0, still deletes them. Upgrade the provider to a release that models these fields together
+  with uapi. (#239)
 
-- **`503 config_missing`** answers a curated write, or a raw POST, into a uci package whose file
-  under `/etc/config/` does not exist, and names the file. `wireless` is the common case: only
-  wifi-scripts creates `/etc/config/wireless`, so an image without it has no such file. (#235)
+- **`503 config_missing`** answers a curated create, PUT or PATCH, a raw POST, or a `POST /batch`
+  with a write, into a uci package whose file under `/etc/config/` does not exist, and names the
+  file. `wireless` is the common case: only wifi-scripts creates `/etc/config/wireless`, so an image
+  without it has no such file. (#235)
 
 - **A sweep error of a `validate_new()` rule has `live`.** `GET /api/v3/diagnostics?validate=1`
   lists a stored value that such a rule refuses, whether the daemon reads it yet or not.
@@ -95,14 +98,15 @@ All notable changes to this project will be documented in this file. Format foll
   accepted and stores nothing. A request is checked only for the fields that it names, so a PATCH
   that changes only `proto` succeeds, unless the section fails a check of the new proto: static
   requires an address, wireguard a private key and addresses, and ppp and pppoe take an `mtu` from
-  128 to 16384 only. That PATCH now removes the options of the old proto and keeps the options that
-  apply to every proto, except a stored `private_key`, which a read masks and a PUT removes. Before,
-  it kept the static address fields when it left proto static. With terraform-provider-uapi 3.1.0
-  and earlier, a proto switch fails with 422 when the state holds a field that the new proto does
-  not take. That is always the case away from static or wireguard, and away from a proto that uapi
-  does not model unless the new proto is wireguard: static requires its addresses, a read of the
-  other two answers `nohostroute: false`, and only wireguard takes `nohostroute`. Upgrade the
-  provider to a release that supports 3.2.0 together with uapi. (#208)
+  128 to 16384 only. The `mtu`, peer and `listen_port` checks of #220, #261 and #272 apply to such a
+  PATCH too. That PATCH now removes the options of the old proto and keeps the options that apply to
+  every proto, except a stored `private_key`, which a read masks and a PUT removes. Before, it kept
+  the static address fields when it left proto static. With terraform-provider-uapi 3.1.0 and
+  earlier, a proto switch fails with 422 when the state holds a field that the new proto does not
+  take. That is always the case away from static or wireguard, and away from a proto that uapi does
+  not model unless the new proto is wireguard: static requires its addresses, a read of the other
+  two answers `nohostroute: false`, and only wireguard takes `nohostroute`. Upgrade the provider to
+  a release that supports 3.2.0 together with uapi. (#208)
 - **A `network/interfaces` read omits the fields that do not apply to its proto.** Before, it
   carried the static address fields on every proto, with any value that uci stored there. A stored
   option that the proto does not take is no longer read. A PATCH keeps it and a PUT removes it, as
@@ -176,8 +180,8 @@ All notable changes to this project will be documented in this file. Format foll
   tool reaches -1. A write that brings up an interface that stores such a value, by a switch to
   wireguard or by enabling it, also answers 422, which uses the tightening carve-out for payloads
   that produced a state no caller can rely on, and fails loudly. A PATCH that leaves the value as it
-  is passes. A switch from a proto whose read does not show `listen_port`, such as static, is
-  checked too (#272). (#225)
+  is passes while the interface stays live or stays disabled. A switch from a proto whose read does
+  not show `listen_port`, such as static, is checked too (#272). (#225)
 - **Request schemas declare the bounds that a write accepts, and Response schemas keep the bounds
   of a read.** A request inherited the read bounds, so it declared values that every write
   refuses. `NetworkInterfacesRequest.mtu` now starts at 68, or takes 128 to 16384 on proto `ppp`
@@ -314,9 +318,10 @@ All notable changes to this project will be documented in this file. Format foll
   ap, sta or adhoc. A write that sends one now answers 422 `out_of_range` in every mode, as LuCI
   refuses it. uapi counts bytes, so a non-ASCII character counts for more than one. The
   `maxLength` of `WirelessInterfacesRequest.ssid` counts characters, so it is exact only for an
-  ASCII SSID. A write that leaves a stored SSID as it is is refused for its length only when it
-  enables the SSID or moves it into mode ap, sta or adhoc, and `GET
-  /api/v3/diagnostics?validate=1` lists it. That tightening uses the carve-out in
+  ASCII SSID. A write that leaves a stored SSID as it is is refused for its length when it enables
+  the SSID or moves it into mode ap, sta or adhoc, and `GET /api/v3/diagnostics?validate=1` lists
+  it. Turning the radio of the SSID on, or moving the SSID from a radio that is off or missing to an
+  enabled one, is refused too (#260, #262). That tightening uses the carve-out in
   `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
   loudly. (#255)
 - **`wireless/interfaces.key` refuses a key that the daemons refuse or misread.** This applies
@@ -329,20 +334,22 @@ All notable changes to this project will be documented in this file. Format foll
   fails there. The shell variant of wifi-scripts gave such a key as a PSK. In mode sta, adhoc and
   mesh, wpa_supplicant reads a `#` after an odd number of double quotes as the start of a comment.
   A write that sends such a key now answers 422 `out_of_range`, `invalid_format` or `conflict`, and
-  no message quotes the key. A write that leaves a stored key as it is is refused for it only when
-  it enables the SSID or changes its mode or encryption, and `GET /api/v3/diagnostics?validate=1`
-  lists it. LuCI takes 8 to 63 characters or 64 hex digits in every mode, and counts characters,
-  where uapi counts bytes as the daemons do. That tightening uses the carve-out in
-  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. (#255)
+  no message quotes the key. A write that leaves a stored key as it is is refused for it when it
+  enables the SSID or changes its mode or encryption, and `GET /api/v3/diagnostics?validate=1` lists
+  it. Turning the radio of the SSID on, or moving the SSID from a radio that is off or missing to an
+  enabled one, is refused too (#260, #262). LuCI takes 8 to 63 characters or 64 hex digits in every
+  mode, and counts characters, where uapi counts bytes as the daemons do. That tightening uses the
+  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it
+  fails loudly. (#255)
 - **`wireless/interfaces` refuses mode `wds` on write.** wifi-scripts sets up no interface in mode
   wds on OpenWrt 25.12, so such a write answered 200, and the SSID never came up. LuCI writes a WDS
   access point or station as mode `ap` or `sta` with option `wds`, which uapi does not model. A
   write that sends `wds` now answers 422 `not_in_enum`. A read still reports a stored `wds`, and a
-  write that leaves it as it is is refused for it only when it enables the SSID.
-  `WirelessInterfacesRequest.mode` drops `wds` from its enum, and the Response keeps it. That
-  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. (#255)
+  write that leaves it as it is is refused for it when it enables the SSID. Turning the radio of the
+  SSID on, or moving the SSID from a radio that is off or missing to an enabled one, is refused too
+  (#260, #262). `WirelessInterfacesRequest.mode` drops `wds` from its enum, and the Response keeps
+  it. That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state
+  no caller can rely on, and it fails loudly. (#255)
 - **`dhcp/servers.domain` refuses `*`, `?` and `[`, with 422 `invalid_format`.** dnsmasq.init
   splits the value into words without quotes when dnsmasq serves DHCPv6, so the shell expanded such
   a word to the names of the files in its working directory, and dnsmasq announced those as search
@@ -404,9 +411,9 @@ All notable changes to this project will be documented in this file. Format foll
 - **A write of `network/interfaces` that makes the stored peers of a WireGuard interface live also
   refuses a peer with an allowed IP that a peer write refuses.** wg refuses the whole config for an
   allowed IP that it cannot parse, as for the other peer rules of #261, and a peer write refuses
-  such a value, and a few forms that wg takes, such as a prefix length of three digits, on every
-  write. The rule counts only on an enabled peer with a public key, because wireguard.sh gives wg no
-  other peer. That uses the tightening carve-out of #261. (#262)
+  such a value, and a few forms that wg takes, such as an IPv4 prefix length of three digits, as in
+  `10.0.0.0/032`, on every write. The rule counts only on an enabled peer with a public key, because
+  wireguard.sh gives wg no other peer. That uses the tightening carve-out of #261. (#262)
 - **The uapi release APK installs `openapi.json` without whitespace**, and so does the test VM of
   the integration suite. `main.uc` reads the installed file whole into the request process that
   serves `GET /api/v3/openapi.json`, and uhttpd sends it uncompressed, so its size is paid in memory
@@ -424,14 +431,15 @@ All notable changes to this project will be documented in this file. Format foll
   keeps an option that it leaves out, so the check of #225 could not see a value such as
   `nosuchservice` that a hand edit left there. wireguard.sh wrote it after `ListenPort=`, wg refused
   it, and the interface did not come up, while the PATCH answered 200. Such a PATCH now passes when
-  it names `listen_port`: a port, a `null`, which now removes the option, or the `remove` of a JSON
-  Patch. A `null` removed nothing before, because a PATCH deletes only the options that the read of
-  the old proto shows. A switch with `disabled: true` passes too, and a write that sends a port or
-  `null` can then enable the interface. A PUT removes every option that it does not write, so the
-  check does not apply to it. That tightening uses the carve-out in `docs/versioning.md` for
-  payloads that produced a state no caller can rely on, and it fails loudly. LuCI saves such a
-  switch, and its wireguard form refuses the value at the next save, so uapi refuses earlier, at the
-  write that makes wg fail. No stock `/etc/config/network` holds a `listen_port`. (#272)
+  it names `listen_port`, with a port or with a `null`, which now removes the option. A `null`
+  removed nothing before, because a PATCH deletes only the options that the read of the old proto
+  shows. A JSON Patch names it with `add`, because that read has no `/listen_port` to remove. A
+  switch with `disabled: true` passes too, and a write that sends a port or `null` can then enable
+  the interface. A PUT removes every option that it does not write, so the check does not apply to
+  it. That tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state
+  no caller can rely on, and it fails loudly. LuCI saves such a switch, and its wireguard form
+  refuses the value at the next save, so uapi refuses earlier, at the write that makes wg fail. No
+  stock `/etc/config/network` holds a `listen_port`. (#272)
 
 ### Deprecated
 
@@ -636,8 +644,9 @@ All notable changes to this project will be documented in this file. Format foll
   tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
   can rely on, and it fails loudly. A field check that refused such a byte with 422 before, such as
   `system/password`, the `name` of `dhcp/hosts` or the enum of `firewall/rules.target`, now answers
-  400 instead. A tab, a newline, a carriage return and DEL still reach the field checks, because uci
-  stores them, and a check that refuses them still answers 422. (#237)
+  400 instead. For these fields only the status of the refusal changes, and no payload that they
+  accepted is refused. A tab, a newline, a carriage return and DEL still reach the field checks,
+  because uci stores them, and a check that refuses them still answers 422. (#237)
 - **A raw POST without an `id` answered 500 for a type that does not start with a lowercase
   letter**, such as `LoadPlugin` in olsrd. The generated id now takes the first letter of the type
   in lowercase, or `u`. (#237)
@@ -682,9 +691,8 @@ All notable changes to this project will be documented in this file. Format foll
 - **The DELETE of a WireGuard peer works on an up interface when uci holds its `public_key` as a
   list, with whitespace, or not as a WireGuard key at all.** uapi refused to give such a value to
   `wg set ... remove`, so the DELETE answered 500, and so did a write that replaced the key or
-  disabled the peer. uapi now removes the peer under the key that wg read from the config of
-  wireguard.sh, which joins a list with spaces, and of which wg reads the first line without
-  whitespace or a comment. When that is not a WireGuard key, the kernel holds no such peer, and uapi
+  disabled the peer. uapi now removes the peer under the key that wg read from the config that
+  wireguard.sh writes. When that is not a WireGuard key, the kernel holds no such peer, and uapi
   removes nothing. A key with a backslash, which wireguard.sh expands, still answers 500. (#247)
 - **A stored WireGuard key with whitespace or a comment, which wg reads, no longer blocks its
   peer.** wireguard.sh writes the key on a line of the config for wg, and wg removes whitespace and
@@ -701,22 +709,22 @@ All notable changes to this project will be documented in this file. Format foll
   a script. A list `endpoint_host` read as an array, outside the declared type, and reached `wg set`
   as JSON text, so every write of the peer on an up interface answered 500. It now reads as a
   string, which is branch (b) of the type carve-out in `docs/versioning.md`. A typed reader failed
-  on the old read and passes now. uapi also removes whitespace from the host before it runs `wg
-  set`, as wg does with the config of wireguard.sh. (#253)
+  on the old read and passes now. uapi also removes whitespace from the host before it runs
+  `wg set`, as wg does with the config of wireguard.sh. (#253)
 - **The routes of `route_allowed_ips` are compared as netifd installs them.** uapi compared
   prefixes as text. A PUT that changed the spelling of a prefix, such as `FD00::/64` to
   `fd00::/64`, deleted the route that it had just installed, and the restore after a failed write
   deleted each route that uci spells in another way than the kernel prints it. A stored prefix
   length of 3 or more digits, such as `/0064`, was not read, so a DELETE left its route. An IPv4
-  prefix with host bits, such as `10.0.0.1/24`, answered 500 on an up interface, because `ip
-  route` refuses it. uapi now reads the length in base 0 and masks the address, as netifd does,
-  compares routes in that spelling, and gives `ip route` the masked prefix. (#253)
+  prefix with host bits, such as `10.0.0.1/24`, answered 500 on an up interface, because `ip route`
+  refuses it. uapi now reads the length in base 0 and masks the address, as netifd does, compares
+  routes in that spelling, and gives `ip route` the masked prefix. (#253)
 - **Removing a WireGuard peer no longer drops another peer section with the same key from the
   kernel.** The kernel holds one peer per key. The DELETE, the disable or the key change of one
   section removed the peer that another enabled section of the interface also set, and that
   section stayed out of the kernel until the next ifup. uapi now sets each such section again, in
   uci order, so the last one wins, as at ifup. (#253)
-- **A create or a PUT of `wireless/interfaces` that sends no `mode` stores mode `ap`.** A read
+- **A create or a PUT of `wireless/interfaces` that leaves `mode` out stores mode `ap`.** A read
   reports `ap` for a section with no mode, but a create stored no mode, and a PUT removed the
   stored one. wifi-scripts sets up no interface for a section with no mode, so the SSID never came
   up while every read showed an access point. A PATCH writes only what it changes, so a section
@@ -744,9 +752,10 @@ All notable changes to this project will be documented in this file. Format foll
   a value outside the range, but the Response no longer declares the range, because a read can
   give a stored value outside it, such as `txpower '0x40'`. That is branch (b) of the type
   carve-out in `docs/versioning.md`. A write that leaves such a stored value as it is now passes,
-  and so does a write that enables the radio, except for a `cell_density` outside 0 to 3, for
-  which wifi-scripts stops the radio. A write takes a channel up to 233, where it refused one above
-  196, so the 6 GHz channels that LuCI offers can be written. (#257)
+  and so does a write that enables the radio, except for a `cell_density` outside 0 to 3, for which
+  wifi-scripts stops the radio. That refusal uses the carve-out in `docs/versioning.md` for payloads
+  that produced a state no caller can rely on, and it fails loudly. A write takes a channel up to
+  233, where it refused one above 196, so the 6 GHz channels that LuCI offers can be written. (#257)
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
   restarts, and a line that it cannot parse makes it refuse its whole config. (#257)
@@ -790,41 +799,41 @@ All notable changes to this project will be documented in this file. Format foll
   this is not breaking under `docs/versioning.md`. (#263)
 - **A WireGuard peer write and a feed create no longer answer 200 when the filesystem cannot hold
   the file that they write.** ucode's `close()` drops the write error, and uapi did not check the
-  write. On a full `/tmp`, the preshared key file stayed empty, and `wg` reads an empty key file
-  as no key: a peer write set the kernel peer without its preshared key and answered 200 with
+  write. On a full tmpfs, the preshared key file stayed empty, and `wg` reads an empty key file as
+  no key: a peer write set the kernel peer without its preshared key and answered 200 with
   `X-Kernel-Status: ok`, and the tunnel stopped handshaking with a peer that uses the key. Such a
   write now fails its kernel apply, and uci gets its previous config back. uapi stages a key
   before it changes the peer in the kernel, so a peer whose key cannot be staged stays as the
   kernel holds it, and no peer is removed for it. The restore sets every peer of the interface
-  again and stages each key, so on a full `/tmp` it answers `500 reload_failed_unrecovered` when
-  a peer of that interface has a key, and `500 reload_failed_restored` when none has one. On a
-  full overlay, `POST /packages/feeds` left an empty `<name>.list` and answered 200, a read then
-  showed an empty URL, and a retry answered 409 because the file existed. It now removes the file
-  and answers 500. No request or response field changes. (#267)
+  again and stages each key, so on a full tmpfs it answers `500 reload_failed_unrecovered` when an
+  enabled peer of that interface has a preshared key, and `500 reload_failed_restored` when none has
+  one. On a full overlay, `POST /packages/feeds` left an empty `<name>.list` and answered 200, a
+  read then showed an empty URL, and a retry answered 409 because the file existed. It now removes
+  the file and answers 500. No request or response field changes. (#267)
 - **`/diagnostics` keeps its recent errors when several requests fail at the same moment.** Every
   append to the error ring wrote through one temp file name, so two appends at once wrote into
   one file, which then held a short array followed by the tail of a longer one. That is not JSON,
   so `recent_errors` read as empty right after a burst of errors, such as the 423s of a Terraform
   apply at parallelism 10 on one package. Each request process now writes its own temp file, and
   when two appends cross, the ring keeps the later one. An error ring append or a metrics counter
-  whose rename fails also no longer leaves its temp file in `/tmp`. (#267)
-- **A revoke whose commit fails keeps the rate-limit bucket of its token.** `DELETE
-  /tokens/{id}` dropped the bucket before it committed the delete, so a commit that failed kept
-  the token and gave it a full burst again. The bucket is now dropped after the commit. (#267)
+  whose rename fails also no longer leaves its temp file in tmpfs. (#267)
+- **A revoke whose commit fails keeps the rate-limit bucket of its token.** `DELETE /tokens/{id}`
+  dropped the bucket before it committed the delete, so a commit that failed kept the token and gave
+  it a full burst again. The bucket is now dropped after the commit. (#267)
 - **The restore after a failed reload no longer leaves the package empty or cut short.** It wrote
   the snapshot over `/etc/config/<package>` in place and did not check the write. A kill or a
   power cut between the truncation and the write left the package empty, a full overlay left it cut
   short while the write answered `500 reload_failed_restored`, and a `uci commit` by LuCI or a shell
   during the restore could read the half-written file. The restore now writes the snapshot to a
   temp file beside the package, reads it back, and renames it over the package. Before it writes,
-  it waits up to 5 s for libuci's flock on the package file, so it does not write while a `uci
-  commit` reads and writes the package. A LuCI or shell commit that already held the lock, or
+  it waits up to 5 s for libuci's flock on the package file, so it does not write while a
+  `uci commit` reads and writes the package. A LuCI or shell commit that already held the lock, or
   waited on it, can still rename its own file over the restored one, as one libuci commit can over
-  another. A restore that cannot take the lock, write or rename the file answers `500
-  reload_failed_unrecovered`, and its `restore_error` names the file. A restore also writes back
-  only the packages that the write changed: the snapshot of another one would undo a commit that
-  another writer made since. Measured with the ucode of the OpenWrt 25.12 SDK on a full tmpfs: the
-  old restore kept 4096 of 10600 bytes and reported nothing. (#268)
+  another. A restore that cannot take the lock, write or rename the file answers
+  `500 reload_failed_unrecovered`, and its `restore_error` names the file. A restore also writes
+  back only the packages that the write changed: the snapshot of another one would undo a commit
+  that another writer made since. Measured with the ucode of the OpenWrt 25.12 SDK on a full tmpfs:
+  the old restore kept 4096 of 10600 bytes and reported nothing. (#268)
 - **A read no longer shows a change that another writer staged and did not commit, and a write no
   longer commits or deletes it.** `uci set` in a shell stages a change in `/tmp/.uci`, and libuci
   applies that directory to every cursor that loads a package by name, uapi's included. So a GET
@@ -839,13 +848,15 @@ All notable changes to this project will be documented in this file. Format foll
   reload and no WireGuard reconcile then, because both come after every commit, so the daemons and
   the kernel stay as they were (#277). LuCI was not affected, because rpcd keeps a delta directory
   per session. A response changes only on a router where a shell staged a change and did not commit
-  it, and no field or type changes. The staged change now takes effect when the shell commits it,
-  and not before, which applies to the `uapi` package too: a token that `uci delete uapi.<name>`
-  removes without a commit keeps authenticating, where it answered 401 at once, a token that
-  `uci set` adds without a commit does not authenticate yet, and a staged change to `uapi.logging`
-  or `uapi.ratelimit` applies once committed. uapi also reads, writes and restores
-  `/etc/config/<package>` only, and ignores an override that libuci reads in its place from
-  `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
+  it, and no field or type changes. On the HTTP path, the staged change now takes effect when the
+  shell commits it, and not before, which applies to the `uapi` package too: a token that
+  `uci delete uapi.<name>` removes without a commit keeps authenticating, where it answered 401 at
+  once, a token that `uci set` adds without a commit does not authenticate yet, and a staged change
+  to `uapi.logging` or `uapi.ratelimit` applies once committed. The HTTP path also reads, writes and
+  restores `/etc/config/<package>` only, and ignores an override that libuci reads in its place from
+  `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. `uapi-token` keeps the default
+  cursor of libuci, so it commits a staged change of the `uapi` package, as `uci commit uapi` does.
+  (#268)
 - **A token minted per run no longer adds files to tmpfs, which is RAM, until a reboot.** The metric
   series that carry `token_id`, in `uapi_requests_total` and `uapi_rate_limit_drops_total`, and the
   last-used marker in `/var/run/uapi-token-update/` kept a file per token name, and nothing removed
@@ -863,10 +874,10 @@ All notable changes to this project will be documented in this file. Format foll
   `sum(rate())` over `token_id` shows a spike after a mint or a revoke. A token with no expiry that
   is never revoked keeps its files. The reap runs after the commit and under the `uapi` lock. No
   request, response or header changes. (#269)
-- **A metrics counter that a full `/tmp` could not write no longer reads 0 until a reboot.** The
+- **A metrics counter that a full tmpfs could not write no longer reads 0 until a reboot.** The
   write of a counter checked only its rename, and ucode does not report the failed close, so on a
-  full `/tmp` the rename put an empty file over the counter. The counter then read as NaN, printed
-  as 0, and every later increment wrote NaN again. A counter is now renamed into place only when its
+  full tmpfs the rename put an empty file over the counter. The counter then read as NaN, printed as
+  0, and every later increment wrote NaN again. A counter is now renamed into place only when its
   size on disk is the size of its line, a counter file that holds no count is left out of a scrape
   and starts again at its next increment, which Prometheus reads as a reset, and a fold into
   `token_id="-retired"` deletes the series of a token only once its count is added. (#269)
@@ -878,11 +889,11 @@ All notable changes to this project will be documented in this file. Format foll
   that no route serves, such as `/` and `/auth`, which had their own label. (#269)
 - **`uapi-token create` and `revoke` take the lock of the `uapi` package.** A write of `uapi-token`
   and a write of the HTTP path to `/etc/config/uapi` at the same moment could lose one of them, a
-  revoke included. Both commands now take the locks that an HTTP write of the token store takes,
-  load the package only then, and wait up to 10 s for the locks. When a lock is still held after 10
-  s, the command names it and exits 75 (`EX_TEMPFAIL`), having written nothing. `uapi-token create`
-  prints the bearer before its reap, so an interrupt during the reap cannot lose the bearer of a
-  committed token. `docs/tokens.md` has the details. (#269)
+  revoke included. Both commands now take the locks that an HTTP write of the token store takes, and
+  wait up to 10 s for them. When a lock is still held after 10 s, the command names it and exits 75
+  (`EX_TEMPFAIL`), having written nothing. `uapi-token create` prints the bearer before its reap, so
+  an interrupt during the reap cannot lose the bearer of a committed token. `docs/tokens.md` has the
+  details. (#269)
 - **A request that uhttpd kills no longer leaves its lock to the processes it started.** The lock
   files were opened without `O_CLOEXEC`, so every child started under a lock, such as an init
   script, `apk`, `passwd`, `wg` or `ip`, held a copy of the descriptor, and an flock belongs to the
@@ -909,7 +920,8 @@ All notable changes to this project will be documented in this file. Format foll
   or goto rule, or the legacy `lldp_capabilities`, `sysServices` or `dnssec_enabled`, and a PATCH
   sent that delete even when the section did not hold the option. The bus counts a delete as a
   write, so the commit wrote the package again, which drops its comments. A PATCH now skips the
-  delete of an option that the section does not hold. No request, response or header changes. (#272)
+  delete of an option that the section does not hold. No request or response changes, and #277
+  changes the headers of such a PATCH. (#272)
 - **A write that sends `wireless/interfaces.mode` as null answers 422 `required`.** In 3.1.0, a
   merge PATCH of `{"mode": null}`, a PUT with a null mode, or a JSON Patch that removes `/mode` or
   replaces it with null removed the mode. wifi-scripts then set up no interface, while every read
@@ -934,7 +946,8 @@ All notable changes to this project will be documented in this file. Format foll
   `option dhcp_option '3,1.2.3.4 6,"a b"'` now reads `["3,1.2.3.4","6,\"a","b\""]`, so a JSON Patch
   of any field of that server, and a PUT of the read, answer 422 where they answered 200. The init
   gives dnsmasq the same words, and dnsmasq refuses `6,"a` as a string that does not close, so that
-  router already had no DHCP and no DNS. (#274)
+  router already had no DHCP and no DNS. These refusals use the carve-out in `docs/versioning.md`
+  for payloads that produced a state no caller can rely on, and they fail loudly. (#274)
 - **`dhcp/hosts.macs` reads a `mac` option or list entry of several MACs as its words, as
   dnsmasq.init does.** The init joins the entries of `mac` with spaces, splits them into words, and
   gives dnsmasq each word as a MAC of the reservation. uapi read such a value as one entry, which
@@ -975,7 +988,8 @@ All notable changes to this project will be documented in this file. Format foll
   `tls_auth` and `pkcs12` on `openvpn/instances`, and a write carries the stored value back. So
   every PATCH of a section that holds one set it again to the value that uci held. The bus counts
   that as a write, so the commit rewrote the package, which drops its comments. A PATCH now skips a
-  set of the value that uci already holds. No request, response or header changes. (#275)
+  set of the value that uci already holds. No request or response changes, and #277 changes the
+  headers of such a PATCH. (#275)
 
 - **`uapi-token create` and `revoke` stop when libuci refuses the commit.** Neither checked the
   result. On a full overlay, `revoke` printed `Revoked token`, exited 0 and dropped the rate-limit
@@ -1017,17 +1031,17 @@ All notable changes to this project will be documented in this file. Format foll
   `/tmp`. Each keeps its files in a directory of mode 0700, `/var/run/uapi-metrics`,
   `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring`, `/var/run/uapi-idempotency` or
   `/var/run/uapi-token-update`, with files of mode 0600. A package install or upgrade removes these
-  five directories after its uhttpd restart, and the four that an older uapi kept in `/tmp` when
-  each is a directory that root owns. The counters then start again from zero, which Prometheus
-  reads as a reset, every token has a full burst, the error ring is empty, and the 24 h idempotency
-  replay window starts empty. The buckets and the ring now check the size on disk before the rename,
-  as the cache and the counters do, so a full tmpfs no longer empties the ring. Two idempotency
-  stores of one key at the same moment no longer share a temp file, which could leave an entry that
-  read as a miss. No request, response or header changes. (#270)
-- **The idempotency cache keeps its entries private and bounded.** It uses only a directory that
-  uapi owns with mode 0700 and writes each entry with mode 0600, a package install or upgrade
-  removes the directory when root owns it, a store removes the entries older than the 24 h TTL at
-  most once an hour, and a `POST /batch` that only reads stores no entry. (#266)
+  five directories after its uhttpd restart, and the four that an older uapi kept in `/tmp`. The
+  counters then start again from zero, which Prometheus reads as a reset, every token has a full
+  burst, the error ring is empty, and the 24 h idempotency replay window starts empty. The buckets
+  and the ring now check the size on disk before the rename, as the cache and the counters do, so a
+  full tmpfs no longer empties the ring. Two idempotency stores of one key at the same moment no
+  longer share a temp file, which could leave an entry that read as a miss. No request, response or
+  header changes. (#270)
+- **The idempotency cache keeps its entries private and bounded.** It keeps its entries in a
+  directory of mode 0700 with files of mode 0600, a package install or upgrade empties it, a store
+  removes the entries older than the 24 h TTL at most once an hour, and a `POST /batch` that only
+  reads stores no entry. (#266)
 - **A stored `persistent_keepalive` no longer runs as a root shell command.** `src/lib/wg.uc`
   put a peer's `persistent_keepalive` into the `wg set` command without quoting it. The restore
   after a failed peer write reapplies the interface's peers from uci, and that path read the raw
@@ -1047,20 +1061,18 @@ All notable changes to this project will be documented in this file. Format foll
   the uci configs of the OpenWrt feeds holds one of these characters. The re-read was measured on
   OpenWrt 25.12.5. (#237)
 
-- **A newline in `wireless/interfaces.key` added a line to hostapd's config.** wifi-scripts writes
-  the key as `wpa_passphrase=<key>` without escaping, so each newline in it started a hostapd
-  directive. A token with `wireless:interfaces:rw` and no raw scope could add any hostapd directive
-  that way, and no read showed it. Measured on OpenWrt 25.12.5: a key that ended in `\nssid2="x"`
-  answered 200, and hostapd broadcast `x` while every read showed the stored SSID. A write that
-  changes the key to one with a newline now answers 422 `invalid_format` in every mode and
-  encryption, because another writer can enable the SSID or change its encryption later. A write
-  that makes the daemon read a stored key with a newline, by enabling the SSID or changing its mode
-  or encryption, is refused too. Any other write is not refused for the newline, and `GET
-  /api/v3/diagnostics?validate=1` lists the SSID. Turning its radio on, or moving it from a radio
-  that is off or missing to an enabled one, is refused too. That tightening uses the carve-out in
+- **A newline in `wireless/interfaces.key` added a line to hostapd's config.** A token with
+  `wireless:interfaces:rw` and no raw scope could add any hostapd directive that way, and no read
+  showed it. Measured on OpenWrt 25.12.5: such a write answered 200, and hostapd used the added line
+  while every read showed the stored values. A write that changes the key to one with a newline now
+  answers 422 `invalid_format` in every mode and encryption, because another writer can enable the
+  SSID or change its encryption later. A write that makes the daemon read a stored key with a
+  newline, by enabling the SSID or changing its mode or encryption, is refused too, and so is a
+  write that turns the radio of the SSID on or moves the SSID from a radio that is off or missing to
+  an enabled one. Any other write is not refused for the newline, and
+  `GET /api/v3/diagnostics?validate=1` lists the SSID. That tightening uses the carve-out in
   `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. LuCI's key field takes one line only.
-  (#246)
+  loudly. LuCI's key field takes one line only. (#246)
 
 - **A WireGuard peer's `allowed_ips` ran a command as root.** `is_valid_ipv6_cidr` read the prefix
   length with `int()`, which stops at the first non-digit, so `::/0;id>x;` passed as `::/0`.
@@ -1086,28 +1098,27 @@ All notable changes to this project will be documented in this file. Format foll
   error from `uapi-token`, and a stored one admits no caller, so the token answers 401. The
   validation sweep does not cover tokens, and `uapi-token list` shows their `allowed_cidrs`. A token
   minted with an entry such as `fd00::/64x`, which matched `fd00::/64`, also answers 401 now and
-  must be minted again. That break uses the carve-out in `docs/versioning.md` for payloads that
-  produced a state no caller can rely on: the same reading that gave `/64` here gave `/0` one
-  character away. (#247)
+  must be minted again. That break uses the security carve-out in `docs/versioning.md`: only a
+  strict reading of the length makes sure that a token admits no source outside its `allowed_cidrs`.
+  (#247)
 
-- **A WireGuard peer's `endpoint_host` added a hidden peer at the next ifup.** On OpenWrt 25.12,
-  wireguard.sh builds the config for `wg syncconf` with `printf %b`, which expands escapes, so the
-  plain text `\n` in the host became a line break. A host such as
-  `192.0.2.1\0072443\n[Peer]\nPublicKey=...\nAllowedIPs=0.0.0.0/0` added a peer that took the
-  allowed IPs, and no read of uapi or LuCI showed it. Measured on OpenWrt 25.12.5 with a token
-  scoped `network:wireguard_peers:rw`: a POST while the interface was down answered 200, and the
-  next ifup installed the extra peer. Every release since 1.1.0 accepts such a host. `endpoint_host`
-  now refuses a backslash, a newline, and a bracket in a host with a colon. wireguard.sh brackets
-  every host with a colon, so a bracketed IPv6 address, which uapi took before, already failed the
-  whole tunnel: on OpenWrt 25.12.5 wg refused the config with `Unable to find port of endpoint:
-  '[[fd00::1]]:51820'`. The rule sees the peer as if it were enabled, because another writer such
-  as LuCI can enable it later. A write that changes the host, or that enables the peer through
-  `disabled`, is refused for it. Any other write is not refused for the host, and `GET
-  /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not. The sweep also lists
-  a stored `public_key` or `preshared_key` that is not a WireGuard key, which reaches the same
-  `printf %b`, and a write that enables such a peer is refused. That tightening uses the same
-  carve-out, and it fails loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and
-  from a shell, so the fix that closes it for every writer belongs upstream. (#247)
+- **A WireGuard peer's `endpoint_host` added a hidden peer at the next ifup.** On OpenWrt 25.12, a
+  host could add a peer with any allowed IPs to the config that wireguard.sh gives wg, and no read
+  of uapi or LuCI showed it. Measured on OpenWrt 25.12.5 with a token scoped
+  `network:wireguard_peers:rw`: a POST while the interface was down answered 200, and the next ifup
+  installed the extra peer. Every release since 1.1.0 accepts such a host. `endpoint_host` now
+  refuses a backslash, a newline, and a bracket in a host with a colon. wireguard.sh brackets every
+  host with a colon, so a bracketed IPv6 address, which uapi took before, already failed the whole
+  tunnel: on OpenWrt 25.12.5 wg refused the config with
+  `Unable to find port of endpoint: '[[fd00::1]]:51820'`. The rule sees the peer as if it were
+  enabled, because another writer such as LuCI can enable it later. A write that changes the host,
+  or that enables the peer through `disabled`, is refused for it. Any other write is not refused for
+  the host, and `GET /api/v3/diagnostics?validate=1` lists a peer that holds one, enabled or not.
+  The sweep also lists a stored `public_key` or `preshared_key` that is not a WireGuard key, and a
+  write that enables such a peer is refused. That tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. wireguard.sh takes the same host from LuCI's RPC, from `/raw` and from a shell, so the fix
+  that closes it for every writer belongs upstream. (#247)
 
 - **`docs/security.md` lists more write scopes that reach root.** `uhttpd:instances:rw`,
   `dhcp:odhcpd:rw` and `dhcp:dnsmasq:rw` set a program, a document root or a file that a root
@@ -1129,17 +1140,18 @@ All notable changes to this project will be documented in this file. Format foll
   only hex digits with optional colons. In mode `monitor`, `adhoc` or `mesh`, wifi-scripts can
   pass `ssid` to a root shell command between single quotes, so `wireless/interfaces` refuses a
   single quote in `ssid` in these modes. As for the key in #246, a write that leaves such an SSID
-  as it is is refused only when it enables the SSID or moves it into one of these modes, and `GET
-  /api/v3/diagnostics?validate=1` lists it. Each refusal answers 422 `invalid_format`, under the
-  carve-out in `docs/versioning.md` for payloads that produced a state no caller can rely on. No
-  value in the uci configs of the OpenWrt feeds is refused. (#250)
+  as it is is refused when it enables the SSID or moves it into one of these modes, and
+  `GET /api/v3/diagnostics?validate=1` lists it. Turning the radio of the SSID on, or moving the
+  SSID from a radio that is off or missing to an enabled one, is refused too (#260, #262). Each
+  refusal answers 422 `invalid_format`, under the carve-out in `docs/versioning.md` for payloads
+  that produced a state no caller can rely on. No value in the uci configs of the OpenWrt feeds is
+  refused. (#250)
 
 - **The removal of a WireGuard peer revokes every kernel peer that its stored `public_key` gives.**
-  A `public_key` that a hand edit, `/raw` or LuCI's RPC stores can make the kernel hold more than
-  one peer for one section at ifup. The DELETE of the section, a write that disabled it and a write
-  that changed its key removed only one of them, so the others kept their access to the tunnel.
-  They now remove each key that wg can read from the stored value. A write through
-  `network/wireguard_peers` cannot store such a key. (#253)
+  After an ifup, the kernel could hold more than one peer for one section. The DELETE of the
+  section, a write that disabled it and a write that changed its key removed only one of them, so
+  the others kept their access to the tunnel. They now remove each of them. A write through
+  `network/wireguard_peers` cannot store such a `public_key`. (#253)
 
 ## [3.1.0] - 2026-10-11
 

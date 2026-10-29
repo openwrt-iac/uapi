@@ -70,13 +70,15 @@ rest.
 - Making a previously-optional request field required.
 - Tightening validation to reject previously-accepted payloads. (Carve-out: when the previously-accepted payload produced broken state no caller can rely on, tightening can ship as a patch with an explicit CHANGELOG entry naming the carve-out. 2.2.1's cross-section uniqueness check is the precedent.)
 
+  **Security carve-out.** A security fix can refuse, in a minor, a payload that an earlier release accepted, when its CHANGELOG entry names this carve-out, says which payloads it now refuses, and says why. Unlike the carve-out above, it also covers a payload whose state a caller could rely on. 3.2.0's check of the IPv6 prefix length in a token's `allowed_cidrs` is the precedent.
+
 ## One installation, one API major
 
 There is no parallel mount; we don't carry two surface areas in a single binary on resource-constrained hardware. Operators who need to keep a v1 client working keep the v1 package installed (the v1.2.1 APK stays available on the feed; the signed `v1.2.1` git tag is the canonical v1 contract). The migration table for v1 → v2 lives at `docs/migration-v1-to-v2.md`.
 
 ## `/raw/` stability
 
-URL structure, verbs, auth/scope behavior, and error envelope are stable within a package major. Payload shape follows uci, which is OpenWrt's moving target; if OpenWrt changes the `firewall` package schema, `/raw/firewall/...` payloads change with it. Documented loudly so users don't expect curated-level stability from raw. See `docs/raw.md` for the full stability disclaimer.
+URL structure, verbs, auth/scope behavior, and error envelope are stable within a package major. Payload shape follows uci, which is OpenWrt's moving target. If OpenWrt changes the `firewall` package schema, `/raw/firewall/...` payloads change with it. Documented loudly so users don't expect curated-level stability from raw. See `docs/raw.md` for the full stability disclaimer.
 
 ## OpenAPI spec versioning
 
@@ -158,9 +160,10 @@ leave out a field that a create requires.
 The merge-patch body of a PATCH takes null on a field where the server removes the field for a
 null, since 3.2.0. RFC 7396 removes a member with null. The server skips a null in its type
 check, the merge sets the field to null, and `toUci` leaves the option out, so the write removes
-it. A read then gives what it gives for an unset option, often the default. On a nested object such as `match`, a null removes
-that member only. An array does not take null items, because a merge patch replaces an array
-whole. These fields keep the type of `<Name>Request`, because a null does not remove them:
+it. A read then gives what it gives for an unset option, often the default. On a nested object
+such as `match`, a null removes that member only. An array does not take null items, because a
+merge patch replaces an array whole. These fields keep the type of `<Name>Request`, because a
+null does not remove them:
 
 - `id`. A PATCH ignores it.
 - A write-only secret, such as `wireless/interfaces.key`. A null keeps the stored secret.
