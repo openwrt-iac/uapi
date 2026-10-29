@@ -295,12 +295,13 @@ All notable changes to this project will be documented in this file. Format foll
   client can use. The message says that each option needs its own entry. A text option keeps its
   spaces, as in `15,my domain`, `15,"my domain"` and `15,my 6,domain`, and so does a field after a
   comma, as in `encap:175, 190, "iscsi-client0"`. An entry such as `3,10.0.0.1, 6,10.0.0.1` passes
-  the rule, and is left to the stay-up watch of the reload. LuCI's form takes any entry, so a write
-  that leaves a stored list as it is still passes, and `GET /api/v3/diagnostics?validate=1` lists
-  such an entry. dnsmasq.init writes no option of an ignored section, so a write that clears
-  `ignore` on a section that holds such an entry answers 422 too. This tightening uses the carve-out
-  in `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
-  loudly. No value in the uci configs of the OpenWrt feeds is refused. (#279)
+  the rule, and is left to the `dnsmasq --test` check after the reload. LuCI's form takes any entry,
+  so a write that leaves a stored list as it is still passes, and
+  `GET /api/v3/diagnostics?validate=1` lists such an entry. dnsmasq.init writes no option of an
+  ignored section, so a write that clears `ignore` on a section that holds such an entry answers 422
+  too. This tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state
+  no caller can rely on, and it fails loudly. No value in the uci configs of the OpenWrt feeds is
+  refused. (#279)
 - **`lldpd/config` refuses a backslash in `lldp_description` and `lldp_mgmt_ip`, and a quote,
   whitespace, a backslash or a `#` in an `interface` entry, with 422 `invalid_format`.**
   lldpd.init writes these values on lldpcli command lines. lldpcli reads a backslash as an escape,
@@ -777,23 +778,28 @@ All notable changes to this project will be documented in this file. Format foll
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
   restarts, and a line that it cannot parse makes it refuse its whole config. (#257)
-- **A write that makes unbound or dnsmasq stop answers `500 reload_failed_restored` and restores the
-  previous config.** procd starts the daemon with its new config on its own, so the init script
-  exited 0, and the daemon then exited on a line that it refuses: unbound on a `srv_line` or
-  `ext_line` that it cannot parse, and dnsmasq on a value such as a `dhcp_option` of
-  `3,not-an-address`. DNS, and with dnsmasq also DHCP, stayed down while the write answered 200.
-  When the daemon runs, a write that reloads it now waits for each instance of the daemon to keep
-  running: 2 s for a reload of `unbound` or `unbound-uci-ext`, and 1 s for a reload of `dnsmasq`.
-  dnsmasq 2.93 exits in under 2 ms on x86 on a bad config, and the 1 s watch saw it stop on an
-  OpenWrt 25.12.5 x86_64 VM. An instance that did not run before the write is not watched, such as
-  the one of a second `config dnsmasq` section that a raw POST adds. The restore runs the same
-  check, so a restore that does not bring the daemon back answers `reload_failed_unrecovered`. This
-  applies to `unbound/server`, `unbound/srv`, `unbound/ext`, `dhcp/servers`, `dhcp/hosts`,
-  `dhcp/dnsmasq`, a `/batch` that holds one of them, and a raw write to the `unbound` or the `dhcp`
-  package. These writes take 2 s or 1 s longer while the daemon runs. A write to `unbound/srv` or
-  `unbound/ext` also takes the lock of the `unbound` package, so two writes that restart unbound at
-  the same time answer `423 locked` for the second, as two writes to one package do. A write that
-  answered 200 and left the daemon down now answers 500, which is the tightening carve-out of
+- **A write that makes unbound stop, or that gives dnsmasq a config that it refuses, answers
+  `500 reload_failed_restored` and restores the previous config.** procd starts unbound with its new
+  config on its own, so the init script exited 0, and unbound then exited on a `srv_line` or
+  `ext_line` that it cannot parse. DNS stayed down while the write answered 200. When unbound runs,
+  a write that reloads `unbound` or `unbound-uci-ext` now waits 2 s for each unbound instance to
+  keep running. The restore runs the same check, so a restore that does not bring unbound back
+  answers `reload_failed_unrecovered`. This applies to `unbound/server`, `unbound/srv`,
+  `unbound/ext`, a `/batch` that holds one of them, and a raw write to the `unbound` package. These
+  writes take 2 s longer. A write to `unbound/srv` or `unbound/ext` also takes the lock of the
+  `unbound` package, so two writes that restart unbound at the same time answer `423 locked` for the
+  second, as two writes to one package do. dnsmasq.init exited 0 too when dnsmasq then refused its
+  new config, such as a `dhcp_option` of `3,not-an-address`, and DHCP and DNS stopped on the whole
+  router. After a write that reloads `dnsmasq`, uapi now runs the command of each dnsmasq instance
+  with `--test`, which reads the config that dnsmasq.init wrote and the files that it includes, as a
+  start does. A refusal answers `500 reload_failed_restored`, with a `reload_error` that names the
+  instance and gives the first line of dnsmasq's output, and a restore whose config dnsmasq refuses
+  too answers `reload_failed_unrecovered`. This applies to `dhcp/servers`, `dhcp/hosts`,
+  `dhcp/dnsmasq`, a `/batch` that holds one of them, and a raw write to the `dhcp` package. No write
+  waits for dnsmasq. The check covers an instance that ran before the write and one that the write
+  adds, and skips one that was listed and not running before. OpenWrt's reload of dnsmasq can
+  restart the daemon, and uapi does not report that restart. A write that answered 200 and left
+  unbound or dnsmasq down now answers 500, which is the tightening carve-out of
   `docs/versioning.md`. (#259, #279)
 - **A PATCH body no longer has to carry the fields that a create requires.** The spec declared the
   `application/json` body of each PATCH as an `allOf` of the Request schema, with its `required`

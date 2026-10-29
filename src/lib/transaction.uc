@@ -63,33 +63,18 @@ function default_reload(services) {
 }
 
 // procd starts the daemon with its new config on its own, so the init script answers 0 before the
-// daemon has read that config. A daemon that refuses the config exits soon after, and procd starts
-// it again only 5 s later, the default `respawn_timeout` of procd.sh, to fail the same way. A
-// reload of the daemon, by its own service or one in RESTARTS, waits for the instances that ran
-// before the write to keep running, for `window_ms`, which every such write waits out.
-// unbound exits within a few hundred ms on a line that it cannot parse. dnsmasq 2.93 exits in under
-// 2 ms on x86 on a bad config, and a watch of 1 s saw it stop on an OpenWrt 25.12.5 x86_64 VM.
-// A write that restarts a daemon also takes the lock of the package that holds its config, so that
-// writes to two packages that restart it run one at a time: a restart that one starts would read
-// as a stop to the other, and its config as the other's.
-const STAY_UP = {
-	unbound: { window_ms: 2000, package: "unbound" },
-	dnsmasq: { window_ms: 1000, package: "dhcp" },
-};
-// unbound-uci-ext renders the files that unbound reads, and restarts unbound.
-const RESTARTS = { "unbound-uci-ext": "unbound" };
+// daemon has read that config. unbound exits within a few hundred ms on a line that it cannot parse,
+// and procd starts it again only 5 s later, to fail the same way. A reload of these services waits
+// for the daemons that ran before the write to keep running. Writes to two packages that restart
+// one daemon also take the lock of the package named after it, because a restart that one starts
+// would read as a stop to the other, and its config as the other's.
+const STAY_UP = { unbound: [ "unbound" ], "unbound-uci-ext": [ "unbound" ] };
 
 function stay_up_daemons(services) {
 	let daemons = {};
-	for (let svc in services) {
-		let d = RESTARTS[svc] ?? svc;
-		if (STAY_UP[d] != null) daemons[d] = true;
-	}
+	for (let svc in services)
+		for (let d in STAY_UP[svc] ?? []) daemons[d] = true;
 	return keys(daemons);
-}
-
-function stay_up_locks(services) {
-	return map(stay_up_daemons(services), (d) => STAY_UP[d].package);
 }
 
 function instances(conn, daemons) {
@@ -106,15 +91,12 @@ function instances(conn, daemons) {
 // The restore runs the same check, so it fails when the previous config does not bring the daemon
 // back either. An instance that `service list` does not show is being restarted, by `restart` or by
 // another writer, or the ubus call failed, so only one that procd reports as not running counts.
-// An instance that did not run before the write is not watched, such as the one of a second
-// `config dnsmasq` section that the write adds.
-function default_watch(conn, services, window_ms, step_ms) {
+function default_watch(conn, services, total_ms, step_ms) {
 	let names = stay_up_daemons(services);
 	if (length(names) == 0) return null;
 	let was = instances(conn, names);
 	let before = filter(keys(was), (k) => was[k].running);
 	if (length(before) == 0) return null;
-	let total_ms = max(...map(before, (k) => window_ms(split(k, "/")[0])));
 	return function() {
 		for (let waited = 0; ; waited += step_ms) {
 			let now = instances(conn, names);
@@ -128,7 +110,46 @@ function default_watch(conn, services, window_ms, step_ms) {
 	};
 }
 
-const watch_stay_up = (conn, services) => default_watch(conn, services, (d) => STAY_UP[d].window_ms, 100);
+function run_test(argv) {
+	let p = fs.popen(wg.command_line(argv) + " 2>&1", "r");
+	if (p == null) return { code: -1, output: "could not exec " + argv[0] };
+	let output = p.read("all") ?? "";
+	return { code: p.close(), output: output };
+}
+
+// dnsmasq.init writes the config of each instance before it returns, and procd then restarts the
+// instance. A watch of the process cannot judge that config: reload_service() sends SIGHUP right
+// after the restart, and on a slow machine the signal can reach the new dnsmasq before it handles
+// it, so dnsmasq dies and procd starts it again 5 s later. `--test` reads the config and the files
+// that it includes, as a start does, without waiting. An instance that was listed and not running
+// before the write is skipped, because the write did not break it.
+function dnsmasq_check(conn, services, run) {
+	if (index(services, "dnsmasq") < 0) return null;
+	let was = instances(conn, [ "dnsmasq" ]);
+	return function() {
+		for (let k, i in instances(conn, [ "dnsmasq" ])) {
+			if (was[k] != null && !was[k].running) continue;
+			let r = run([ i.command[0], "--test", ...slice(i.command, 1) ]);
+			if (r.code != 0)
+				return sprintf("dnsmasq refuses its config %s: %s", split(k, "/")[1],
+				               replace(split(trim(r.output), "\n")[0], /^dnsmasq: /, ""));
+		}
+		return null;
+	};
+}
+
+// The reload and the restore each run every check, and the first refusal fails them.
+function check_daemons(conn, services) {
+	let checks = filter([ dnsmasq_check(conn, services, run_test), default_watch(conn, services, 2000, 100) ],
+	                    (c) => c != null);
+	return function() {
+		for (let c in checks) {
+			let err = c();
+			if (err != null) return err;
+		}
+		return null;
+	};
+}
 
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
 // non-blocking ("n" suffix). Returns the fd handle on success; null on lock
@@ -312,7 +333,7 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
-	let watch = { start: params.watch ?? watch_stay_up };
+	let watch = { start: params.watch ?? check_daemons };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
 	// snapshot, committing, or reloading. Used by /batch to compose many
@@ -327,7 +348,7 @@ function transaction(conn, params) {
 	if (cfg_err != null)
 		return { ok: false, kind: "config_missing", message: cfg_err };
 
-	let lock = acquire(path, filter(stay_up_locks(services), (p) => p != pkg));
+	let lock = acquire(path, filter(stay_up_daemons(services), (d) => d != pkg));
 	// `null` means a test/legacy stub that pre-dates the contention sentinel;
 	// treat as per-package since that's the production-default flavour.
 	if (lock == null)
@@ -386,7 +407,7 @@ function multi_transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
-	let watch = { start: params.watch ?? watch_stay_up };
+	let watch = { start: params.watch ?? check_daemons };
 	let check_services = params.check_services ?? default_check_services;
 
 	let svc_err = check_services(services);
@@ -411,7 +432,7 @@ function multi_transaction(conn, params) {
 	}
 
 	let locks = { ...unique };
-	for (let p in stay_up_locks(services)) locks[p] = true;
+	for (let d in stay_up_daemons(services)) locks[d] = true;
 	locks = sort(keys(locks));
 	let lock_prefix = params.pkg_lock_prefix ?? PKG_LOCK_PREFIX;
 
@@ -534,4 +555,4 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
-         default_check_services, default_reload, default_watch };
+         default_check_services, default_reload, default_watch, dnsmasq_check };
