@@ -119,13 +119,15 @@ Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 | Path | Wraps | Notes |
 |---|---|---|
 | `dhcp/hosts` | `config host` | Static leases. `macs` (the whole uci `list mac`), `ip`, `name`, `leasetime`, `duid`, `tag` (tags the host sets), `match_tag` (tags a request must carry). |
-| `dhcp/servers` | `config dhcp` | Per-interface server config. `runtime` carries active-lease counts. |
+| `dhcp/servers` | `config dhcp` | Per-interface server config. `runtime` carries active-lease counts. `dhcp_option` takes one option per entry, because dnsmasq.init passes each entry to dnsmasq whole and dnsmasq reads it as one option. An entry in which whitespace outside a quoted string comes before the start of another option, such as `3,10.0.0.1 6,10.0.0.1`, answers `422 invalid_format`, where LuCI's form takes any entry. A text option with spaces, such as `15,my domain`, stays valid, and a write that leaves a stored list as it is passes. |
 | `dhcp/dnsmasq` (singleton) | `config dnsmasq` | Global dnsmasq tuning; forwarders, address overrides, rebind protection. |
 | `dhcp/odhcpd` (singleton) | `config odhcpd` | `maindhcp`, `leasefile`, `loglevel`. |
 | `dhcp/leases` (read-only collection) | `/tmp/dhcp.leases` | IPv4 leases parsed from dnsmasq's lease file. |
 | `dhcp/leases6` (read-only collection) | `/tmp/(hosts/odhcpd|odhcpd.leases)` | IPv6 leases from odhcpd. Per-IA-address entries. |
 
 Reload: `dnsmasq`, except `dhcp/odhcpd`, which declares `odhcpd`.
+
+When dnsmasq runs, a write that reloads it waits 1 s after the reload. If an instance that ran before stops in that time, the write answers `500 reload_failed_restored` and restores the previous config. dnsmasq stops for a line that it refuses, such as a `dhcp_option` of `3,not-an-address`.
 
 ## System
 

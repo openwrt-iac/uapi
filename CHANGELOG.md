@@ -283,6 +283,21 @@ All notable changes to this project will be documented in this file. Format foll
   uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller can
   rely on, and it fails loudly. No value in the uci configs of the OpenWrt feeds is refused.
   (#254)
+- **`dhcp/servers` refuses a `dhcp_option` entry that holds the start of a second option, with 422
+  `invalid_format`.** dnsmasq.init passes each entry of the list to dnsmasq whole, and dnsmasq reads
+  it as one option. So `3,10.99.0.1 6,10.99.0.1` gave option 3 the address `10.99.0.1 6`, and
+  dnsmasq refused it and did not start. DHCP and DNS stopped on the whole router after a write that
+  answered 200, in 3.1.0 too. An entry now answers 422 when whitespace outside a quoted string,
+  after a character other than a comma, comes before what dnsmasq reads as the start of an option: a
+  number and a comma, `option:`, `option6:`, `tag:`, `net:`, `set:`, `vendor:`, `encap:` or
+  `vi-encap:`. The message says that each option needs its own entry. A text option keeps its
+  spaces, as in `15,my domain` and `15,"my domain"`, and so does a field after a comma, as in
+  `encap:175, 190, "iscsi-client0"`. A text value that holds such a word, such as `15,my 6,domain`,
+  is refused too, and its quoted form `15,"my 6,domain"` gives dnsmasq the same value. LuCI's form
+  takes any entry, so a write that leaves a stored list as it is still passes, and
+  `GET /api/v3/diagnostics?validate=1` lists such an entry. This tightening uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, and it fails
+  loudly. No value in the uci configs of the OpenWrt feeds is refused. (#279)
 - **`lldpd/config` refuses a backslash in `lldp_description` and `lldp_mgmt_ip`, and a quote,
   whitespace, a backslash or a `#` in an `interface` entry, with 422 `invalid_format`.**
   lldpd.init writes these values on lldpcli command lines. lldpcli reads a backslash as an escape,
@@ -759,18 +774,21 @@ All notable changes to this project will be documented in this file. Format foll
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
   restarts, and a line that it cannot parse makes it refuse its whole config. (#257)
-- **A write that makes unbound stop answers `500 reload_failed_restored` and restores the previous
-  config.** procd starts unbound with its new config on its own, so the init script exited 0, and
-  unbound then exited on a `srv_line` or `ext_line` that it cannot parse. DNS stayed down while the
-  write answered 200. When unbound runs, a write that reloads `unbound` or `unbound-uci-ext` now
-  waits 2 s for each unbound instance to keep running. The restore runs the same check, so a
-  restore that does not bring unbound back answers `reload_failed_unrecovered`. This applies to
-  `unbound/server`, `unbound/srv`, `unbound/ext`, a `/batch` that holds one of them, and a raw
-  write to the `unbound` package. These writes take 2 s longer. A write to `unbound/srv` or
-  `unbound/ext` also takes the lock of the `unbound` package, so two writes that restart unbound at
-  the same time answer `423 locked` for the second, as two writes to one package do. A write that
-  answered 200 and left unbound down now answers 500, which is the tightening carve-out of
-  `docs/versioning.md`. (#259)
+- **A write that makes unbound or dnsmasq stop answers `500 reload_failed_restored` and restores the
+  previous config.** procd starts the daemon with its new config on its own, so the init script
+  exited 0, and the daemon then exited on a line that it refuses: unbound on a `srv_line` or
+  `ext_line` that it cannot parse, and dnsmasq on a value such as a `dhcp_option` of
+  `3,not-an-address`. DNS, and with dnsmasq also DHCP, stayed down while the write answered 200.
+  When the daemon runs, a write that reloads it now waits for each instance of the daemon to keep
+  running: 2 s for a reload of `unbound` or `unbound-uci-ext`, and 1 s for a reload of `dnsmasq`,
+  which exits within a few ms of its start. The restore runs the same check, so a restore that does
+  not bring the daemon back answers `reload_failed_unrecovered`. This applies to `unbound/server`,
+  `unbound/srv`, `unbound/ext`, `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, a `/batch` that holds
+  one of them, and a raw write to the `unbound` or the `dhcp` package. These writes take 2 s or 1 s
+  longer while the daemon runs. A write to `unbound/srv` or `unbound/ext` also takes the lock of the
+  `unbound` package, so two writes that restart unbound at the same time answer `423 locked` for the
+  second, as two writes to one package do. A write that answered 200 and left the daemon down now
+  answers 500, which is the tightening carve-out of `docs/versioning.md`. (#259, #279)
 - **A PATCH body no longer has to carry the fields that a create requires.** The spec declared the
   `application/json` body of each PATCH as an `allOf` of the Request schema, with its `required`
   list and its conditionals. The server checks the required fields after it merges the body into

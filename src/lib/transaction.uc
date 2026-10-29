@@ -63,18 +63,31 @@ function default_reload(services) {
 }
 
 // procd starts the daemon with its new config on its own, so the init script answers 0 before the
-// daemon has read that config. unbound exits within a few hundred ms on a line that it cannot parse,
-// and procd starts it again only 5 s later, to fail the same way. A reload of these services waits
-// for the daemons that ran before the write to keep running. Writes to two packages that restart
-// one daemon also take the lock of the package named after it, because a restart that one starts
-// would read as a stop to the other, and its config as the other's.
-const STAY_UP = { unbound: [ "unbound" ], "unbound-uci-ext": [ "unbound" ] };
+// daemon has read that config. A daemon that refuses the config exits soon after, and procd starts
+// it again only 5 s later, the default `respawn_timeout` of procd.sh, to fail the same way. A
+// reload of these services waits for the daemons that ran before the write to keep running.
+const STAY_UP = { unbound: [ "unbound" ], "unbound-uci-ext": [ "unbound" ], dnsmasq: [ "dnsmasq" ] };
+
+// Every write that reloads the daemon while it runs waits out its window. unbound exits within a
+// few hundred ms on a line that it cannot parse. dnsmasq parses its config before it opens a socket,
+// and exits on a line that it refuses within 2 ms of its start, measured with dnsmasq 2.93 on x86,
+// so most of its window is for procd to stop the old process and start the new one in ujail.
+const WINDOW_MS = { unbound: 2000, dnsmasq: 1000 };
+
+// A write that restarts a daemon also takes the lock of the package that holds its config, so that
+// writes to two packages that restart it run one at a time: a restart that one starts would read
+// as a stop to the other, and its config as the other's.
+const CONFIG_PACKAGE = { unbound: "unbound", dnsmasq: "dhcp" };
 
 function stay_up_daemons(services) {
 	let daemons = {};
 	for (let svc in services)
 		for (let d in STAY_UP[svc] ?? []) daemons[d] = true;
 	return keys(daemons);
+}
+
+function stay_up_locks(services) {
+	return map(stay_up_daemons(services), (d) => CONFIG_PACKAGE[d]);
 }
 
 function instances(conn, daemons) {
@@ -91,12 +104,13 @@ function instances(conn, daemons) {
 // The restore runs the same check, so it fails when the previous config does not bring the daemon
 // back either. An instance that `service list` does not show is being restarted, by `restart` or by
 // another writer, or the ubus call failed, so only one that procd reports as not running counts.
-function default_watch(conn, services, total_ms, step_ms) {
+function default_watch(conn, services, window_ms, step_ms) {
 	let names = stay_up_daemons(services);
 	if (length(names) == 0) return null;
 	let was = instances(conn, names);
 	let before = filter(keys(was), (k) => was[k].running);
 	if (length(before) == 0) return null;
+	let total_ms = max(...map(before, (k) => window_ms[split(k, "/")[0]]));
 	return function() {
 		for (let waited = 0; ; waited += step_ms) {
 			let now = instances(conn, names);
@@ -110,7 +124,7 @@ function default_watch(conn, services, total_ms, step_ms) {
 	};
 }
 
-const watch_stay_up = (conn, services) => default_watch(conn, services, 2000, 100);
+const watch_stay_up = (conn, services) => default_watch(conn, services, WINDOW_MS, 100);
 
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
 // non-blocking ("n" suffix). Returns the fd handle on success; null on lock
@@ -309,7 +323,7 @@ function transaction(conn, params) {
 	if (cfg_err != null)
 		return { ok: false, kind: "config_missing", message: cfg_err };
 
-	let lock = acquire(path, filter(stay_up_daemons(services), (d) => d != pkg));
+	let lock = acquire(path, filter(stay_up_locks(services), (p) => p != pkg));
 	// `null` means a test/legacy stub that pre-dates the contention sentinel;
 	// treat as per-package since that's the production-default flavour.
 	if (lock == null)
@@ -393,7 +407,7 @@ function multi_transaction(conn, params) {
 	}
 
 	let locks = { ...unique };
-	for (let d in stay_up_daemons(services)) locks[d] = true;
+	for (let p in stay_up_locks(services)) locks[p] = true;
 	locks = sort(keys(locks));
 	let lock_prefix = params.pkg_lock_prefix ?? PKG_LOCK_PREFIX;
 

@@ -838,6 +838,25 @@ t.describe('values.DNSMASQ_TEXT_RE and DNSMASQ_OPTION_RE', () => {
 	});
 });
 
+t.describe('values.dnsmasq_option_problem', () => {
+	t.it('flags whitespace before the start of another option, outside a string', () => {
+		for (let s in [ '3,10.99.0.1 6,10.99.0.1', '3,10.99.0.1\t6,10.99.0.1', '3,1.2.3.4  6 ,1.2.3.4',
+		                'option:router,1.2.3.4 option:dns-server,1.2.3.4',
+		                'option6:dns-server,[::] option6:ntp-server,[::]', '15,my 6,domain', '15,"a" 6,b',
+		                '15,a tag:x,3,1.2.3.4', '15,a net:x,3,1.2.3.4', '15,a set:x,3,1.2.3.4',
+		                '15,a vendor:x,1,2', '15,a encap:175,190,x', '15,a vi-encap:2,10,x' ])
+			t.assert_true(v.dnsmasq_option_problem(s) != null, s);
+	});
+
+	t.it('takes whitespace in a text value, in a string and after a comma', () => {
+		for (let s in [ '3,10.99.0.1', '15,my domain', '15,"my domain"', '15,"my 6,domain"', '15,a "6,b"',
+		                'encap:175, 190, "iscsi-client0"', '6,1.2.3.4, 5.6.7.8', '6,1.2.3.4 ,5.6.7.8',
+		                ' 6,1.2.3.4', 'option:domain-search,a.example b.example', '15,a b6,c',
+		                '15,a OPTION:x', 'option:dns-server,0.0.0.0' ])
+			t.assert_equal(v.dnsmasq_option_problem(s), null, s);
+	});
+});
+
 t.describe('values.unstorable_text_path', () => {
 	t.it('names the first key or string that holds a control byte uci drops', () => {
 		t.assert_equal(v.unstorable_text_path({ a: "x", b: "y\u0001z" }), "b");

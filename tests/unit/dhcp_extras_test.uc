@@ -139,4 +139,29 @@ t.describe('dhcp.servers dhcp_option', () => {
 		t.assert_deep_equal(h.get_one(stored([ '67,"a b"', '3,1.2.3.4' ]), ctx, 'lan').body.dhcp_option,
 		                    [ '67,"a b"', '3,1.2.3.4' ]);
 	});
+
+	// dnsmasq read `dhcp-option=lan,3,10.99.0.1 6,10.99.0.1` as option 3, refused the address
+	// `10.99.0.1 6`, and did not start, while the write answered 200.
+	t.it('refuses an entry that holds a second option, and takes a text option with spaces', () => {
+		let c = stored([ '3,10.99.0.1' ]);
+		let r = h.patch(c, ctx, 'lan', { dhcp_option: [ '3,10.99.0.1', '3,10.99.0.1 6,10.99.0.1' ] });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].field, 'dhcp_option[1]');
+		t.assert_equal(r.body.errors[0].code, 'invalid_format');
+		t.assert_true(index(r.body.errors[0].message, 'reads each entry as one option') >= 0);
+		t.assert_true(index(r.body.errors[0].message, 'its own entry') >= 0);
+		t.assert_deep_equal(c._state.uci.dhcp.lan.dhcp_option, [ '3,10.99.0.1' ]);
+		let opts = [ '3,10.99.0.1', '6,10.99.0.1', '15,my domain', '15,"my 6,domain"' ];
+		t.assert_equal(h.patch(c, ctx, 'lan', { dhcp_option: opts }).status, 200);
+		t.assert_deep_equal(c._state.uci.dhcp.lan.dhcp_option, opts);
+	});
+
+	// LuCI stores any entry, so a section can hold one that the rule refuses.
+	t.it('takes a write that leaves such a stored entry as it is, and the sweep lists the entry', () => {
+		let c = stored([ '15,my 6,domain' ]);
+		t.assert_equal(h.patch(c, ctx, 'lan', { leasetime: '1h' }).status, 200);
+		t.assert_equal(h.patch(c, ctx, 'lan', { dhcp_option: [ '15,my 6,domain', '3,1.2.3.4' ] }).status, 422);
+		t.assert_deep_equal(map(h.sweep(c), (s) => [ s.id, map(s.errors, (e) => e.field) ]),
+		                    [ [ 'lan', [ 'dhcp_option[0]' ] ] ]);
+	});
 });
