@@ -202,6 +202,22 @@ t.describe('token_store.create validation', () => {
 	});
 });
 
+// The first architectural principle: no write to /etc/config except through uci. A create created
+// the file itself when it was missing, which the transaction refuses first.
+t.describe('token_store, the config file', () => {
+	t.it('a create and a revoke open nothing under /etc/config', () => {
+		let opened = [];
+		let ts = t.load_with_fs({ ...fs, open: function(path, ...rest) {
+			if (substr(path, 0, 12) == "/etc/config/") { push(opened, path); return null; }
+			return fs.open(path, ...rest);
+		} }, [ "token_store" ]);
+		let c = bus.stub({}); seed_tokens(c);
+		t.assert_true(ts.create(c, { name: "fresh", scopes: [ "*:ro" ] }, [ "*:rw" ], 1700000000, noop_tx()).ok);
+		t.assert_true(ts.remove(c, "fresh", 1700000000, noop_tx()).ok);
+		t.assert_deep_equal(opened, []);
+	});
+});
+
 t.describe('token_store.remove', () => {
 	t.it('deletes an existing token', () => {
 		let c = bus.stub({}); seed_tokens(c);

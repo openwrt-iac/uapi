@@ -15,12 +15,11 @@ background.
 Two signals worth wiring into your automation:
 
 - **`X-Reload-Status`** response header on curated-resource writes: `ok` means the init
-  script ran and exited 0; `no_reload` means the resource has no reload
-  services. The header is intentionally not a "converged" promise.
-  In practice you will only ever see `ok`: all 42 writable resources declare
-  at least one reload service, so `no_reload` describes a resource shape that
-  does not currently exist. `system` used to be cited here as the example and
-  is not one, since it reloads `system` and `log`.
+  script ran and exited 0, and `no_reload` means that no init script ran. The header is
+  intentionally not a "converged" promise. All 42 writable resources declare at least
+  one reload service, so `no_reload` means that the write changed nothing in uci, which
+  only a PATCH can do: one that names no field, or sends the values that uci holds. A
+  write that commits nothing reloads nothing, since 3.2.0.
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
 

@@ -38,7 +38,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 403  | `tls_required`                  | Non-localhost client over plain HTTP                         |
 | 404  | `not_found`                     | Resource does not exist                                      |
 | 405  | `method_not_allowed`            | Verb not supported on this resource                          |
-| 409  | `conflict`                      | Duplicate name, dangling cross-reference, etc.               |
+| 409  | `conflict`                      | Duplicate name, dangling cross-reference, etc. Also a write whose package another writer, such as LuCI or a shell, changed during the request so that the writes of the request no longer apply. Nothing was written, and a retry reads the new state |
 | 409  | `unmanaged_resource`            | Tried to write to a section that needs to be adopted first   |
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
 | 412  | `precondition_failed`           | Stale `If-Match` ETag, a matching `If-None-Match` on a write, or JSON Patch `test` op mismatch |
@@ -51,7 +51,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
-| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio |
+| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist |
 
 `unsupported_media_type` is reserved and never emitted. uapi never rejects a body
 on `Content-Type`; the header is read for one thing only, switching a PATCH into
@@ -131,9 +131,9 @@ Every response carries:
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`.                                       |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | `ok` = init script reload exited 0 (NOT a runtime-convergence promise); `no_reload` = the resource has no reload services. See `docs/operations.md` "Success != converged". |
-| `X-Reload-Services`          | curated-resource writes and the `POST /batch` 207, when status=ok | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). |
-| `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied; `partial` = some were and some were skipped; `skipped` = it targeted interfaces and none was applied; `no_kernel` = the resource has no kernel path. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
+| `X-Reload-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci or the resource has no reload services. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Services`          | curated-resource writes and the `POST /batch` 207, when status=ok | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`). On a batch, the services of the packages that the batch changed. |
+| `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied. `partial` = some were and some were skipped. `skipped` = it targeted interfaces and none was applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path or the write changed nothing in uci. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. |
 | `X-Kernel-Applied`           | curated-resource writes and the `POST /batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
 | `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
@@ -159,10 +159,15 @@ every response whose body it builds and are absent from the ones assembled by ha
 `304 Not Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
 it replaces, and nothing else.
 
-`X-Reload-Status: no_reload` is documented but not currently reachable: every writable
-resource declares at least one reload service, so shipped responses always say `ok`.
-The value stays defined because it describes a resource with no reload services, which
-is a shape the transaction still handles.
+Every writable resource declares at least one reload service, so `X-Reload-Status:
+no_reload` and `X-Kernel-Status: no_kernel` on a WireGuard peer mean that the write changed
+nothing in uci. Only a PATCH can do that: it writes only the options that it changes, so a
+PATCH that names no field, or sends what uci already holds, commits nothing, and uapi then
+runs no init script and nothing in the kernel. A PUT, POST or DELETE always writes. A
+`POST /batch` reloads the services of the packages that its writes changed, and none when
+they changed nothing. Before 3.2.0 such a PATCH reloaded the daemon anyway and answered
+`ok`, and on a WireGuard peer without an endpoint the kernel apply removed the peer and set
+it again, which reset its session.
 
 ## Retry-After
 

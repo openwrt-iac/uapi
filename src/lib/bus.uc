@@ -171,6 +171,8 @@ function connect(opts) {
 		},
 		// False when the request wrote nothing to the package. libuci skips such a commit too, and
 		// a rewrite would drop the comments of the file and any commit that landed since the load.
+		// A commit that fails drops the copy, which holds the writes that the file does not, so a
+		// read after it, such as the restore's reconcile of the kernel, reads the file.
 		uci_commit: function(pkg) {
 			let ops = writes[pkg] ?? [];
 			if (length(ops) == 0) return false;
@@ -182,10 +184,14 @@ function connect(opts) {
 			try {
 				for (let op in ops) op();
 			} catch (e) {
-				die(sprintf("uci commit %s: another writer changed the package while the request ran, and its writes no longer apply: %s",
-				            pkg, e.message));
+				drop(pkg);
+				return { conflict: sprintf("another writer changed the package %s during the request, and the writes of the request no longer apply to it: %s. Nothing was written. A retry reads the new state.",
+				                           pkg, e.message) };
 			}
-			return wrote("commit", pkg, cursor.commit(pkg));
+			if (cursor.commit(pkg)) return true;
+			let err = cursor.error();
+			drop(pkg);
+			die(sprintf("uci commit %s: %s", pkg, err ?? "failed"));
 		},
 		uci_package_exists: function(pkg) {
 			return fs_mod.stat(config_dir + "/" + pkg) != null;

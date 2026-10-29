@@ -64,7 +64,7 @@ The response is the section as uci stores it, as a `GET` reads it, plus:
 }
 ```
 
-`reloaded: false` plus a `reload_note` string when uapi does not know which service to reload for the package. The configuration is on disk; you must reload the relevant daemon manually.
+`reloaded: false` plus a `reload_note` string when uapi does not know which service to reload for the package. The configuration is on disk, and you must reload the relevant daemon manually. Since 3.2.0 a write that changes nothing in uci, such as a `PATCH` with no option, also answers `reloaded: false`, an empty `reload_services` and a `reload_note`, because it commits nothing and reloads nothing.
 
 A package needs its file under `/etc/config/` before a write, as with `uci` itself. Without one, a `POST` answers `503 config_missing` and creates nothing, and a `PUT`, `PATCH` or `DELETE` answers `404`, because no section can exist. An empty file is enough, for example after `touch /etc/config/<package>`.
 
