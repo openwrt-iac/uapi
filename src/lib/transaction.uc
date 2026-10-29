@@ -224,6 +224,12 @@ function _finalize_after_reload(reload_err, restore_fn, body, services, ops, app
 	         reload_error: reload_err };
 }
 
+// Only here is it known that nothing stays written: in a batch, the restore of the packages that
+// it committed can still fail.
+function conflict_result(message) {
+	return { ok: false, kind: "conflict", message: message + ". Nothing was written. A retry reads the new state." };
+}
+
 function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, applied) {
 	let result = fn(conn, pkg);
 
@@ -234,7 +240,7 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 
 	let committed = conn.uci_commit(pkg);
 	if (type(committed) == "object")
-		return { ok: false, kind: "conflict", message: committed.conflict };
+		return conflict_result(committed.conflict);
 	// A package that the write left as it was gets no reload, which would read the same config
 	// again, and no restore, which would put the snapshot over what another writer committed since.
 	if (!committed)
@@ -434,9 +440,9 @@ function multi_transaction(conn, params) {
 			// restored: the snapshot of a package that this batch did not write
 			// would undo what another writer committed since, such as LuCI's
 			// delete of the section that made this batch's commit fail. The
-			// others are reverted first, because the cursor still holds the
-			// writes of the packages after the failure, and the reconcile of
-			// the restore reads the network package through it.
+			// others are reverted, so that the cursor holds no write that uci
+			// did not store, and the reconcile after a failed reload reads the
+			// network package from the file.
 			let committed = [];
 			let commit_err = null, conflict = null;
 			for (let pkg in sorted) {
@@ -455,18 +461,29 @@ function multi_transaction(conn, params) {
 				if (wrote) push(committed, pkg);
 			}
 			let ran = services_of(by_package, committed);
-			let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
-			let restore_apply = _make_restore(conn, reload, ran,
-			                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
-			let reload_err = commit_err ?? ((length(committed) > 0) ? apply() : null);
-			result = _finalize_after_reload(reload_err, function() {
+			let put_back = function() {
 				for (let pkg in sorted)
 					if (index(committed, pkg) < 0) conn.uci_revert(pkg);
 				for (let pkg in committed) conn.uci_import(pkg, snapshots[pkg]);
-				return restore_apply();
-			}, inner.body, ran, wg_ops, wg_applied);
-			if (conflict != null && result.kind == "reload_failed_restored")
-				result = { ok: false, kind: "conflict", message: conflict };
+			};
+			if (commit_err != null) {
+				// The reload and the kernel apply come after every commit, so neither ran: the
+				// daemons and the kernel hold what they held before the batch, and the restored
+				// files match it again. A reload or a reconcile there would reset WireGuard
+				// sessions and undo what another writer put in the kernel by hand.
+				result = _finalize_after_reload(commit_err, function() { put_back(); return null; },
+				                                inner.body, ran, wg_ops, wg_applied);
+				if (conflict != null && result.kind == "reload_failed_restored")
+					result = conflict_result(conflict);
+			} else if (length(committed) == 0) {
+				result = _finalize_after_reload(null, null, inner.body, [], wg_ops, wg_applied);
+			} else {
+				let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
+				let restore_apply = _make_restore(conn, reload, ran,
+				                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
+				result = _finalize_after_reload(apply(), function() { put_back(); return restore_apply(); },
+				                                inner.body, ran, wg_ops, wg_applied);
+			}
 		}
 	} catch (e) { caught = e; }
 

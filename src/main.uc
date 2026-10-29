@@ -443,21 +443,30 @@ function batch_resolve_target(parts) {
 	return null;
 }
 
-function batch_run_one(conn, sub_ctx, scopes, op) {
+function batch_aborted(ctx, index, envelope) {
+	return {
+		status: envelope.status,
+		headers: { "Content-Type": "application/json",
+		           "X-Request-Id": ctx.request_id },
+		body: {
+			code: "batch_partial_failure",
+			message: sprintf("batch aborted at index %d; all changes reverted", index),
+			request_id: ctx.request_id,
+			aborted_at_index: index,
+			error: envelope.body,
+			reverted: true,
+		},
+	};
+}
+
+function batch_run_one(conn, sub_ctx, op) {
 	if (type(op) != "object" || type(op.method) != "string" || type(op.path) != "string")
 		return { status: 400, headers: {},
 		         body: { code: "bad_request",
 		                 message: "sub-request must have string method + path",
 		                 request_id: sub_ctx.request_id } };
 	let parts = split_path(op.path);
-	let domain = parts[0] ?? "";
-	let sub = length(parts) >= 2 ? parts[1] : null;
 	let m = op.method;
-	let scope_path = sub != null ? [domain, sub] : [domain];
-	let denied = scope.require_or_deny(errors, sub_ctx, scopes, scope_path, method_verb(m),
-		sprintf("%s on %s", m, op.path));
-	if (denied != null) return denied;
-
 	let tgt = batch_resolve_target(parts);
 	if (tgt == null)
 		return errors.error(sub_ctx, "not_found",
@@ -501,17 +510,23 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		return errors.error(ctx, "bad_request", "operations capped at 50");
 
 	// Pre-resolve targets up-front: a typo aborts before any lock is taken.
-	// Only WRITE ops contribute to the lock/reload set.
+	// Only WRITE ops contribute to the lock/reload set. The scopes are checked here, before the
+	// transaction answers 503 for a missing config file or init script, which told a token whether
+	// a package that it has no scope for is installed.
 	let reloads = {};
 	for (let i = 0; i < length(ops); i++) {
 		let op = ops[i];
 		if (type(op) != "object" || type(op.path) != "string")
 			return errors.error(ctx, "bad_request",
 				sprintf("operations[%d] missing path", i));
-		let tgt = batch_resolve_target(split_path(op.path));
+		let parts = split_path(op.path);
+		let tgt = batch_resolve_target(parts);
 		if (tgt == null)
 			return errors.error(ctx, "not_found",
 				sprintf("operations[%d]: no batch-eligible handler for %s", i, op.path));
+		let denied = scope.require_or_deny(errors, { request_id: ctx.request_id + "." + i }, token.scopes,
+			slice(parts, 0, 2), method_verb(op.method), sprintf("%s on %s", op.method, op.path));
+		if (denied != null) return batch_aborted(ctx, i, denied);
 		if (op.method == "POST" || op.method == "PUT"
 		    || op.method == "PATCH" || op.method == "DELETE")
 			reloads[tgt.package] = uniq([ ...(reloads[tgt.package] ?? []), ...tgt.reload ]);
@@ -527,7 +542,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	let run_ops = function(c) {
 		for (let i = 0; i < length(ops); i++) {
 			let sub_ctx = { request_id: ctx.request_id + "." + i, kernel_sink: kernel_ops };
-			let resp = batch_run_one(c, sub_ctx, token.scopes, ops[i]);
+			let resp = batch_run_one(c, sub_ctx, ops[i]);
 			push(results, { status: resp.status, body: resp.body });
 			if (resp.status >= 400) {
 				aborted = { index: i, envelope: resp };
@@ -552,22 +567,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		});
 	}
 
-	if (aborted != null) {
-		return {
-			status: aborted.envelope.status,
-			headers: { "Content-Type": "application/json",
-			           "X-Request-Id": ctx.request_id },
-			body: {
-				code: "batch_partial_failure",
-				message: sprintf("batch aborted at index %d; all changes reverted",
-				                 aborted.index),
-				request_id: ctx.request_id,
-				aborted_at_index: aborted.index,
-				error: aborted.envelope.body,
-				reverted: true,
-			},
-		};
-	}
+	if (aborted != null)
+		return batch_aborted(ctx, aborted.index, aborted.envelope);
 
 	if (r.kind == "init_script_missing")
 		return errors.error(ctx, "init_script_missing", r.message);

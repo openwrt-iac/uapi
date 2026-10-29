@@ -333,7 +333,8 @@ t.describe('transaction, the restore writes back only what the request committed
 	// LuCI deletes and commits a section that the batch wrote into while the batch runs, so the
 	// replay of the batch's writes to that package fails. The snapshot of that package predates
 	// LuCI's delete, and writing it back brought the section back. The cursor still held the writes
-	// of the packages that the batch did not commit, and the restore read them.
+	// of the packages that the batch did not commit, and the restore read them. The reload comes
+	// after every commit, so a failed commit leaves no daemon to reload.
 	let batch = function(conn, reload) {
 		let r = tx.multi_transaction(conn, {
 			packages: [ "aa", "bb", "cc", "dd" ],
@@ -346,14 +347,17 @@ t.describe('transaction, the restore writes back only what the request committed
 		return r;
 	};
 	let restored = (conn) => filter(conn._state.uci_ops, (o) => o[0] == "import" || o[0] == "revert");
-	const CONFLICT = "another writer changed the package cc during the request, and the writes of the request no longer apply to it: uci set cc: Entry not found. Nothing was written. A retry reads the new state.";
+	const CONFLICT = "another writer changed the package cc during the request, and the writes of the request no longer apply to it: uci set cc: Entry not found";
 
 	t.it('a batch whose replay no longer applies answers conflict, after it restores what it committed and drops the rest', () => {
 		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {}, dd: {} } });
 		conn.uci_commit = (pkg) => (pkg == "cc") ? { conflict: CONFLICT } : (pkg == "aa");
-		let r = batch(conn);
-		t.assert_deep_equal(r, { ok: false, kind: "conflict", message: CONFLICT });
+		let tracker = track_reload();
+		let r = batch(conn, tracker.fn);
+		t.assert_deep_equal(r, { ok: false, kind: "conflict",
+		                         message: CONFLICT + ". Nothing was written. A retry reads the new state." });
 		t.assert_deep_equal(restored(conn), [ [ "revert", "bb" ], [ "revert", "cc" ], [ "revert", "dd" ], [ "import", "aa" ] ]);
+		t.assert_deep_equal(tracker.calls, []);
 	});
 
 	t.it('a batch whose commit the cursor refuses is restored the same way, and reports the refusal', () => {
@@ -362,13 +366,16 @@ t.describe('transaction, the restore writes back only what the request committed
 			if (pkg == "cc") die("uci commit cc: No space left on device");
 			return pkg == "aa";
 		};
-		let r = batch(conn);
+		let tracker = track_reload();
+		let r = batch(conn, tracker.fn);
 		t.assert_equal(r.kind, "reload_failed_restored");
 		t.assert_equal(r.reload_error, "uci_commit(cc) failed: uci commit cc: No space left on device");
 		t.assert_deep_equal(restored(conn), [ [ "revert", "bb" ], [ "revert", "cc" ], [ "revert", "dd" ], [ "import", "aa" ] ]);
+		t.assert_deep_equal(tracker.calls, []);
 	});
 
-	t.it('a conflict that the restore cannot undo is unrecovered', () => {
+	// A 500 must not tell the client that nothing was written.
+	t.it('a conflict that the restore cannot undo is unrecovered, and says only what happened', () => {
 		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {}, dd: {} } });
 		conn.uci_commit = (pkg) => (pkg == "cc") ? { conflict: CONFLICT } : (pkg == "aa");
 		conn.uci_import = function() { die("restore of aa: cannot open it"); };
