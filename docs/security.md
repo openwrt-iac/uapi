@@ -161,6 +161,10 @@ value that LuCI, `uci` or another writer stored stays until a write replaces it.
 `raw:<package>:rw` with a domain scope of that package counts as a root scope for each package
 that a root daemon or script reads.
 
+uapi checks the dnsmasq config after a reload with `dnsmasq --test`, as root and outside the jail
+that procd gives dnsmasq, so a `conf-script` in that config runs there too. Only `raw:dhcp:rw` with
+a domain scope of `dhcp`, a root scope already, can write such a line.
+
 ### Audit consequence
 
 The token *name* is logged on every audit line. Tokens should be named for

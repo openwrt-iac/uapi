@@ -896,13 +896,33 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		t.assert_equal(tx.dnsmasq_check(fake([ { main: true } ]), [ "dnsmasq" ], tester([ "main" ]).run)(), REFUSED);
 	});
 
-	t.it('tests a new instance, and skips one that was listed and not running before the write', () => {
+	// The SIGHUP race of a reload can leave an instance stopped for 5 s, and procd then starts it on
+	// the config that the next write leaves.
+	t.it('tests every instance, a new one and one that was not running before included', () => {
 		let lists = [ { main: true, guest: false }, { main: true, guest: false, added: true } ];
-		let tests = tester([ "guest" ]);
+		let tests = tester([]);
 		t.assert_equal(tx.dnsmasq_check(fake(lists), [ "dnsmasq" ], tests.run)(), null);
-		t.assert_deep_equal(map(tests.ran, (a) => a[3]), [ conf("main"), conf("added") ]);
-		t.assert_equal(tx.dnsmasq_check(fake(lists), [ "dnsmasq" ], tester([ "added" ]).run)(),
-		               "dnsmasq refuses its config added: bad IP address at line 33 of " + conf("added"));
+		t.assert_deep_equal(map(tests.ran, (a) => a[3]), [ conf("main"), conf("guest"), conf("added") ]);
+		for (let name in [ "guest", "added" ])
+			t.assert_equal(tx.dnsmasq_check(fake(lists), [ "dnsmasq" ], tester([ name ]).run)(),
+			               sprintf("dnsmasq refuses its config %s: bad IP address at line 33 of %s", name, conf(name)));
+	});
+
+	t.it('tests an instance that service list no longer shows with its command from before', () => {
+		let tests = tester([ "main" ]);
+		t.assert_equal(tx.dnsmasq_check(fake([ { main: true }, {} ]), [ "dnsmasq" ], tests.run)(), REFUSED);
+		t.assert_equal(length(tests.ran), 1);
+	});
+
+	t.it('skips an instance without a dnsmasq command, so the check cannot throw after the commit', () => {
+		let conn = ubus.stub();
+		conn.set_ubus_response("service", "list", () => ({ dnsmasq: { instances: {
+			bare: { running: true }, odd: { running: true, command: "/usr/sbin/dnsmasq" },
+			other: { running: true, command: [ "/bin/sh", "-c", "exit 1" ] },
+		} } }));
+		let tests = tester([]);
+		t.assert_equal(tx.dnsmasq_check(conn, [ "dnsmasq" ], tests.run)(), null);
+		t.assert_equal(length(tests.ran), 0);
 	});
 
 	function write(bad_after_restore) {
@@ -926,6 +946,29 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		w = write([ "main" ]);
 		t.assert_equal(w.r.kind, "reload_failed_unrecovered");
 		t.assert_equal(w.r.restore_error, "reload during restore failed: " + REFUSED);
+	});
+
+	// The tests above pass their own watch, so this one runs the default checks and the real popen.
+	t.it('a write that reloads dnsmasq runs --test by default, and the restore runs it again', () => {
+		let dir = "/tmp/uapi-test-dnsmasq-check";
+		system(sprintf("rm -rf %s; mkdir -p %s/refuse %s/accept", dir, dir, dir));
+		fs.writefile(dir + "/refuse/dnsmasq", "#!/bin/sh\necho; echo 'dnsmasq: bad IP address at line 1 of x'; exit 1\n");
+		fs.writefile(dir + "/accept/dnsmasq", "#!/bin/sh\nexit 0\n");
+		for (let d in [ "refuse", "accept" ]) fs.chmod(dir + "/" + d + "/dnsmasq", 0755);
+		let n = 0;
+		let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', leasetime: '12h' } } } });
+		conn.set_ubus_response("service", "list", (args) => ({ dnsmasq: { instances: { main: { running: true,
+			command: [ dir + ((n++ < 2) ? "/refuse" : "/accept") + "/dnsmasq", "-C", conf("main") ] } } } }));
+		let r = tx.transaction(conn, build_params({
+			package: "dhcp", reload_services: [ "dnsmasq" ],
+			acquire: function() { return {}; }, release: function() {},
+			fn: function(c, pkg) { c.uci_set(pkg, "lan", "leasetime", "1h"); return { ok: true, body: {} }; },
+		}));
+		system("rm -rf " + dir);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(r.reload_error, "dnsmasq refuses its config main: bad IP address at line 1 of x");
+		t.assert_equal(conn._state.uci.dhcp.lan.leasetime, "12h");
+		t.assert_equal(n, 3);
 	});
 });
 

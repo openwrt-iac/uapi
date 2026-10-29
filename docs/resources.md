@@ -127,7 +127,7 @@ Reload: `network`. Requires `rpcd-mod-iwinfo` at runtime for the
 
 Reload: `dnsmasq`, except `dhcp/odhcpd`, which declares `odhcpd`.
 
-After a write that reloads dnsmasq, uapi runs the command of each dnsmasq instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq refuses it, the write answers `500 reload_failed_restored` and restores the previous config, and no write waits for dnsmasq. dnsmasq refuses a line such as a `dhcp_option` of `3,not-an-address` in a section that it reads, one that is not ignored, on an interface that is up and static. The check covers an instance that ran before the write and one that the write adds, and skips one that was listed and not running before.
+After a write that reloads dnsmasq, uapi runs the command of each dnsmasq instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq refuses it, the write answers `500 reload_failed_restored` and restores the previous config. dnsmasq refuses a line such as a `dhcp_option` of `3,not-an-address` in a section that it reads, one that is not ignored, on an interface that is up and static. The check covers every instance, one that is not running included, so on a router whose dnsmasq config was refused before the write, a write that does not fix it answers `500 reload_failed_unrecovered`. `--test` only parses: a config that dnsmasq parses but cannot start with, such as one whose port another daemon holds, still answers 2xx. No write waits for the daemon to start, and each pays one parse of the whole config per instance, which grows with its size, and again on a restore.
 
 ## System
 

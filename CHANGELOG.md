@@ -778,9 +778,9 @@ All notable changes to this project will be documented in this file. Format foll
 - **The descriptions of `unbound/srv.srv_line` and `unbound/ext.ext_line` no longer say that
   `unbound-checkconf` checks the lines.** Nothing runs it. unbound parses the lines when it
   restarts, and a line that it cannot parse makes it refuse its whole config. (#257)
-- **A write that makes unbound stop, or that gives dnsmasq a config that it refuses, answers
-  `500 reload_failed_restored` and restores the previous config.** procd starts unbound with its new
-  config on its own, so the init script exited 0, and unbound then exited on a `srv_line` or
+- **A write that makes unbound stop, or that gives dnsmasq a config that it refuses to parse,
+  answers `500 reload_failed_restored` and restores the previous config.** procd starts unbound with
+  its new config on its own, so the init script exited 0, and unbound then exited on a `srv_line` or
   `ext_line` that it cannot parse. DNS stayed down while the write answered 200. When unbound runs,
   a write that reloads `unbound` or `unbound-uci-ext` now waits 2 s for each unbound instance to
   keep running. The restore runs the same check, so a restore that does not bring unbound back
@@ -791,16 +791,19 @@ All notable changes to this project will be documented in this file. Format foll
   second, as two writes to one package do. dnsmasq.init exited 0 too when dnsmasq then refused its
   new config, such as a `dhcp_option` of `3,not-an-address`, and DHCP and DNS stopped on the whole
   router. After a write that reloads `dnsmasq`, uapi now runs the command of each dnsmasq instance
-  with `--test`, which reads the config that dnsmasq.init wrote and the files that it includes, as a
-  start does. A refusal answers `500 reload_failed_restored`, with a `reload_error` that names the
+  with `--test`, which parses the config that dnsmasq.init wrote and the files that it includes, and
+  exits. A refusal answers `500 reload_failed_restored`, with a `reload_error` that names the
   instance and gives the first line of dnsmasq's output, and a restore whose config dnsmasq refuses
-  too answers `reload_failed_unrecovered`. This applies to `dhcp/servers`, `dhcp/hosts`,
-  `dhcp/dnsmasq`, a `/batch` that holds one of them, and a raw write to the `dhcp` package. No write
-  waits for dnsmasq. The check covers an instance that ran before the write and one that the write
-  adds, and skips one that was listed and not running before. OpenWrt's reload of dnsmasq can
-  restart the daemon, and uapi does not report that restart. A write that answered 200 and left
-  unbound or dnsmasq down now answers 500, which is the tightening carve-out of
-  `docs/versioning.md`. (#259, #279)
+  too answers `reload_failed_unrecovered`. The check covers every instance, one that is not running
+  included, since procd starts it on that config, so on a router whose dnsmasq config was refused
+  before the write, a write that does not fix it answers `reload_failed_unrecovered`. A config that
+  dnsmasq parses but cannot start with, such as one whose port another daemon holds, still answers
+  2xx. This applies to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, a `/batch` that holds one of
+  them, and a raw write to the `dhcp` package. No write waits for the daemon to start. Each pays one
+  parse of the whole config per instance, which grows with its size, and again on a restore.
+  OpenWrt's reload of dnsmasq can restart the daemon, and uapi does not report that restart. A write
+  that answered 200 and left unbound down, or gave dnsmasq a config that it refuses to parse, now
+  answers 500, which is the tightening carve-out of `docs/versioning.md`. (#259, #279)
 - **A PATCH body no longer has to carry the fields that a create requires.** The spec declared the
   `application/json` body of each PATCH as an `allOf` of the Request schema, with its `required`
   list and its conditionals. The server checks the required fields after it merges the body into
