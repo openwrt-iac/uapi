@@ -38,6 +38,13 @@ function default_check_services(services) {
 	return null;
 }
 
+// A daemon that reads the package but that an image can lack, as odhcpd reads dhcp, is reloaded
+// when its init script is there and skipped when it is not. Refusing the write would answer 503 on
+// every router without it.
+function installed(services, check_services) {
+	return filter(services ?? [], (svc) => check_services([ svc ]) == null);
+}
+
 // A write into a config file that does not exist stores nothing, and the uci cursor raises
 // nothing either, so this answers first. Nothing on the box created the file: the package that
 // ships it is missing, or, for `wireless`, the radio that `wifi config` would have described.
@@ -328,7 +335,6 @@ function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 
 function transaction(conn, params) {
 	let pkg = params.package;
-	let services = params.reload_services ?? [];
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
 	let acquire = params.acquire ?? function(p, also) { return default_acquire_pkg(p, pkg, also); };
@@ -347,6 +353,8 @@ function transaction(conn, params) {
 	if (params.bare === true)
 		return fn(conn, pkg);
 
+	let services = [ ...(params.reload_services ?? []),
+	                 ...installed(params.reload_if_installed, check_services) ];
 	let svc_err = check_services(services);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
@@ -398,15 +406,20 @@ function services_of(by_package, packages) {
 
 // multi_transaction snapshots, EX-locks, and on-failure restores N packages
 // atomically. Caller passes a package list, the reload services of each package
-// keyed by package, and an fn that performs all uci writes inside the locked
-// region. On success every package that the batch wrote commits, and the
-// union of their reload services runs once. On a failure after the commits,
+// keyed by package, those to reload only when installed keyed the same way, and
+// an fn that performs all uci writes inside the locked region. On success every
+// package that the batch wrote commits, and the union of their reload services
+// runs once. On a failure after the commits,
 // every package that the batch committed is restored from its snapshot.
 // Per-package EX locks are acquired in sorted order to avoid deadlocks vs
 // other writers.
 function multi_transaction(conn, params) {
 	let packages = params.packages ?? [];
-	let by_package = params.reload_services ?? {};
+	let check_services = params.check_services ?? default_check_services;
+	let by_package = {};
+	for (let p in packages)
+		by_package[p] = [ ...(params.reload_services?.[p] ?? []),
+		                  ...installed(params.reload_if_installed?.[p], check_services) ];
 	let services = services_of(by_package, packages);
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
@@ -414,7 +427,6 @@ function multi_transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let watch = { start: params.watch ?? check_daemons };
-	let check_services = params.check_services ?? default_check_services;
 
 	let svc_err = check_services(services);
 	if (svc_err != null)

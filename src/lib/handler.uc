@@ -758,7 +758,8 @@ function make(resource, opts) {
 	}
 
 	function tx_params(extra) {
-		let p = { package: pkg, reload_services: reload_services };
+		let p = { package: pkg, reload_services: reload_services,
+		          reload_if_installed: resource.reload_if_installed };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;
@@ -1101,7 +1102,8 @@ function make_singleton(resource, opts) {
 	let singleton_section_name = resource.singleton_section_name ?? "main";
 
 	function tx_params(extra) {
-		let p = { package: pkg, reload_services: reload_services };
+		let p = { package: pkg, reload_services: reload_services,
+		          reload_if_installed: resource.reload_if_installed };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;

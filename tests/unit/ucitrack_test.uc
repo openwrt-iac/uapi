@@ -76,6 +76,12 @@ t.describe('ucitrack.reload_services, fallback table', () => {
 		t.assert_deep_equal(r.services, ['dnsmasq']);
 	});
 
+	// As LuCI's ucitrack does. odhcpd's procd trigger does not fire for a commit through libuci.
+	t.it('reloads odhcpd for dhcp too, when it is installed', () => {
+		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'dhcp').if_installed, ['odhcpd']);
+		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'network').if_installed, []);
+	});
+
 	t.it('maps wireless to network via fallback', () => {
 		let c = ubus.stub();
 		let r = ucitrack.reload_services(c, 'wireless');

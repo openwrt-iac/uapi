@@ -312,8 +312,10 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   entry in which an address is followed by whitespace and a second option answers 422, and a
   write whose generated config `dnsmasq --test` refuses answers `500 reload_failed_restored`
   and restores the previous config (#279). The request schemas declare the bounds that a write
-  accepts, through `x-uapi-write`.
-- **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
+  accepts, through `x-uapi-write`. A write to `dhcp/servers`, `dhcp/hosts` or the raw `dhcp`
+  package reloads odhcpd too, and one to `dhcp/odhcpd` reloads dnsmasq too, when the router
+  ships that daemon, so neither daemon keeps its old config after a write that answered 200
+  (#280).- **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
   Before, the first apply that changed a radio removed its `path`, and the radio stayed down
   with all its SSIDs.
 - **Raw writes answer with what uci stored**, refuse what uci cannot store, and remove an option
