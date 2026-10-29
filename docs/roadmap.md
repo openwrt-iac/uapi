@@ -305,22 +305,23 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   `ip6hint` and `ip6ifaceid`, apply to every proto, and `sourcefilter`, `ip6class`, `ip6weight`
   and `broadcast_flag` are new.
 - **A write that the daemon refuses or ignores no longer answers 200.** An `mtu` that netifd or
-  pppd does not apply, table 0, a `goto` that the kernel refuses and a raw option that uci cannot
-  store answer 422, and a package with no file under `/etc/config/` answers `503
-  config_missing`. The request schemas declare the bounds that a write accepts, through
-  `x-uapi-write`.
-- **A PUT of a radio or an SSID keeps its hardware binding and its 802.11r group.** Before, the
-  first apply that changed a radio removed its `path`, and the radio stayed down with all its
-  SSIDs.
+  pppd does not apply, table 0, a `goto` that the kernel refuses and a raw option that uci
+  cannot store answer 422, and a package with no file under `/etc/config/` answers
+  `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /batch` then
+  restores what it committed and runs no reload and no kernel apply (#277). The request schemas
+  declare the bounds that a write accepts, through `x-uapi-write`.
+- **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
+  Before, the first apply that changed a radio removed its `path`, and the radio stayed down
+  with all its SSIDs.
 - **Raw writes answer with what uci stored**, refuse what uci cannot store, and remove an option
-  for `null` and `""`. Every write reads the package only after it takes the lock, so a commit by
-  LuCI just before it is no longer invisible to it.
+  for `null` and `""`. Every write reads the package only after it takes the lock, so a commit
+  by LuCI just before it is no longer invisible to it.
 - **Audits of the values that reach a root shell or a daemon config.** A WireGuard peer's
   `allowed_ips` and a stored `persistent_keepalive` reached a root shell, `endpoint_host` and a
   wireless `key` added lines to a daemon config, a raw `.type` passed the scope check as another
-  type, and an IPv6 `allowed_cidrs` entry could admit every address. Each one is fixed. The values
-  that init scripts copy into the configs and commands of snmpd, dnsmasq, unbound, lldpd, mwan3,
-  netifd and wifi-scripts refuse the characters that end a line or an argument, and
+  type, and an IPv6 `allowed_cidrs` entry could admit every address. Each one is fixed. The
+  values that init scripts copy into the configs and commands of snmpd, dnsmasq, unbound, lldpd,
+  mwan3, netifd and wifi-scripts refuse the characters that end a line or an argument, and
   `docs/security.md` lists the write scopes that reach root.
 - **Values that a daemon refuses or misreads answer 422.** A wireless `ssid` over 32 bytes, a
   `key` in a form that hostapd or wpa_supplicant refuses, mode `wds`, a dnsmasq value with a
@@ -341,10 +342,10 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   without `required`, conditionals or defaults, and takes null where the server removes the
   field, so a strict client sends what the server takes (#258, #263).
 - **A write answers what uci then holds.** The body and the ETag of a write come from the
-  section that it staged, and a PATCH that changes nothing writes nothing and keeps the comments
-  of the package (#272, #275). An option that a daemon splits into words, such as an lldpd
-  `interface` or a dnsmasq `dhcp_option` or `mac`, reads as its words (#274), and
-  `wireless/devices` reads its numbers as netifd does (#257).
+  section that it staged, and a PATCH that changes nothing writes nothing, keeps the comments of
+  the package (#272, #275), and runs no reload and no kernel apply (#277). An option that a
+  daemon splits into words, such as an lldpd `interface` or a dnsmasq `dhcp_option` or `mac`,
+  reads as its words (#274), and `wireless/devices` reads its numbers as netifd does (#257).
 - **The state that uapi keeps in tmpfs is private.** The idempotency cache, the metrics, the
   rate-limit buckets, the error ring and the last-used markers of the tokens keep their files
   under `/var/run`, in directories of mode 0700 with files of mode 0600 (#266, #270).

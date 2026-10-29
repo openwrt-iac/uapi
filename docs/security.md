@@ -157,8 +157,7 @@ uapi refuses the characters that end the line or the argument, so that a value c
 directive, a command or a command argument. The check runs when a write goes through uapi, so a
 value that LuCI, `uci` or another writer stored stays until a write replaces it.
 
-`/raw/` checks a value only for what uci can store, never for what a daemon reads, so a raw write
-scope can store a newline, a quote or whitespace in any option of its package.
+`/raw/` checks a value only for what uci can store, never for what a daemon reads.
 `raw:<package>:rw` with a domain scope of that package counts as a root scope for each package
 that a root daemon or script reads.
 

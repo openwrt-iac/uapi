@@ -43,14 +43,14 @@ no partial state is left behind.
 The uci config file has to exist too. `wireless/devices` and
 `wireless/interfaces` need `/etc/config/wireless`, which only
 wifi-scripts creates, with `wifi config` when it finds a radio. LuCI
-never creates a radio section. On a router or an image without it, a write answers `503 config_missing`
-with the missing path, before any uci write. That includes a PUT or PATCH
-of an id that a GET answers 404 for, as with `init_script_missing`. A
-DELETE answers 404, because no section can exist there, and a client
-reads that as already gone. A DELETE in a `POST /batch` answers the 503,
-because the batch commits as one write. A read answers an empty list.
-The same applies to any package whose file was removed. An empty file
-is enough.
+never creates a radio section. On a router or an image without it, a
+write answers `503 config_missing` with the missing path, before any uci
+write. That includes a PUT or PATCH of an id that a GET answers 404 for,
+as with `init_script_missing`. A DELETE answers 404, because no section
+can exist there, and a client reads that as already gone. A DELETE in a
+`POST /batch` answers the 503, because the batch commits as one write. A
+read answers an empty list. The same applies to any package whose file
+was removed. An empty file is enough.
 
 Install the daemon either out of band (`apk add unbound`, etc.) or
 through uapi itself via `POST /api/v3/packages/installed`. The latter
