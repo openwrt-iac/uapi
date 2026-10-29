@@ -94,6 +94,24 @@ t.describe('wireless writes on a router without a radio', () => {
 			t.assert_true(match(r.body.message, /\/etc\/config\/wireless/) != null);
 			t.assert_deep_equal(conn._state.uci_ops, []);
 		});
+
+		t.it(sprintf("%s: a PUT and a PATCH answer 503 config_missing", c[0].type), () => {
+			let conn = ubus.stub({ uci: {}, missing_packages: [ "wireless" ] });
+			let h = handler.make(c[0], { tx });
+			for (let r in [ h.replace(conn, ctx, "radio0", c[1]), h.patch(conn, ctx, "radio0", c[1]) ])
+				t.assert_deep_equal([ r.status, r.body.code ], [ 503, "config_missing" ]);
+		});
+
+		// The transaction refuses a missing file before any write, and it refused a DELETE too, so a
+		// client that reads a 404 on DELETE as already gone, as a Terraform destroy does after the
+		// package was removed, failed on a 503. That package usually took its init script along.
+		t.it(sprintf("%s: a DELETE answers 404, because no section can exist", c[0].type), () => {
+			let conn = ubus.stub({ uci: {}, missing_packages: [ "wireless" ] });
+			let r = handler.make(c[0], { tx: { ...tx, check_services: () => "init script /etc/init.d/network not found" } })
+			               .remove(conn, ctx, "radio0");
+			t.assert_deep_equal([ r.status, r.body.code ], [ 404, "not_found" ]);
+			t.assert_deep_equal(conn._state.uci_ops, []);
+		});
 	}
 });
 

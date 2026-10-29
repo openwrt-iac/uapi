@@ -115,13 +115,17 @@ function normalize_section(s) {
 	return out;
 }
 
-function build_response_body(view, reload_info) {
-	let body = normalize_section(view);
-	body.reloaded = !!reload_info.known;
-	body.reload_services = reload_info.services;
+// From the result of the transaction, because a write that changed nothing reloads nothing.
+function with_reload(result, reload_info) {
+	if (!result.ok) return result;
+	let body = result.body;
+	body.reloaded = length(result.reload_services) > 0;
+	body.reload_services = result.reload_services;
 	if (!reload_info.known)
 		body.reload_note = "no reload service is known for this package; configuration is on disk but no daemon was notified";
-	return body;
+	else if (!body.reloaded)
+		body.reload_note = "the write changed nothing, so no daemon was reloaded";
+	return result;
 }
 
 function translate_raw_tx(ctx, result) {
@@ -260,11 +264,11 @@ function create(conn, ctx, scopes, pkg, body) {
 				         message: sprintf("Section %s.%s already exists", pkg, new_id) };
 			c.uci_create_section(p, new_id, sec_type);
 			for (let k in w.opts) c.uci_set(p, new_id, k, w.opts[k]);
-			return { ok: true, body: build_response_body(load_section(c, p, new_id), reload) };
+			return { ok: true, body: normalize_section(load_section(c, p, new_id)) };
 		},
 	});
 
-	return translate_raw_tx(ctx, result);
+	return translate_raw_tx(ctx, with_reload(result, reload));
 }
 
 function replace(conn, ctx, scopes, pkg, id, body) {
@@ -310,11 +314,11 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 				c.uci_delete(p, id, k);
 			}
 			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
-			return { ok: true, body: build_response_body(load_section(c, p, id), reload) };
+			return { ok: true, body: normalize_section(load_section(c, p, id)) };
 		},
 	});
 
-	return translate_raw_tx(ctx, result);
+	return translate_raw_tx(ctx, with_reload(result, reload));
 }
 
 function patch(conn, ctx, scopes, pkg, id, body) {
@@ -352,11 +356,11 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 			for (let k in DERIVED_FIELDS)
 				if (exists(existing, k)) c.uci_set(p, id, k, []);
 			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
-			return { ok: true, body: build_response_body(load_section(c, p, id), reload) };
+			return { ok: true, body: normalize_section(load_section(c, p, id)) };
 		},
 	});
 
-	return translate_raw_tx(ctx, result);
+	return translate_raw_tx(ctx, with_reload(result, reload));
 }
 
 function remove(conn, ctx, scopes, pkg, id) {

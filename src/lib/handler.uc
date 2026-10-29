@@ -569,10 +569,12 @@ function default_footprint(resource, existing, old_opts, new_opts) {
 }
 
 function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
+	let wrote = false;
 	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (exists(new_opts, k) || !exists(existing, k)) continue;
 		c.uci_delete(p, id, k);
+		wrote = true;
 	}
 	for (let k in new_opts) {
 		// Write only what the patch moved. old_opts is toUci(fromUci(existing)), so a key
@@ -610,7 +612,9 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		if (!clearing && unchanged && (exists(existing, k) || is_default))
 			continue;
 		c.uci_set(p, id, k, new_opts[k]);
+		wrote = true;
 	}
+	return wrote;
 }
 
 // A write-only field is masked on read, so a client that reads a section and
@@ -943,10 +947,13 @@ function make(resource, opts) {
 
 				let new_opts = resource.toUci(r.merged);
 				let old_opts = resource.toUci(existing_view);
-				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
-				                 default_footprint(resource, existing, old_opts, new_opts));
+				let wrote = diff_apply_patch(c, p, id, existing, old_opts, new_opts,
+				                             default_footprint(resource, existing, old_opts, new_opts));
 				let out = resource.fromUci(load_section(c, p, id), conn);
-				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+				// The ops come from new_opts, which a PATCH builds whether it wrote or not, and a peer
+				// without an endpoint is removed and set again, which resets its session.
+				if (wrote)
+					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
 				return { ok: true, body: out };
 			},
 		}));
@@ -955,6 +962,11 @@ function make(resource, opts) {
 	}
 
 	function remove(conn, ctx, id) {
+		// The transaction refuses a write into a missing config file, and a section cannot exist
+		// there. A client reads a 404 on DELETE as already gone, as a Terraform destroy does after
+		// the package that ships the file was removed.
+		if (!conn.uci_package_exists(pkg))
+			return errors.error(ctx, "not_found", sprintf("No %s with id %J", sec_type, id));
 		let kops = ctx.kernel_sink ?? [];
 		// Deleting the interface the caller arrived through strands them as surely as
 		// renumbering it, and none of LuCI's four field names covers a delete.

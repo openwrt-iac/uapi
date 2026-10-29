@@ -603,12 +603,14 @@ All notable changes to this project will be documented in this file. Format foll
   ignored. On a router without a radio, `POST /wireless/devices` and `POST /wireless/interfaces`
   answered 200 with an `id` that a GET then answered 404 for, and a raw POST to a package without a
   file did the same. Such a write now answers `503 config_missing` before any uci write. That
-  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, and it fails loudly. A PUT, PATCH or DELETE of a curated id there answers the
-  same 503 where it answered 404, as with `init_script_missing`. The raw ones still answer 404,
+  tightening uses the carve-out in `docs/versioning.md` for payloads that produced a state no caller
+  can rely on, and it fails loudly. A PUT or PATCH of a curated id there answers the same 503 where
+  it answered 404, as with `init_script_missing`. A DELETE still answers 404, because no section can
+  exist there, and a client reads a 404 on DELETE as already gone, as terraform-provider-uapi does
+  at destroy after the package was removed (#277). The raw PUT, PATCH and DELETE still answer 404,
   because they look up the section first. A uci set, rename or commit that the cursor refuses now
-  answers 500 instead of 200, and a raw write whose reload service is not installed answers `503
-  init_script_missing` instead of a 500 that named an unknown kind. (#235)
+  answers 500 instead of 200, and a raw write whose reload service is not installed answers
+  `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
 
 - **A raw write of an option that uci cannot store answered 200 and stored nothing, or only part of
   it.** The cursor drops an option name outside letters, digits and `_` and still returns true. It
@@ -816,20 +818,22 @@ All notable changes to this project will be documented in this file. Format foll
 - **A read no longer shows a change that another writer staged and did not commit, and a write no
   longer commits or deletes it.** `uci set` in a shell stages a change in `/tmp/.uci`, and libuci
   applies that directory to every cursor that loads a package by name, uapi's included. So a GET
-  reported a value that neither the file nor the daemon held, and its ETag changed with it. The
-  next uapi write of the package committed the change, and a write that uapi refused deleted every
-  staged change of the package. uapi now loads each package by its path, which reads the file
-  alone, and its commit reloads the file and replays the writes of the request, so a commit by
-  LuCI or a shell during the request is still kept. When another writer deleted a section that the
-  request wrote into, the commit fails with a 500 that names the package. LuCI was not affected,
-  because rpcd keeps a delta directory per session. A response changes only on a router where a
-  shell staged a change and did not commit it, and no field or type changes. The staged change now
-  takes effect when the shell commits it, and not before, which applies to the `uapi` package too:
-  a token that `uci delete uapi.<name>` removes without a commit keeps authenticating, where it
-  answered 401 at once, a token that `uci set` adds without a commit does not authenticate yet, and
-  a staged change to `uapi.logging` or `uapi.ratelimit` applies once committed. uapi also reads,
-  writes and restores `/etc/config/<package>` only, and ignores an override that libuci reads in
-  its place from `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
+  reported a value that neither the file nor the daemon held, and its ETag changed with it. The next
+  uapi write of the package committed the change, and a write that uapi refused deleted every staged
+  change of the package. uapi now loads each package by its path, which reads the file alone, and
+  its commit reloads the file and replays the writes of the request, so a commit by LuCI or a shell
+  during the request is still kept. When another writer deleted a section that the request wrote
+  into, the commit fails, and the write answers `409 conflict` with a message that names the package
+  and says that a retry reads the new state. A `POST /batch` answers it once it has restored the
+  packages that it committed (#277). LuCI was not affected, because rpcd keeps a delta directory per
+  session. A response changes only on a router where a shell staged a change and did not commit it,
+  and no field or type changes. The staged change now takes effect when the shell commits it, and
+  not before, which applies to the `uapi` package too: a token that `uci delete uapi.<name>` removes
+  without a commit keeps authenticating, where it answered 401 at once, a token that `uci set` adds
+  without a commit does not authenticate yet, and a staged change to `uapi.logging` or
+  `uapi.ratelimit` applies once committed. uapi also reads, writes and restores
+  `/etc/config/<package>` only, and ignores an override that libuci reads in its place from
+  `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
 - **A token minted per run no longer adds files to tmpfs, which is RAM, until a reboot.** The metric
   series that carry `token_id`, in `uapi_requests_total` and `uapi_rate_limit_drops_total`, and the
   last-used marker in `/var/run/uapi-token-update/` kept a file per token name, and nothing removed
@@ -960,6 +964,45 @@ All notable changes to this project will be documented in this file. Format foll
   every PATCH of a section that holds one set it again to the value that uci held. The bus counts
   that as a write, so the commit rewrote the package, which drops its comments. A PATCH now skips a
   set of the value that uci already holds. No request, response or header changes. (#275)
+
+- **A `POST /batch` whose commit fails leaves the WireGuard peers in the kernel as uci stores
+  them.** When libuci refused the commit of a package, as on a full overlay, uapi 3.1.0 ignored it:
+  the batch answered 207 and gave the kernel the peers that its writes set, while
+  `/etc/config/network` kept the old ones. #235 made such a batch fail and restore. The restore sets
+  the peers of each interface that the batch touched again from uci, but it read uci through the
+  copy of the package that the request holds, which still held the writes. That copy also held the
+  writes of every package after the one whose commit failed, and #268 made a commit fail when
+  another writer, such as LuCI, deleted a section that the batch writes. So a batch that changed the
+  `allowed_ips` of a peer with `route_allowed_ips` from `10.0.0.2/32` to `0.0.0.0/0` answered
+  `500 reload_failed_restored` and kept `10.0.0.2/32` in uci, and the restore ran
+  `wg set wg0 peer <key> allowed-ips 0.0.0.0/0` and `ip route replace 0.0.0.0/0 dev wg0`, a default
+  route into the tunnel. A commit that fails now drops that copy, and the restore reverts each
+  package that the batch did not commit before it reads uci. A single write runs no restore after a
+  failed commit, so it was not affected. No request, response or header changes. (#277)
+- **`uapi-token create` and `revoke` stop when libuci refuses the commit.** Neither checked the
+  result. On a full overlay, `revoke` printed `Revoked token`, exited 0, and its reap then dropped
+  the rate-limit bucket, the metric series and the last-used marker of a token that still
+  authenticates. `create` printed a bearer for a token that does not exist. Both now exit non-zero
+  with the error of libuci, before they print and before the reap. (#277)
+- **A PATCH that changes nothing no longer reloads the daemon or sets a WireGuard peer again in the
+  kernel.** Since #272 and #275 such a PATCH commits nothing, but uapi still ran the init scripts of
+  the resource, and on `network/wireguard_peers` the kernel apply set the peer from the body. It
+  removed a peer without `endpoint_host` and set it again, which reset its session. A PATCH that
+  names no field, or sends the values that uci holds, a stored `preshared_key` included, now runs no
+  init script and changes nothing in the kernel. This holds for a merge PATCH, a JSON Patch and the
+  PATCH of a singleton, and for the PATCH sub-requests of a `POST /batch`, which now reloads only
+  the services of the packages that its writes changed. A PUT writes every option that it sends, so
+  it still reloads, and so do a POST and a DELETE. A PATCH that changes only `preshared_key` still
+  reaches the kernel. The headers of such a PATCH say what ran: `X-Reload-Status: no_reload` and
+  `X-Kernel-Status: no_kernel` where they said `ok`, or `skipped` for a peer on a down interface,
+  and no `X-Reload-Services` or `X-Kernel-Applied`. The `X-Reload-Services` of a batch names only
+  the services that ran. Under `docs/versioning.md` this is not an addition but a change of what two
+  documented values cover: `no_reload` meant a resource without reload services, which no resource
+  is, so no client could see it, and `no_kernel` meant a resource without a kernel path. Both now
+  also cover a write that changed nothing, and `docs/errors.md` says so. No value, header or status
+  is new. terraform-provider-uapi only logs these headers. A raw write that changes nothing, such as
+  a raw PATCH with no option, reloads nothing either, and answers `reloaded: false`, an empty
+  `reload_services` and a `reload_note`, where it answered `reloaded: true`. (#277)
 
 ### Security
 

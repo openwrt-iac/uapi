@@ -15,8 +15,15 @@ fail() { echo "FAIL: $*"; exit 1; }
 
 $SSH 'uci -q revert firewall; cp -p /etc/config/firewall /tmp/uapi-staged-before'
 $SSH 'uci -q revert network; cp -p /etc/config/network /tmp/uapi-staged-network'
+$SSH 'uci -q revert dhcp; cp -p /etc/config/dhcp /tmp/uapi-staged-dhcp'
 cleanup() {
-	$SSH 'uci -q revert firewall
+	$SSH 'touch /tmp/uapi56-release
+	      uci -q revert dhcp
+	      if [ -f /tmp/uapi-staged-dhcp ]; then
+	          cp -p /tmp/uapi-staged-dhcp /etc/config/dhcp && rm -f /tmp/uapi-staged-dhcp
+	          /etc/init.d/dnsmasq reload
+	      fi
+	      uci -q revert firewall
 	      if [ -f /tmp/uapi-staged-before ]; then
 	          cp -p /tmp/uapi-staged-before /etc/config/firewall && rm -f /tmp/uapi-staged-before
 	      fi
@@ -104,12 +111,72 @@ $SSH "uci set network.uapi56wg=interface; uci set network.uapi56wg.proto=wiregua
 	uci commit network
 	{ echo '# kept by a PATCH that names nothing'; cat /etc/config/network; } > /tmp/uapi-staged-net &&
 	cat /tmp/uapi-staged-net > /etc/config/network && rm -f /tmp/uapi-staged-net"
+# It reloaded network all the same, and its headers said so.
 for path in interfaces/uapi56wg rules/uapi56rule; do
-	status=$(curl -sS -o /tmp/uapi_staged_patch.json -w '%{http_code}' -H "$ADMIN" \
+	status=$(curl -sS -D /tmp/uapi_staged_patch.h -o /tmp/uapi_staged_patch.json -w '%{http_code}' -H "$ADMIN" \
 		-H 'Content-Type: application/json' -X PATCH "$URL/network/$path" -d '{}')
 	[ "$status" = 200 ] || { cat /tmp/uapi_staged_patch.json; fail "an empty PATCH of network/$path returned $status"; }
 	$SSH 'grep -q "^# kept by a PATCH that names nothing" /etc/config/network' \
 		|| fail "an empty PATCH of network/$path rewrote /etc/config/network"
+	hdrs=$(tr -d '\r' < /tmp/uapi_staged_patch.h)
+	echo "$hdrs" | grep -qix 'X-Reload-Status: no_reload' && echo "$hdrs" | grep -qix 'X-Kernel-Status: no_kernel' \
+		&& ! echo "$hdrs" | grep -qi '^X-Reload-Services:' && ! echo "$hdrs" | grep -qi '^X-Kernel-Applied:' \
+		|| fail "an empty PATCH of network/$path reported a reload or a kernel apply: $hdrs"
 done
+
+# The commit replays the writes of the request over what another writer committed, and fails when
+# one no longer applies. That answered 500, and reload_failed_restored in a batch. Here the batch has
+# staged its write of the rule and waits for libuci's flock on /etc/config/dhcp, which a holder
+# takes first, while the shell deletes the rule.
+echo "--- a batch whose rule the shell deletes during the request answers 409 conflict, and the delete stays ---"
+id_of() { grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//'; }
+rid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/rules" \
+	-d '{"name": "uapi56r", "target": "ACCEPT", "match": {"src_zone": "lan", "proto": ["tcp"], "dest_port": ["5656"]}}' | id_of)
+hid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/dhcp/hosts" \
+	-d '{"name": "uapi56h", "macs": ["02:00:00:00:56:56"], "ip": "192.168.1.56"}' | id_of)
+[ -n "$rid" ] && [ -n "$hid" ] || fail "could not create the rule and the host of the batch"
+$SSH 'cat > /tmp/uapi56-hold.uc' <<'UC'
+let fs = require('fs');
+let f = fs.open(ARGV[0], "r");
+f.lock("x");
+fs.writefile("/tmp/uapi56-held", "");
+for (let i = 0; i < 300 && fs.stat("/tmp/uapi56-release") == null; i++) sleep(100);
+UC
+$SSH 'rm -f /tmp/uapi56-held /tmp/uapi56-release
+      ucode /tmp/uapi56-hold.uc /etc/config/dhcp </dev/null >/dev/null 2>&1 &' &
+n=0
+until $SSH 'test -e /tmp/uapi56-held'; do
+	n=$((n + 1)); [ $n -lt 50 ] || fail "the holder never took the flock of /etc/config/dhcp"; sleep 0.2
+done
+curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d "{\"operations\": [
+		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56r2\"}},
+		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56h2\"}}]}" \
+	> /tmp/uapi_staged_batch.status &
+req=$!
+# The request process of uhttpd opens the file before it waits on the flock. The snapshot opens it
+# too, for a moment and before the firewall write, so the file has to stay open across two looks.
+waiting() {
+	$SSH 'for p in /proc/[0-9]*; do
+	          [ "$(cat $p/comm 2>/dev/null)" = uhttpd ] && ls -l $p/fd 2>/dev/null | grep -q " /etc/config/dhcp$" && echo ${p#/proc/}
+	      done; true'
+}
+n=0 seen=""
+while :; do
+	now=$(waiting)
+	[ -n "$now" ] && [ "$now" = "$seen" ] && break
+	seen=$now n=$((n + 1))
+	[ $n -lt 100 ] || { $SSH 'touch /tmp/uapi56-release'; fail "the batch never waited on /etc/config/dhcp"; }
+	sleep 0.3
+done
+$SSH "uci delete firewall.$rid; uci commit firewall"
+$SSH 'touch /tmp/uapi56-release'
+wait $req || true
+[ "$(cat /tmp/uapi_staged_batch.status)" = 409 ] || { cat /tmp/uapi_staged_batch.json; fail "the batch answered $(cat /tmp/uapi_staged_batch.status), expected 409"; }
+jq -e '.code == "conflict" and (.message | test("another writer changed the package firewall") and test("A retry reads the new state"))' \
+	/tmp/uapi_staged_batch.json >/dev/null || { cat /tmp/uapi_staged_batch.json; fail "the 409 is not the conflict of the firewall package"; }
+[ -z "$($SSH "uci -q get firewall.$rid")" ] || fail "the restore brought back the rule that the shell deleted"
+[ "$($SSH "uci -q get dhcp.$hid.name")" = uapi56h ] || fail "the batch kept its write of the host"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$hid"
 
 echo "a change that a shell staged stays out of uapi's reads and writes until the shell commits it."

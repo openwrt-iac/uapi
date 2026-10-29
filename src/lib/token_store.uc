@@ -96,16 +96,6 @@ function get_public(conn, name) {
 	return _read_record(s, false);
 }
 
-function _ensure_uapi_file(conn) {
-	// uci requires the package file before commit; touch it if absent.
-	let path = "/etc/config/" + PACKAGE;
-	if (fs.stat(path) == null) {
-		let f = fs.open(path, "w");
-		if (f) f.close();
-		try { conn.uci_load(PACKAGE); } catch (_) {}
-	}
-}
-
 function _validate_create_body(body) {
 	if (type(body) != "object")
 		return [errors.field_error("(root)", "invalid_type", "must be a JSON object")];
@@ -193,7 +183,6 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 		reload_services: [],
 		reload: reap_on_commit(conn, now),
 		fn: function(c, pkg) {
-			_ensure_uapi_file(c);
 			let errs = _validate_create_body(body);
 			if (length(errs) > 0)
 				return { ok: false, kind: "validation", errors: errs };

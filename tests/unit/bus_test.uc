@@ -264,6 +264,7 @@ function fake_uci(disk) {
 				},
 				commit: function(p) {
 					if (held[p] == null) return fail("Entry not found");
+					if (disk.commit_error != null) return fail(disk.commit_error);
 					disk.files[p] = copy(held[p]);
 					disk.commits = (disk.commits ?? 0) + 1;
 					return true;
@@ -397,14 +398,124 @@ t.describe('bus.connect, the commit', () => {
 		t.assert_equal(disk.files.fw.d.output, 'DROP');
 	});
 
-	t.it('fails, names the package and writes nothing when a write no longer applies', () => {
+	t.it('answers a conflict that names the package and writes nothing when a write no longer applies', () => {
 		let disk = seeded();
 		let c = connect_to(disk);
 		c.uci_set('fw', 'r2', 'name', 'deux');
 		delete disk.files.fw.r2;
-		t.assert_equal(caught(() => c.uci_commit('fw')),
-		               "uci commit fw: another writer changed the package while the request ran, and its writes no longer apply: uci set fw: Entry not found");
+		t.assert_deep_equal(c.uci_commit('fw'), { conflict:
+			"another writer changed the package fw during the request, and the writes of the request no longer apply to it: uci set fw: Entry not found. Nothing was written. A retry reads the new state." });
 		t.assert_equal(disk.commits, null);
+	});
+
+	// The replay ran over a fresh copy of the file, so a failure part way left that copy holding
+	// the writes before it, and a refused commit left all of them. The restore after a failed batch
+	// then read the copy, and gave the kernel what uci did not store.
+	t.it('drops the copy when the replay fails part way, so a read after it reads the file', () => {
+		let disk = seeded();
+		let c = connect_to(disk);
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		c.uci_set('fw', 'r2', 'name', 'deux');
+		delete disk.files.fw.r2;
+		t.assert_true(c.uci_commit('fw').conflict != null);
+		t.assert_equal(c.uci_get('fw', 'd', 'forward'), 'REJECT');
+		t.assert_equal(c.uci_commit('fw'), false);
+	});
+
+	t.it('drops the copy and names the package when the cursor refuses the commit', () => {
+		let disk = { ...seeded(), commit_error: "No space left on device" };
+		let c = connect_to(disk);
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		t.assert_equal(caught(() => c.uci_commit('fw')), "uci commit fw: No space left on device");
+		t.assert_equal(c.uci_get('fw', 'd', 'forward'), 'REJECT');
+		t.assert_equal(disk.commits, null);
+	});
+});
+
+// A batch commits its packages in order and stops at the first that fails. The restore then
+// reconciles the WireGuard interfaces that the batch touched with what uci holds, and read uci
+// through the cursor, which still held the writes of every package that the batch did not commit.
+// So a failed batch put an allowed IP that uci never stored into the kernel, with its route.
+t.describe('bus.connect, the restore after a batch whose commit fails', () => {
+	let tx = require('transaction');
+	const K = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
+	let ran = [];
+	let wg = t.load_with_fs({ ...fs, popen: function(cmd) {
+		push(ran, cmd);
+		return { read: () => "", close: () => 0 };
+	} }, [ "wg" ]);
+	const UP = { connect: () => ({ call: (o) => (o == "network.interface.wg0") ? { up: true } : null }),
+	             error: () => null };
+	let paths = { lock: "/tmp/uapi-test-bus-batch.lock", prefix: "/tmp/uapi-test-bus-batch-pkg." };
+
+	function batch(pkgs, fn) {
+		let disk = { files: {
+			firewall: { r1: { '.type': 'rule', name: 'one' } },
+			network: { wg0: { '.type': 'interface', proto: 'wireguard' },
+			           lan: { '.type': 'interface', proto: 'static' },
+			           p1: { '.type': 'wireguard_wg0', public_key: K, allowed_ips: [ '10.0.0.2/32' ],
+			                 route_allowed_ips: '1' } },
+		}, staged: {} };
+		let dir = temp_dir();
+		for (let pkg in pkgs) fs.writefile(dir + "/" + pkg, "");
+		let conn = ubus.connect({ ubus: UP, uci: fake_uci(disk), config_dir: dir });
+		ran = [];
+		let r = tx.multi_transaction(conn, {
+			packages: pkgs, lock_path: paths.lock, pkg_lock_prefix: paths.prefix,
+			check_services: () => null, reload: () => null, watch: () => null,
+			wg_ops: [ { iface: 'wg0', action: 'set', public_key: K } ],
+			wg_apply: () => null, wg_reconcile: wg.reconcile,
+			fn: function(c) { fn(c, disk); return { ok: true, body: null }; },
+		});
+		system([ "rm", "-rf", dir ]);
+		for (let f in [ paths.lock, ...map(pkgs, (p) => paths.prefix + p + ".lock") ]) fs.unlink(f);
+		return { r, sets: filter(ran, (c) => match(c, /'(set|replace)'/)) };
+	}
+	let stored = [
+		wg.command_line([ "wg", "set", "wg0", "peer", K, "remove" ]) + " 2>&1",
+		wg.command_line([ "wg", "set", "wg0", "peer", K, "allowed-ips", "10.0.0.2/32", "persistent-keepalive", "0",
+		                  "preshared-key", "/dev/null" ]) + " 2>&1",
+		wg.command_line([ "ip", "route", "replace", "10.0.0.2/32", "dev", "wg0", "proto", "static",
+		                  "scope", "link" ]) + " 2>&1",
+	];
+
+	t.it('the replay of an earlier package fails, and the later one still holds its writes', () => {
+		let b = batch([ "firewall", "network" ], function(c, disk) {
+			c.uci_set('network', 'p1', 'allowed_ips', [ '0.0.0.0/0' ]);
+			c.uci_set('firewall', 'r1', 'name', 'x');
+			delete disk.files.firewall.r1;
+		});
+		t.assert_deep_equal(b.sets, stored);
+	});
+
+	t.it('the replay of the package fails part way', () => {
+		let b = batch([ "network" ], function(c, disk) {
+			c.uci_set('network', 'p1', 'allowed_ips', [ '0.0.0.0/0' ]);
+			c.uci_set('network', 'lan', 'mtu', '1400');
+			delete disk.files.network.lan;
+		});
+		t.assert_deep_equal(b.sets, stored);
+	});
+
+	t.it('a full overlay refuses the commit of a batch that only writes the peer', () => {
+		let b = batch([ "network" ], function(c, disk) {
+			c.uci_set('network', 'p1', 'allowed_ips', [ '0.0.0.0/0' ]);
+			disk.commit_error = "No space left on device";
+		});
+		t.assert_equal(b.r.kind, "reload_failed_restored");
+		t.assert_deep_equal(b.sets, stored);
+	});
+
+	// The commit replays the writes over a commit of another writer, and fails when one no longer
+	// applies. A batch answered reload_failed_restored for it, which says that a daemon refused the
+	// config.
+	t.it('a replay that no longer applies answers conflict', () => {
+		let b = batch([ "firewall", "network" ], function(c, disk) {
+			c.uci_set('firewall', 'r1', 'name', 'x');
+			delete disk.files.firewall.r1;
+		});
+		t.assert_equal(b.r.kind, "conflict");
+		t.assert_match(b.r.message, /^another writer changed the package firewall during the request, .* A retry reads the new state\.$/);
 	});
 });
 
@@ -529,22 +640,138 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 	let handler = require('handler');
 	let fx = require('resource_fixtures');
-	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null,
-	           wg_apply: () => null, wg_reconcile: () => null };
-	for (let id in [ "wg0", "p1", "w1", "vpn0", "nr3" ]) {
-		let c = filter(fx.CASES, (x) => x.id == id)[0];
-		t.it(sprintf("%s/%s", c.file, id), () => {
-			let files = fx.world();
-			files[c.pkg] = { ...(files[c.pkg] ?? {}), [id]: { ...c.section } };
-			let disk = { files, staged: {} };
-			let dir = temp_dir();
-			for (let pkg in files) fs.writefile(dir + "/" + pkg, "");
-			let conn = connect_to(disk, { config_dir: dir });
-			let r = handler.make(loadfile('src/resources/' + c.file)(), { tx })
-			               .patch(conn, { request_id: "01hx0000000000000000000000" }, id, {});
-			system([ "rm", "-rf", dir ]);
-			t.assert_equal(r.status, 200, r.body);
-			t.assert_equal(disk.commits, null);
-		});
+	let reloaded = [], kernel_ops = [];
+	let tx = { acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
+	           reload: function(s) { push(reloaded, ...s); return null; },
+	           wg_apply: function(c, ops, applied) {
+	               push(kernel_ops, ...ops);
+	               for (let o in ops) if (index(applied, o.iface) < 0) push(applied, o.iface);
+	               return null;
+	           },
+	           wg_reconcile: () => null };
+	function patch(c, body, ctx) {
+		let files = fx.world();
+		files[c.pkg] = { ...(files[c.pkg] ?? {}), [c.id]: { ...c.section } };
+		let disk = { files, staged: {} };
+		let dir = temp_dir();
+		for (let pkg in files) fs.writefile(dir + "/" + pkg, "");
+		let conn = connect_to(disk, { config_dir: dir });
+		let mod = loadfile('src/resources/' + c.file)();
+		reloaded = [];
+		kernel_ops = [];
+		ctx = { request_id: "01hx0000000000000000000000", ...(ctx ?? {}) };
+		let r = c.singleton ? handler.make_singleton(mod, { tx }).patch(conn, ctx, body)
+		                    : handler.make(mod, { tx }).patch(conn, ctx, c.id, body);
+		system([ "rm", "-rf", dir ]);
+		return { r, disk };
 	}
+	// It reloaded the daemon anyway, and on a WireGuard peer without an endpoint the kernel apply
+	// removed the peer and set it again, which resets its session. The headers said that both ran.
+	function assert_noop(w) {
+		t.assert_equal(w.r.status, 200, w.r.body);
+		t.assert_equal(w.disk.commits, null);
+		t.assert_deep_equal(reloaded, []);
+		t.assert_deep_equal(kernel_ops, []);
+		t.assert_deep_equal(map([ "X-Reload-Status", "X-Reload-Services", "X-Kernel-Status", "X-Kernel-Applied" ],
+		                        (h) => w.r.headers[h]),
+		                    [ "no_reload", null, "no_kernel", null ]);
+	}
+	for (let id in [ "wg0", "p1", "w1", "vpn0", "nr3", "defaults" ]) {
+		let c = filter(fx.CASES, (x) => x.id == id)[0];
+		t.it(sprintf("%s/%s", c.file, id), () => assert_noop(patch(c, {})));
+	}
+	t.it('a JSON Patch that only tests a value', () => {
+		let c = filter(fx.CASES, (x) => x.id == "p1")[0];
+		assert_noop(patch(c, [ { op: "test", path: "/public_key", value: fx.WG_PUB } ], { json_patch: true }));
+	});
+
+	let peer = (psk) => ({ file: "network.wireguard_peers.uc", id: "p9", pkg: "network",
+	                       section: { '.type': 'wireguard_wg0', public_key: fx.WG_PUB, allowed_ips: [ '10.9.0.9/32' ],
+	                                  preshared_key: psk } });
+	const PSK2 = 'cHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHM=';
+	t.it('a PATCH that sends the stored preshared key of an enabled peer', () => {
+		assert_noop(patch(peer(fx.WG_KEY), { preshared_key: fx.WG_KEY }));
+	});
+	t.it('a PATCH that changes only the preshared key still reloads and applies it', () => {
+		let w = patch(peer(fx.WG_KEY), { preshared_key: PSK2 });
+		t.assert_equal(w.r.status, 200, w.r.body);
+		t.assert_equal(w.disk.files.network.p9.preshared_key, PSK2);
+		t.assert_deep_equal(reloaded, [ "network" ]);
+		t.assert_deep_equal(map(kernel_ops, (o) => [ o.action, o.preshared_key ]), [ [ "set", PSK2 ] ]);
+		t.assert_deep_equal(map([ "X-Reload-Status", "X-Reload-Services", "X-Kernel-Status", "X-Kernel-Applied" ],
+		                        (h) => w.r.headers[h]),
+		                    [ "ok", "network", "ok", "wg0" ]);
+	});
+});
+
+// The commit replays the writes over a commit of another writer, and fails when one no longer
+// applies. A single write answered 500 for it from the catch-all of main.uc.
+t.describe('bus.connect, a write whose replay no longer applies', () => {
+	let handler = require('handler');
+	let fx = require('resource_fixtures');
+	t.it('answers 409 conflict, writes nothing and reloads nothing', () => {
+		let disk = { files: { network: { ...fx.world().network,
+			p1: { '.type': 'wireguard_wg0', public_key: fx.WG_PUB, allowed_ips: [ '10.9.0.2/32' ] } } }, staged: {} };
+		let dir = temp_dir();
+		fs.writefile(dir + "/network", "");
+		let conn = connect_to(disk, { config_dir: dir });
+		let commit = conn.uci_commit;
+		conn.uci_commit = function(pkg) {
+			delete disk.files.network.p1;
+			return commit(pkg);
+		};
+		let ran = [];
+		let h = handler.make(loadfile('src/resources/network.wireguard_peers.uc')(), { tx: {
+			acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
+			reload: function(s) { push(ran, ...s); return null; },
+			wg_apply: function(c, ops) { push(ran, ...ops); return null; }, wg_reconcile: () => null,
+		} });
+		let r = null;
+		try { r = h.patch(conn, { request_id: "01hx0000000000000000000000" }, "p1", { allowed_ips: [ '10.9.0.3/32' ] }); }
+		catch (e) { r = { status: e.message }; }
+		system([ "rm", "-rf", dir ]);
+		t.assert_equal(r.status, 409);
+		t.assert_equal(r.body.code, "conflict");
+		t.assert_match(r.body.message, /^another writer changed the package network during the request, .* A retry reads the new state\.$/);
+		t.assert_equal(disk.commits, null);
+		t.assert_deep_equal(ran, []);
+	});
+});
+
+// A raw write reports whether it reloaded, and one that changes nothing reloads nothing.
+t.describe('bus.connect, the reload fields of a raw write', () => {
+	let real = require('transaction');
+	let reloaded = [];
+	global.modules.transaction = { ...real, transaction: (conn, p) => real.transaction(conn, { ...p,
+		acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
+		reload: function(s) { push(reloaded, ...s); return null; } }) };
+	let raw = loadfile('src/raw.uc')();
+	global.modules.transaction = real;
+
+	function patch(body) {
+		let disk = { files: { firewall: { r1: { '.type': 'rule', name: 'one' } } }, staged: {} };
+		let dir = temp_dir();
+		fs.writefile(dir + "/firewall", "");
+		reloaded = [];
+		let r = raw.patch(connect_to(disk, { config_dir: dir }), { request_id: "01hx0000000000000000000000" },
+		                  [ "*:rw" ], "firewall", "r1", body);
+		system([ "rm", "-rf", dir ]);
+		return r;
+	}
+
+	t.it('a PATCH that changes nothing says that no daemon was reloaded', () => {
+		let r = patch({});
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal(reloaded, []);
+		t.assert_deep_equal([ r.body.reloaded, r.body.reload_services, r.body.reload_note ],
+		                    [ false, [], "the write changed nothing, so no daemon was reloaded" ]);
+	});
+
+	t.it('a PATCH that writes names the services that it reloaded', () => {
+		let r = patch({ name: "two" });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal(reloaded, [ "firewall" ]);
+		t.assert_deep_equal([ r.body.reloaded, r.body.reload_services, r.body.reload_note ],
+		                    [ true, [ "firewall" ], null ]);
+	});
 });

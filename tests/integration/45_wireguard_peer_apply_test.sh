@@ -96,6 +96,33 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 $SSH "wg show $IFACE endpoints" | grep -q '198.51.100.9' \
 	|| fail "endpoint not updated in kernel: $($SSH "wg show $IFACE endpoints")"
 
+# A PATCH that changed nothing still reloaded network and set the peer again in the kernel, which
+# for a peer without an endpoint is a remove and a set, and resets its session. The keepalive that
+# wg sets here by hand is drift from uci, which only a write that sets the peer gives back to uci.
+echo "--- a PATCH that changes nothing reloads nothing and leaves the kernel peer as it is ---"
+keepalive() { $SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER1" '$1 == k { print $2 }'; }
+patch_headers() {
+	curl -sS -D - -o /tmp/uapi45_patch.json -H "$ADMIN" -H 'Content-Type: application/json' \
+		-X PATCH "$URL/network/wireguard_peers/$pid" -d "$1" | tr -d '\r'
+}
+$SSH "wg set $IFACE peer $PEER1 persistent-keepalive 77"
+for body in '{}' '{"endpoint_host": "198.51.100.9", "endpoint_port": 51820}'; do
+	h=$(patch_headers "$body")
+	echo "$h" | head -1 | grep -q ' 200 ' || fail "PATCH $body: $h $(cat /tmp/uapi45_patch.json)"
+	echo "$h" | grep -qix 'X-Reload-Status: no_reload' && echo "$h" | grep -qix 'X-Kernel-Status: no_kernel' \
+		&& ! echo "$h" | grep -qi '^X-Reload-Services:' && ! echo "$h" | grep -qi '^X-Kernel-Applied:' \
+		|| fail "PATCH $body changed nothing and reported a reload or a kernel apply: $h"
+	[ "$(keepalive)" = 77 ] || fail "PATCH $body changed nothing and set the peer again: keepalive $(keepalive)"
+done
+
+echo "--- a PATCH that changes only the preshared key reaches the kernel ---"
+PSK=$($SSH 'wg genpsk')
+h=$(patch_headers "{\"preshared_key\": \"$PSK\"}")
+echo "$h" | head -1 | grep -q ' 200 ' || fail "PATCH preshared_key: $h $(cat /tmp/uapi45_patch.json)"
+echo "$h" | grep -qix 'X-Kernel-Status: ok' && echo "$h" | grep -qix "X-Kernel-Applied: $IFACE" \
+	|| fail "a new preshared key did not reach the kernel: $h"
+$SSH "wg show $IFACE preshared-keys" | grep -qF "$PSK" || fail "wg holds another preshared key"
+
 echo "--- DELETE actually revokes the peer ---"
 r=$(call -X DELETE "$URL/network/wireguard_peers/$pid")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE peer: $(body_of "$r")"

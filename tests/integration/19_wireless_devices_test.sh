@@ -78,7 +78,7 @@ got=$($SSH 'for o in macaddr cell_density legacy_rates; do uci get wireless.radi
 restore_radio0
 trap cleanup EXIT INT TERM
 
-echo "--- without /etc/config/wireless, a write answers 503 config_missing and stores nothing ---"
+echo "--- without /etc/config/wireless, a write answers 503 config_missing and stores nothing, and a DELETE 404 ---"
 # A router without a radio has no such file, because `wifi config` writes it only for hardware it finds.
 $SSH 'mv /etc/config/wireless /tmp/uapi19-wireless'
 restore_wireless() { $SSH 'test -e /tmp/uapi19-wireless && mv /tmp/uapi19-wireless /etc/config/wireless' || true; }
@@ -92,6 +92,16 @@ for ep in devices interfaces; do
 	echo "$r" | tail -1 | grep -q '^503$' && echo "$r" | grep -q '"code": "config_missing"' \
 		&& echo "$r" | grep -q '/etc/config/wireless' || fail "POST /wireless/$ep without the config: $r"
 	call "$URL/wireless/$ep" | sed '$d' | jq -e 'length == 0' >/dev/null || fail "GET /wireless/$ep is not empty"
+	for verb in PUT PATCH; do
+		r=$(call -X $verb -H 'Content-Type: application/json' "$URL/wireless/$ep/radio0" -d "$body")
+		echo "$r" | tail -1 | grep -q '^503$' && echo "$r" | grep -q '"code": "config_missing"' \
+			|| fail "$verb /wireless/$ep/radio0 without the config: $r"
+	done
+	# A client reads a 404 on DELETE as already gone, as a Terraform destroy does once the
+	# package that ships the file is removed.
+	r=$(call -X DELETE "$URL/wireless/$ep/radio0")
+	echo "$r" | tail -1 | grep -q '^404$' && echo "$r" | grep -q '"code": "not_found"' \
+		|| fail "DELETE /wireless/$ep/radio0 without the config: $r"
 done
 $SSH 'test ! -e /etc/config/wireless' || fail "a refused write created /etc/config/wireless"
 restore_wireless

@@ -502,7 +502,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 
 	// Pre-resolve targets up-front: a typo aborts before any lock is taken.
 	// Only WRITE ops contribute to the lock/reload set.
-	let packages_seen = {}, reload_seen = {};
+	let reloads = {};
 	for (let i = 0; i < length(ops); i++) {
 		let op = ops[i];
 		if (type(op) != "object" || type(op.path) != "string")
@@ -513,15 +513,10 @@ function batch_dispatch(conn, ctx, token, method, body) {
 			return errors.error(ctx, "not_found",
 				sprintf("operations[%d]: no batch-eligible handler for %s", i, op.path));
 		if (op.method == "POST" || op.method == "PUT"
-		    || op.method == "PATCH" || op.method == "DELETE") {
-			packages_seen[tgt.package] = true;
-			for (let svc in tgt.reload) reload_seen[svc] = true;
-		}
+		    || op.method == "PATCH" || op.method == "DELETE")
+			reloads[tgt.package] = uniq([ ...(reloads[tgt.package] ?? []), ...tgt.reload ]);
 	}
-	let pkgs = [], reloads = [];
-	for (let p in packages_seen) push(pkgs, p);
-	for (let s in reload_seen) push(reloads, s);
-	sort(pkgs); sort(reloads);
+	let pkgs = sort(keys(reloads));
 
 	let aborted = null;
 	let results = [];
@@ -578,6 +573,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		return errors.error(ctx, "init_script_missing", r.message);
 	if (r.kind == "config_missing")
 		return errors.error(ctx, "config_missing", r.message);
+	if (r.kind == "conflict")
+		return errors.error(ctx, "conflict", r.message);
 	if (r.kind == "reload_failed_restored")
 		return errors.reload_failed_restored(ctx, r.reload_error);
 	if (r.kind == "reload_failed_unrecovered")

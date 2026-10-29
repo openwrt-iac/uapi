@@ -121,7 +121,9 @@ without uci state change.
    `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
    no uci write attempted. Then confirm `/etc/config/<package>` exists, because
    the uci cursor stores nothing in a missing file and reports that only through
-   a null return. Miss → `503 config_missing` with the path.
+   a null return. Miss → `503 config_missing` with the path. A DELETE checks the
+   file first and answers `404 not_found` for a missing one, because no section
+   can exist there, and a client reads a 404 on DELETE as already gone.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
 2. **Snapshot.** `uci_unload(<package>)`, then `uci_export(<package>)` captures
@@ -137,7 +139,8 @@ without uci state change.
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
    Nothing is staged outside the request process (see below). A PATCH skips
    a set of the value that uci already holds and a delete of an option that
-   it does not hold, so a PATCH that changes nothing has nothing to commit.
+   it does not hold, so a PATCH that changes nothing has nothing to commit,
+   and it collects no kernel operations.
    The response body is `fromUci` of the section read back from that copy.
    So a write answers the body, apart from `runtime`, and the ETag that a GET
    then answers, unless another writer commits to the package while the
@@ -146,6 +149,12 @@ without uci state change.
 5. **Commit.** When the request wrote to the package, `uci_commit(<package>)`
    loads the package file again, replays the writes over it and writes it
    through libuci, so a commit by LuCI or a shell while the request ran is kept.
+   A replay that no longer applies → `409 conflict`, and nothing is written. A
+   commit that libuci refuses, as on a full overlay, → `500 internal_error`.
+   Either way the cursor drops its copy of the package, so nothing later in the
+   request reads the writes that the file does not hold. A request that wrote
+   nothing commits nothing, and skips steps 6 and 7: `X-Reload-Status:
+   no_reload`, `X-Kernel-Status: no_kernel`.
 6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, via
    `fs.popen`, exit code checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
@@ -167,7 +176,7 @@ without uci state change.
    leaves the peer in uci alone and a caller otherwise cannot tell that from a
    write that reached the kernel.
 8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>, snapshot)`
-   when step 5 wrote the package → reload, then **reconcile** each touched interface
+   → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the
    captured stderr/exit summary. If the restore itself fails,
    `500 reload_failed_unrecovered`. `uci_import` writes the snapshot to
@@ -214,9 +223,10 @@ holds, without reading the file again. The commit of step 5 therefore reloads th
 file and replays the request's writes, which keeps a commit by another writer
 that landed while the request ran, as libuci's own replay of a delta does. A
 replay that no longer applies, because another writer deleted a section that the
-request wrote into, fails the commit with a message that names the package. A
-package that the request did not write is not committed, as libuci skips a
-commit with no changes, so its comments stay, and it gets no restore.
+request wrote into, fails the commit, and the request answers `409 conflict` with
+a message that names the package. A package that the request did not write is not
+committed, as libuci skips a commit with no changes, so its comments stay, and it
+gets no reload and no restore.
 `uci_revert` and `uci_unload` drop the copy and the writes, which is the whole
 of what the request staged.
 
@@ -323,17 +333,22 @@ what keeps a peer orphaned by deleting its parent interface deletable.
 6. First sub-request status ≥ 400 → abort: `uci_revert()` each package,
    return `{ code: "batch_partial_failure", aborted_at_index, error: ..., reverted: true }`
    with the failing sub's status.
-7. All sub-requests 2xx → `uci_commit()` each package, run the union of
-   reload services, then the collected kernel operations. Same failure recipe
-   as the single-package transaction, and a commit that fails part way counts as
-   a failed reload. Either way only the packages that the batch committed are
-   restored: the snapshot of another one would undo what LuCI or a shell
-   committed to it since, such as the delete that made the replay of the batch
-   fail. Sub-requests accumulate into one ordered
-   operation list shared through their sub-context, so a batch touching the same
-   peer twice ends on its last state, and the restore reconciles rather than
-   replaying, since a batch can apply several peers before failing on a later
-   one.
+7. All sub-requests 2xx → `uci_commit()` each package, run the union of the
+   reload services of the packages that the batch committed, then the collected
+   kernel operations. A batch that committed nothing runs neither. Same failure
+   recipe as the single-package transaction, and a commit that fails part way
+   counts as a failed reload. Either way only the packages that the batch
+   committed are restored: the snapshot of another one would undo what LuCI or
+   a shell committed to it since, such as the delete that made the replay of the
+   batch fail. Each other package is reverted before that, because the cursor
+   still holds the writes of the packages after the one that failed, and the
+   kernel reconcile reads `network` through it. A replay that no longer applies
+   answers `409 conflict` once the restore succeeds, and a commit that libuci
+   refuses answers `500 reload_failed_restored`. Sub-requests accumulate into
+   one ordered operation list shared through their sub-context, so a batch
+   touching the same peer twice ends on its last state, and the restore
+   reconciles rather than replaying, since a batch can apply several peers
+   before failing on a later one.
 
 ## Schema layer
 

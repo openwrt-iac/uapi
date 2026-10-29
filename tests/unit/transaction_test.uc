@@ -314,37 +314,110 @@ t.describe('transaction, reload failure with successful restore', () => {
 t.describe('transaction, the restore writes back only what the request committed', () => {
 	let imports = (conn) => map(filter(conn._state.uci_ops, (o) => o[0] == "import"), (o) => o[1]);
 
-	t.it('a write that changed nothing gets no restore', () => {
+	// A reload of a package that the write left as it was reads the same config again, and it
+	// can still fail, which put the restore of a write that changed nothing in motion.
+	t.it('a write that changed nothing reloads nothing and restores nothing', () => {
 		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } } });
 		conn.uci_commit = (pkg) => false;
+		let tracker = track_reload();
 		let r = tx.transaction(conn, build_params({
 			acquire: function() { return {}; }, release: function() {},
-			reload: reload_flaky(1),
+			reload: tracker.fn,
 		}));
-		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_true(r.ok);
+		t.assert_deep_equal([ r.reload_status, r.reload_services, r.kernel_status ], [ "no_reload", [], "no_kernel" ]);
+		t.assert_deep_equal(tracker.calls, []);
 		t.assert_deep_equal(imports(conn), []);
 	});
 
 	// LuCI deletes and commits a section that the batch wrote into while the batch runs, so the
 	// replay of the batch's writes to that package fails. The snapshot of that package predates
-	// LuCI's delete, and writing it back brought the section back.
-	t.it('a batch whose commit fails restores the packages before it that it wrote, and no other', () => {
-		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {} } });
-		conn.uci_commit = function(pkg) {
-			if (pkg == "cc") die("uci commit cc: another writer changed the package while the request ran, and its writes no longer apply: uci set cc: Entry not found");
-			return pkg == "aa";
-		};
+	// LuCI's delete, and writing it back brought the section back. The cursor still held the writes
+	// of the packages that the batch did not commit, and the restore read them.
+	let batch = function(conn, reload) {
 		let r = tx.multi_transaction(conn, {
-			packages: [ "aa", "bb", "cc" ], reload_services: [],
+			packages: [ "aa", "bb", "cc", "dd" ],
 			lock_path: "/tmp/uapi-test-restore-global.lock", pkg_lock_prefix: "/tmp/uapi-test-restore-pkg.",
 			fn: (c) => ({ ok: true, body: {} }),
-			reload: noop_reload, check_services: noop_check,
+			reload: reload ?? noop_reload, check_services: noop_check,
 		});
-		t.assert_equal(r.kind, "reload_failed_restored");
-		t.assert_match(r.reload_error, /^uci_commit\(cc\) failed: uci commit cc: another writer changed the package/);
-		t.assert_deep_equal(imports(conn), [ "aa" ]);
-		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock", "pkg.cc.lock" ])
+		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock", "pkg.cc.lock", "pkg.dd.lock" ])
 			require('fs').unlink("/tmp/uapi-test-restore-" + f);
+		return r;
+	};
+	let restored = (conn) => filter(conn._state.uci_ops, (o) => o[0] == "import" || o[0] == "revert");
+	const CONFLICT = "another writer changed the package cc during the request, and the writes of the request no longer apply to it: uci set cc: Entry not found. Nothing was written. A retry reads the new state.";
+
+	t.it('a batch whose replay no longer applies answers conflict, after it restores what it committed and drops the rest', () => {
+		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {}, dd: {} } });
+		conn.uci_commit = (pkg) => (pkg == "cc") ? { conflict: CONFLICT } : (pkg == "aa");
+		let r = batch(conn);
+		t.assert_deep_equal(r, { ok: false, kind: "conflict", message: CONFLICT });
+		t.assert_deep_equal(restored(conn), [ [ "revert", "bb" ], [ "revert", "cc" ], [ "revert", "dd" ], [ "import", "aa" ] ]);
+	});
+
+	t.it('a batch whose commit the cursor refuses is restored the same way, and reports the refusal', () => {
+		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {}, dd: {} } });
+		conn.uci_commit = function(pkg) {
+			if (pkg == "cc") die("uci commit cc: No space left on device");
+			return pkg == "aa";
+		};
+		let r = batch(conn);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(r.reload_error, "uci_commit(cc) failed: uci commit cc: No space left on device");
+		t.assert_deep_equal(restored(conn), [ [ "revert", "bb" ], [ "revert", "cc" ], [ "revert", "dd" ], [ "import", "aa" ] ]);
+	});
+
+	t.it('a conflict that the restore cannot undo is unrecovered', () => {
+		let conn = ubus.stub({ uci: { aa: {}, bb: {}, cc: {}, dd: {} } });
+		conn.uci_commit = (pkg) => (pkg == "cc") ? { conflict: CONFLICT } : (pkg == "aa");
+		conn.uci_import = function() { die("restore of aa: cannot open it"); };
+		let r = batch(conn);
+		t.assert_deep_equal([ r.kind, r.reload_error, r.restore_error ],
+		                    [ "reload_failed_unrecovered", CONFLICT, "restore of aa: cannot open it" ]);
+	});
+});
+
+t.describe('multi_transaction, the reload of a batch', () => {
+	function batch(conn, reload) {
+		let r = tx.multi_transaction(conn, {
+			packages: [ "fw", "net" ], reload_services: { fw: [ "firewall" ], net: [ "network" ] },
+			lock_path: "/tmp/uapi-test-reload-global.lock", pkg_lock_prefix: "/tmp/uapi-test-reload-pkg.",
+			fn: (c) => ({ ok: true, body: {} }), reload, check_services: noop_check,
+		});
+		for (let f in [ "global.lock", "pkg.fw.lock", "pkg.net.lock" ])
+			require('fs').unlink("/tmp/uapi-test-reload-" + f);
+		return r;
+	}
+
+	t.it('runs the services of the packages that the batch committed', () => {
+		let conn = ubus.stub({ uci: { fw: {}, net: {} } });
+		conn.uci_commit = (pkg) => pkg == "fw";
+		let tracker = track_reload();
+		let r = batch(conn, tracker.fn);
+		t.assert_true(r.ok);
+		t.assert_deep_equal(tracker.calls, [ [ "firewall" ] ]);
+		t.assert_deep_equal([ r.reload_status, r.reload_services ], [ "ok", [ "firewall" ] ]);
+	});
+
+	t.it('runs none when the batch committed nothing', () => {
+		let conn = ubus.stub({ uci: { fw: {}, net: {} } });
+		conn.uci_commit = (pkg) => false;
+		let tracker = track_reload();
+		let r = batch(conn, tracker.fn);
+		t.assert_true(r.ok);
+		t.assert_deep_equal(tracker.calls, []);
+		t.assert_deep_equal([ r.reload_status, r.reload_services, r.kernel_status ], [ "no_reload", [], "no_kernel" ]);
+	});
+
+	t.it('checks the init scripts of every package before it takes a lock', () => {
+		let seen = null;
+		let r = tx.multi_transaction(ubus.stub({ uci: { fw: {}, net: {} } }), {
+			packages: [ "fw", "net" ], reload_services: { fw: [ "firewall" ], net: [ "network" ] },
+			check_services: function(s) { seen = s; return "init script /etc/init.d/network not found"; },
+		});
+		t.assert_equal(r.kind, "init_script_missing");
+		t.assert_deep_equal(seen, [ "firewall", "network" ]);
 	});
 });
 
@@ -447,7 +520,7 @@ t.describe('transaction, config pre-flight', () => {
 	t.it('refuses a batch that names a missing package, before any lock or uci op', () => {
 		let conn = ubus.stub({ uci: { fw: {} }, missing_packages: [ "wireless" ] });
 		let r = tx.multi_transaction(conn, {
-			packages: [ "fw", "wireless" ], reload_services: [],
+			packages: [ "fw", "wireless" ],
 			fn: function(c) {
 				c.uci_set("fw", "r1", "target", "ACCEPT");
 				return { ok: true, body: {} };
@@ -752,7 +825,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		let prefix = "/tmp/uapi-test-stayup-pkg.", global = "/tmp/uapi-test-stayup-global.lock";
 		let batch = function(conn, reload) {
 			return tx.multi_transaction(conn, {
-				packages: [ "unbound_srv" ], reload_services: [ "unbound-uci-ext" ],
+				packages: [ "unbound_srv" ], reload_services: { unbound_srv: [ "unbound-uci-ext" ] },
 				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload,
 				watch: (cn, s) => tx.default_watch(cn, s, 0, 0),
 				fn: function(c) { c.uci_set("unbound_srv", "main", "enabled", "1"); return { ok: true }; },

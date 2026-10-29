@@ -232,12 +232,16 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 		return result ?? { ok: false, kind: "unknown" };
 	}
 
-	// A package that the write left as it was gets no restore, which would put the snapshot over
-	// what another writer committed since.
 	let committed = conn.uci_commit(pkg);
+	if (type(committed) == "object")
+		return { ok: false, kind: "conflict", message: committed.conflict };
+	// A package that the write left as it was gets no reload, which would read the same config
+	// again, and no restore, which would put the snapshot over what another writer committed since.
+	if (!committed)
+		return _finalize_after_reload(null, null, result.body, [], ops, applied);
 
 	return _finalize_after_reload(apply(), function() {
-		if (committed) conn.uci_import(pkg, snapshot);
+		conn.uci_import(pkg, snapshot);
 		return restore();
 	}, result.body, services, ops, applied);
 }
@@ -334,25 +338,31 @@ function transaction(conn, params) {
 	return result;
 }
 
+function services_of(by_package, packages) {
+	let out = {};
+	for (let p in packages)
+		for (let s in by_package[p] ?? []) out[s] = true;
+	return sort(keys(out));
+}
+
 // multi_transaction snapshots, EX-locks, and on-failure restores N packages
-// atomically. Caller passes a sorted-deduped package list and an fn that
-// performs all uci writes inside the locked region. On success all packages
-// commit and the union of reload services runs once. On a failure after the
-// commits, every package that the batch committed is restored from its
-// snapshot. Per-package EX locks are acquired in sorted order to avoid
-// deadlocks vs other writers.
+// atomically. Caller passes a package list, the reload services of each package
+// keyed by package, and an fn that performs all uci writes inside the locked
+// region. On success every package that the batch wrote commits, and the
+// union of their reload services runs once. On a failure after the commits,
+// every package that the batch committed is restored from its snapshot.
+// Per-package EX locks are acquired in sorted order to avoid deadlocks vs
+// other writers.
 function multi_transaction(conn, params) {
 	let packages = params.packages ?? [];
-	let services = params.reload_services ?? [];
+	let by_package = params.reload_services ?? {};
+	let services = services_of(by_package, packages);
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let watch = { start: params.watch ?? watch_stay_up };
-	let apply = _make_apply(conn, reload, services, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
-	let restore_apply = _make_restore(conn, reload, services,
-	                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
 	let check_services = params.check_services ?? default_check_services;
 
 	let svc_err = check_services(services);
@@ -423,13 +433,20 @@ function multi_transaction(conn, params) {
 			// breaks the across-packages atomicity contract. Only those are
 			// restored: the snapshot of a package that this batch did not write
 			// would undo what another writer committed since, such as LuCI's
-			// delete of the section that made this batch's commit fail.
+			// delete of the section that made this batch's commit fail. The
+			// others are reverted first, because the cursor still holds the
+			// writes of the packages after the failure, and the reconcile of
+			// the restore reads the network package through it.
 			let committed = [];
-			let commit_err = null;
+			let commit_err = null, conflict = null;
 			for (let pkg in sorted) {
 				let caught_commit = null;
 				let wrote = false;
 				try { wrote = conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
+				if (type(wrote) == "object") {
+					commit_err = conflict = wrote.conflict;
+					break;
+				}
 				if (caught_commit != null) {
 					commit_err = sprintf("uci_commit(%s) failed: %s",
 					                     pkg, caught_commit);
@@ -437,11 +454,19 @@ function multi_transaction(conn, params) {
 				}
 				if (wrote) push(committed, pkg);
 			}
-			let reload_err = (commit_err == null) ? apply() : commit_err;
+			let ran = services_of(by_package, committed);
+			let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
+			let restore_apply = _make_restore(conn, reload, ran,
+			                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
+			let reload_err = commit_err ?? ((length(committed) > 0) ? apply() : null);
 			result = _finalize_after_reload(reload_err, function() {
+				for (let pkg in sorted)
+					if (index(committed, pkg) < 0) conn.uci_revert(pkg);
 				for (let pkg in committed) conn.uci_import(pkg, snapshots[pkg]);
 				return restore_apply();
-			}, inner.body, services, wg_ops, wg_applied);
+			}, inner.body, ran, wg_ops, wg_applied);
+			if (conflict != null && result.kind == "reload_failed_restored")
+				result = { ok: false, kind: "conflict", message: conflict };
 		}
 	} catch (e) { caught = e; }
 

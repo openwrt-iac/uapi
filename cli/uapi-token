@@ -174,7 +174,9 @@ function cmd_create(opts) {
 			cursor.set(PACKAGE, opts.name, "rate", "" + opts.rate);
 		if (opts.burst != null)
 			cursor.set(PACKAGE, opts.name, "burst", "" + opts.burst);
-		cursor.commit(PACKAGE);
+		if (!cursor.commit(PACKAGE))
+			die(sprintf("uapi-token create: cannot commit /etc/config/%s: %s, so token %J does not exist",
+			            PACKAGE, cursor.error() ?? "failed", opts.name));
 
 		// Out before the reap, so that an interrupt there cannot lose the bearer of a token
 		// that is committed.
@@ -237,7 +239,9 @@ function cmd_revoke(opts) {
 		if (!s || s['.type'] != TOKEN_TYPE)
 			die(sprintf("uapi-token revoke: %J not found", name));
 		cursor.delete(PACKAGE, name);
-		cursor.commit(PACKAGE);
+		if (!cursor.commit(PACKAGE))
+			die(sprintf("uapi-token revoke: cannot commit /etc/config/%s: %s, so token %J still authenticates",
+			            PACKAGE, cursor.error() ?? "failed", name));
 		fs.stderr.write(sprintf("Revoked token %J\n", name));
 		reap(cursor);
 	});
