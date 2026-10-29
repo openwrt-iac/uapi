@@ -159,9 +159,10 @@ function validate_new(json) {
 return {
 	package: "dhcp",
 	type: "dhcp",
-	// reload via ucitrack on the dhcp package, which fans out to both dnsmasq
-	// and odhcpd. Listing them here would double-reload.
+	// odhcpd reads ra, dhcpv6, ra_default, domain and leasetime, and start and limit when it serves
+	// DHCPv4. Its procd trigger on dhcp does not fire for a commit through libuci.
 	reload: ["dnsmasq"],
+	reload_if_installed: ["odhcpd"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

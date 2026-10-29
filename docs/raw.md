@@ -92,9 +92,9 @@ The reload service list is computed from `/etc/config/ucitrack` plus a small fal
 | network    | network         |
 | wireless   | network         |
 | firewall   | firewall        |
-| dhcp       | dnsmasq         |
+| dhcp       | dnsmasq, then odhcpd when `/etc/init.d/odhcpd` exists |
 
-If `/etc/config/ucitrack` has an entry for the package, its `option init` (plus `list affects` chain) takes precedence over the fallback table.
+If `/etc/config/ucitrack` has an entry for the package, its `option init` (plus `list affects` chain) takes precedence over the fallback table. The fallback for `dhcp` follows LuCI's `/usr/share/ucitrack/luci-mod-network-dnsmasq.json`, in which `dhcp` affects odhcpd. A router without odhcpd skips it, and the write does not answer `503 init_script_missing` for it.
 
 ## Examples
 

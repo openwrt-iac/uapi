@@ -17,6 +17,36 @@ t.describe('dhcp.servers contract', () => {
 		t.assert_equal(servers.package, "dhcp");
 		t.assert_equal(servers.type, "dhcp");
 		t.assert_deep_equal(servers.reload, ["dnsmasq"]);
+		t.assert_deep_equal(servers.reload_if_installed, ["odhcpd"]);
+	});
+});
+
+// odhcpd reads ra, dhcpv6 and ra_default, and reloads on its procd trigger only, which a commit
+// through libuci does not fire. A PATCH of ra answered 200 and odhcpd kept its old config.
+t.describe('dhcp.servers reloads odhcpd when it is installed', () => {
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	function patch_ra(missing) {
+		let ran = [];
+		let tx = { acquire: () => ({}), release: () => null,
+		           reload: (s) => { push(ran, ...s); return null; },
+		           check_services: (s) => (index(s, missing) >= 0) ? "init script not found" : null };
+		let c = ubus.stub({ uci: {
+			dhcp: { lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' } },
+		} });
+		let r = handler.make(servers, { tx }).patch(c, ctx, 'lan', { ra: 'server' });
+		return { status: r.status, header: r.headers["X-Reload-Services"], ran };
+	}
+
+	t.it('a PATCH of ra reloads dnsmasq and odhcpd', () => {
+		t.assert_deep_equal(patch_ra(null), { status: 200, header: "dnsmasq,odhcpd", ran: [ "dnsmasq", "odhcpd" ] });
+	});
+
+	t.it('on a router without odhcpd it reloads dnsmasq and answers 200', () => {
+		t.assert_deep_equal(patch_ra("odhcpd"), { status: 200, header: "dnsmasq", ran: [ "dnsmasq" ] });
+	});
+
+	t.it('on a router without dnsmasq it answers 503, as before', () => {
+		t.assert_deep_equal(patch_ra("dnsmasq"), { status: 503, header: null, ran: [] });
 	});
 });
 
@@ -51,6 +81,7 @@ t.describe('dhcp.dnsmasq contract', () => {
 		t.assert_equal(dnsmasq.package, "dhcp");
 		t.assert_equal(dnsmasq.type, "dnsmasq");
 		t.assert_deep_equal(dnsmasq.reload, ["dnsmasq"]);
+		t.assert_equal(dnsmasq.reload_if_installed, null);
 	});
 });
 
@@ -87,11 +118,29 @@ t.describe('dhcp.odhcpd contract', () => {
 		t.assert_equal(odhcpd.package, "dhcp");
 		t.assert_equal(odhcpd.type, "odhcpd");
 		t.assert_deep_equal(odhcpd.reload, ["odhcpd"]);
+		t.assert_deep_equal(odhcpd.reload_if_installed, ["dnsmasq"]);
 	});
 	t.it('rejects loglevel out of range', () => {
 		let errs = full_validate(odhcpd, { loglevel: 10 }, null);
 		let le = filter(errs, function(e) { return e.field == "loglevel"; });
 		t.assert_equal(le[0].code, "out_of_range");
+	});
+
+	// dnsmasq.init reads maindhcp, so a PATCH of it that reloaded odhcpd alone left both daemons
+	// serving DHCPv4, or neither.
+	t.it('a PATCH of maindhcp reloads dnsmasq too, when it is installed', () => {
+		let patch = (missing) => {
+			let ran = [];
+			let tx = { acquire: () => ({}), release: () => null,
+			           reload: (s) => { push(ran, ...s); return null; },
+			           check_services: (s) => (index(s, missing) >= 0) ? "init script not found" : null };
+			let c = ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', '.anonymous': false, maindhcp: '0' } } } });
+			let r = handler.make_singleton(odhcpd, { tx }).patch(c, { request_id: "01hx0000000000000000000000" },
+			                                                    { maindhcp: true });
+			return { status: r.status, header: r.headers["X-Reload-Services"], ran };
+		};
+		t.assert_deep_equal(patch(null), { status: 200, header: "odhcpd,dnsmasq", ran: [ "odhcpd", "dnsmasq" ] });
+		t.assert_deep_equal(patch("dnsmasq"), { status: 200, header: "odhcpd", ran: [ "odhcpd" ] });
 	});
 });
 

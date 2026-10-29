@@ -972,6 +972,109 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 	});
 });
 
+// odhcpd reads dhcp too, and an image can lack it. A write that requires it answered 503 on such
+// a router, and one that left it out answered 200 while odhcpd kept its old config.
+t.describe('transaction, a service to reload only when it is installed', () => {
+	let missing = (svc) => (s) => (index(s, svc) >= 0) ? sprintf("init script /etc/init.d/%s not found", svc) : null;
+	function dhcp_write(check_services, reload) {
+		let calls = [];
+		let r = tx.transaction(ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ra: 'disabled' } } } }), build_params({
+			package: "dhcp", reload_services: [ "dnsmasq" ], reload_if_installed: [ "odhcpd" ],
+			acquire: function() { return {}; }, release: function() {}, check_services,
+			reload: (s) => { push(calls, s); return reload ? reload(s) : null; },
+			fn: function(c, pkg) { c.uci_set(pkg, "lan", "ra", "server"); return { ok: true, body: {} }; },
+		}));
+		return { r, calls };
+	}
+
+	t.it('reloads it after the required services when its init script exists', () => {
+		let w = dhcp_write(noop_check);
+		t.assert_true(w.r.ok);
+		t.assert_deep_equal(w.calls, [ [ "dnsmasq", "odhcpd" ] ]);
+		t.assert_deep_equal(w.r.reload_services, [ "dnsmasq", "odhcpd" ]);
+	});
+
+	t.it('skips it when its init script is missing, and the write goes through', () => {
+		let w = dhcp_write(missing("odhcpd"));
+		t.assert_true(w.r.ok);
+		t.assert_deep_equal(w.calls, [ [ "dnsmasq" ] ]);
+		t.assert_deep_equal(w.r.reload_services, [ "dnsmasq" ]);
+		let real = tx.transaction(ubus.stub(), build_params({
+			reload_services: [], reload_if_installed: [ "this-daemon-definitely-not-installed-anywhere" ],
+			acquire: function() { return {}; }, release: function() {}, check_services: null,
+		}));
+		t.assert_deep_equal([ real.ok, real.reload_services ], [ true, [] ]);
+	});
+
+	t.it('a missing required service still answers init_script_missing', () => {
+		let w = dhcp_write(missing("dnsmasq"));
+		t.assert_equal(w.r.kind, "init_script_missing");
+		t.assert_deep_equal(w.calls, []);
+	});
+
+	t.it('the restore reloads it too', () => {
+		let w = dhcp_write(noop_check, reload_flaky(1));
+		t.assert_equal(w.r.kind, "reload_failed_restored");
+		t.assert_deep_equal(w.calls, [ [ "dnsmasq", "odhcpd" ], [ "dnsmasq", "odhcpd" ] ]);
+	});
+
+	t.it('a batch reloads the installed ones of the packages that it committed', () => {
+		let prefix = "/tmp/uapi-test-optional-pkg.", global = "/tmp/uapi-test-optional-global.lock";
+		let batch = (check_services, committed) => {
+			let calls = [];
+			let conn = ubus.stub({ uci: { dhcp: {}, fw: {} } });
+			conn.uci_commit = (pkg) => index(committed, pkg) >= 0;
+			let r = tx.multi_transaction(conn, {
+				packages: [ "dhcp", "fw" ],
+				reload_services: { dhcp: [ "dnsmasq" ], fw: [ "firewall" ] },
+				reload_if_installed: { dhcp: [ "odhcpd" ] },
+				lock_path: global, pkg_lock_prefix: prefix, check_services,
+				reload: (s) => { push(calls, s); return null; },
+				fn: (c) => ({ ok: true, body: {} }),
+			});
+			for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
+			return [ r.ok, calls ];
+		};
+		t.assert_deep_equal(batch(noop_check, [ "dhcp", "fw" ]), [ true, [ [ "dnsmasq", "firewall", "odhcpd" ] ] ]);
+		t.assert_deep_equal(batch(missing("odhcpd"), [ "dhcp", "fw" ]), [ true, [ [ "dnsmasq", "firewall" ] ] ]);
+		t.assert_deep_equal(batch(noop_check, [ "fw" ]), [ true, [ [ "firewall" ] ] ]);
+	});
+
+	// A dhcp/odhcpd write reloads dnsmasq only as an installed extra, and the dnsmasq --test check
+	// decides from the services that it is handed whether to run.
+	t.it('the check after the reload sees the services that ran, as X-Reload-Services does', () => {
+		let odhcpd_write = (check_services, code, batch) => {
+			let tested = [];
+			let conn = ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', maindhcp: '0' } } } });
+			conn.set_ubus_response("service", "list", (args) => ({ [args.name]: { instances: {
+				main: { running: true, command: [ "/usr/sbin/dnsmasq", "-C", "/var/etc/dnsmasq.conf.main" ] } } } }));
+			let p = {
+				acquire: function() { return {}; }, release: function() {}, check_services,
+				reload: noop_reload,
+				watch: (cn, s) => tx.dnsmasq_check(cn, s, (argv) => {
+					push(tested, argv[1]);
+					return { code, output: "dnsmasq: bad option at line 1 of /var/etc/dnsmasq.conf.main" };
+				}),
+			};
+			let write = function(c, pkg) { c.uci_set(pkg, "odhcpd", "maindhcp", "1"); return { ok: true, body: {} }; };
+			let r = batch
+				? tx.multi_transaction(conn, { ...p, packages: [ "dhcp" ], reload_services: { dhcp: [ "odhcpd" ] },
+				                               reload_if_installed: { dhcp: [ "dnsmasq" ] },
+				                               lock_path: "/tmp/uapi-test-check-global.lock",
+				                               pkg_lock_prefix: "/tmp/uapi-test-check-pkg.", fn: (c) => write(c, "dhcp") })
+				: tx.transaction(conn, build_params({ ...p, package: "dhcp", reload_services: [ "odhcpd" ],
+				                                      reload_if_installed: [ "dnsmasq" ], fn: write }));
+			for (let f in [ "/tmp/uapi-test-check-global.lock", ...fs.glob("/tmp/uapi-test-check-pkg.*") ]) fs.unlink(f);
+			return [ r.kind ?? r.reload_services, tested ];
+		};
+		for (let batch in [ false, true ]) {
+			t.assert_deep_equal(odhcpd_write(noop_check, 0, batch), [ batch ? [ "dnsmasq", "odhcpd" ] : [ "odhcpd", "dnsmasq" ], [ "--test" ] ]);
+			t.assert_deep_equal(odhcpd_write(noop_check, 1, batch), [ "reload_failed_unrecovered", [ "--test", "--test" ] ]);
+			t.assert_deep_equal(odhcpd_write(missing("dnsmasq"), 1, batch), [ [ "odhcpd" ], [] ]);
+		}
+	});
+});
+
 function lock_is_free(path) {
 	let fd = fs.open(path, "r");
 	let ok = fd.lock("xn") === true;

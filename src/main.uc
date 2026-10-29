@@ -433,12 +433,14 @@ function batch_resolve_target(parts) {
 	if (BARE_SINGLETONS[key]) {
 		let src = RESOURCE_SOURCES[key];
 		return { kind: "singleton", key, h: BARE_SINGLETONS[key],
-		         package: src.package, reload: src.reload ?? [] };
+		         package: src.package, reload: src.reload ?? [],
+		         reload_if_installed: src.reload_if_installed ?? [] };
 	}
 	if (BARE_RESOURCES[key]) {
 		let src = RESOURCE_SOURCES[key];
 		return { kind: "resource", key, h: BARE_RESOURCES[key],
-		         package: src.package, reload: src.reload ?? [] };
+		         package: src.package, reload: src.reload ?? [],
+		         reload_if_installed: src.reload_if_installed ?? [] };
 	}
 	return null;
 }
@@ -514,6 +516,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	// transaction answers 503 for a missing config file or init script, which told a token whether
 	// a package that it has no scope for is installed.
 	let reloads = {};
+	let if_installed = {};
 	for (let i = 0; i < length(ops); i++) {
 		let op = ops[i];
 		if (type(op) != "object" || type(op.path) != "string")
@@ -528,8 +531,10 @@ function batch_dispatch(conn, ctx, token, method, body) {
 			slice(parts, 0, 2), method_verb(op.method), sprintf("%s on %s", op.method, op.path));
 		if (denied != null) return batch_aborted(ctx, i, denied);
 		if (op.method == "POST" || op.method == "PUT"
-		    || op.method == "PATCH" || op.method == "DELETE")
+		    || op.method == "PATCH" || op.method == "DELETE") {
 			reloads[tgt.package] = uniq([ ...(reloads[tgt.package] ?? []), ...tgt.reload ]);
+			if_installed[tgt.package] = uniq([ ...(if_installed[tgt.package] ?? []), ...tgt.reload_if_installed ]);
+		}
 	}
 	let pkgs = sort(keys(reloads));
 
@@ -562,6 +567,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		r = transaction.multi_transaction(conn, {
 			packages: pkgs,
 			reload_services: reloads,
+			reload_if_installed: if_installed,
 			wg_ops: kernel_ops,
 			fn: run_ops,
 		});

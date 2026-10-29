@@ -1050,6 +1050,22 @@ All notable changes to this project will be documented in this file. Format foll
   `reload_note`, where it answered `reloaded: true` for a package whose reload service uapi knows. A
   raw PUT or PATCH that sends options sets each of them, also one that uci already holds, so it
   still reloads. (#277)
+- **A write to `dhcp/servers`, `dhcp/hosts` or the raw `dhcp` package reloads odhcpd too, and a
+  write to `dhcp/odhcpd` reloads dnsmasq too.** odhcpd reads `ra`, `dhcpv6`, `ra_default`, `domain`
+  and `leasetime` of a server, `start` and `limit` when it serves DHCPv4, and the static leases of a
+  host, with `duid` and `hostid` for DHCPv6. odhcpd reloads on its procd trigger on the `dhcp`
+  package, which fires on a `config.change` event. uapi commits through libuci and runs
+  `/etc/init.d/<service> reload` itself, which sends no such event, and these writes ran only
+  `dnsmasq`. So a write of these fields answered 200 with `X-Reload-Status: ok`, and odhcpd kept its
+  old config until something else reloaded it or the router rebooted. In the same way, dnsmasq.init
+  reads `maindhcp`, and a write of it reloaded only odhcpd, so dnsmasq went on serving DHCPv4 beside
+  odhcpd, or neither served it. 3.1.0 has the same defect. LuCI saves through rpcd, which sends the
+  event, so procd reloads both daemons, and uapi now does the same. A router can lack the second
+  daemon, so it is reloaded only when its init script exists, and a write does not answer
+  `503 init_script_missing` for it. `X-Reload-Services` then reads `dnsmasq,odhcpd`, or
+  `odhcpd,dnsmasq` on `dhcp/odhcpd`, and the `reload_services` of a raw write names odhcpd too. A
+  `dhcp/odhcpd` write that reloads dnsmasq also runs the `dnsmasq --test` check after the reload. No
+  status, header or field is new. (#280)
 
 ### Security
 

@@ -35,7 +35,8 @@ later than 2 s still answers 2xx.
 
 dnsmasq is checked by its config. After a write that reloads `dnsmasq`, as a
 write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, the raw `dhcp` package
-or a `/batch` that holds one does, uapi runs the command of each dnsmasq
+or a `/batch` that holds one does, and a write to `dhcp/odhcpd` on a router
+that ships dnsmasq, uapi runs the command of each dnsmasq
 instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq
 refuses it, the write answers `500 reload_failed_restored`, and its
 `reload_error` reads, for example,

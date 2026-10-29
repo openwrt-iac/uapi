@@ -138,6 +138,8 @@ return {
 	// is not a non-empty string.
 	unique_field: "ip",
 	reload: ["dnsmasq"],
+	// odhcpd serves the static leases of a host, by duid and hostid for DHCPv6.
+	reload_if_installed: ["odhcpd"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
