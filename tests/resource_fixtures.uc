@@ -249,7 +249,7 @@ const CASES = [
 	},
 	{
 		file: "dhcp.servers.uc", id: "s1", pkg: "dhcp",
-		section: { ignore: '1', force: '1', dynamicdhcp: '0', '.type': 'dhcp', interface: 'lan', start: '100', limit: '150', leasetime: '12h' },
+		section: { ignore: '1', force: '1', dynamicdhcp: '0', '.type': 'dhcp', interface: 'lan', start: '100', limit: '150', leasetime: '12h', dhcpv4: 'server', ra_slaac: '0', ra_flags: ['managed-config', 'other-config'] },
 	},
 	{
 		file: "dhcp.dnsmasq.uc", id: "main", pkg: "dhcp",

@@ -39,6 +39,19 @@ stored=$($SSH "uci -q show dhcp.$sid.dhcp_option" || true)
 [ "$stored" = "dhcp.$sid.dhcp_option='3,192.0.2.1' '6,192.0.2.1'" ] || fail "PUT of the read stored $stored"
 assert_dnsmasq_loads
 
+echo "--- dhcp/servers: a PUT of the read keeps the options that odhcpd.defaults writes into lan ---"
+$SSH "uci set dhcp.$sid.dhcpv4=server; uci set dhcp.$sid.ra_slaac=1
+      uci add_list dhcp.$sid.ra_flags=managed-config; uci add_list dhcp.$sid.ra_flags=other-config
+      uci commit dhcp"
+view=$(call "$URL/dhcp/servers/$sid" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '[.dhcpv4, .ra_flags, .ra_slaac]')" = '["server",["managed-config","other-config"],true]' ] \
+	|| fail "the odhcpd options read wrong: $view"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/dhcp/servers/$sid" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $r"
+stored=$($SSH "uci -q get dhcp.$sid.dhcpv4; uci -q get dhcp.$sid.ra_flags; uci -q get dhcp.$sid.ra_slaac" | tr '\n' '|')
+[ "$stored" = "server|managed-config other-config|1|" ] || fail "PUT of the read stored $stored"
+assert_dnsmasq_loads
+
 echo "--- dhcp/servers: DELETE ---"
 call -X DELETE "$URL/dhcp/servers/$sid" | tail -1 | grep -q '^204$' || fail "DELETE servers expected 204"
 assert_dnsmasq_loads
