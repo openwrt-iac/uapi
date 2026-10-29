@@ -26,12 +26,14 @@ cleanup() {
 	      uci -q revert firewall
 	      if [ -f /tmp/uapi-staged-before ]; then
 	          cp -p /tmp/uapi-staged-before /etc/config/firewall && rm -f /tmp/uapi-staged-before
+	          /etc/init.d/firewall reload
 	      fi
 	      uci -q revert network
 	      if [ -f /tmp/uapi-staged-network ]; then
 	          cp -p /tmp/uapi-staged-network /etc/config/network && rm -f /tmp/uapi-staged-network
 	          /etc/init.d/network reload
-	      fi' || true
+	      fi
+	      rm -f /tmp/uapi56-hold.uc /tmp/uapi56-held /tmp/uapi56-release' || true
 }
 trap cleanup EXIT INT TERM
 

@@ -607,10 +607,13 @@ All notable changes to this project will be documented in this file. Format foll
   can rely on, and it fails loudly. A PUT or PATCH of a curated id there answers the same 503 where
   it answered 404, as with `init_script_missing`. A DELETE still answers 404, because no section can
   exist there, and a client reads a 404 on DELETE as already gone, as terraform-provider-uapi does
-  at destroy after the package was removed (#277). The raw PUT, PATCH and DELETE still answer 404,
-  because they look up the section first. A uci set, rename or commit that the cursor refuses now
-  answers 500 instead of 200, and a raw write whose reload service is not installed answers
-  `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
+  at destroy after the package was removed (#277). A DELETE in a `POST /batch` answers the 503,
+  because the batch commits as one write. The raw PUT, PATCH and DELETE still answer 404, because
+  they look up the section first. A uci set, rename or commit that the cursor refuses now answers
+  500 instead of 200. In a `POST /batch` that refusal restores the packages that the batch committed
+  before it and runs no reload and no kernel apply, where 3.1.0 answered 207 and gave the kernel the
+  WireGuard peers that the batch set (#277). A raw write whose reload service is not installed
+  answers `503 init_script_missing` instead of a 500 that named an unknown kind. (#235)
 
 - **A raw write of an option that uci cannot store answered 200 and stored nothing, or only part of
   it.** The cursor drops an option name outside letters, digits and `_` and still returns true. It
@@ -824,14 +827,16 @@ All notable changes to this project will be documented in this file. Format foll
   its commit reloads the file and replays the writes of the request, so a commit by LuCI or a shell
   during the request is still kept. When another writer deleted a section that the request wrote
   into, the commit fails, and the write answers `409 conflict` with a message that names the package
-  and says that a retry reads the new state. A `POST /batch` answers it once it has restored the
-  packages that it committed (#277). LuCI was not affected, because rpcd keeps a delta directory per
-  session. A response changes only on a router where a shell staged a change and did not commit it,
-  and no field or type changes. The staged change now takes effect when the shell commits it, and
-  not before, which applies to the `uapi` package too: a token that `uci delete uapi.<name>` removes
-  without a commit keeps authenticating, where it answered 401 at once, a token that `uci set` adds
-  without a commit does not authenticate yet, and a staged change to `uapi.logging` or
-  `uapi.ratelimit` applies once committed. uapi also reads, writes and restores
+  and says that a retry reads the new state. A `POST /batch` answers it once it has written back the
+  packages that it committed before the failure and dropped the writes of the others. It runs no
+  reload and no WireGuard reconcile then, because both come after every commit, so the daemons and
+  the kernel stay as they were (#277). LuCI was not affected, because rpcd keeps a delta directory
+  per session. A response changes only on a router where a shell staged a change and did not commit
+  it, and no field or type changes. The staged change now takes effect when the shell commits it,
+  and not before, which applies to the `uapi` package too: a token that `uci delete uapi.<name>`
+  removes without a commit keeps authenticating, where it answered 401 at once, a token that
+  `uci set` adds without a commit does not authenticate yet, and a staged change to `uapi.logging`
+  or `uapi.ratelimit` applies once committed. uapi also reads, writes and restores
   `/etc/config/<package>` only, and ignores an override that libuci reads in its place from
   `/var/run/uci/<package>`. Nothing in the OpenWrt feeds writes one. (#268)
 - **A token minted per run no longer adds files to tmpfs, which is RAM, until a reboot.** The metric
@@ -965,47 +970,41 @@ All notable changes to this project will be documented in this file. Format foll
   that as a write, so the commit rewrote the package, which drops its comments. A PATCH now skips a
   set of the value that uci already holds. No request, response or header changes. (#275)
 
-- **A `POST /batch` whose commit fails leaves the WireGuard peers in the kernel as uci stores
-  them.** When libuci refused the commit of a package, as on a full overlay, uapi 3.1.0 ignored it:
-  the batch answered 207 and gave the kernel the peers that its writes set, while
-  `/etc/config/network` kept the old ones. #235 made such a batch fail and restore. The restore sets
-  the peers of each interface that the batch touched again from uci, but it read uci through the
-  copy of the package that the request holds, which still held the writes. That copy also held the
-  writes of every package after the one whose commit failed, and #268 made a commit fail when
-  another writer, such as LuCI, deleted a section that the batch writes. So a batch that changed the
-  `allowed_ips` of a peer with `route_allowed_ips` from `10.0.0.2/32` to `0.0.0.0/0` answered
-  `500 reload_failed_restored` and kept `10.0.0.2/32` in uci, and the restore ran
-  `wg set wg0 peer <key> allowed-ips 0.0.0.0/0` and `ip route replace 0.0.0.0/0 dev wg0`, a default
-  route into the tunnel. A commit that fails now drops that copy, and the restore reverts each
-  package that the batch did not commit before it reads uci. A single write runs no restore after a
-  failed commit, so it was not affected. No request, response or header changes. (#277)
 - **`uapi-token create` and `revoke` stop when libuci refuses the commit.** Neither checked the
-  result. On a full overlay, `revoke` printed `Revoked token`, exited 0, and its reap then dropped
-  the rate-limit bucket, the metric series and the last-used marker of a token that still
-  authenticates. `create` printed a bearer for a token that does not exist. Both now exit non-zero
-  with the error of libuci, before they print and before the reap. (#277)
-- **A PATCH that changes nothing no longer reloads the daemon or sets a WireGuard peer again in the
-  kernel.** Since #272 and #275 such a PATCH commits nothing, but uapi still ran the init scripts of
-  the resource, and on `network/wireguard_peers` the kernel apply set the peer from the body. It
-  removed a peer without `endpoint_host` and set it again, which reset its session. A PATCH that
-  names no field, or sends the values that uci holds, a stored `preshared_key` included, now runs no
-  init script and changes nothing in the kernel. This holds for a merge PATCH, a JSON Patch and the
-  PATCH of a singleton, and for the PATCH sub-requests of a `POST /batch`, which now reloads only
-  the services of the packages that its writes changed. A PUT writes every option that it sends, so
-  it still reloads, and so do a POST and a DELETE. A PATCH that changes only `preshared_key` still
-  reaches the kernel. The headers of such a PATCH say what ran: `X-Reload-Status: no_reload` and
-  `X-Kernel-Status: no_kernel` where they said `ok`, or `skipped` for a peer on a down interface,
-  and no `X-Reload-Services` or `X-Kernel-Applied`. The `X-Reload-Services` of a batch names only
-  the services that ran. Under `docs/versioning.md` this is not an addition but a change of what two
-  documented values cover: `no_reload` meant a resource without reload services, which no resource
-  is, so no client could see it, and `no_kernel` meant a resource without a kernel path. Both now
-  also cover a write that changed nothing, and `docs/errors.md` says so. No value, header or status
-  is new. terraform-provider-uapi only logs these headers. A raw write that changes nothing, such as
-  a raw PATCH with no option, reloads nothing either, and answers `reloaded: false`, an empty
-  `reload_services` and a `reload_note`, where it answered `reloaded: true`. (#277)
+  result. On a full overlay, `revoke` printed `Revoked token`, exited 0 and dropped the rate-limit
+  bucket of a token that still authenticates, and `create` printed a bearer for a token that does
+  not exist. Both now exit non-zero with the error of libuci, before they print and before they
+  touch the state of the token. (#277)
+- **A PATCH that changes nothing in uci no longer reloads the daemon or sets a WireGuard peer again
+  in the kernel.** In 3.1.0 such a PATCH ran the init scripts of the resource, and on
+  `network/wireguard_peers` the kernel apply set the peer from the body: it removed a peer without
+  `endpoint_host` and set it again, which reset its session. A PATCH that names no field, or sends
+  the values that uci holds, a stored `preshared_key` included, now commits nothing, runs no init
+  script and changes nothing in the kernel. This holds for a merge PATCH, a JSON Patch and the PATCH
+  of a singleton, and for the PATCH sub-requests of a `POST /batch`, which now reloads only the
+  services of the packages that its writes changed. A PUT writes every option that it sends, so it
+  still reloads, and so do a POST and a DELETE. A PATCH that changes only `preshared_key` still
+  reaches the kernel. For a client, an empty PATCH no longer makes the daemon read its config again,
+  which also applied a `uci commit` that a shell had made without a reload. This is a behavior fix
+  with a header change, and both headers still report what ran: such a PATCH now answers
+  `X-Reload-Status: no_reload` and `X-Kernel-Status: no_kernel`, with no `X-Reload-Services` or
+  `X-Kernel-Applied`, where it answered `ok`, and `ok` or `skipped` on a peer. No header, value or
+  status is new, and `docs/errors.md` now says that `no_reload` also covers a write that changed
+  nothing. The `X-Reload-Services` of a batch names only the services that ran.
+  terraform-provider-uapi only logs these headers. A raw PATCH that sends no option writes nothing,
+  so it reloads nothing either, and answers `reloaded: false`, an empty `reload_services` and a
+  `reload_note`, where it answered `reloaded: true` for a package whose reload service uapi knows. A
+  raw PUT or PATCH that sends options sets each of them, also one that uci already holds, so it
+  still reloads. (#277)
 
 ### Security
 
+- **A `POST /batch` checks the scope of each operation before anything else.** It checked that the
+  init scripts of its writes are installed before it checked the scopes of its operations, so a
+  token learned from a `503 init_script_missing` whether a daemon that it has no scope for is
+  installed, where a single request answers 403. A batch now checks the scopes first, also before
+  the check of the config file that #235 adds, and answers the 403 of the first operation out of
+  scope, as `batch_partial_failure`, before any write. (#277)
 - **The metrics, the rate-limit buckets, the error ring and the idempotency cache keep their files
   private under `/var/run`, and so do the last-used markers of the tokens.** The first four were in
   `/tmp`. Each keeps its files in a directory of mode 0700, `/var/run/uapi-metrics`,

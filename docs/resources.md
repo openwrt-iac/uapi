@@ -47,8 +47,10 @@ section. On a router without one, a write answers `503 config_missing`
 with the missing path, before any uci write. That includes a PUT or PATCH
 of an id that a GET answers 404 for, as with `init_script_missing`. A
 DELETE answers 404, because no section can exist there, and a client
-reads that as already gone. A read answers an empty list. The same
-applies to any package whose file was removed. An empty file is enough.
+reads that as already gone. A DELETE in a `POST /batch` answers the 503,
+because the batch commits as one write. A read answers an empty list.
+The same applies to any package whose file was removed. An empty file
+is enough.
 
 Install the daemon either out of band (`apk add unbound`, etc.) or
 through uapi itself via `POST /api/v3/packages/installed`. The latter

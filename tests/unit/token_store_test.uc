@@ -205,15 +205,17 @@ t.describe('token_store.create validation', () => {
 // The first architectural principle: no write to /etc/config except through uci. A create created
 // the file itself when it was missing, which the transaction refuses first.
 t.describe('token_store, the config file', () => {
-	t.it('a create and a revoke open nothing under /etc/config', () => {
+	t.it('a create opens nothing under /etc/config, also where /etc/config/uapi is missing', () => {
 		let opened = [];
-		let ts = t.load_with_fs({ ...fs, open: function(path, ...rest) {
-			if (substr(path, 0, 12) == "/etc/config/") { push(opened, path); return null; }
-			return fs.open(path, ...rest);
-		} }, [ "token_store" ]);
+		let ts = t.load_with_fs({ ...fs,
+			stat: (path) => (path == "/etc/config/uapi") ? null : fs.stat(path),
+			open: function(path, ...rest) {
+				if (substr(path, 0, 12) == "/etc/config/") { push(opened, path); return null; }
+				return fs.open(path, ...rest);
+			},
+		}, [ "token_store" ]);
 		let c = bus.stub({}); seed_tokens(c);
 		t.assert_true(ts.create(c, { name: "fresh", scopes: [ "*:ro" ] }, [ "*:rw" ], 1700000000, noop_tx()).ok);
-		t.assert_true(ts.remove(c, "fresh", 1700000000, noop_tx()).ok);
 		t.assert_deep_equal(opened, []);
 	});
 });
@@ -353,5 +355,59 @@ t.describe('token_store.update_last_used, the last-used marker', () => {
 		token_store.reap_state([], time());
 		t.assert_false(written);
 		t.assert_true(kept);
+	});
+});
+
+// uapi-token writes through its own cursor, so this runs it in a child, with a stub of libuci found
+// before the real module. Its locks go to /tmp, because the container of the unit job can lack
+// /var/lock. A create checks /etc/config/uapi with the real fs first, which no unit host holds.
+t.describe('uapi-token revoke, a commit that libuci refuses', () => {
+	function revoke(commit) {
+		let mk = fs.popen("mktemp -d /tmp/uapi-token-cli.XXXXXX");
+		let dir = trim(mk.read("all") ?? "");
+		mk.close();
+		fs.writefile(dir + "/uci.uc", sprintf(`return { cursor: function() {
+			let tokens = { admin: { '.type': 'token', '.name': 'admin', salt: 's', hash: 'h', scopes: [ '*:rw' ] } };
+			return {
+				foreach: function(p, t, fn) { for (let n, s in tokens) fn({ ...s }); return true; },
+				get_all: (p, n) => tokens[n],
+				delete: function(p, n) { delete tokens[n]; return true; },
+				commit: () => %s,
+				error: () => "No space left on device",
+			};
+		} };`, commit));
+		fs.writefile(dir + "/digest.uc", "return { sha256: (s) => s };");
+		fs.writefile(dir + "/transaction.uc", sprintf("let real = loadfile(%J)();\n" +
+			"return { ...real, acquire_pkg_waiting: (pkg, ms) => real.acquire_pkg_waiting(pkg, ms, %J, %J) };\n",
+			fs.getcwd() + "/src/lib/transaction.uc", dir + "/global.lock", dir + "/pkg."));
+		let p = fs.popen(sprintf("ucode -L %s -L src/lib cli/uapi-token revoke admin 2>%s/err; echo $?", dir, dir));
+		let code = trim(p.read("all") ?? "");
+		p.close();
+		let err = fs.readfile(dir + "/err") ?? "";
+		let locked = fs.stat(dir + "/pkg.uapi.lock") != null;
+		system([ "rm", "-rf", dir ]);
+		return { code, err, locked };
+	}
+
+	// It printed that it revoked the token, exited 0, and reaped the state of a token that still
+	// authenticates.
+	t.it('exits non-zero, says that the token still authenticates, and keeps its state', () => {
+		plant_state([ "admin" ]);
+		let r = revoke("null");
+		t.assert_true(r.code != "0", r.err);
+		t.assert_match(r.err, /uapi-token revoke: cannot commit \/etc\/config\/uapi: No space left on device, so token "admin" still authenticates/);
+		t.assert_true(index(r.err, "Revoked") < 0, r.err);
+		t.assert_true(fs.stat(BUCKETS + "admin.txt") != null);
+		t.assert_true(has_series("admin"));
+	});
+
+	t.it('a commit that works revokes and reaps, so the stub drives the command', () => {
+		plant_state([ "admin" ]);
+		let r = revoke("true");
+		t.assert_equal(r.code, "0", r.err);
+		t.assert_true(r.locked);
+		t.assert_match(r.err, /Revoked token "admin"/);
+		t.assert_equal(fs.stat(BUCKETS + "admin.txt"), null);
+		t.assert_false(has_series("admin"));
 	});
 });

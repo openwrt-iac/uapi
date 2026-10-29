@@ -103,6 +103,23 @@ for ep in devices interfaces; do
 	echo "$r" | tail -1 | grep -q '^404$' && echo "$r" | grep -q '"code": "not_found"' \
 		|| fail "DELETE /wireless/$ep/radio0 without the config: $r"
 done
+# A batch refused the missing file before it checked the scopes of its operations, so a token
+# learned whether a package that it has no scope for is installed, where a single request answers
+# 403. A batch answers 503 for a DELETE in a missing package too, as for any write, because it
+# commits as one write.
+echo "--- a batch for wireless with a firewall-only token answers 403, and an admin batch DELETE 503 ---"
+fwbearer=$($SSH "uapi-token create --name uapi19_fw --scope 'firewall:rw' 2>/dev/null" | head -1)
+[ -n "$fwbearer" ] || fail "could not mint a firewall-only token"
+r=$(curl -sS -H "Authorization: Bearer $fwbearer" -H 'Content-Type: application/json' -w "\n%{http_code}" \
+	-X POST "$URL/batch" -d '{"operations": [{"path": "/wireless/devices/radio0", "method": "PATCH", "body": {"type": "mac80211"}}]}')
+$SSH 'uapi-token revoke uapi19_fw' >/dev/null 2>&1 || true
+echo "$r" | tail -1 | grep -q '^403$' \
+	&& echo "$r" | sed '$d' | jq -e '.code == "batch_partial_failure" and .error.code == "insufficient_scope"' >/dev/null \
+	|| fail "a wireless batch with a firewall-only token: $r"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
+	-d '{"operations": [{"path": "/wireless/devices/radio0", "method": "DELETE"}]}')
+echo "$r" | tail -1 | grep -q '^503$' && echo "$r" | grep -q '"code": "config_missing"' \
+	|| fail "a batch DELETE without the config: $r"
 $SSH 'test ! -e /etc/config/wireless' || fail "a refused write created /etc/config/wireless"
 restore_wireless
 

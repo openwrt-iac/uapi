@@ -185,7 +185,7 @@ function connect(opts) {
 				for (let op in ops) op();
 			} catch (e) {
 				drop(pkg);
-				return { conflict: sprintf("another writer changed the package %s during the request, and the writes of the request no longer apply to it: %s. Nothing was written. A retry reads the new state.",
+				return { conflict: sprintf("another writer changed the package %s during the request, and the writes of the request no longer apply to it: %s",
 				                           pkg, e.message) };
 			}
 			if (cursor.commit(pkg)) return true;

@@ -404,7 +404,7 @@ t.describe('bus.connect, the commit', () => {
 		c.uci_set('fw', 'r2', 'name', 'deux');
 		delete disk.files.fw.r2;
 		t.assert_deep_equal(c.uci_commit('fw'), { conflict:
-			"another writer changed the package fw during the request, and the writes of the request no longer apply to it: uci set fw: Entry not found. Nothing was written. A retry reads the new state." });
+			"another writer changed the package fw during the request, and the writes of the request no longer apply to it: uci set fw: Entry not found" });
 		t.assert_equal(disk.commits, null);
 	});
 
@@ -432,10 +432,11 @@ t.describe('bus.connect, the commit', () => {
 	});
 });
 
-// A batch commits its packages in order and stops at the first that fails. The restore then
-// reconciles the WireGuard interfaces that the batch touched with what uci holds, and read uci
-// through the cursor, which still held the writes of every package that the batch did not commit.
-// So a failed batch put an allowed IP that uci never stored into the kernel, with its route.
+// A batch commits its packages in order and stops at the first that fails, before its reload and
+// its kernel apply, so nothing reached a daemon or the kernel. The restore reloaded all the same, and
+// its reconcile set every peer of the interface again, which reset their sessions, removed a peer
+// that wg had set by hand, and read uci through the cursor, which still held the writes of the
+// packages that the batch did not commit. So it gave the kernel an allowed IP that uci never stored.
 t.describe('bus.connect, the restore after a batch whose commit fails', () => {
 	let tx = require('transaction');
 	const K = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
@@ -459,33 +460,45 @@ t.describe('bus.connect, the restore after a batch whose commit fails', () => {
 		let dir = temp_dir();
 		for (let pkg in pkgs) fs.writefile(dir + "/" + pkg, "");
 		let conn = ubus.connect({ ubus: UP, uci: fake_uci(disk), config_dir: dir });
+		let reloads = [];
 		ran = [];
 		let r = tx.multi_transaction(conn, {
 			packages: pkgs, lock_path: paths.lock, pkg_lock_prefix: paths.prefix,
-			check_services: () => null, reload: () => null, watch: () => null,
+			reload_services: { firewall: [ "firewall" ], network: [ "network" ] },
+			check_services: () => null, watch: () => null,
+			reload: function(s) { push(reloads, s); return null; },
 			wg_ops: [ { iface: 'wg0', action: 'set', public_key: K } ],
 			wg_apply: () => null, wg_reconcile: wg.reconcile,
 			fn: function(c) { fn(c, disk); return { ok: true, body: null }; },
 		});
 		system([ "rm", "-rf", dir ]);
 		for (let f in [ paths.lock, ...map(pkgs, (p) => paths.prefix + p + ".lock") ]) fs.unlink(f);
-		return { r, sets: filter(ran, (c) => match(c, /'(set|replace)'/)) };
+		return { r, disk, ran: { reloads, commands: ran } };
 	}
-	let stored = [
-		wg.command_line([ "wg", "set", "wg0", "peer", K, "remove" ]) + " 2>&1",
-		wg.command_line([ "wg", "set", "wg0", "peer", K, "allowed-ips", "10.0.0.2/32", "persistent-keepalive", "0",
-		                  "preshared-key", "/dev/null" ]) + " 2>&1",
-		wg.command_line([ "ip", "route", "replace", "10.0.0.2/32", "dev", "wg0", "proto", "static",
-		                  "scope", "link" ]) + " 2>&1",
-	];
+	const NOTHING = { reloads: [], commands: [] };
 
-	t.it('the replay of an earlier package fails, and the later one still holds its writes', () => {
+	t.it('the replay of an earlier package fails, and a later one holds its writes', () => {
 		let b = batch([ "firewall", "network" ], function(c, disk) {
 			c.uci_set('network', 'p1', 'allowed_ips', [ '0.0.0.0/0' ]);
 			c.uci_set('firewall', 'r1', 'name', 'x');
 			delete disk.files.firewall.r1;
 		});
-		t.assert_deep_equal(b.sets, stored);
+		t.assert_equal(b.r.kind, "conflict");
+		t.assert_deep_equal(b.ran, NOTHING);
+	});
+
+	// Its file changed and was put back, and no daemon read it in between, because the reload of
+	// every package comes after the last commit.
+	t.it('a later package fails after an earlier one committed', () => {
+		let b = batch([ "firewall", "network" ], function(c, disk) {
+			c.uci_set('firewall', 'r1', 'name', 'x');
+			c.uci_set('network', 'p1', 'allowed_ips', [ '0.0.0.0/0' ]);
+			c.uci_set('network', 'lan', 'mtu', '1400');
+			delete disk.files.network.lan;
+		});
+		t.assert_equal(b.disk.commits, 1);
+		t.assert_equal(b.r.kind, "conflict");
+		t.assert_deep_equal(b.ran, NOTHING);
 	});
 
 	t.it('the replay of the package fails part way', () => {
@@ -494,7 +507,8 @@ t.describe('bus.connect, the restore after a batch whose commit fails', () => {
 			c.uci_set('network', 'lan', 'mtu', '1400');
 			delete disk.files.network.lan;
 		});
-		t.assert_deep_equal(b.sets, stored);
+		t.assert_equal(b.r.kind, "conflict");
+		t.assert_deep_equal(b.ran, NOTHING);
 	});
 
 	t.it('a full overlay refuses the commit of a batch that only writes the peer', () => {
@@ -503,7 +517,7 @@ t.describe('bus.connect, the restore after a batch whose commit fails', () => {
 			disk.commit_error = "No space left on device";
 		});
 		t.assert_equal(b.r.kind, "reload_failed_restored");
-		t.assert_deep_equal(b.sets, stored);
+		t.assert_deep_equal(b.ran, NOTHING);
 	});
 
 	// The commit replays the writes over a commit of another writer, and fails when one no longer
@@ -515,7 +529,7 @@ t.describe('bus.connect, the restore after a batch whose commit fails', () => {
 			delete disk.files.firewall.r1;
 		});
 		t.assert_equal(b.r.kind, "conflict");
-		t.assert_match(b.r.message, /^another writer changed the package firewall during the request, .* A retry reads the new state\.$/);
+		t.assert_match(b.r.message, /^another writer changed the package firewall during the request, .*: uci set firewall: Entry not found\. Nothing was written\. A retry reads the new state\.$/);
 	});
 });
 

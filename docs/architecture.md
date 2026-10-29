@@ -123,7 +123,9 @@ without uci state change.
    the uci cursor stores nothing in a missing file and reports that only through
    a null return. Miss → `503 config_missing` with the path. A DELETE checks the
    file first and answers `404 not_found` for a missing one, because no section
-   can exist there, and a client reads a 404 on DELETE as already gone.
+   can exist there, and a client reads a 404 on DELETE as already gone. A
+   `POST /batch` answers the 503 for a DELETE too, because it commits as one
+   write.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
 2. **Snapshot.** `uci_unload(<package>)`, then `uci_export(<package>)` captures
@@ -320,7 +322,10 @@ what keeps a peer orphaned by deleting its parent interface deletable.
 
 `POST /batch` composes N sub-requests under one combined snapshot/restore:
 
-1. Pre-resolve every sub-request's target (path → package + reload services).
+1. Pre-resolve every sub-request's target (path → package + reload services),
+   and check its scope, before the pre-flight checks: their 503 would tell a token
+   whether a package that it has no scope for is installed. An operation out of
+   scope aborts the batch with its 403 before anything runs.
 2. **Only WRITE sub-requests contribute to the lock/reload set.** Pure-read
    batches skip lock+snapshot+commit+reload entirely.
 3. Acquire global SH + per-package EX in sorted package order
@@ -340,11 +345,14 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    counts as a failed reload. Either way only the packages that the batch
    committed are restored: the snapshot of another one would undo what LuCI or
    a shell committed to it since, such as the delete that made the replay of the
-   batch fail. Each other package is reverted before that, because the cursor
-   still holds the writes of the packages after the one that failed, and the
-   kernel reconcile reads `network` through it. A replay that no longer applies
-   answers `409 conflict` once the restore succeeds, and a commit that libuci
-   refuses answers `500 reload_failed_restored`. Sub-requests accumulate into
+   batch fail. Each other package is reverted before that, so that the cursor
+   holds no write that uci did not store, and a reconcile reads `network` from
+   the file. A commit that fails stops there, with no reload and no reconcile:
+   both come after every commit, so neither ran, and the restore puts a package
+   that the batch committed before the failure back before uapi reloads it. A
+   replay that no longer applies then answers `409 conflict`,
+   and a commit that libuci refuses answers `500 reload_failed_restored`.
+   Sub-requests accumulate into
    one ordered operation list shared through their sub-context, so a batch
    touching the same peer twice ends on its last state, and the restore
    reconciles rather than replaying, since a batch can apply several peers

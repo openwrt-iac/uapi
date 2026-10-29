@@ -51,7 +51,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed. Loudest case; manual recovery     |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
-| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist |
+| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /batch` answers 503 for a DELETE there too, because it commits as one write |
 
 `unsupported_media_type` is reserved and never emitted. uapi never rejects a body
 on `Content-Type`; the header is read for one thing only, switching a PATCH into
@@ -161,13 +161,14 @@ it replaces, and nothing else.
 
 Every writable resource declares at least one reload service, so `X-Reload-Status:
 no_reload` and `X-Kernel-Status: no_kernel` on a WireGuard peer mean that the write changed
-nothing in uci. Only a PATCH can do that: it writes only the options that it changes, so a
-PATCH that names no field, or sends what uci already holds, commits nothing, and uapi then
-runs no init script and nothing in the kernel. A PUT, POST or DELETE always writes. A
-`POST /batch` reloads the services of the packages that its writes changed, and none when
-they changed nothing. Before 3.2.0 such a PATCH reloaded the daemon anyway and answered
-`ok`, and on a WireGuard peer without an endpoint the kernel apply removed the peer and set
-it again, which reset its session.
+nothing in uci, and uapi then ran no init script and nothing in the kernel. A PATCH writes
+only the options that it changes, so one that names no field, or sends what uci already
+holds, commits nothing. So does the adopt of an anonymous section that another writer named
+while the request waited for its lock. A PUT, POST or DELETE always writes. A `POST /batch`
+reloads the services of the packages that its writes changed, and none when they changed
+nothing. In 3.1.0 such a PATCH reloaded the daemon anyway and answered `ok`, and on a
+WireGuard peer without an endpoint the kernel apply removed the peer and set it again, which
+reset its session.
 
 ## Retry-After
 
