@@ -31582,7 +31582,40 @@
 						],
 						"minimum": 0,
 						"maximum": 2,
-						"description": "0 default, 1 deprecate prefix, 2 advertise as router"
+						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always."
+					},
+					"dhcpv4": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"disabled",
+							"server",
+							null
+						],
+						"description": "DHCPv4 service on this interface. dnsmasq serves unless the value is `disabled`. odhcpd serves only on `server`, and only when `dhcp/odhcpd` sets `maindhcp`, so null turns DHCPv4 off on a router where odhcpd serves it."
+					},
+					"ra_flags": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"enum": [
+								"managed-config",
+								"other-config",
+								"home-agent",
+								"none"
+							]
+						},
+						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`."
+					},
+					"ra_slaac": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether odhcpd sets the autonomous flag on the prefixes of its router advertisements, so that clients configure their addresses with SLAAC. odhcpd reads only `1`, `true`, `0` and `false`, and takes true for any other value."
 					},
 					"domain": {
 						"type": [
@@ -31706,7 +31739,40 @@
 						],
 						"minimum": 0,
 						"maximum": 2,
-						"description": "0 default, 1 deprecate prefix, 2 advertise as router"
+						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always."
+					},
+					"dhcpv4": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"disabled",
+							"server",
+							null
+						],
+						"description": "DHCPv4 service on this interface. dnsmasq serves unless the value is `disabled`. odhcpd serves only on `server`, and only when `dhcp/odhcpd` sets `maindhcp`, so null turns DHCPv4 off on a router where odhcpd serves it."
+					},
+					"ra_flags": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"enum": [
+								"managed-config",
+								"other-config",
+								"home-agent",
+								"none"
+							]
+						},
+						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`."
+					},
+					"ra_slaac": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether odhcpd sets the autonomous flag on the prefixes of its router advertisements, so that clients configure their addresses with SLAAC. odhcpd reads only `1`, `true`, `0` and `false`, and takes true for any other value."
 					},
 					"domain": {
 						"type": [
@@ -31820,6 +31886,38 @@
 						],
 						"minimum": 0,
 						"maximum": 2
+					},
+					"dhcpv4": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"disabled",
+							"server",
+							null
+						]
+					},
+					"ra_flags": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string",
+							"enum": [
+								"managed-config",
+								"other-config",
+								"home-agent",
+								"none"
+							]
+						}
+					},
+					"ra_slaac": {
+						"type": [
+							"boolean",
+							"null"
+						]
 					},
 					"domain": {
 						"type": [

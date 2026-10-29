@@ -233,3 +233,55 @@ t.describe('dhcp.servers dhcp_option', () => {
 		t.assert_equal(c._state.uci.dhcp.lan.ignore, '1');
 	});
 });
+
+// odhcpd.defaults writes these options into the stock lan section, and a PUT removed every option
+// that the resource did not model, so the router advertisements lost the managed flag.
+t.describe('dhcp.servers dhcpv4, ra_flags and ra_slaac', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(servers, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let stored = (opts) => ubus.stub({ uci: {
+		dhcp: { lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ...opts } },
+		network: { lan: { '.type': 'interface' } },
+	} });
+	let three = (o) => [ o.dhcpv4, o.ra_flags, o.ra_slaac ];
+
+	t.it('a PUT of the read of the stock lan keeps them', () => {
+		let c = stored({ dhcpv4: 'server', ra_slaac: '1', ra_flags: [ 'managed-config', 'other-config' ] });
+		let body = h.get_one(c, ctx, 'lan').body;
+		t.assert_deep_equal(three(body), [ 'server', [ 'managed-config', 'other-config' ], true ]);
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx, 'lan', body).status, 200);
+		t.assert_deep_equal(three(c._state.uci.dhcp.lan), [ 'server', [ 'managed-config', 'other-config' ], '1' ]);
+	});
+
+	t.it('reads what odhcpd takes when they are absent', () => {
+		t.assert_deep_equal(three(h.get_one(stored({}), ctx, 'lan').body), [ null, null, true ]);
+	});
+
+	// uci's blob converter drops a bool other than 1, true, 0 and false, and odhcpd keeps its default.
+	t.it('reads ra_slaac as odhcpd does', () => {
+		for (let v in [ [ '0', false ], [ 'false', false ], [ 'no', true ], [ 'off', true ], [ '1', true ] ])
+			t.assert_equal(h.get_one(stored({ ra_slaac: v[0] }), ctx, 'lan').body.ra_slaac, v[1]);
+	});
+
+	t.it('reads an ra_flags option as its words', () => {
+		t.assert_deep_equal(h.get_one(stored({ ra_flags: 'managed-config other-config' }), ctx, 'lan').body.ra_flags,
+		                    [ 'managed-config', 'other-config' ]);
+	});
+
+	t.it('stores none, and removes ra_flags for []', () => {
+		let c = stored({ ra_flags: [ 'managed-config' ] });
+		t.assert_equal(h.patch(c, ctx, 'lan', { ra_flags: [ 'none' ], ra_slaac: false }).status, 200);
+		t.assert_deep_equal([ c._state.uci.dhcp.lan.ra_flags, c._state.uci.dhcp.lan.ra_slaac ], [ [ 'none' ], '0' ]);
+		t.assert_equal(h.patch(c, ctx, 'lan', { ra_flags: [] }).status, 200);
+		t.assert_false(exists(c._state.uci.dhcp.lan, 'ra_flags'));
+	});
+
+	t.it('refuses a flag that odhcpd does not take, and a dhcpv4 mode that LuCI does not offer', () => {
+		let r = h.patch(stored({}), ctx, 'lan', { dhcpv4: 'relay', ra_flags: [ 'other-config', 'M' ] });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'dhcpv4', 'not_in_enum' ], [ 'ra_flags[1]', 'not_in_enum' ] ]);
+	});
+});

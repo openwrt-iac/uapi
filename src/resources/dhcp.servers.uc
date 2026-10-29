@@ -1,5 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
+let platform_bool = values.platform_bool;
 let as_int = values.as_int;
 let fs = require('fs');
 
@@ -65,6 +66,10 @@ function lease_counts_for_interface(iface) {
 const VALID_RA = {
 	"disabled": true, "server": true, "relay": true, "hybrid": true,
 };
+// odhcpd has no DHCPv4 relay: it parses relay and hybrid for dhcpv4 and answers requests as on
+// server, as dnsmasq does for every value but disabled. LuCI offers only these two.
+const VALID_DHCPV4 = [ "disabled", "server" ];
+const VALID_RA_FLAGS = [ "managed-config", "other-config", "home-agent", "none" ];
 
 function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
@@ -87,6 +92,9 @@ function fromUci(section, conn) {
 		ra: section.ra ?? null,
 		dhcpv6: section.dhcpv6 ?? null,
 		ra_default: as_int(section.ra_default),
+		dhcpv4: section.dhcpv4 ?? null,
+		ra_flags: values.as_word_list_or_null(section.ra_flags),
+		ra_slaac: platform_bool(section.ra_slaac, true),
 		// LuCI writes a list, with no space in an entry. dnsmasq.init joins the entries with
 		// config_get and splits the words, and odhcpd takes the entries, or the words of an option,
 		// so the entries joined with spaces read the same to both.
@@ -109,6 +117,10 @@ function toUci(json) {
 	if (json.ra != null)           out.ra = json.ra;
 	if (json.dhcpv6 != null)       out.dhcpv6 = json.dhcpv6;
 	if (json.ra_default != null)   out.ra_default = "" + json.ra_default;
+	if (json.dhcpv4 != null)       out.dhcpv4 = json.dhcpv4;
+	if (type(json.ra_flags) == "array" && length(json.ra_flags) > 0)
+		out.ra_flags = json.ra_flags;
+	if (json.ra_slaac != null)     out.ra_slaac = json.ra_slaac ? "1" : "0";
 	if (json.domain != null)       out.domain = json.domain;
 	if (type(json.dhcp_option) == "array" && length(json.dhcp_option) > 0)
 		out.dhcp_option = json.dhcp_option;
@@ -190,7 +202,13 @@ return {
 		ra:          { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		dhcpv6:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
-		               description: "0 default, 1 deprecate prefix, 2 advertise as router" },
+		               description: "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always." },
+		dhcpv4:      { "x-uapi-read-nullable": true, type: "string", enum: VALID_DHCPV4,
+		               description: "DHCPv4 service on this interface. dnsmasq serves unless the value is `disabled`. odhcpd serves only on `server`, and only when `dhcp/odhcpd` sets `maindhcp`, so null turns DHCPv4 off on a router where odhcpd serves it." },
+		ra_flags:    { type: ["array", "null"], items: { type: "string", enum: VALID_RA_FLAGS },
+		               description: "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`." },
+		ra_slaac:    { type: "boolean", default: true,
+		               description: "Whether odhcpd sets the autonomous flag on the prefixes of its router advertisements, so that clients configure their addresses with SLAAC. odhcpd reads only `1`, `true`, `0` and `false`, and takes true for any other value." },
 		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_WORDS_RE,
 		               description: "DNS search domains that dnsmasq or odhcpd announces over DHCPv6 and RA, separated by spaces. A list that LuCI stores reads as its entries joined with spaces." },
 		dhcp_option: { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_OPTION_RE },
