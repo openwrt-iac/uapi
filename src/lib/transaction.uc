@@ -38,11 +38,17 @@ function default_check_services(services) {
 	return null;
 }
 
-// A daemon that reads the package but that an image can lack, as odhcpd reads dhcp, is reloaded
-// when its init script is there and skipped when it is not. Refusing the write would answer 503 on
-// every router without it.
-function installed(services, check_services) {
-	return filter(services ?? [], (svc) => check_services([ svc ]) == null);
+// A daemon that reads the package but that an image can lack or that the operator stopped, as
+// odhcpd reads dhcp, is reloaded only while procd lists it, from its start to its stop. That is
+// when the procd trigger of a LuCI save reloads it. A reload of a stopped one can start it, as the
+// reload of dnsmasq.init does, and refusing the write would answer 503 on every router without it.
+function running(conn, services, check_services) {
+	return filter(services ?? [], function(svc) {
+		if (check_services([ svc ]) != null) return false;
+		let r = null;
+		try { r = conn.call("service", "list", { name: svc }); } catch (e) {}
+		return r?.[svc] != null;
+	});
 }
 
 // A write into a config file that does not exist stores nothing, and the uci cursor raises
@@ -354,7 +360,7 @@ function transaction(conn, params) {
 		return fn(conn, pkg);
 
 	let services = [ ...(params.reload_services ?? []),
-	                 ...installed(params.reload_if_installed, check_services) ];
+	                 ...running(conn, params.reload_if_running, check_services) ];
 	let svc_err = check_services(services);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
@@ -406,20 +412,19 @@ function services_of(by_package, packages) {
 
 // multi_transaction snapshots, EX-locks, and on-failure restores N packages
 // atomically. Caller passes a package list, the reload services of each package
-// keyed by package, those to reload only when installed keyed the same way, and
+// keyed by package, those to reload only while they run keyed the same way, and
 // an fn that performs all uci writes inside the locked region. On success every
 // package that the batch wrote commits, and the union of their reload services
-// runs once. On a failure after the commits,
-// every package that the batch committed is restored from its snapshot.
-// Per-package EX locks are acquired in sorted order to avoid deadlocks vs
-// other writers.
+// runs once. On a failure after the commits, every package that the batch
+// committed is restored from its snapshot. Per-package EX locks are acquired in
+// sorted order to avoid deadlocks vs other writers.
 function multi_transaction(conn, params) {
 	let packages = params.packages ?? [];
 	let check_services = params.check_services ?? default_check_services;
 	let by_package = {};
 	for (let p in packages)
 		by_package[p] = [ ...(params.reload_services?.[p] ?? []),
-		                  ...installed(params.reload_if_installed?.[p], check_services) ];
+		                  ...running(conn, params.reload_if_running?.[p], check_services) ];
 	let services = services_of(by_package, packages);
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;

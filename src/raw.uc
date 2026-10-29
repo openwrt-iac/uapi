@@ -258,7 +258,7 @@ function create(conn, ctx, scopes, pkg, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		reload_if_installed: reload.if_installed,
+		reload_if_running: reload.if_running,
 		fn: function(c, p) {
 			if (client_supplied_id && load_section(c, p, new_id) != null)
 				return { ok: false, kind: "conflict",
@@ -295,7 +295,7 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		reload_if_installed: reload.if_installed,
+		reload_if_running: reload.if_running,
 		fn: function(c, p) {
 			// The type too: the scope check approved the type that the preview read, and
 			// a commit before the lock can have put another section under this name.
@@ -346,7 +346,7 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		reload_if_installed: reload.if_installed,
+		reload_if_running: reload.if_running,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
 			if (!existing || existing['.type'] != sec_type)
@@ -380,7 +380,7 @@ function remove(conn, ctx, scopes, pkg, id) {
 	let result = transaction.transaction(conn, {
 		package: pkg,
 		reload_services: reload.services,
-		reload_if_installed: reload.if_installed,
+		reload_if_running: reload.if_running,
 		fn: function(c, p) {
 			let existing = load_section(c, p, id);
 			if (!existing || existing['.type'] != sec_type)

@@ -34,7 +34,7 @@ return {
 	type: "odhcpd",
 	reload: ["odhcpd"],
 	// dnsmasq.init reads maindhcp to decide whether dnsmasq serves DHCPv4.
-	reload_if_installed: ["dnsmasq"],
+	reload_if_running: ["dnsmasq"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
