@@ -88,8 +88,7 @@ The interactions:
 - Two writes that restart unbound, such as one to `unbound_srv` and one to
   `unbound_ext`, contend on the EX of `unbound` the same way. Otherwise the
   restart of one would read as a stop to the stay-up check of the other,
-  and a line that unbound refuses in one would fail the other too. dnsmasq
-  reads its config from `dhcp`, so a dhcp write takes no other lock.
+  and a line that unbound refuses in one would fail the other too.
 - A non-uci write (apk install / authorized_keys write) takes EX on the
   global → refused with `423 locked` while any uci transaction is in flight
   (any package), and refuses new ones the same way until it is done. Apk's
@@ -101,8 +100,7 @@ locked` so the client can decide whether to back off and retry. The HTTP
 worker never waits for a uapi lock, but libuci's own flocks on a package
 file block while LuCI or a shell holds them. It can sleep while it holds a
 uapi lock: the stay-up
-watch of an unbound reload polls for up to 2 s under the transaction's locks,
-and that of a dnsmasq reload for up to 1 s.
+watch of an unbound reload polls for up to 2 s under the transaction's locks.
 The restore after a failed reload also waits, for up to 5 s, for libuci's flock
 on the package file. A load holds that flock while it parses the file, and a
 `uci commit` while it reads the file again, writes its temp file and syncs it.
@@ -164,20 +162,23 @@ without uci state change.
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
    real child gives back the actual exit bit. procd starts the daemon with
    its new config on its own, so the init script exits 0 before the daemon
-   has read that config, and a daemon that refuses it stops later. For a
-   reload of a daemon that `STAY_UP` in `src/lib/transaction.uc` lists, by
-   `unbound`, `unbound-uci-ext` or `dnsmasq`, the write then watches the
-   procd instances of the daemon that ran before it. It polls `service list`
-   every 100 ms for the `window_ms` of the daemon, 2 s for unbound and 1 s
-   for dnsmasq, or for the longer one when it watches both, and an instance
-   that procd reports as not running counts as a failed reload. dnsmasq 2.93
-   exits in under 2 ms on x86 on a bad config, and a 1 s watch saw it stop on
-   an OpenWrt 25.12.5 x86_64 VM. procd starts a daemon that exited again
-   only 5 s later, so the poll sees the stop. An instance that
-   `service list` does not show is being restarted, and does not count, and
-   an instance that did not run before the write is not watched. The restore
-   runs the same check. Each write of these services pays the window while
-   the daemon runs, and the restore pays it again.
+   has read that config, and a daemon that refuses it stops later. For the
+   reloads that `STAY_UP` in `src/lib/transaction.uc` lists, which are
+   `unbound` and `unbound-uci-ext`, the write then watches the procd
+   instances of the daemon that ran before it. It polls `service list`
+   every 100 ms for 2 s, and an instance that procd reports as not running
+   counts as a failed reload. An instance that `service list` does not show
+   is being restarted, and does not count. The restore runs the same check.
+   A reload of `dnsmasq` is judged by its config instead, because the
+   `reload_service()` of dnsmasq.init sends SIGHUP right after procd restarts
+   an instance, and on a slow machine that signal can stop the new process
+   for 5 s with a config that dnsmasq takes. The init script writes the
+   config of each instance before it returns. For each instance that
+   `service list` shows after the reload, the write runs its command with
+   `--test`, which reads the config and the files that it includes as a start
+   does, and a refusal counts as a failed reload. It skips an instance that
+   was listed and not running before the write, which the write did not
+   break. The restore runs the same check, and no write waits for dnsmasq.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. Runs only after the reload returned zero, and reports the

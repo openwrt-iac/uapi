@@ -25,19 +25,28 @@ Two signals worth wiring into your automation:
 
 unbound and dnsmasq are the exceptions. When unbound runs, a write that
 reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
-keep running. When dnsmasq runs, a write that reloads `dnsmasq`, as a write to
-`dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, the raw `dhcp` package or a
-`/batch` that holds one does, waits 1 s for each dnsmasq instance in the same
-way. These writes take that much longer, and the restore after a failure waits
-again. If an instance stops, the write answers `500 reload_failed_restored`,
+keep running. If one stops, the write answers `500 reload_failed_restored`,
 and its `reload_error` reads
-`unbound stopped after the reload, with exit code 1`, or the same for dnsmasq.
-So a 2xx on these writes also means that procd did not report the daemon as
-stopped in that time after the reload. An instance that `service list` does
-not show, because something restarts it or the ubus call fails, does not
-count, and a daemon that stops later still answers 2xx. An instance that did
-not run before the write is not watched, such as the one of a second
-`config dnsmasq` section that a raw POST adds.
+`unbound stopped after the reload, with exit code 1`. So a 2xx on these writes
+also means that procd did not report unbound as stopped in the 2 s after the
+reload. An instance that `service list` does not show, because something
+restarts it or the ubus call fails, does not count, and a daemon that stops
+later than 2 s still answers 2xx.
+
+dnsmasq is checked by its config. After a write that reloads `dnsmasq`, as a
+write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, the raw `dhcp` package
+or a `/batch` that holds one does, uapi runs the command of each dnsmasq
+instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq
+refuses it, the write answers `500 reload_failed_restored`, and its
+`reload_error` reads, for example,
+`dnsmasq refuses its config cfg01411c: bad IP address at line 33 of /var/etc/dnsmasq.conf.cfg01411c`.
+The check covers an instance that ran before the write and one that the
+write adds. It skips an instance that was listed and not running before the
+write. No write waits for dnsmasq. `--test` reads the files of `conf-file` and
+`conf-dir`, and not those of `addn-hosts` and `servers-file`, which dnsmasq
+reads after it starts. OpenWrt's reload of dnsmasq can restart the daemon,
+which on a slow machine can leave it stopped for 5 s, and uapi does not report
+that restart.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block

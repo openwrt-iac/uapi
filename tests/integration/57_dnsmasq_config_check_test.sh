@@ -19,8 +19,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 cleanup
 
+# dnsmasq.init sends SIGHUP right after procd restarts an instance, and on a slow machine the
+# signal can stop the new dnsmasq until procd starts it again 5 s later.
 dnsmasq_running() {
-	$SSH "ubus call service list '{\"name\":\"dnsmasq\"}'" | grep -q '"running": true'
+	n=0
+	until $SSH "ubus call service list '{\"name\":\"dnsmasq\"}'" | grep -q '"running": true'; do
+		n=$((n + 1))
+		[ $n -lt 10 ] || return 1
+		sleep 1
+	done
 }
 
 stored_options() {
@@ -78,20 +85,19 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" 
 body=$(echo "$r" | sed '$d')
 [ "$(echo "$r" | tail -1)" = "500" ] || fail "a value that dnsmasq refuses expected 500: $r"
 echo "$body" | jq -e '.code == "reload_failed_restored"' >/dev/null || fail "expected reload_failed_restored: $body"
-echo "$body" | jq -e '.reload_error | startswith("dnsmasq stopped after the reload")' >/dev/null \
-	|| fail "expected the stay-up error in reload_error: $body"
+echo "$body" | jq -e '.reload_error | startswith("dnsmasq refuses its config ") and contains("bad IP address")' >/dev/null \
+	|| fail "expected the dnsmasq --test refusal in reload_error: $body"
 [ "$(stored_options)" = "$TWO" ] || fail "uci did not get the old list back: $(stored_options)"
 assert_dnsmasq_omits "dhcp-option=tdhcp,3,not-an-address"
 dnsmasq_running || fail "dnsmasq is not running after the restore"
 assert_dnsmasq_loads
 
 echo "--- a valid option still answers 200, a text option with a space before 6, included ---"
-t=$(curl -sS -o /dev/null -w '%{http_code} %{time_total}' -H "$ADMIN" -X PATCH -H 'Content-Type: application/json' \
-	"$URL/dhcp/servers/tdhcp" -d '{"dhcp_option":["3,10.99.0.1","6,10.99.0.1","15,my 6,domain"]}')
-[ "${t% *}" = "200" ] || fail "a valid option expected 200, got $t"
-echo "the write took ${t#* } s with dnsmasq running"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" \
+	-d '{"dhcp_option":["3,10.99.0.1","6,10.99.0.1","15,my 6,domain"]}')
+[ "$(echo "$r" | tail -1)" = "200" ] || fail "a valid option expected 200: $r"
 assert_dnsmasq_emits 'dhcp-option=tdhcp,15,my 6,domain'
 dnsmasq_running || fail "dnsmasq is not running after a valid option"
 assert_dnsmasq_loads
 
-echo "dhcp_option refusal and the dnsmasq stay-up watch ok."
+echo "dhcp_option refusal and the dnsmasq --test check ok."

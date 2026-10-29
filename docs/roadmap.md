@@ -310,9 +310,9 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /batch` then
   restores what it committed and runs no reload and no kernel apply (#277). A `dhcp_option`
   entry in which an address is followed by whitespace and a second option answers 422, and a
-  write after which dnsmasq stops answers `500 reload_failed_restored` and restores the previous
-  config, as one after which unbound stops does (#279). The request schemas declare the bounds
-  that a write accepts, through `x-uapi-write`.
+  write whose generated config `dnsmasq --test` refuses answers `500 reload_failed_restored`
+  and restores the previous config (#279). The request schemas declare the bounds that a write
+  accepts, through `x-uapi-write`.
 - **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
   Before, the first apply that changed a radio removed its `path`, and the radio stayed down
   with all its SSIDs.
@@ -493,8 +493,7 @@ is unresolvable.
   close on exec the kill also releases the lock, so the next write can commit and reload
   beside it. `multi_transaction()` and the crontab apply in `crontab.uc` have the same
   shape. The steps after the commit are not short: each reload, the stay-up watch, which
-  waits up to 2 s for unbound and 1 s for dnsmasq, and again on a restore, and the kernel
-  apply.
+  waits up to 2 s and again on a restore, and the kernel apply.
   Nothing inside the request can close this, so it needs a design change. The shapes seen
   so far, none chosen:
   - A record of the write in flight, written before the commit and removed when the
