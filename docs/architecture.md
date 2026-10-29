@@ -119,10 +119,13 @@ without uci state change.
 0. **Pre-flight checks.** For each entry in the resource's
    `reload` list, confirm `/etc/init.d/<svc>` exists and the name matches
    `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
-   no uci write attempted. A service in the resource's `reload_if_installed`
-   list, a daemon that reads the package but that an image can lack, such as
-   odhcpd for the dhcp writes, joins the reload when its init script exists
-   and is skipped when it does not, so it never answers 503. Then confirm
+   no uci write attempted. A service in the resource's `reload_if_running`
+   list, a daemon that reads the package but that an image can lack or that
+   the operator stopped, such as odhcpd for the dhcp writes, joins the reload
+   when its init script exists and `service list` names it, which procd does
+   from its start to its stop. That is when the procd trigger of a LuCI save
+   reloads it. Otherwise it is skipped, so it never answers 503, and a reload
+   does not start a daemon that the operator stopped. Then confirm
    `/etc/config/<package>` exists, because the uci cursor stores nothing in a
    missing file and reports that only through a null return. Miss →
    `503 config_missing` with the path. A DELETE checks the file first and

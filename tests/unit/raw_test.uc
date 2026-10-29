@@ -397,3 +397,45 @@ t.describe('raw does not disclose token credential material', () => {
 	// would destroy the credential. The carry-forward that prevents it is verified on
 	// hardware instead, in the PR that added it.
 });
+
+// odhcpd reads dhcp too, and its procd trigger does not fire for a commit through libuci. A raw
+// dhcp write reloaded only dnsmasq, as the ucitrack fallback named it.
+t.describe('raw dhcp writes reload odhcpd while procd runs it', () => {
+	let real = require('transaction');
+	let reloaded = [];
+	global.modules.transaction = { ...real, transaction: (conn, p) => real.transaction(conn, { ...p,
+		acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
+		reload: function(s) { push(reloaded, s); return null; } }) };
+	let raw2 = loadfile('src/raw.uc')();
+	global.modules.transaction = real;
+
+	function box(running) {
+		let conn = bus.stub({ uci: { dhcp: {
+			lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' },
+		} } });
+		conn.set_ubus_response("service", "list", (a) => (index(running, a.name) >= 0) ? { [a.name]: {} } : {});
+		reloaded = [];
+		return conn;
+	}
+
+	t.it('each verb reloads dnsmasq and odhcpd, and the body names both', () => {
+		let writes = [
+			(c) => raw2.create(c, ctx(), [ "*:rw" ], "dhcp", { ".type": "dhcp", id: "guest", interface: "guest" }),
+			(c) => raw2.replace(c, ctx(), [ "*:rw" ], "dhcp", "lan", { interface: "lan", ra: "server" }),
+			(c) => raw2.patch(c, ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" }),
+			(c) => raw2.remove(c, ctx(), [ "*:rw" ], "dhcp", "lan"),
+		];
+		for (let w in writes) {
+			let r = w(box([ "dnsmasq", "odhcpd" ]));
+			t.assert_true(r.status == 200 || r.status == 204, r.body);
+			t.assert_deep_equal(reloaded, [ [ "dnsmasq", "odhcpd" ] ]);
+			if (r.status == 200) t.assert_deep_equal(r.body.reload_services, [ "dnsmasq", "odhcpd" ]);
+		}
+	});
+
+	t.it('skips odhcpd when procd does not list it', () => {
+		let r = raw2.patch(box([ "dnsmasq" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal([ reloaded, r.body.reload_services ], [ [ [ "dnsmasq" ] ], [ "dnsmasq" ] ]);
+	});
+});

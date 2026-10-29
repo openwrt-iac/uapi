@@ -159,10 +159,10 @@ function validate_new(json) {
 return {
 	package: "dhcp",
 	type: "dhcp",
-	// odhcpd reads ra, dhcpv6, ra_default, domain and leasetime, and start and limit when it serves
-	// DHCPv4. Its procd trigger on dhcp does not fire for a commit through libuci.
+	// odhcpd reads the section too, ra, dhcpv6 and ra_default among others. Its procd trigger on
+	// dhcp does not fire for a commit through libuci.
 	reload: ["dnsmasq"],
-	reload_if_installed: ["odhcpd"],
+	reload_if_running: ["odhcpd"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

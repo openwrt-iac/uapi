@@ -54,7 +54,7 @@ return {
     create_if_missing: true,           // singletons only; opt-in. PATCH creates the uci section if absent instead of returning 404. See "Singletons that may be wiped" below.
     singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
     unique_field: "name",              // optional. Value of this field must be unique among same-type sections in this package. See "Cross-section reference fields" below.
-    reload_if_installed: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack, as odhcpd reads dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists, and skipped without a 503 when it does not.
+    reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as odhcpd reads dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd lists the service, and skipped without a 503 otherwise. A POST /batch reloads and lists its services sorted.
 };
 ```
 

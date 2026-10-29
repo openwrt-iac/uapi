@@ -7,8 +7,8 @@ const FALLBACK = {
 	dhcp: ["dnsmasq"],
 };
 // LuCI's /usr/share/ucitrack/luci-mod-network-dnsmasq.json has dhcp affect odhcpd, which an image
-// can lack.
-const FALLBACK_IF_INSTALLED = {
+// can lack and an operator can stop.
+const FALLBACK_IF_RUNNING = {
 	dhcp: ["odhcpd"],
 };
 
@@ -36,7 +36,7 @@ function reload_services(conn, pkg, opts) {
 	                  ? opts.init_exists : default_init_exists;
 	let entry = lookup_init(conn, pkg);
 	let services = [];
-	let if_installed = [];
+	let if_running = [];
 	let known = false;
 
 	if (entry.init != null) {
@@ -49,7 +49,7 @@ function reload_services(conn, pkg, opts) {
 	} else if (FALLBACK[pkg]) {
 		known = true;
 		for (let s in FALLBACK[pkg]) push(services, s);
-		if_installed = FALLBACK_IF_INSTALLED[pkg] ?? [];
+		if_running = FALLBACK_IF_RUNNING[pkg] ?? [];
 	} else if (init_exists(pkg)) {
 		known = true;
 		push(services, pkg);
@@ -63,7 +63,7 @@ function reload_services(conn, pkg, opts) {
 		push(out, s);
 	}
 
-	return { services: out, if_installed, known };
+	return { services: out, if_running, known };
 }
 
 return { reload_services };

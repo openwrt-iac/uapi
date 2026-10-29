@@ -1708,7 +1708,7 @@ function build_doc() {
 					"schema": { "type": "string", "enum": ["ok", "no_reload"] },
 				},
 				"XReloadServices": {
-					"description": "Comma-separated list of init scripts that were reloaded after the write committed. A daemon that reads the config but that the router can lack is listed only when its init script exists: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd`, or `dnsmasq` on a router without odhcpd. Absent when X-Reload-Status: no_reload, and absent wherever X-Reload-Status itself is.",
+					"description": "Comma-separated list of init scripts that were reloaded after the write committed. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd`, or `dnsmasq` when odhcpd does not run. The `POST /batch` 207 lists its services sorted. Absent when X-Reload-Status: no_reload, and absent wherever X-Reload-Status itself is.",
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
 				},
 				"XKernelStatus": {
