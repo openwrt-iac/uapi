@@ -309,10 +309,10 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   cannot store answer 422, and a package with no file under `/etc/config/` answers
   `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /batch` then
   restores what it committed and runs no reload and no kernel apply (#277). A `dhcp_option`
-  entry that holds a second option answers 422, and a write after which dnsmasq stops answers
-  `500 reload_failed_restored` and restores the previous config, as one after which unbound
-  stops does (#279). The request schemas declare the bounds that a write accepts, through
-  `x-uapi-write`.
+  entry in which an address is followed by whitespace and a second option answers 422, and a
+  write after which dnsmasq stops answers `500 reload_failed_restored` and restores the previous
+  config, as one after which unbound stops does (#279). The request schemas declare the bounds
+  that a write accepts, through `x-uapi-write`.
 - **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
   Before, the first apply that changed a radio removed its `path`, and the radio stayed down
   with all its SSIDs.

@@ -838,21 +838,29 @@ t.describe('values.DNSMASQ_TEXT_RE and DNSMASQ_OPTION_RE', () => {
 	});
 });
 
+// Each entry of the first list is a line that dnsmasq 2.93 refuses as `dhcp-option=lan,<entry>`,
+// and each of the second a line that it takes.
 t.describe('values.dnsmasq_option_problem', () => {
-	t.it('flags whitespace before the start of another option, outside a string', () => {
+	t.it('flags an address that whitespace and the start of another option follow, outside a string', () => {
 		for (let s in [ '3,10.99.0.1 6,10.99.0.1', '3,10.99.0.1\t6,10.99.0.1', '3,1.2.3.4  6 ,1.2.3.4',
-		                'option:router,1.2.3.4 option:dns-server,1.2.3.4',
-		                'option6:dns-server,[::] option6:ntp-server,[::]', '15,my 6,domain', '15,"a" 6,b',
-		                '15,a tag:x,3,1.2.3.4', '15,a net:x,3,1.2.3.4', '15,a set:x,3,1.2.3.4',
-		                '15,a vendor:x,1,2', '15,a encap:175,190,x', '15,a vi-encap:2,10,x' ])
+		                '3, 1.2.3.4 6,1.2.3.4', '6,1.2.3.4,5.6.7.8 3,1.2.3.4', '42,0.0.0.0 6,0.0.0.0',
+		                '121,10.0.0.0/8,10.0.0.1 6,10.0.0.1', 'option:router,1.2.3.4 option:dns-server,1.2.3.4',
+		                'option6:dns-server,[::] option6:ntp-server,[::]',
+		                'option6:dns-server,[2001:db8::1] option6:ntp-server,[2001:db8::2]',
+		                '3,1.2.3.4 tag:x,6,1.2.3.4', '3,1.2.3.4 net:x,6,1.2.3.4', '3,1.2.3.4 set:x,6,1.2.3.4',
+		                '3,1.2.3.4 vendor:x,1,2', '3,1.2.3.4 encap:175,190,x', '3,1.2.3.4 vi-encap:2,10,x',
+		                '10.0.0.1 6,10.0.0.1' ])
 			t.assert_true(v.dnsmasq_option_problem(s) != null, s);
 	});
 
 	t.it('takes whitespace in a text value, in a string and after a comma', () => {
 		for (let s in [ '3,10.99.0.1', '15,my domain', '15,"my domain"', '15,"my 6,domain"', '15,a "6,b"',
-		                'encap:175, 190, "iscsi-client0"', '6,1.2.3.4, 5.6.7.8', '6,1.2.3.4 ,5.6.7.8',
-		                ' 6,1.2.3.4', 'option:domain-search,a.example b.example', '15,a b6,c',
-		                '15,a OPTION:x', 'option:dns-server,0.0.0.0' ])
+		                '15,my 6,domain', '15,"a" 6,b', '15,a tag:x,3,1.2.3.4', '15,a,"10.0.0.1 6,b"',
+		                'encap:175, 190, "iscsi-client0"', 'vi-encap:2, 10, "text"', '6,1.2.3.4, 5.6.7.8',
+		                '6,1.2.3.4 ,5.6.7.8', ' 6,1.2.3.4', 'option:domain-search,a.example b.example',
+		                '15,a b6,c', '15,a OPTION:x', 'option:dns-server,0.0.0.0', '66,"1.2.3.4"',
+		                '6,192.168.2.1,192.168.2.2', 'option:root-path,192.168.1.2:/data/netboot/root',
+		                '3,192.168.10.1,10.10.10.1' ])
 			t.assert_equal(v.dnsmasq_option_problem(s), null, s);
 	});
 });

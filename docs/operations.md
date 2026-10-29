@@ -35,7 +35,9 @@ and its `reload_error` reads
 So a 2xx on these writes also means that procd did not report the daemon as
 stopped in that time after the reload. An instance that `service list` does
 not show, because something restarts it or the ubus call fails, does not
-count, and a daemon that stops later still answers 2xx.
+count, and a daemon that stops later still answers 2xx. An instance that did
+not run before the write is not watched, such as the one of a second
+`config dnsmasq` section that a raw POST adds.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block
