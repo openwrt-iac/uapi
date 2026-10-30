@@ -66,9 +66,6 @@ function lease_counts_for_interface(iface) {
 const VALID_RA = {
 	"disabled": true, "server": true, "relay": true, "hybrid": true,
 };
-// odhcpd has no DHCPv4 relay: it parses relay and hybrid for dhcpv4 and answers requests as on
-// server, as dnsmasq does for every value but disabled. LuCI offers only these two.
-const VALID_DHCPV4 = [ "disabled", "server" ];
 const VALID_RA_FLAGS = [ "managed-config", "other-config", "home-agent", "none" ];
 
 function fromUci(section, conn) {
@@ -203,10 +200,10 @@ return {
 		dhcpv6:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
 		               description: "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always." },
-		dhcpv4:      { "x-uapi-read-nullable": true, type: "string", enum: VALID_DHCPV4,
-		               description: "DHCPv4 service on this interface. dnsmasq serves unless the value is `disabled`. odhcpd serves only on `server`, and only when `dhcp/odhcpd` sets `maindhcp`, so null turns DHCPv4 off on a router where odhcpd serves it." },
+		dhcpv4:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA),
+		               description: "DHCPv4 service on this interface. LuCI offers `disabled` and `server`. dnsmasq serves on every value but `disabled`. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`." },
 		ra_flags:    { type: ["array", "null"], items: { type: "string", enum: VALID_RA_FLAGS },
-		               description: "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`." },
+		               description: "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation." },
 		ra_slaac:    { type: "boolean", default: true,
 		               description: "Whether odhcpd sets the autonomous flag on the prefixes of its router advertisements, so that clients configure their addresses with SLAAC. odhcpd reads only `1`, `true`, `0` and `false`, and takes true for any other value." },
 		domain:      { type: ["string", "null"], pattern: values.DNSMASQ_WORDS_RE,
