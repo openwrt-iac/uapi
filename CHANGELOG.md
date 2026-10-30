@@ -9,10 +9,11 @@ All notable changes to this project will be documented in this file. Format foll
 - **`dhcp/servers.dhcpv4`, `ra_flags` and `ra_slaac`** are the options that odhcpd.defaults writes
   into the stock `lan` section. A PUT removed them, as it removes every option that the resource
   does not model, so the router advertisements of `lan` lost the managed flag (M), and DHCPv4
-  stopped on a router where odhcpd serves it. `ra_flags` reads null when unset, which odhcpd takes
-  as `other-config` only, and `["none"]` sets no flag. `dhcpv4` takes `disabled` and `server`, the
-  two values that LuCI offers. `ra_slaac` reads true when unset, as odhcpd does. The description
-  of `ra_default` now says what odhcpd does with each value. (#283)
+  stopped where `dhcp/odhcpd` sets `maindhcp`. A PUT that leaves them out still removes them, so a
+  client keeps them only once it sends them. `ra_flags` reads null when unset, which odhcpd takes
+  as `other-config` only, and `["none"]` sets no flag. `dhcpv4` takes the four modes of `ra`.
+  `ra_slaac` reads true when unset, as odhcpd does. The description of `ra_default` now says what
+  odhcpd does with each value. (#283)
 
 ## [3.2.0] - 2026-10-29
 

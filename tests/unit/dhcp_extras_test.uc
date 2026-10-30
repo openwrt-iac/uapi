@@ -255,6 +255,14 @@ t.describe('dhcp.servers dhcpv4, ra_flags and ra_slaac', () => {
 		t.assert_deep_equal(three(c._state.uci.dhcp.lan), [ 'server', [ 'managed-config', 'other-config' ], '1' ]);
 	});
 
+	t.it('a PUT of the read keeps a dhcpv4 mode that LuCI does not offer', () => {
+		let c = stored({ dhcpv4: 'relay' });
+		let body = h.get_one(c, ctx, 'lan').body;
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.replace(c, ctx, 'lan', body).status, 200);
+		t.assert_equal(c._state.uci.dhcp.lan.dhcpv4, 'relay');
+	});
+
 	t.it('reads what odhcpd takes when they are absent', () => {
 		t.assert_deep_equal(three(h.get_one(stored({}), ctx, 'lan').body), [ null, null, true ]);
 	});
@@ -278,8 +286,8 @@ t.describe('dhcp.servers dhcpv4, ra_flags and ra_slaac', () => {
 		t.assert_false(exists(c._state.uci.dhcp.lan, 'ra_flags'));
 	});
 
-	t.it('refuses a flag that odhcpd does not take, and a dhcpv4 mode that LuCI does not offer', () => {
-		let r = h.patch(stored({}), ctx, 'lan', { dhcpv4: 'relay', ra_flags: [ 'other-config', 'M' ] });
+	t.it('refuses a flag or a dhcpv4 mode that odhcpd does not take', () => {
+		let r = h.patch(stored({}), ctx, 'lan', { dhcpv4: 'on', ra_flags: [ 'other-config', 'M' ] });
 		t.assert_equal(r.status, 422);
 		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'dhcpv4', 'not_in_enum' ], [ 'ra_flags[1]', 'not_in_enum' ] ]);
