@@ -35,10 +35,12 @@ $SSH "test -x /etc/init.d/odhcpd && ubus call service list '{\"name\":\"odhcpd\"
 	|| fail "odhcpd does not run on the test box, so this case proves nothing"
 $SSH 'uci -q get dhcp.odhcpd >/dev/null' || fail "the test box has no config odhcpd section"
 cleanup
-# A dhcp or system write reloads unbound too while procd runs it, which a box with the openwrt-iac
-# feed may have from test 40.
+# A dhcp or system write reloads unbound too while procd holds a config trigger for it, as a LuCI
+# save does, which a box with the openwrt-iac feed may have from test 40.
 UNB="" UNBJ=""
-if $SSH "ubus call service list '{\"name\":\"unbound\"}'" | grep -q '"unbound"'; then UNB=",unbound" UNBJ=',"unbound"'; fi
+if $SSH "ubus call service list '{\"name\":\"unbound\",\"verbose\":true}'" | grep -q '"config.change"'; then
+	UNB=",unbound" UNBJ=',"unbound"'
+fi
 
 # A reload makes odhcpd log for a while, and a line of the last reload after a new mark would be
 # read as one of the next write.

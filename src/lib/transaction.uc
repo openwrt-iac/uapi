@@ -39,17 +39,21 @@ function default_check_services(services) {
 }
 
 // A daemon that reads the package but that an image can lack or that the operator stopped, as
-// dnsmasq, odhcpd and unbound read dhcp, is reloaded only while procd lists it, from its start to
-// its stop, which removes the service and its triggers. That is when the procd trigger of a LuCI
-// save reloads it. The reload of dnsmasq.init and unbound.init starts a stopped daemon, and refusing
-// the write would answer 503 on every router without it. When the ubus call fails, whether it runs
-// is unknown, and skipping it would answer 2xx with a daemon on its old config.
-function running(conn, services, check_services) {
+// dnsmasq, odhcpd and unbound read dhcp, is reloaded when a LuCI save reloads it: while procd lists
+// its service with a config.change trigger, whatever its instances show. `stop` removes the service
+// and its triggers. procd lists a service before it has one too: at boot, unbound.init registers
+// only a trigger on interface events, which starts unbound 3 s after the last of them, and a write
+// then started unbound early. A system write reaches unbound only through ucitrack's `affects`, so
+// any config trigger counts. The reload of dnsmasq.init and unbound.init starts a stopped daemon,
+// and refusing the write would answer 503 on every router without it. When the ubus call fails,
+// whether procd holds the service is unknown, and skipping it would answer 2xx with a daemon on its
+// old config.
+function with_config_trigger(conn, services, check_services) {
 	return filter(services ?? [], function(svc) {
 		if (check_services([ svc ]) != null) return false;
 		let r = null;
-		try { r = conn.call("service", "list", { name: svc }); } catch (e) { return true; }
-		return r?.[svc] != null;
+		try { r = conn.call("service", "list", { name: svc, verbose: true }); } catch (e) { return true; }
+		return length(filter(r?.[svc]?.triggers ?? [], (t) => t[0] == "config.change")) > 0;
 	});
 }
 
@@ -408,7 +412,7 @@ function transaction(conn, params) {
 		return fn(conn, pkg);
 
 	let services = [ ...(params.reload_services ?? []),
-	                 ...running(conn, params.reload_if_running, check_services) ];
+	                 ...with_config_trigger(conn, params.reload_if_running, check_services) ];
 	let svc_err = check_services(services);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
@@ -471,7 +475,7 @@ function multi_transaction(conn, params) {
 	let by_package = {};
 	for (let p in packages)
 		by_package[p] = [ ...(params.reload_services?.[p] ?? []),
-		                  ...running(conn, params.reload_if_running?.[p], check_services) ];
+		                  ...with_config_trigger(conn, params.reload_if_running?.[p], check_services) ];
 	let services = services_of(by_package, packages);
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;

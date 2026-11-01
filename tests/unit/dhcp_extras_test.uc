@@ -36,7 +36,7 @@ t.describe('a dhcp write reloads each daemon that reads it while procd runs it',
 	};
 	function write(name, missing, stopped, watch) {
 		let ran = [];
-		let tx = { acquire: () => ({}), release: () => null, watch,
+		let tx = { acquire: () => ({}), release: () => null, watch: watch ?? (() => null),
 		           reload: (s) => { push(ran, ...s); return null; },
 		           check_services: (s) => (length(filter(s, (svc) => index(missing, svc) >= 0)) > 0)
 		                                  ? "init script not found" : null };
@@ -47,14 +47,16 @@ t.describe('a dhcp write reloads each daemon that reads it while procd runs it',
 			odhcpd: { '.type': 'odhcpd', '.anonymous': false, maindhcp: '0' },
 		} } });
 		c.set_ubus_response("service", "list", (stopped == null) ? { _error: "ubus call service.list: Request timed out" }
-		                                       : (a) => (index(stopped, a.name) >= 0) ? {} : { [a.name]: {} });
+		                                       : (a) => (index(stopped, a.name) >= 0) ? {}
+		                                                  : { [a.name]: { instances: { [a.name]: { running: true, pid: 10 } },
+		                                                                  triggers: [ [ "config.change", [ "if", [ "eq", "package", "dhcp" ], [ "run_script", "/etc/init.d/" + a.name, "reload" ] ], 1000 ] ] } });
 		let r = WRITES[name][1](c, tx);
 		return { status: r.status, header: r.headers["X-Reload-Services"], ran: join(",", ran),
 		         reload: r.headers["X-Reload-Status"] };
 	}
 	let without = (list, svc) => join(",", filter(split(list, ","), (s) => s != svc));
 
-	t.it('reloads and names each one that procd lists', () => {
+	t.it('reloads and names each one that procd runs', () => {
 		for (let name, w in WRITES)
 			t.assert_deep_equal(write(name, [], []), { status: 200, header: w[0], ran: w[0], reload: "ok" }, name);
 	});

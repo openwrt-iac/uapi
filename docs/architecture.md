@@ -123,12 +123,21 @@ without uci state change.
    no uci write attempted. A service in the resource's `reload_if_running`
    list, a daemon that reads the package but that an image can lack or that
    the operator stopped, such as dnsmasq, odhcpd and unbound for the dhcp
-   writes, joins the reload when its init script exists and `service list`
-   names it, which procd does from its start to its stop. That is when the
-   procd trigger of a LuCI save reloads it. Otherwise it is skipped, so it
-   never answers 503, and a reload does not start a daemon that the operator
-   stopped, as the reload of dnsmasq.init and unbound.init would. When the
-   `service list` call fails, uapi cannot tell, and reloads it. Then confirm
+   writes, joins the reload when its init script exists and a verbose
+   `service list` shows a `config.change` trigger for it. That matches a
+   LuCI save, whose commit fires each such trigger that procd holds,
+   whatever the instances of the daemon show. procd holds them from the
+   start of the service to its stop, which removes them, so a write starts
+   again a daemon that crashed too often, and starts dnsmasq when it enables
+   a `dnsmasq` section while every other one is disabled, as the save does.
+   At boot, unbound.init registers only a trigger on interface events, which
+   starts unbound 3 s after the last of them, so neither starts it earlier. Any config trigger counts,
+   not only one on the package written, because a `system` write reaches
+   unbound only through ucitrack's `affects`. Otherwise the daemon is
+   skipped, so it never answers 503, and a reload does not start a daemon
+   that the operator stopped, as the reload of dnsmasq.init and unbound.init
+   would. When the `service list` call fails, uapi cannot tell, and reloads
+   it. Then confirm
    `/etc/config/<package>` exists, because the uci cursor stores nothing in a
    missing file and reports that only through a null return. Miss →
    `503 config_missing` with the path. A DELETE checks the file first and

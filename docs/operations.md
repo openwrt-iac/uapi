@@ -23,7 +23,11 @@ Two signals worth wiring into your automation:
   nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds.
   A write that commits nothing reloads nothing, since 3.2.0 for a PATCH and since 3.3.0 for a PUT. A `dhcp` write reloads
   dnsmasq, odhcpd and unbound only while procd runs them, so it also answers `no_reload`
-  when none of them runs. `unverified` means that every init script exited 0, but that
+  when none of them runs. As for a LuCI save, procd runs such a daemon while it holds a
+  config trigger for it, from the start of the service to its stop, whatever the instances
+  show, so a write also starts again a daemon that crashed too often. At boot, unbound holds
+  no such trigger until 3 s after the last interface event, and a write leaves it as it is.
+  `unverified` means that every init script exited 0, but that
   the `dnsmasq --test` check after a dhcp write did not finish, see below.
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
@@ -32,7 +36,8 @@ unbound and dnsmasq are the exceptions. When unbound runs, a write that
 reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
 keep running. A write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`,
 `dhcp/odhcpd`, `system` or the raw `dhcp` and `system` packages reloads
-`unbound` while procd runs it, so it waits the 2 s too. It also takes the lock
+`unbound` while procd runs it, and waits the 2 s too when unbound ran before
+the write. It also takes the lock
 of `unbound`, so a write to `unbound/server`, `unbound/srv` or `unbound/ext`, or
 another of these writes, at the same moment answers `423 locked`. If an
 instance stops, the write answers `500 reload_failed_restored`, and its

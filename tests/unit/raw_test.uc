@@ -416,7 +416,9 @@ t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => 
 		}, system: {
 			cfg01: { '.type': 'system', '.anonymous': true, hostname: 'OpenWrt' },
 		} } });
-		conn.set_ubus_response("service", "list", (a) => (index(running, a.name) >= 0) ? { [a.name]: {} } : {});
+		conn.set_ubus_response("service", "list", (a) => (index(running, a.name) >= 0)
+			? { [a.name]: { instances: { [a.name]: { running: true, pid: 10 } },
+			                triggers: [ [ "config.change", [ "if", [ "eq", "package", "dhcp" ], [ "run_script", "/etc/init.d/" + a.name, "reload" ] ], 1000 ] ] } } : {});
 		reloaded = [];
 		return conn;
 	}
@@ -436,7 +438,7 @@ t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => 
 		}
 	});
 
-	t.it('skips one that procd does not list, a stopped dnsmasq included', () => {
+	t.it('skips one that procd does not run, a stopped dnsmasq included', () => {
 		let r = raw2.patch(box([ "dnsmasq" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
 		t.assert_equal(r.status, 200, r.body);
 		t.assert_deep_equal([ reloaded, r.body.reload_services ], [ [ [ "dnsmasq" ] ], [ "dnsmasq" ] ]);
