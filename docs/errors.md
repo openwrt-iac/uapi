@@ -163,19 +163,22 @@ Every writable resource outside `dhcp` declares a reload service that it always 
 `X-Reload-Status: no_reload` and `X-Kernel-Status: no_kernel` on a WireGuard peer mean that
 the write changed nothing in uci, and uapi then ran no init script and nothing in the kernel. A
 `dhcp` write reloads dnsmasq, odhcpd and unbound only while procd runs them, so it also answers
-`no_reload` when none of them runs. A PATCH writes
-only the options that it changes, so one that names no field, or sends what uci already
-holds, commits nothing. So does the adopt of an anonymous section that another writer named
-while the request waited for its lock. A PUT, POST or DELETE always writes. A `POST /batch`
-reloads the services of the packages that its writes changed, and none when they changed
-nothing. In 3.1.0 such a PATCH reloaded the daemon anyway and answered `ok`, and on a
-WireGuard peer without an endpoint the kernel apply removed the peer and set it again, which
-reset its session.
+`no_reload` when none of them runs. A PUT or a PATCH
+writes only the options that it changes, and no default that the read fills in for an option
+that uci does not hold, so a PATCH that names no field, or a PUT or a PATCH that sends what uci
+already holds, commits nothing. So does the adopt of an anonymous section that another writer
+named while the request waited for its lock. Such a PUT or PATCH still answers `409 conflict`
+when another writer deleted the section during the request. A PUT of the read still writes what
+it stores in another form than uci holds, such as a list that uci holds as an option, and the PUT
+of the read after it commits nothing. A POST or DELETE always writes. A `POST /batch` reloads the
+services of the packages that its writes changed, and none when they changed nothing. In 3.1.0 such a PATCH reloaded the daemon anyway
+and answered `ok`, and on a WireGuard peer without an endpoint the kernel apply removed the
+peer and set it again, which reset its session. In 3.2.0 such a PUT still did.
 
 ## Retry-After
 
 `423 locked` includes `Retry-After: 1`; `429 too_many_requests` carries
 the rate-limit bucket refill estimate. Wait that many seconds (or use
 jittered backoff) and try again. The 423 lock window is the duration of
-one atomic transaction (snapshot, validate, stage, commit, reload,
+one atomic transaction (validate, stage, snapshot, commit, reload,
 possibly restore) and is typically well under a second.

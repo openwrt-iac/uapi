@@ -138,30 +138,45 @@ without uci state change.
    write.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
-2. **Snapshot.** `uci_unload(<package>)`, then `uci_export(<package>)` captures
-   the package file into an in-memory string. The unload matters: the preview
-   before the lock loaded the package into the cursor, which serves every later
-   read from that copy, so a commit by LuCI or a shell in between was invisible
-   to the write.
+2. **Unload.** `uci_unload(<package>)` drops the copy of the package that the
+   preview before the lock loaded into the cursor, which serves every later read
+   from that copy, so a commit by LuCI or a shell in between was invisible to the
+   write.
 3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta, partial)`
    run inside the lock, and `validate_new(json, conn)` where a resource has one, which refuses only
    the errors that the write adds (`docs/adding-a-resource.md`). Any field error → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
-   Nothing is staged outside the request process (see below). A PATCH skips
-   a set of the value that uci already holds and a delete of an option that
-   it does not hold, so a PATCH that changes nothing has nothing to commit,
-   and it collects no kernel operations.
+   Nothing is staged outside the request process (see below). A PUT and a
+   PATCH skip a set of the value that uci already holds, a delete of an option
+   that it does not hold, and a default that the read fills in for an option
+   that uci does not hold, such as the `enabled '1'` that a POST or a LuCI flag
+   leaves out. So one that changes nothing has nothing to commit, and it
+   collects no kernel operations. A PUT of the read still writes what it stores
+   in another form than uci holds, such as a list that uci holds as an option or
+   a number in hex, and the PUT of the read after it changes nothing. A PUT and
+   a PATCH also stage a check that the section still exists, see step 5.
    The response body is `fromUci` of the section read back from that copy.
    So a write answers the body, apart from `runtime`, and the ETag that a GET
    then answers, unless another writer commits to the package while the
    request runs. `runtime` is read before the reload, and the commit replays
    the writes over such a commit, which the body does not show.
-5. **Commit.** When the request wrote to the package, `uci_commit(<package>)`
-   loads the package file again, replays the writes over it and writes it
-   through libuci, so a commit by LuCI or a shell while the request ran is kept.
-   A replay that no longer applies → `409 conflict`, and nothing is written. A
+5. **Snapshot and commit.** `uci_export(<package>)` captures the package file
+   into an in-memory string, the snapshot that step 8 restores. When the request
+   wrote to the package, `uci_commit(<package>)` then loads the package file
+   again, replays the writes over it and writes it through libuci, so a commit by
+   LuCI or a shell while the request ran is kept. The snapshot is taken here, and
+   not at the lock, so that it holds such a commit too, and the restore of step 8
+   keeps it. Taken at the lock, it put back the file from before such a commit.
+   A commit by another writer between the snapshot and the load of the commit,
+   a few microseconds, is still lost on a restore, as one between that load and
+   libuci's write is lost by every commit. A request that staged only the check
+   of a section loads the file and runs the check, and writes nothing.
+   A replay that no longer applies, or a section that another writer deleted
+   since the request read it, → `409 conflict`, and nothing is written. Without
+   the check, a PUT or a PATCH that changed nothing answered 200 for a section
+   that another writer had deleted. A
    commit that libuci refuses, as on a full overlay, → `500 internal_error`.
    Either way the cursor drops its copy of the package, so nothing later in the
    request reads the writes that the file does not hold. A request that wrote
@@ -226,8 +241,11 @@ without uci state change.
    waits for a load or a commit in progress, and gives up after 5 s. That orders
    nothing after it: libuci releases the flock before its own rename, so a LuCI
    commit that held the lock, or waited on it with the old file open, can rename
-   its file over the restored one, as one libuci commit can over another. ucode
-   has no `fsync`, so the rename holds against a kill but not against a power
+   its file over the restored one, as one libuci commit can over another. A
+   commit by LuCI or a shell after step 5, while the daemons reload, is undone
+   too, because it went into the file that the request committed. Keeping it
+   needs a choice that this recipe does not make yet, see `docs/roadmap.md`.
+   ucode has no `fsync`, so the rename holds against a kill but not against a power
    cut on a filesystem that writes data back later than the rename, such as
    ubifs.
 9. **On success:** `200` with the refreshed resource.
@@ -260,7 +278,8 @@ holds, without reading the file again. The commit of step 5 therefore reloads th
 file and replays the request's writes, which keeps a commit by another writer
 that landed while the request ran, as libuci's own replay of a delta does. A
 replay that no longer applies, because another writer deleted a section that the
-request wrote into, fails the commit, and the request answers `409 conflict` with
+request wrote into, or that a PUT or a PATCH addressed without writing to it,
+fails the commit, and the request answers `409 conflict` with
 a message that names the package. A package that the request did not write is not
 committed, as libuci skips a commit with no changes, so its comments stay, and it
 gets no reload and no restore.
@@ -371,8 +390,9 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    batches skip lock+snapshot+commit+reload entirely.
 3. Acquire global SH + per-package EX in sorted package order
    (deadlock-free).
-4. `uci_unload()` and `uci_export()` each package into a snapshot, as in step 2
-   of the single-package recipe.
+4. `uci_unload()` each package, as in step 2 of the single-package recipe. Each
+   commit of step 7 takes the snapshot of its package right before it, as in
+   step 5.
 5. Run each sub-request in order via `BARE_RESOURCES`/`BARE_SINGLETONS` -
    handlers that skip their own per-package flock + snapshot + commit + reload
    (since the outer multi_transaction has those covered).
@@ -381,7 +401,9 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    with the failing sub's status.
 7. All sub-requests 2xx → `uci_commit()` each package, run the union of the
    reload services of the packages that the batch committed, then the collected
-   kernel operations. A batch that committed nothing runs neither. Same failure
+   kernel operations. A PUT or a PATCH that changes nothing writes nothing, as in
+   step 4 of the single-package recipe, and a batch that committed nothing runs
+   neither. Same failure
    recipe as the single-package transaction, and a commit that fails part way
    counts as a failed reload. Either way only the packages that the batch
    committed are restored: the snapshot of another one would undo what LuCI or
@@ -430,8 +452,13 @@ differently per verb:
 
 - **PUT (replace)** normalizes the section to the modeled set. `diff_apply`
   iterates the raw existing section and deletes every option not re-emitted by
-  `toUci`, including ones the resource does not model. PUT means "this body is
-  the whole resource," so uapi owns the section.
+  `toUci`, including ones the resource does not model, and sets each option of
+  `toUci` that uci does not hold as emitted, apart from a default that the read
+  filled in. PUT means "this body is the whole resource," so uapi owns the
+  section, apart from one case: an option that the PUT does not set is not
+  replayed over a commit by LuCI or a shell during the request, so such a commit
+  keeps its value there, as under a PATCH. Before 3.3.0 a PUT replayed every
+  option and its values won.
 - **PATCH (partial update)** preserves unmodeled options. `diff_apply_patch`
   computes the modeled footprint as `toUci(fromUci(existing))`, with the
   write-only secrets that the read masks put back, and only deletes within it

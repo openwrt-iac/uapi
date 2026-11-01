@@ -357,6 +357,12 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 
 ## Features (additive, future minor bumps in v3.x)
 
+- **A read of `network/wireguard_peers` does not report the peer in the kernel.** Its `runtime` is
+  empty, so a peer that `wg` changed by hand, or that a failed apply left behind, reads as uci
+  holds it. A PUT of the read set the peer again until a PUT that changes nothing stopped writing,
+  and now nothing sets it again and nothing reports the drift. Fields under `runtime` from
+  `wg show` would report it, and a read reports drift rather than correct it.
+
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
   `wg syncconf` is all or nothing and the proto handler escalates any failure to
@@ -509,6 +515,24 @@ is unresolvable.
     ignore it with ucode's `signal()` until its recipe ends. That is upstream work, and the
     wait would bound how long a recipe may take.
   The details are under Open findings in `docs/lock-state-audit.md`.
+
+- **The restore after a failed reload undoes what another writer committed after the commit of
+  the request.** LuCI and a shell take no uapi lock, so they can commit to the package while its
+  daemons reload. Their commit goes into the file that the request committed, and the restore
+  writes back the file from before that commit, so it undoes both. A commit by them before the
+  commit of the request is kept, because the snapshot is taken right before that commit. Keeping a
+  later one needs a choice, none made yet:
+  - Undo only the writes of the request: load the file as it is, set back what the request wrote
+    and commit through libuci. That needs a rule for an option that both wrote, puts a section that
+    a DELETE removed back at the end of the package with a new name when it was anonymous, drops
+    the comments of the file, and gives up the check of its own write that the restore makes,
+    because libuci does not check its write.
+  - Report it: compare the file before the restore with what the request committed, and say in
+    the 500 that the restore undid another commit, which adds a field, or leave the file and answer
+    `reload_failed_unrecovered`, which leaves the config that the daemon refused.
+  - Hold libuci's flock from the commit to the end of the restore: libuci's own load and commit in
+    the request would wait on that lock, LuCI would wait for the whole reload, and libuci releases
+    its flock before its rename anyway.
 
 - **Reporting-surface consumption is the provider's.** `X-Kernel-Status`,
   `management_path` and `?validate=1` are all emitted and documented here, and

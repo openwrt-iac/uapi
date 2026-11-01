@@ -230,7 +230,9 @@ The handler runs `validate_new()` on the section as it was and as the write leav
 refuses the write only for an error that it adds: one in a field that the write changes, one
 that the section did not have, by field, code and message, or one that was not live and is now.
 So a message names its rule and quotes no value: a message that quotes another field changes when
-that field changes, and the old error then reads as a new one.
+that field changes, and the old error then reads as a new one. A property in
+`tests/unit/handler_test.uc` puts a marker into each field of the fixture cases and fails on a
+message that holds it.
 An option and the list of its words, split on whitespace as netifd splits it, are the same
 value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
 of its own. So a write that leaves a field alone is refused for an error that the field already

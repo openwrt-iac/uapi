@@ -5,7 +5,7 @@ Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates stan
 > Not affiliated with the OpenWrt project. uapi started as the work of a single operator solving a specific problem on their own network, shared in the open in the hope it is useful to others with similar needs.
 
 - Direct-to-bus: runs as a uhttpd-mod-ucode handler. No daemon, no `/etc/config/` file mangling.
-- Atomic transactions (single AND multi-package via `POST /batch`): snapshot, validate, commit, reload, restore-on-failure in a single request.
+- Atomic transactions (single AND multi-package via `POST /batch`): validate, stage, snapshot, commit, reload, restore-on-failure in a single request.
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side rotation (`POST /tokens`).
 - 44 curated resources plus a generic `/raw/<package>/<id>` passthrough for the long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags + `If-Match`, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
@@ -19,7 +19,7 @@ uapi sidesteps all three:
 
 - **Lives inside OpenWrt's runtime.** uhttpd-mod-ucode plus direct ubus calls means uci stays the single source of truth: no shadow state, no drift, no extra daemon to babysit.
 - **Stable IDs by construction.** uapi-created sections are ULID-named; pre-existing anonymous sections surface as `managed: false` with an explicit `adopt` flow.
-- **Atomic transactions with honest failure codes.** Snapshot, validate, commit, reload, restore-on-fail under per-package flocks. Every outcome is a distinct status (`200`, `412`, `422`, `423`, `429`, `500 reload_failed_restored`, `500 reload_failed_unrecovered`).
+- **Atomic transactions with honest failure codes.** Validate, stage, snapshot, commit, reload, restore-on-fail under per-package flocks. Every outcome is a distinct status (`200`, `412`, `422`, `423`, `429`, `500 reload_failed_restored`, `500 reload_failed_unrecovered`).
 - **Bearer tokens with hierarchical scopes.** No login dance, no session timeout. Optional expiry + IP scoping + per-token rate limit. Exactly the primitive a CI pipeline wants.
 
 This works now because the substrate finally caught up: `ucode-mod-ubus`, `uhttpd-mod-ucode`, and apk-based packaging all shipped in the last cycle. Older attempts had to pick between lua, Python, and C; uapi picked the right moment to be small.

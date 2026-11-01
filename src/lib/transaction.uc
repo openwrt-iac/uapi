@@ -332,7 +332,7 @@ function conflict_result(message) {
 	return { ok: false, kind: "conflict", message: message + ". Nothing was written. A retry reads the new state." };
 }
 
-function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, applied) {
+function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -340,6 +340,10 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 		return result ?? { ok: false, kind: "unknown" };
 	}
 
+	// The file that the commit replays over, so the restore undoes the writes of the request and
+	// keeps what another writer committed while the request ran. Taken when the lock was, it put back
+	// the file from before such a commit.
+	let snapshot = conn.uci_export(pkg);
 	let committed = conn.uci_commit(pkg);
 	if (type(committed) == "object")
 		return conflict_result(committed.conflict);
@@ -434,8 +438,7 @@ function transaction(conn, params) {
 		// a section that uci did not store. The commit itself re-reads the file, so only the
 		// reads were stale.
 		conn.uci_unload(pkg);
-		let snapshot = conn.uci_export(pkg);
-		result = run_inner(conn, pkg, services, fn, snapshot,
+		result = run_inner(conn, pkg, services, fn,
 		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied, watch),
 		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops, watch),
 		                   wg_ops, wg_applied);
@@ -530,10 +533,7 @@ function multi_transaction(conn, params) {
 	let result = null;
 	let caught = null;
 	try {
-		for (let pkg in sorted) {
-			conn.uci_unload(pkg);
-			snapshots[pkg] = conn.uci_export(pkg);
-		}
+		for (let pkg in sorted) conn.uci_unload(pkg);
 		let inner = fn(conn);
 		if (!inner || inner.ok === false) {
 			for (let pkg in sorted) conn.uci_revert(pkg);
@@ -554,6 +554,8 @@ function multi_transaction(conn, params) {
 			for (let pkg in sorted) {
 				let caught_commit = null;
 				let wrote = false;
+				// Right before the commit, for the reason that run_inner() gives.
+				snapshots[pkg] = conn.uci_export(pkg);
 				try { wrote = conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
 				if (type(wrote) == "object") {
 					commit_err = conflict = wrote.conflict;

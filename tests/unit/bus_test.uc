@@ -650,10 +650,12 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 // The bus commits only a package that the request wrote, and a write of the value that uci holds
 // still counts. A PATCH that names nothing wrote each stored secret again, because the read masks
 // it, so on any section with one the commit rewrote the package and dropped its comments. On the
-// goto rule nr3 it deleted the `action` that toUci clears and the rule does not hold.
-t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
+// goto rule nr3 it deleted the `action` that toUci clears and the rule does not hold. A PUT set
+// every option that toUci emits, so a PUT of the read rewrote the package too.
+t.describe('bus.connect, a write that changes nothing commits nothing', () => {
 	let handler = require('handler');
 	let fx = require('resource_fixtures');
+	let ph = require('property_harness');
 	let reloaded = [], kernel_ops = [];
 	let tx = { acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
 	           reload: function(s) { push(reloaded, ...s); return null; },
@@ -663,7 +665,7 @@ t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 	               return null;
 	           },
 	           wg_reconcile: () => null };
-	function patch(c, body, ctx) {
+	function run(c, fn) {
 		let files = fx.world();
 		files[c.pkg] = { ...(files[c.pkg] ?? {}), [c.id]: { ...c.section } };
 		let disk = { files, staged: {} };
@@ -673,11 +675,21 @@ t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 		let mod = loadfile('src/resources/' + c.file)();
 		reloaded = [];
 		kernel_ops = [];
-		ctx = { request_id: "01hx0000000000000000000000", ...(ctx ?? {}) };
-		let r = c.singleton ? handler.make_singleton(mod, { tx }).patch(conn, ctx, body)
-		                    : handler.make(mod, { tx }).patch(conn, ctx, c.id, body);
+		let r = fn(c.singleton ? handler.make_singleton(mod, { tx }) : handler.make(mod, { tx }), conn, disk);
 		system([ "rm", "-rf", dir ]);
 		return { r, disk };
+	}
+	function patch(c, body, ctx) {
+		ctx = { request_id: "01hx0000000000000000000000", ...(ctx ?? {}) };
+		return run(c, (h, conn) => c.singleton ? h.patch(conn, ctx, body) : h.patch(conn, ctx, c.id, body));
+	}
+	// A singleton has no PUT, and the PATCH of its read is its round trip.
+	function write_read(h, conn, c, ctx) {
+		ctx ??= { request_id: "01hx0000000000000000000000" };
+		let read = c.singleton ? h.get(conn, ctx) : h.get_one(conn, ctx, c.id);
+		let body = { ...read.body };
+		delete body.runtime;
+		return c.singleton ? h.patch(conn, ctx, body) : h.replace(conn, ctx, c.id, body);
 	}
 	// It reloaded the daemon anyway, and on a WireGuard peer without an endpoint the kernel apply
 	// removed the peer and set it again, which resets its session. The headers said that both ran.
@@ -697,6 +709,81 @@ t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 	t.it('a JSON Patch that only tests a value', () => {
 		let c = filter(fx.CASES, (x) => x.id == "p1")[0];
 		assert_noop(patch(c, [ { op: "test", path: "/public_key", value: fx.WG_PUB } ], { json_patch: true }));
+	});
+
+	// A PUT stores some reads in another form, such as a default that the seed does not hold, a list
+	// that uci holds as an option, a number in hex or a legacy option name, so the PUT of the read
+	// after it is the one that must commit nothing. A first one that leaves uci as it was commits
+	// nothing either.
+	for (let c in fx.CASES)
+		t.it(sprintf("a %s of the read of %s, and of the read after it", c.singleton ? "PATCH" : "PUT", c.file + "/" + c.id), () => {
+			assert_noop(run(c, function(h, conn, disk) {
+				let seed = json(sprintf("%J", disk.files));
+				let first = write_read(h, conn, c);
+				t.assert_equal(first.status, 200, first.body);
+				if (ph.json_eq(disk.files, seed)) t.assert_equal(disk.commits, null);
+				disk.commits = null;
+				reloaded = [];
+				kernel_ops = [];
+				return write_read(h, conn, c);
+			}));
+		});
+
+	// LuCI's flags store nothing for their default, and a POST stores no field that it leaves out.
+	// A PUT of the read wrote the default that the read fills in for such an option, `enabled '1'`
+	// on a rule, `disabled '0'` and `route_allowed_ips '0'` on a peer, so it reloaded the daemon and
+	// set the peer again.
+	t.it('a PUT of the read of a peer that LuCI wrote without its defaults', () => {
+		let c = { file: "network.wireguard_peers.uc", id: "luci1", pkg: "network",
+		          section: { '.type': 'wireguard_wg0', public_key: fx.WG_PUB, allowed_ips: [ '10.9.0.7/32' ],
+		                     endpoint_host: '198.51.100.7', endpoint_port: '51820', persistent_keepalive: '25' } };
+		assert_noop(run(c, (h, conn) => write_read(h, conn, c)));
+	});
+	t.it('a PUT of the read of a rule that a POST created', () => {
+		let c = filter(fx.CASES, (x) => x.id == "r1")[0];
+		assert_noop(run(c, function(h, conn, disk) {
+			let created = h.create(conn, { request_id: "01hx0000000000000000000000" },
+			                       { name: "posted", target: "ACCEPT", match: { src_zone: "lan", proto: [ "tcp" ], dest_port: [ "5657" ] } });
+			t.assert_equal(created.status, 200, created.body);
+			t.assert_equal(disk.commits, 1);
+			disk.commits = null;
+			reloaded = [];
+			return write_read(h, conn, { ...c, id: created.body.id });
+		}));
+	});
+
+	// A batch commits a package only when one of its operations wrote to it.
+	t.it('a batch that PUTs the read of a peer and of a rule', () => {
+		let cases = map([ "p1", "r1" ], (id) => filter(fx.CASES, (x) => x.id == id)[0]);
+		let files = fx.world();
+		for (let c in cases) files[c.pkg][c.id] = { ...c.section };
+		let disk = { files, staged: {} };
+		let dir = temp_dir();
+		for (let pkg in files) fs.writefile(dir + "/" + pkg, "");
+		let paths = { lock: "/tmp/uapi-test-bus-noop.lock", prefix: "/tmp/uapi-test-bus-noop-pkg." };
+		let bare = map(cases, (c) => handler.make(loadfile('src/resources/' + c.file)(), { tx: { bare: true } }));
+		let sink = [];
+		reloaded = [];
+		kernel_ops = [];
+		let r = require('transaction').multi_transaction(connect_to(disk, { config_dir: dir }), {
+			...tx, packages: [ "firewall", "network" ], reload_services: { firewall: [ "firewall" ], network: [ "network" ] },
+			lock_path: paths.lock, pkg_lock_prefix: paths.prefix, wg_ops: sink,
+			fn: function(c) {
+				for (let i = 0; i < length(cases); i++) {
+					let w = write_read(bare[i], c, cases[i], { request_id: "01hx0000000000000000000000." + i, kernel_sink: sink });
+					if (w.status != 200) return { ok: false, kind: "batch_aborted", body: w.body };
+				}
+				return { ok: true };
+			},
+		});
+		system([ "rm", "-rf", dir ]);
+		for (let f in [ paths.lock, paths.prefix + "firewall.lock", paths.prefix + "network.lock" ]) fs.unlink(f);
+		t.assert_equal(r.ok, true, r);
+		t.assert_equal(disk.commits, null);
+		t.assert_deep_equal(reloaded, []);
+		t.assert_deep_equal(sink, []);
+		t.assert_deep_equal([ r.reload_status, r.reload_services, r.kernel_status, r.kernel_applied ],
+		                    [ "no_reload", [], "no_kernel", [] ]);
 	});
 
 	let peer = (psk) => ({ file: "network.wireguard_peers.uc", id: "p9", pkg: "network",
@@ -719,11 +806,13 @@ t.describe('bus.connect, a PATCH that names nothing commits nothing', () => {
 });
 
 // The commit replays the writes over a commit of another writer, and fails when one no longer
-// applies. A single write answered 500 for it from the catch-all of main.uc.
+// applies. A single write answered 500 for it from the catch-all of main.uc. A write that changes
+// nothing has nothing to replay, and answered 200 with the section that the other writer deleted.
 t.describe('bus.connect, a write whose replay no longer applies', () => {
 	let handler = require('handler');
 	let fx = require('resource_fixtures');
-	t.it('answers 409 conflict, writes nothing and reloads nothing', () => {
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	function racing(write) {
 		let disk = { files: { network: { ...fx.world().network,
 			p1: { '.type': 'wireguard_wg0', public_key: fx.WG_PUB, allowed_ips: [ '10.9.0.2/32' ] } } }, staged: {} };
 		let dir = temp_dir();
@@ -741,7 +830,7 @@ t.describe('bus.connect, a write whose replay no longer applies', () => {
 			wg_apply: function(c, ops) { push(ran, ...ops); return null; }, wg_reconcile: () => null,
 		} });
 		let r = null;
-		try { r = h.patch(conn, { request_id: "01hx0000000000000000000000" }, "p1", { allowed_ips: [ '10.9.0.3/32' ] }); }
+		try { r = write(h, conn); }
 		catch (e) { r = { status: e.message }; }
 		system([ "rm", "-rf", dir ]);
 		t.assert_equal(r.status, 409);
@@ -749,6 +838,19 @@ t.describe('bus.connect, a write whose replay no longer applies', () => {
 		t.assert_match(r.body.message, /^another writer changed the package network during the request, .* A retry reads the new state\.$/);
 		t.assert_equal(disk.commits, null);
 		t.assert_deep_equal(ran, []);
+	}
+
+	t.it('answers 409 conflict, writes nothing and reloads nothing', () => {
+		racing((h, conn) => h.patch(conn, ctx, "p1", { allowed_ips: [ '10.9.0.3/32' ] }));
+	});
+
+	t.it('answers 409 conflict to a PUT of the read and to a PATCH that names nothing', () => {
+		racing(function(h, conn) {
+			let read = h.get_one(conn, ctx, "p1").body;
+			delete read.runtime;
+			return h.replace(conn, ctx, "p1", read);
+		});
+		racing((h, conn) => h.patch(conn, ctx, "p1", {}));
 	});
 });
 
@@ -762,19 +864,20 @@ t.describe('bus.connect, the reload fields of a raw write', () => {
 	let raw = loadfile('src/raw.uc')();
 	global.modules.transaction = real;
 
-	function patch(body) {
-		let disk = { files: { firewall: { r1: { '.type': 'rule', name: 'one' } } }, staged: {} };
+	function write(verb, body) {
+		let disk = { files: { firewall: { r1: { '.type': 'rule', name: 'one', enabled: '0', proto: [ 'tcp', 'udp' ] } } },
+		             staged: {} };
 		let dir = temp_dir();
 		fs.writefile(dir + "/firewall", "");
 		reloaded = [];
-		let r = raw.patch(connect_to(disk, { config_dir: dir }), { request_id: "01hx0000000000000000000000" },
+		let r = raw[verb](connect_to(disk, { config_dir: dir }), { request_id: "01hx0000000000000000000000" },
 		                  [ "*:rw" ], "firewall", "r1", body);
 		system([ "rm", "-rf", dir ]);
-		return r;
+		return { ...r, commits: disk.commits };
 	}
 
 	t.it('a PATCH that changes nothing says that no daemon was reloaded', () => {
-		let r = patch({});
+		let r = write("patch", {});
 		t.assert_equal(r.status, 200, r.body);
 		t.assert_deep_equal(reloaded, []);
 		t.assert_deep_equal([ r.body.reloaded, r.body.reload_services, r.body.reload_note ],
@@ -782,10 +885,53 @@ t.describe('bus.connect, the reload fields of a raw write', () => {
 	});
 
 	t.it('a PATCH that writes names the services that it reloaded', () => {
-		let r = patch({ name: "two" });
+		let r = write("patch", { name: "two" });
 		t.assert_equal(r.status, 200, r.body);
 		t.assert_deep_equal(reloaded, [ "firewall" ]);
 		t.assert_deep_equal([ r.body.reloaded, r.body.reload_services, r.body.reload_note ],
 		                    [ true, [ "firewall" ], null ]);
+	});
+
+	// Each set counted as a write, so a PUT of the read committed and reloaded. uci stores a boolean
+	// as 1 or 0 and a number as its text, so those are what it holds too.
+	t.it('a PUT or a PATCH of what uci holds commits nothing and says that no daemon was reloaded', () => {
+		let read = { id: "r1", ".type": "rule", name: "one", enabled: "0", proto: [ "tcp", "udp" ], managed: true };
+		for (let w in [ [ "replace", read ], [ "replace", { ...read, enabled: false } ], [ "patch", read ], [ "patch", { name: "one" } ] ]) {
+			let r = write(...w);
+			t.assert_equal(r.status, 200, r.body);
+			t.assert_equal(r.commits, null, w);
+			t.assert_deep_equal(reloaded, []);
+			t.assert_deep_equal([ r.body.reloaded, r.body.reload_note ],
+			                    [ false, "the write changed nothing, so no daemon was reloaded" ]);
+		}
+	});
+
+	t.it('a PUT or a PATCH of what uci holds answers 409 when another writer deleted the section during the request', () => {
+		for (let verb in [ "replace", "patch" ]) {
+			let disk = { files: { firewall: { r1: { '.type': 'rule', name: 'one' } } }, staged: {} };
+			let dir = temp_dir();
+			fs.writefile(dir + "/firewall", "");
+			let conn = connect_to(disk, { config_dir: dir });
+			let commit = conn.uci_commit;
+			conn.uci_commit = function(pkg) {
+				delete disk.files.firewall.r1;
+				return commit(pkg);
+			};
+			reloaded = [];
+			let r = raw[verb](conn, { request_id: "01hx0000000000000000000000" }, [ "*:rw" ], "firewall", "r1", { name: "one" });
+			system([ "rm", "-rf", dir ]);
+			t.assert_equal(r.status, 409, verb);
+			t.assert_equal(r.body.code, "conflict");
+			t.assert_deep_equal(reloaded, []);
+		}
+	});
+
+	t.it('a PUT that changes one option, or turns a list into an option, commits and reloads', () => {
+		for (let body in [ { name: "one", enabled: true, proto: [ "tcp", "udp" ] }, { name: "one", enabled: 0, proto: "tcp udp" } ]) {
+			let r = write("replace", body);
+			t.assert_equal(r.status, 200, r.body);
+			t.assert_equal(r.commits, 1, body);
+			t.assert_deep_equal(reloaded, [ "firewall" ]);
+		}
 	});
 });

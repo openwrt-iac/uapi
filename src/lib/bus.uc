@@ -94,7 +94,7 @@ function connect(opts) {
 	// libuci commits a package loaded by path by writing the copy that it holds, where it reads a
 	// package loaded by name again and replays the delta. So the commit reloads the file and
 	// replays the writes kept here, and a commit by LuCI or a shell while the request ran stays.
-	let writes = {};
+	let writes = {}, changed = {};
 	function load(pkg) {
 		if (writes[pkg] == null && loadable(pkg) && cursor.load(config_dir + "/" + pkg))
 			writes[pkg] = [];
@@ -103,13 +103,18 @@ function connect(opts) {
 	function drop(pkg) {
 		cursor.unload(pkg);
 		delete writes[pkg];
+		delete changed[pkg];
 		return true;
 	}
-	function write(pkg, op) {
+	function loaded(pkg) {
 		if (!load(pkg))
 			die(sprintf("uci load %s: %s", pkg, cursor.error() ?? "not a package that uci loads"));
+	}
+	function write(pkg, op) {
+		loaded(pkg);
 		let r = op();
 		push(writes[pkg], op);
+		changed[pkg] = true;
 		return r;
 	}
 
@@ -169,13 +174,22 @@ function connect(opts) {
 				? cursor.delete(pkg, section, option)
 				: cursor.delete(pkg, section)));
 		},
-		// False when the request wrote nothing to the package. libuci skips such a commit too, and
-		// a rewrite would drop the comments of the file and any commit that landed since the load.
+		// The commit fails with a conflict when another writer deleted the section during the
+		// request, also when the request writes nothing to it: a write that changed nothing
+		// answered 200 with the body of a section that uci no longer held.
+		uci_require: function(pkg, section) {
+			loaded(pkg);
+			push(writes[pkg], () => cursor.get_all(pkg, section) ?? die(sprintf("the section %s is gone", section)));
+		},
+		// False when the request wrote nothing to the package, after the checks of uci_require().
+		// libuci skips such a commit too, and a rewrite would drop the comments of the file and any
+		// commit that landed since the load.
 		// A commit that fails drops the copy, which holds the writes that the file does not, so a
 		// read after it, such as the restore's reconcile of the kernel, reads the file.
 		uci_commit: function(pkg) {
 			let ops = writes[pkg] ?? [];
 			if (length(ops) == 0) return false;
+			let changes = changed[pkg];
 			drop(pkg);
 			if (!load(pkg))
 				die(sprintf("uci load %s: %s", pkg, cursor.error() ?? "failed"));
@@ -188,6 +202,7 @@ function connect(opts) {
 				return { conflict: sprintf("another writer changed the package %s during the request, and the writes of the request no longer apply to it: %s",
 				                           pkg, e.message) };
 			}
+			if (!changes) return false;
 			if (cursor.commit(pkg)) return true;
 			let err = cursor.error();
 			drop(pkg);
@@ -232,6 +247,14 @@ function stub(initial) {
 		push(st.uci_ops, args);
 	}
 
+	// What the package file holds, as the real bus reads it for a snapshot: the state before the
+	// first write that is not committed yet. Taken at that write, so a test that seeds _state.uci
+	// after the stub is made seeds the file too.
+	let file = {};
+	function writing(pkg) {
+		if (!exists(file, pkg)) file[pkg] = deepcopy(st.uci[pkg] ?? {});
+	}
+
 	function ensure_section(pkg, section) {
 		if (!st.uci[pkg]) st.uci[pkg] = {};
 		if (!st.uci[pkg][section]) st.uci[pkg][section] = {};
@@ -268,6 +291,7 @@ function stub(initial) {
 		// option. The stub used to accept it and store `[]`, which is why no unit test
 		// could see a cleared list being silently dropped.
 		uci_set: function(pkg, section, option, value) {
+			writing(pkg);
 			if (type(value) == "array" && length(value) == 0) {
 				if (st.uci[pkg] && st.uci[pkg][section]) delete st.uci[pkg][section][option];
 				record("delete", pkg, section, option);
@@ -280,6 +304,7 @@ function stub(initial) {
 		},
 
 		uci_create_section: function(pkg, name, sec_type) {
+			writing(pkg);
 			if (!st.uci[pkg]) st.uci[pkg] = {};
 			st.uci[pkg][name] = { ['.type']: sec_type };
 			record("create_section", pkg, name, sec_type);
@@ -288,6 +313,7 @@ function stub(initial) {
 
 		uci_rename: function(pkg, section, new_name) {
 			if (!st.uci[pkg] || !st.uci[pkg][section]) return false;
+			writing(pkg);
 			st.uci[pkg][new_name] = st.uci[pkg][section];
 			delete st.uci[pkg][section];
 			record("rename", pkg, section, new_name);
@@ -296,6 +322,7 @@ function stub(initial) {
 
 		uci_delete: function(pkg, section, option) {
 			if (!st.uci[pkg] || !st.uci[pkg][section]) return false;
+			writing(pkg);
 			if (option == null) {
 				delete st.uci[pkg][section];
 				record("delete-section", pkg, section);
@@ -306,7 +333,12 @@ function stub(initial) {
 			return true;
 		},
 
+		uci_require: function(pkg, section) {
+			return true;
+		},
+
 		uci_commit: function(pkg) {
+			delete file[pkg];
 			record("commit", pkg);
 			return true;
 		},
@@ -325,10 +357,11 @@ function stub(initial) {
 		},
 
 		uci_export: function(pkg) {
-			return sprintf("%J", st.uci[pkg] ?? {});
+			return sprintf("%J", exists(file, pkg) ? file[pkg] : (st.uci[pkg] ?? {}));
 		},
 
 		uci_import: function(pkg, snapshot) {
+			delete file[pkg];
 			st.uci[pkg] = json(snapshot);
 			record("import", pkg);
 			return true;

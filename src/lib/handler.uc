@@ -533,13 +533,32 @@ function translate_tx(ctx, result) {
 // not in new_opts is removed. Iterates the RAW existing section, so options
 // the resource does not model are normalized away too (uapi owns the section
 // on replace). The leading-dot keys (.name/.type/.anonymous) are pseudo.
-function diff_apply(c, p, id, existing, new_opts) {
+// As a PATCH does, it skips a set of the value that uci holds, a clear of an option that uci does
+// not hold, and a default that the read filled in for an option that uci does not hold, such as
+// the `enabled '1'` that a POST or LuCI leaves out. The bus counts each as a write, so a PUT of the
+// read rewrote the package, reloaded its daemons and set its peers again.
+function diff_apply(c, p, id, existing, old_opts, new_opts, defaults) {
+	let eq = (a, b) => sprintf("%J", a) == sprintf("%J", b);
+	let wrote = false;
 	for (let k in existing) {
 		if (substr(k, 0, 1) == ".") continue;
 		if (exists(new_opts, k)) continue;
 		c.uci_delete(p, id, k);
+		wrote = true;
 	}
-	for (let k in new_opts) c.uci_set(p, id, k, new_opts[k]);
+	for (let k, v in new_opts) {
+		let held;
+		if (v == null || (type(v) == "array" && length(v) == 0))
+			held = !exists(existing, k);
+		else if (exists(existing, k))
+			held = eq(existing[k], v);
+		else
+			held = eq(old_opts[k], v) && eq(defaults[k], v);
+		if (held) continue;
+		c.uci_set(p, id, k, v);
+		wrote = true;
+	}
+	return wrote;
 }
 
 // PATCH semantics: a partial update must not wipe options the resource does
@@ -556,11 +575,11 @@ function diff_apply(c, p, id, existing, new_opts) {
 // that proto. An empty section was projected here before, and read as proto none it gave a
 // wireguard interface no `nohostroute` default, so every PATCH wrote `nohostroute '0'`.
 // Projected with a null connection because only the uci-derived half is wanted and `runtime`
-// never reaches toUci anyway.
-function default_footprint(resource, existing, old_opts, new_opts) {
+// never reaches toUci anyway. A PUT also removes each option that toUci does not emit.
+function default_footprint(resource, existing, old_opts, new_opts, replace) {
 	let post = { ...existing };
-	for (let k in old_opts)
-		if (!exists(new_opts, k)) delete post[k];
+	for (let k in (replace ? existing : old_opts))
+		if (substr(k, 0, 1) != "." && !exists(new_opts, k)) delete post[k];
 	for (let k, v in new_opts) {
 		if (v == null || (type(v) == "array" && length(v) == 0))
 			delete post[k];
@@ -784,7 +803,9 @@ function make(resource, opts) {
 	// because the read view masks it. The array is handed to the transaction before
 	// fn runs and read after the commit, so fn filling it in between is the whole
 	// point. /batch passes its own sink in ctx so every sub-request accumulates
-	// into one ordered list applied once.
+	// into one ordered list applied once. A PUT or a PATCH that wrote nothing
+	// collects nothing: the ops come from opts, which it builds either way, and a
+	// peer without an endpoint is removed and set again, which resets its session.
 	function collect_kernel_ops(sink, kind, opts, sec_type, existing) {
 		if (resource.kernel_ops == null) return;
 		let ops = resource.kernel_ops(kind, opts, sec_type, existing);
@@ -907,9 +928,13 @@ function make(resource, opts) {
 				mgmt_device = mgmt_device_of(resource, write_body, existing_view);
 
 				let new_opts = resource.toUci(write_body);
-				diff_apply(c, p, id, existing, new_opts);
+				let old_opts = resource.toUci(existing_view);
+				let wrote = diff_apply(c, p, id, existing, old_opts, new_opts,
+				                       default_footprint(resource, existing, old_opts, new_opts, true));
+				c.uci_require(p, id);
 				let out = resource.fromUci(load_section(c, p, id), conn);
-				collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+				if (wrote)
+					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
 				return { ok: true, body: out };
 			},
 		}));
@@ -963,9 +988,8 @@ function make(resource, opts) {
 				let wrote = diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                             default_footprint(resource, existing, old_opts, new_opts),
 				                             named_rewrites(resource, r.delta));
+				c.uci_require(p, id);
 				let out = resource.fromUci(load_section(c, p, id), conn);
-				// The ops come from new_opts, which a PATCH builds whether it wrote or not, and a peer
-				// without an endpoint is removed and set again, which resets its session.
 				if (wrote)
 					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
 				return { ok: true, body: out };
