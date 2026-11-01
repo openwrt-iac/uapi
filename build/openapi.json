@@ -39698,7 +39698,7 @@
 				}
 			},
 			"PayloadTooLarge": {
-				"description": "The Content-Length of the request body is over 262144 bytes (256 KiB), or the body holds more than 2000 `{` and `[` characters. Checked before the bearer check (code: payload_too_large)",
+				"description": "The request body is over 262144 bytes (256 KiB), its Content-Length is not a whole number from 0 to 262144, or it holds more than 2000 `{` and `[` characters. Checked before the bearer check (code: payload_too_large)",
 				"content": {
 					"application/json": {
 						"schema": {

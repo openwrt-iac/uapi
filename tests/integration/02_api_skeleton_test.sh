@@ -66,11 +66,47 @@ done
 
 echo "--- a body over 256 KiB answers 413 before the bearer check, and the connection stays in step ---"
 # uhttpd parses what the handler leaves unread as the next request on the connection, so the
-# handler drops the body. curl sends the second request on the same connection.
-head -c 262145 /dev/zero | tr '\0' ' ' > "$body"
-s=$(curl -sS -o /dev/null -w '%{http_code} ' -H 'Content-Type: application/json' \
-	-X POST "$URL/firewall/rules" --data-binary @"$body" --next -o /dev/null -w '%{http_code}' "$URL/healthz")
-[ "$s" = "413 200" ] || fail "a body of 256 KiB and 1 byte, then GET /healthz, expected 413 then 200, got $s"
+# handler drops the rest of the body. At 512 KB per second, most of 1 MiB arrives after the 413
+# is decided. curl stops sending and opens a new connection when the answer comes before the end
+# of the body, so the second request must reuse the first connection. The body is not spaces,
+# which uhttpd skips in front of a request line.
+head -c 1048576 /dev/zero | tr '\0' a > "$body"
+s=$(curl -sS -o /dev/null -w '%{http_code} ' --limit-rate 512k -H 'Content-Type: application/json' \
+	-X POST "$URL/firewall/rules" --data-binary @"$body" \
+	--next -o /dev/null -w '%{http_code} %{num_connects}' "$URL/healthz")
+[ "$s" = "413 200 0" ] || fail "a body of 1 MiB at 512 KB/s, then GET /healthz on the same connection, expected 413 200 0, got $s"
+
+echo "--- a body sent to /healthz is dropped, and the connection stays in step ---"
+s=$(curl -sS -o /dev/null -w '%{http_code} ' --limit-rate 512k -X POST "$URL/healthz" --data-binary @"$body" \
+	--next -o /dev/null -w '%{http_code} %{num_connects}' "$URL/healthz")
+[ "$s" = "405 200 0" ] || fail "a POST of 1 MiB at 512 KB/s to /healthz, then GET /healthz on the same connection, expected 405 200 0, got $s"
+
+echo "--- a chunked body is read, and one over 256 KiB answers 413 with the connection in step ---"
+# uhttpd passes a chunked body with no Content-Length, and the handler read none of it. A POST
+# with no body answers 422 too, so the check names the error on target.
+r=$(curl -sS -w '\n%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' -H 'Transfer-Encoding: chunked' \
+	-X POST "$URL/firewall/rules" --data-binary '{"name": "uapi-chunked", "target": "uapi-no-such-target"}')
+[ "$(printf '%s\n' "$r" | tail -1)" = 422 ] \
+	&& printf '%s\n' "$r" | sed '$d' | jq -e 'any(.errors[]; .field == "target" and .code == "not_in_enum")' >/dev/null \
+	|| fail "a chunked POST with an unknown target expected 422 not_in_enum on target: $r"
+s=$(curl -sS -o /dev/null -w '%{http_code} ' --limit-rate 512k -H 'Content-Type: application/json' \
+	-H 'Transfer-Encoding: chunked' -X POST "$URL/firewall/rules" --data-binary @"$body" \
+	--next -o /dev/null -w '%{http_code} %{num_connects}' "$URL/healthz")
+[ "$s" = "413 200 0" ] || fail "a chunked body of 1 MiB at 512 KB/s, then GET /healthz on the same connection, expected 413 200 0, got $s"
+
+echo "--- a POST with no body answers while uhttpd queues it ---"
+# uhttpd runs at most max_requests handlers and queues the rest, and it never closes the pipe of
+# a queued request without a body. A handler that read such a body to its end waited for the
+# script timeout and answered 502.
+slots=$($SSH 'uci -q get uhttpd.main.max_requests' || echo 3)
+printf '{"name": "%s", "target": "uapi-no-such-target"}' "$(head -c 4000 /dev/zero | tr '\0' a)" > "$body"
+for i in $(seq "$slots"); do
+	curl -sS -o /dev/null --limit-rate 1k -X POST "$URL/firewall/rules" --data-binary @"$body" &
+done
+sleep 1
+s=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -H "$ADMIN" -X POST "$URL/firewall/rules" || true)
+wait
+[ "$s" = 422 ] || fail "a POST with no body behind $slots slow requests expected 422, got $s"
 
 echo "--- a body with more than 2000 objects and arrays answers 413 before the bearer check ---"
 printf '[%s{}]' "$(yes '{},' | head -n 1998 | tr -d '\n')" > "$body"
