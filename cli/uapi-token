@@ -122,7 +122,8 @@ function reap(cursor) {
 function ensure_package() {
 	let path = "/etc/config/" + PACKAGE;
 	if (fs.stat(path) != null) return;
-	let f = fs.open(path, "w");
+	// libuci gives each commit the mode of the file it replaces, so this mode is the store's.
+	let f = fs.open(path, "w", 0o600);
 	if (!f) die("uapi-token: cannot create " + path);
 	f.close();
 }

@@ -46,8 +46,10 @@ per-arch sha256 lines actually match upstream.
 
 Operators who want a runtime per-arch smoke test (the CI matrix only
 verifies compile) can run
-`tests/integration/release_apk_smoke.sh <path-to-apk>` against their own
-arch's QEMU VM or live router.
+`tests/integration/release_apk_smoke.sh <path-to-apk> [<path-to-3.2.0-apk>]`
+against their own arch's QEMU VM or live router. With the second argument
+it also upgrades from 3.2.0, the last release whose package shipped
+`/etc/config/uapi`.
 
 ## Versioning
 
@@ -166,7 +168,8 @@ Per-release steps (operator does these in order):
    - `make stage` (populate `build/openwrt/uapi/files`)
    - `make package/uapi/compile` in the SDK
    - APK upload as workflow artifact
-   - VM smoke test (`tests/integration/release_apk_smoke.sh`)
+   - VM smoke test (`tests/integration/release_apk_smoke.sh`), including the
+     upgrade from the 3.2.0 APK
    - GitHub Release create + APK attach (always; RCs get `--prerelease`)
 9. **Verify the release** is visible on GitHub Releases. The feed at
    `openwrt-iac.github.io/feed/` picks up the new asset on its next
