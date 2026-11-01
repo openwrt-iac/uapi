@@ -353,8 +353,18 @@ jobs:
       - name: Wait for VM SSH
         run: TIMEOUT=180 tests/vm/wait.sh
 
+      # 3.2.0 is the last release whose package shipped /etc/config/uapi, so the upgrade from it is
+      # the one that can lose the token store. It stays pinned when later releases ship.
+      - name: Fetch the 3.2.0 APK
+        id: old_apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v3.2.0 -p 'uapi-*.apk' -D /tmp/old-apk
+          echo "apk=$(ls /tmp/old-apk/uapi-*.apk)" >> $GITHUB_OUTPUT
+
       - name: Install APK in VM and run smoke test
-        run: tests/integration/release_apk_smoke.sh "${{ steps.find_apk.outputs.apk }}"
+        run: tests/integration/release_apk_smoke.sh "${{ steps.find_apk.outputs.apk }}" "${{ steps.old_apk.outputs.apk }}"
 
       - name: Capture serial log on failure
         if: failure()

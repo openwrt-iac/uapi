@@ -14,7 +14,7 @@ apk add /path/to/uapi-<version>-r1.apk
 
 The post-install hook will:
 
-1. Run `/etc/uci-defaults/99-uapi`, which adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so that it loads the new code. Both the hook's reload and this restart run only when uhttpd is enabled, because on OpenWrt either one starts a stopped uhttpd, and an operator disables it when another web server owns the ports.
+1. Run `/etc/uci-defaults/99-uapi`, which creates the token store `/etc/config/uapi` with mode 0600 when it does not exist, or sets mode 0600 on an existing one, and adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so that it loads the new code. Both the hook's reload and this restart run only when uhttpd is enabled, because on OpenWrt either one starts a stopped uhttpd, and an operator disables it when another web server owns the ports.
 2. Delete itself.
 3. Print the bootstrap message (first install only; suppressed on upgrade or reinstall).
 
@@ -51,6 +51,8 @@ To move an existing install to a newer release, `upgrade` rather than `add`:
 apk update
 apk upgrade uapi
 ```
+
+Up to 3.2.0 the package shipped `/etc/config/uapi`, and each upgrade left the shipped copy beside the token store as `/etc/config/uapi.apk-new`. The upgrade from such a release deletes that file and keeps the token store. Do not pass `--purge` to that upgrade: it makes apk delete every file that the old package shipped and the new one does not, so every token is lost.
 
 `apk add uapi` does **not** upgrade a package that is already installed. On
 apk-tools 3.0.5, as shipped in OpenWrt 25.12.x, it resolves to the installed
@@ -127,4 +129,4 @@ uci commit uhttpd
 apk del uapi
 ```
 
-The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and reloads uhttpd if it is enabled. `/etc/config/uapi` (the token store) is conffile-marked and preserved across removal and upgrades. To wipe tokens: `rm /etc/config/uapi` after removal.
+The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and reloads uhttpd if it is enabled. `/etc/config/uapi` (the token store) is no file of the package, so apk keeps it across removal and upgrades. A sysupgrade keeps it too, also after a removal: on OpenWrt 25.12.5, base-files lists all of `/etc/config/` in `/lib/upgrade/keep.d/base-files`, and while the package is installed `/lib/upgrade/keep.d/uapi` names the store as well. To wipe tokens: `rm /etc/config/uapi` after removal.

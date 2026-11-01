@@ -224,8 +224,11 @@ config token 'ci_bot'
 - Cleartext token is shown exactly once at creation (`uapi-token create`
   CLI or `POST /tokens` HTTP). Never logged.
 - Salt is 64 random bits (16 hex chars); hash is `sha256(salt || ":" || token)`.
-- `/etc/config/uapi` is a conffile, preserved across upgrades and
-  removal.
+- `/etc/config/uapi` has mode 0600, which the install hook sets, and is no
+  file of the package, so apk keeps it across upgrades and removal.
+  sysupgrade keeps it because base-files of OpenWrt 25.12.5 lists all of
+  `/etc/config/` in its keep.d, and `/lib/upgrade/keep.d/uapi` names it
+  while the package is installed.
 - last-used tracking is throttled to ~1 write/minute per token via a tmpfs
   sentinel (`/var/run/uapi-token-update/<token-id>`); the wire response
   never depends on the audit write.

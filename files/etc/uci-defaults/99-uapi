@@ -1,5 +1,16 @@
 #!/bin/sh
 
+# The package ships no token store: apk would write the shipped copy as .apk-new at each upgrade.
+# Up to 3.2.0, uapi-token create made a missing store 0644, and libuci keeps the mode at each commit.
+# ln refuses a store that uapi-token create made after the test, which a cp would overwrite.
+if [ -e /etc/config/uapi ]; then
+	chmod 600 /etc/config/uapi
+else
+	tmp=/etc/config/.uapi.$$
+	( umask 077 && cp /usr/share/uapi/config.template "$tmp" ) && ln "$tmp" /etc/config/uapi 2>/dev/null
+	rm -f "$tmp"
+fi
+
 # v3 mounts at /api/v3/. On a fresh install we just add it. On an upgrade we strip every
 # older mount, because uhttpd would otherwise serve the same main.uc under two prefixes and
 # the removed v2 surface would appear to still exist while answering with v3 semantics.

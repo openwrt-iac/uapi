@@ -28,6 +28,12 @@ define Package/uapi/description
   passthrough for the long tail.
 endef
 
+# The package does not install /etc/config/uapi: at an upgrade apk writes a shipped file of /etc
+# that differs on disk as <file>.apk-new, and the token store always differs. 99-uapi creates it
+# from config.template. The entry stays so that the package names its own store for sysupgrade:
+# for a listed conffile that the package does not ship, the build writes its path into
+# /lib/upgrade/keep.d/uapi. base-files of OpenWrt 25.12.5 also keeps all of /etc/config/, through
+# /lib/upgrade/keep.d/base-files.
 define Package/uapi/conffiles
 /etc/config/uapi
 endef
@@ -43,19 +49,18 @@ define Package/uapi/install
 	$(INSTALL_DIR) $(1)/usr/share/uapi/lib
 	$(INSTALL_DIR) $(1)/usr/share/uapi/resources
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 
 	$(INSTALL_DATA) ./files/usr/share/uapi/main.uc      $(1)/usr/share/uapi/main.uc
 	$(INSTALL_DATA) ./files/usr/share/uapi/raw.uc       $(1)/usr/share/uapi/raw.uc
 	$(INSTALL_DATA) ./files/usr/share/uapi/openapi.json $(1)/usr/share/uapi/openapi.json
 	$(INSTALL_DATA) ./files/usr/share/uapi/VERSION      $(1)/usr/share/uapi/VERSION
+	$(INSTALL_DATA) ./files/usr/share/uapi/config.template $(1)/usr/share/uapi/config.template
 	$(INSTALL_DATA) ./files/usr/share/uapi/lib/*.uc       $(1)/usr/share/uapi/lib/
 	$(INSTALL_DATA) ./files/usr/share/uapi/resources/*.uc $(1)/usr/share/uapi/resources/
 
 	$(INSTALL_BIN) ./files/usr/bin/uapi-token $(1)/usr/bin/uapi-token
 
-	$(INSTALL_CONF) ./files/etc/config/uapi $(1)/etc/config/uapi
 	$(INSTALL_BIN)  ./files/etc/uci-defaults/99-uapi $(1)/etc/uci-defaults/99-uapi
 endef
 
@@ -80,8 +85,8 @@ for d in /var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit
 	find "$$d" -maxdepth 0 -type d -user 0 -exec rm -rf {} \; 2>/dev/null
 done
 # Only show the bootstrap message when no token exists yet. The token store
-# survives upgrades and remove/reinstall (conffile), so on second-and-later
-# installs the operator already knows the drill.
+# is no file of the package, so it survives upgrades and remove/reinstall, and
+# on second-and-later installs the operator already knows the drill.
 if ! uci -q show uapi 2>/dev/null | grep -q '=token$$'; then
 cat <<EOF
 

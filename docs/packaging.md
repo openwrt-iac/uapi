@@ -26,9 +26,16 @@ This document walks through producing `uapi-<version>-r1.apk` for OpenWrt 25.12.
                                           the directory, so this needs no list here)
 /usr/share/uapi/resources/*.uc           curated resource modules
 /usr/share/uapi/openapi.json             generated OpenAPI 3.1 spec, without whitespace
+/usr/share/uapi/config.template          comments that 99-uapi copies to a new token store
 /usr/bin/uapi-token                      token CLI
-/etc/config/uapi                         conffile (mode 0600, conffile-marked)
 /etc/uci-defaults/99-uapi                one-shot install hook
+/lib/upgrade/keep.d/uapi                 names /etc/config/uapi for sysupgrade (written by the build)
+```
+
+Created by the install hook when it does not exist, and never a file of the package:
+
+```
+/etc/config/uapi                         token store, mode 0600
 ```
 
 Runtime files created on first use (tmpfs, reset on reboot):
@@ -44,9 +51,6 @@ Runtime files created on first use (tmpfs, reset on reboot):
 ```
 
 The `/var/run/uapi-*` directories have mode 0700 and their files 0600, see `docs/architecture.md` § Where state lives.
-
-`/etc/config/uapi` is marked as a conffile, so upgrades preserve
-operator-created tokens.
 
 Dependencies (pulled in automatically):
 
@@ -75,7 +79,7 @@ make openapi   # regenerate build/openapi.json
 make stage     # populate build/openwrt/uapi/files/
 ```
 
-`make stage` needs `python3`, which the OpenWrt SDK requires on the host too. `tools/compact_json.py` writes the spec into the APK without whitespace, and the stage fails unless that copy parses to the same JSON value as `build/openapi.json`, with the keys in the same order. `main.uc` reads the file whole into every request process that serves `GET /api/v3/openapi.json`, and uhttpd does not compress it. The compact copy is about 30% smaller. `build/openapi.json` stays indented in the repository, because reviews read its diffs. The uapi package of the OpenWrt packages feed builds from the release tarball and copies `build/openapi.json` as it is, so it installs the indented file until its Makefile runs `tools/compact_json.py`.
+`make stage` needs `python3`, which the OpenWrt SDK requires on the host too. `tools/compact_json.py` writes the spec into the APK without whitespace, and the stage fails unless that copy parses to the same JSON value as `build/openapi.json`, with the keys in the same order. `main.uc` reads the file whole into every request process that serves `GET /api/v3/openapi.json`, and uhttpd does not compress it. The compact copy is about 30% smaller. `build/openapi.json` stays indented in the repository, because reviews read its diffs. The uapi package of the OpenWrt packages feed builds from the release tarball and copies `build/openapi.json` as it is, so it installs the indented file until its Makefile runs `tools/compact_json.py`. Its Makefile must also install `files/usr/share/uapi/config.template` into `/usr/share/uapi/`, and no longer install a file at `/etc/config/uapi`, whose source the tarball no longer holds. Without the template the install hook creates no token store: the copy prints its error in the output of apk, the hook goes on, and `uapi-token create` creates the store at the first token.
 
 ### 3. Build inside the SDK
 
@@ -106,11 +110,12 @@ The CLI prints the cleartext bearer to stdout exactly once. Save it.
 
 ## Post-install behavior
 
-The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live installs (not chroots/INSTROOT builds) and then deletes the script. That single run:
+The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live installs (not chroots/INSTROOT builds) and then deletes the script. In an image, the script runs at first boot instead. That single run:
 
-1. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
-2. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
-3. If either step changed something, commits the uhttpd config and, if uhttpd is enabled, reloads it.
+1. Creates `/etc/config/uapi` from `/usr/share/uapi/config.template`, with mode 0600, when the file does not exist. It copies the template to a temporary file and links that into place, so a store that `uapi-token create` makes at the same moment is kept. On an existing store it only sets mode 0600, because `uapi-token create` up to 3.2.0 made a missing store 0644 and libuci keeps the mode of the file at each commit.
+2. Strips any older mount (`/api/v2=`, `/api/v1=`) from `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same `main.uc` under a prefix whose surface no longer exists.
+3. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
+4. If step 2 or 3 changed something, commits the uhttpd config and, if uhttpd is enabled, reloads it.
 
 `postinst` then restarts uhttpd, because uhttpd-mod-ucode caches the compiled VM at parent startup and a reload would keep serving the previous version's code.
 
@@ -147,11 +152,19 @@ Future upgrades from the project feed:
 
 These three steps run BEFORE the handler file is deleted. Order matters: if the prefix entry survived past handler removal, uhttpd would dispatch `/api/v3/*` to a missing `main.uc` and every request would 500 until the operator manually fixed the uhttpd config. Reorder only with care.
 
-The token store at `/etc/config/uapi` is preserved (conffile semantics). To wipe it: `rm /etc/config/uapi` after removal.
+apk keeps the token store at `/etc/config/uapi`, because it is no file of the package, and `apk del --purge` keeps it too. To wipe it: `rm /etc/config/uapi` after removal. `apk del` also removes `/lib/upgrade/keep.d/uapi`, and a sysupgrade still keeps the store, because base-files of OpenWrt 25.12.5 lists all of `/etc/config/` in `/lib/upgrade/keep.d/base-files`.
 
 ## Upgrade contract
 
-`/etc/config/uapi` is marked as a conffile (`Package/uapi/conffiles` in the OpenWrt Makefile). The token store is precious user state and is preserved across `apk upgrade`. Files under `/usr/share/uapi/` are package-owned and freely overwritten by the upgrade; never add conffile markers to handler or library files there or upgrades will stop replacing them.
+The token store at `/etc/config/uapi` is precious user state. The package does not install it, and the install hook creates it when it does not exist. apk then never writes, replaces or deletes it, at an upgrade, a reinstall or a removal.
+
+Up to 3.2.0 the package shipped a template at that path. apk-tools 3 protects `/etc`: at an upgrade it keeps a file there that differs from the one it installed, and writes the shipped copy beside it as `/etc/config/uapi.apk-new`. A store with tokens always differs, so every upgrade left that file. Do not install a file at `/etc/config/uapi` again.
+
+At the upgrade from 3.2.0 or earlier, the package that owned the store goes away, and apk-tools 3.0.5 then handles the file as it handles every file that leaves a package in a protected path. It keeps a store that holds tokens, and deletes one that still equals the shipped template, which the install hook then creates again. It also deletes the `/etc/config/uapi.apk-new` that the earlier upgrades left. `apk upgrade --purge` across that upgrade deletes the store, and the install hook then creates it again from the template, without a token: with `--purge`, apk deletes every file that the old package shipped and the new one does not, changed or not.
+
+sysupgrade keeps a conffile that a package ships only when it differs from the shipped file, by the checksum in `/lib/apk/packages/*.conffiles_static`, and it keeps every file that `/etc/sysupgrade.conf` and `/lib/upgrade/keep.d/*` name. `Package/uapi/conffiles` in the OpenWrt Makefile still lists `/etc/config/uapi`: for a listed conffile that the package does not ship, the build writes its path into `/lib/upgrade/keep.d/uapi`, as it does for the certificate and key of uhttpd. base-files of OpenWrt 25.12.5 lists all of `/etc/config/` in `/lib/upgrade/keep.d/base-files`, so a sysupgrade keeps the store without that entry too. The entry makes the package name its own store, so that its backup does not depend on a list of base-files. `tests/unit/package_test.uc` fails when the package installs a file at `/etc/config/uapi` or drops the entry.
+
+Files under `/usr/share/uapi/` are package-owned and freely overwritten by the upgrade; never add conffile markers to handler or library files there or upgrades will stop replacing them.
 
 ## Release artifacts
 

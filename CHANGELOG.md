@@ -15,6 +15,21 @@ All notable changes to this project will be documented in this file. Format foll
   `ra_slaac` reads true when unset, as odhcpd does. The description of `ra_default` now says what
   odhcpd does with each value. (#283)
 
+### Fixed
+
+- **An upgrade no longer leaves `/etc/config/uapi.apk-new`.** The package shipped a template at
+  `/etc/config/uapi`, and apk keeps a changed file of `/etc` at an upgrade and writes the shipped
+  copy beside it. The token store always differs, so every upgrade wrote the file. The template
+  now lives at `/usr/share/uapi/config.template`, and the install hook copies it to
+  `/etc/config/uapi`, mode 0600, only when that file does not exist. apk no longer owns the store,
+  so an upgrade, a reinstall and `apk del` keep it. A sysupgrade keeps it as before, because
+  base-files of OpenWrt 25.12.5 lists all of `/etc/config/` for it, and the package now also
+  names the store in `/lib/upgrade/keep.d/uapi`. The upgrade from 3.2.0 or earlier keeps a store
+  with tokens and deletes the `.apk-new` that the earlier upgrades left. Do not pass `--purge` to
+  that upgrade, which loses every token. `uapi-token create` now creates a missing store with mode
+  0600 too, where it followed the umask, and since libuci keeps that mode at each commit, the
+  install hook sets mode 0600 on an existing store. (#286)
+
 ## [3.2.0] - 2026-10-29
 
 ### Added

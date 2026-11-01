@@ -88,7 +88,6 @@ stage:
 	@mkdir -p build/openwrt/uapi/files/usr/share/uapi/lib
 	@mkdir -p build/openwrt/uapi/files/usr/share/uapi/resources
 	@mkdir -p build/openwrt/uapi/files/usr/bin
-	@mkdir -p build/openwrt/uapi/files/etc/config
 	@mkdir -p build/openwrt/uapi/files/etc/uci-defaults
 	@cp src/main.uc src/raw.uc      build/openwrt/uapi/files/usr/share/uapi/
 	@cp src/lib/*.uc                build/openwrt/uapi/files/usr/share/uapi/lib/
@@ -97,7 +96,7 @@ stage:
 	@cp VERSION                     build/openwrt/uapi/files/usr/share/uapi/VERSION
 	@cp VERSION                     build/openwrt/uapi/files/VERSION
 	@cp cli/uapi-token              build/openwrt/uapi/files/usr/bin/uapi-token
-	@cp files/etc/config/uapi       build/openwrt/uapi/files/etc/config/uapi
+	@cp files/usr/share/uapi/config.template build/openwrt/uapi/files/usr/share/uapi/config.template
 	@cp files/etc/uci-defaults/99-uapi build/openwrt/uapi/files/etc/uci-defaults/99-uapi
 	@chmod +x build/openwrt/uapi/files/usr/bin/uapi-token \
 	          build/openwrt/uapi/files/etc/uci-defaults/99-uapi
