@@ -162,6 +162,36 @@ patch_system uapi-t58
 await_ndp "the system PATCH" "$services"
 [ "$services" = "X-Reload-Services: system,log,dnsmasq,odhcpd$UNB" ] || fail "expected the system PATCH to name dnsmasq and odhcpd: $services"
 
+# odhcpd reads the network config, and its procd trigger on network does not fire for a commit
+# through libuci either. dnsmasq and unbound are left out on purpose, as docs/raw.md says.
+echo "--- a network write, curated, raw or in a /batch, reloads odhcpd and neither dnsmasq nor unbound ---"
+mark network
+hdrs=$(mktemp)
+r=$(curl -sS -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
+	"$URL/network/interfaces/tdhcp6" -d '{"metric":5}')
+services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
+rm -f "$hdrs"
+[ "$(printf '%s\n' "$r" | tail -1)" = "200" ] || fail "PATCH of network/interfaces expected 200: $r"
+await_ndp "the network PATCH" "$services"
+[ "$services" = "X-Reload-Services: network,odhcpd" ] || fail "expected the network PATCH to name network and odhcpd alone: $services"
+mark raw_network
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/network/tdhcp6" -d '{"metric":"6"}')
+body=$(printf '%s\n' "$r" | sed '$d')
+[ "$(printf '%s\n' "$r" | tail -1)" = "200" ] || fail "raw PATCH of network expected 200: $r"
+await_ndp "the raw network PATCH" "$(printf '%s\n' "$body" | jq -c '.reload_services')"
+[ "$(printf '%s\n' "$body" | jq -c '.reload_services')" = '["network","odhcpd"]' ] \
+	|| fail "expected the raw network PATCH to name network and odhcpd alone: $body"
+mark batch_network
+hdrs=$(mktemp)
+status=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d '{"operations":[{"path":"/network/interfaces/tdhcp6","method":"PATCH","body":{"metric":7}}]}')
+services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
+rm -f "$hdrs"
+[ "$status" = "207" ] || fail "network batch expected 207, got $status"
+await_ndp "the network batch" "$services"
+[ "$services" = "X-Reload-Services: network,odhcpd" ] || fail "expected the network batch to name network and odhcpd alone: $services"
+[ "$($SSH 'uci -q get network.tdhcp6.metric')" = "7" ] || fail "uci does not hold metric=7"
+
 echo "--- with dnsmasq stopped, a dhcp or system write reloads odhcpd and leaves dnsmasq stopped ---"
 $SSH '/etc/init.d/dnsmasq stop'
 dnsmasq_listed && fail "procd still lists dnsmasq after its stop, so the case below proves nothing"
@@ -180,4 +210,4 @@ patch_system uapi-t58-2
 dnsmasq_listed && fail "the system write started the dnsmasq that was stopped"
 $SSH '/etc/init.d/dnsmasq start'
 
-echo "dhcp/servers, raw dhcp, /batch and system writes reload odhcpd, and leave a stopped dnsmasq stopped, ok."
+echo "dhcp/servers, raw dhcp, /batch, system and network writes reload odhcpd, and dhcp and system writes leave a stopped dnsmasq stopped, ok."

@@ -1713,7 +1713,7 @@ function build_doc() {
 					"schema": { "type": "string", "enum": ["ok", "no_reload", "unverified"] },
 				},
 				"XReloadServices": {
-					"description": "Comma-separated list of init scripts that were reloaded after the write committed. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound` in the same way. The `POST /batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
+					"description": "Comma-separated list of init scripts that were reloaded after the write committed. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
 				},
 				"XKernelStatus": {

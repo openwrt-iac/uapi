@@ -75,7 +75,15 @@ t.describe('ucitrack.reload_services, fallback table', () => {
 	t.it('reloads dnsmasq, odhcpd and unbound for dhcp only while procd runs them', () => {
 		let r = ucitrack.reload_services(ubus.stub(), 'dhcp');
 		t.assert_deep_equal([ r.known, r.services, r.if_running ], [ true, [], ['dnsmasq', 'odhcpd', 'unbound'] ]);
-		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'network').if_running, []);
+		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'firewall').if_running, []);
+	});
+
+	// odhcpd reads the network config and has a procd trigger on it, and a raw network write reloaded
+	// only network. dnsmasq, unbound and wireless are left out on purpose, as docs/raw.md says.
+	t.it('reloads odhcpd for network, after network, and nothing more for wireless', () => {
+		let net = ucitrack.reload_services(ubus.stub(), 'network'), wifi = ucitrack.reload_services(ubus.stub(), 'wireless');
+		t.assert_deep_equal([ net.services, net.if_running ], [ ['network'], ['odhcpd'] ]);
+		t.assert_deep_equal([ wifi.services, wifi.if_running ], [ ['network'], [] ]);
 	});
 
 	t.it('reloads them for system too, after the system service', () => {

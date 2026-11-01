@@ -91,6 +91,9 @@ return {
 	package: "network",
 	type: "route",
 	reload: ["network"],
+	// odhcpd reads this config and has a procd trigger on it. dnsmasq and unbound, which LuCI's
+	// ucitrack also reloads, read only ula_prefix and the interface names here: see docs/raw.md.
+	reload_if_running: ["odhcpd"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

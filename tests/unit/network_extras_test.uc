@@ -576,3 +576,59 @@ t.describe('network.rules match options through the handler', () => {
 		t.assert_equal(c._state.uci.network.w2.suppress_prefixlength, '0');
 	});
 });
+
+// odhcpd reads the network config and has a procd trigger on it, which a commit through libuci does
+// not fire, so a network write left it on what it read before. LuCI's ucitrack also has network
+// affect dhcp, which reloads dnsmasq and unbound too, but from this package they read only
+// ula_prefix and the interface names, and reloading them held the lock of unbound and its 2 s watch
+// on every network write.
+t.describe('a network write reloads odhcpd while procd runs it, and a wireless write does not', () => {
+	let fs = require('fs');
+	let tx = require('transaction');
+	let ctx = { request_id: "01hx000000000000000000rtid" };
+	let prefix = "/tmp/uapi-test-netdhcp-pkg.", global = "/tmp/uapi-test-netdhcp-global.lock";
+	const ALL = [ "dnsmasq", "odhcpd", "unbound" ];
+	function box(running) {
+		let c = ubus.stub({ uci: { network: {
+			lan: { '.type': 'interface', '.anonymous': false, proto: 'static' },
+			r1: { '.type': 'route', '.anonymous': false, interface: 'lan', target: '10.9.0.0/24' },
+		} } });
+		c.set_ubus_response("service", "list", (a) => (index(running, a.name) < 0) ? {} : { [a.name]: {
+			instances: { [a.name]: { running: true, pid: 10 } },
+			triggers: [ [ "config.change", [ "if", [ "eq", "package", "dhcp" ], [ "run_script", "/etc/init.d/" + a.name, "reload" ] ], 1000 ] ] } });
+		return c;
+	}
+
+	t.it('every network resource declares odhcpd alone, and no wireless resource declares one', () => {
+		for (let f in fs.glob("src/resources/network.*.uc"))
+			t.assert_deep_equal(loadfile(f)().reload_if_running, [ "odhcpd" ], f);
+		for (let f in fs.glob("src/resources/wireless.*.uc"))
+			t.assert_deep_equal(loadfile(f)().reload_if_running, null, f);
+	});
+
+	t.it('reloads and names odhcpd after network while procd runs it, and takes no lock of unbound', () => {
+		let write = (running) => {
+			let ran = [], also = null;
+			let h = handler.make(routes, { tx: { acquire: (p, a) => { also = a; return {}; }, release: () => null,
+				check_services: () => null, reload: (s) => { push(ran, ...s); return null; } } });
+			let r = h.patch(box(running), ctx, 'r1', { metric: 5 });
+			return [ r.status, r.headers["X-Reload-Services"], join(",", ran), also ];
+		};
+		t.assert_deep_equal(write(ALL), [ 200, "network,odhcpd", "network,odhcpd", [] ]);
+		t.assert_deep_equal(write([ "dnsmasq", "unbound" ]), [ 200, "network", "network", [] ]);
+	});
+
+	t.it('a batch reloads it too, sorted, while another write holds the lock of unbound', () => {
+		let held = fs.open(prefix + "unbound.lock", "w+");
+		held.lock("xn");
+		let r = tx.multi_transaction(box(ALL), {
+			packages: [ "network" ], reload_services: { network: routes.reload },
+			reload_if_running: { network: routes.reload_if_running },
+			lock_path: global, pkg_lock_prefix: prefix, check_services: () => null, reload: () => null,
+			fn: function(c) { c.uci_set("network", "r1", "metric", "5"); return { ok: true, body: {} }; },
+		});
+		held.close();
+		for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
+		t.assert_deep_equal([ r.ok, r.reload_services ], [ true, [ "network", "odhcpd" ] ]);
+	});
+});

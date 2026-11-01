@@ -208,6 +208,9 @@ return {
 	create_type: function(body) { return "wireguard_" + body.interface; },
 	id_prefix: "g",
 	reload: ["network"],
+	// odhcpd reads this config and has a procd trigger on it. dnsmasq and unbound, which LuCI's
+	// ucitrack also reloads, read only ula_prefix and the interface names here: see docs/raw.md.
+	reload_if_running: ["odhcpd"],
 	// A peer edit leaves the parent `interface` section untouched, so a network
 	// reload converges nothing and the peer never reaches the kernel. These are the
 	// peer changes the transaction pushes there once the write is committed.

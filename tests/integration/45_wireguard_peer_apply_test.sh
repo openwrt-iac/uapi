@@ -66,10 +66,12 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
 
 # netifd keys admin-down state on the interface NAME and keeps it across the uci
 # section being deleted and recreated, so the ifdown in the last step below would
-# leave the next run's interface with autostart=false and no netdev. This clears
-# it. It is setup only: no ifup appears between a peer write and the `wg show`
-# that checks it, which is the whole point of the file.
-$SSH "ifup $IFACE" >/dev/null 2>&1 || true
+# leave the next run's interface with autostart=false and no netdev. `up` clears
+# it, where ifup runs down first and took away the netdev that the reload of the
+# write had made, between the loop below and its last check. It is setup only: no
+# ifup appears between a peer write and the `wg show` that checks it, which is the
+# whole point of the file.
+$SSH "ubus call network.interface.$IFACE up" >/dev/null 2>&1 || true
 n=0
 while [ $n -lt 15 ]; do
 	$SSH "ip link show $IFACE" >/dev/null 2>&1 && break

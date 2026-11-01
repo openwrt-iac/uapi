@@ -903,20 +903,27 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		for (let f in [ global, prefix + "unbound.lock", prefix + "unbound_srv.lock" ]) fs.unlink(f);
 	});
 
-	// A dhcp or system write reloads unbound only while procd runs it, and takes its lock only then.
-	t.it('a dhcp or system write takes the lock of unbound while unbound runs', () => {
-		let also_of = (pkg, names) => {
+	// The lock of unbound was taken only when procd, asked before the locks, held a trigger for it.
+	// So a write that skipped a stopped unbound, at boot or after a stop, ran beside a write to
+	// unbound, whose restart then read the config from before the commit of the first.
+	let not_installed = (svc) => (s) => (index(s, svc) >= 0) ? sprintf("init script /etc/init.d/%s not found", svc) : null;
+
+	t.it('a dhcp or system write takes the lock of unbound whenever unbound is installed', () => {
+		let write = (pkg, names, check) => {
 			let also = null;
-			tx.transaction(running_now(ubus.stub(), names), build_params({
+			let r = tx.transaction(running_now(ubus.stub(), names), build_params({
 				package: pkg, reload_services: [], reload_if_running: [ "dnsmasq", "odhcpd", "unbound" ],
+				check_services: check ?? noop_check,
 				acquire: function(p, a) { also = a; return {}; }, release: function() {}, watch: () => null,
 			}));
-			return also;
+			return [ also, r.reload_services ];
 		};
-		t.assert_deep_equal(also_of("dhcp", [ "dnsmasq", "unbound" ]), [ "unbound" ]);
-		t.assert_deep_equal(also_of("dhcp", [ "dnsmasq", "odhcpd" ]), []);
-		t.assert_deep_equal(also_of("system", [ "dnsmasq", "unbound" ]), [ "unbound" ]);
-		t.assert_deep_equal(also_of("system", [ "dnsmasq", "odhcpd" ]), []);
+		for (let pkg in [ "dhcp", "system" ]) {
+			t.assert_deep_equal(write(pkg, [ "dnsmasq", "odhcpd", "unbound" ]), [ [ "unbound" ], [ "dnsmasq", "odhcpd", "unbound" ] ], pkg);
+			t.assert_deep_equal(write(pkg, [ "dnsmasq", "odhcpd" ]), [ [ "unbound" ], [ "dnsmasq", "odhcpd" ] ], pkg);
+			t.assert_deep_equal(write(pkg, [ "dnsmasq", "odhcpd", "unbound" ], not_installed("unbound")),
+			                    [ [], [ "dnsmasq", "odhcpd" ] ], pkg);
+		}
 	});
 
 	t.it('a batch takes it too', () => {
@@ -924,21 +931,47 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		let held = fs.open(prefix + "unbound.lock", "w+");
 		held.lock("xn");
 		let conn = ubus.stub({ uci: { system: { cfg01: { '.type': 'system', hostname: 'OpenWrt' } } } });
-		let batch = (names) => {
+		let batch = (names, check) => {
 			running_now(conn, names);
 			return tx.multi_transaction(conn, {
 				packages: [ "system" ], reload_services: { system: [ "system" ] },
 				reload_if_running: { system: [ "dnsmasq", "odhcpd", "unbound" ] },
-				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload: noop_reload,
+				lock_path: global, pkg_lock_prefix: prefix, check_services: check ?? noop_check, reload: noop_reload,
 				watch: () => null,
 				fn: function(c) { c.uci_set("system", "cfg01", "hostname", "gw"); return { ok: true }; },
 			});
 		};
-		let locked = batch([ "unbound" ]), skipped = batch([ "dnsmasq", "odhcpd" ]);
+		let running = batch([ "unbound" ]), stopped = batch([ "dnsmasq", "odhcpd" ]);
+		let absent = batch([ "dnsmasq", "odhcpd" ], not_installed("unbound"));
 		held.lock("u"); held.close();
 		for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
-		t.assert_deep_equal([ locked.kind, locked.package ], [ "locked", "unbound" ]);
-		t.assert_deep_equal([ skipped.ok, skipped.reload_services ], [ true, [ "dnsmasq", "odhcpd", "system" ] ]);
+		t.assert_deep_equal([ running.kind, running.package ], [ "locked", "unbound" ]);
+		t.assert_deep_equal([ stopped.kind, stopped.package ], [ "locked", "unbound" ]);
+		t.assert_deep_equal([ absent.ok, absent.reload_services ], [ true, [ "dnsmasq", "odhcpd", "system" ] ]);
+	});
+
+	t.it('asks procd only once it holds its locks, the lock of unbound included', () => {
+		let prefix = "/tmp/uapi-test-order-pkg.", global = "/tmp/uapi-test-order-global.lock";
+		let free = (name) => {
+			let fd = fs.open(prefix + name + ".lock", "w+");
+			let ok = fd.lock("xn") === true;
+			fd.close();
+			return ok;
+		};
+		let asked = [];
+		let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ignore: '0' } } } });
+		conn.set_ubus_response("service", "list", (a) => { push(asked, [ a.name, free("dhcp"), free("unbound") ]); return {}; });
+		let p = { check_services: noop_check, reload: noop_reload, watch: () => null };
+		let fn = (c) => { c.uci_set("dhcp", "lan", "ignore", "1"); return { ok: true, body: {} }; };
+		let single = tx.transaction(conn, build_params({ ...p, package: "dhcp", reload_services: [],
+			reload_if_running: [ "dnsmasq", "unbound" ], fn, release: tx.default_release_pkg,
+			acquire: (g, also) => tx.default_acquire_pkg(global, "dhcp", also, prefix) }));
+		let batch = tx.multi_transaction(conn, { ...p, packages: [ "dhcp" ], reload_services: { dhcp: [] },
+			reload_if_running: { dhcp: [ "dnsmasq", "unbound" ] }, lock_path: global, pkg_lock_prefix: prefix, fn });
+		for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
+		t.assert_deep_equal([ single.ok, batch.ok ], [ true, true ]);
+		t.assert_deep_equal(asked, [ [ "dnsmasq", false, false ], [ "unbound", false, false ],
+		                             [ "dnsmasq", false, false ], [ "unbound", false, false ] ]);
 	});
 
 	t.it('a dhcp write that reloads unbound restores the previous config when unbound stops', () => {
@@ -1275,7 +1308,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		let up = { unbound: { running: true, pid: 10, respawn: RESPAWN } };
 		let respawning = { unbound: { running: false, exit_code: 1, respawn: RESPAWN } };
 		let exhausted = { unbound: { running: false, exit_code: 1 } };
-		let reloaded = [ [ "unbound" ], [ "unbound" ] ], skipped = [ [], [] ];
+		let reloaded = [ [ "unbound" ], [ "unbound" ] ], skipped = [ [], [ "unbound" ] ];
 		let cases = [
 			[ "running", listed(up, config), "dhcp", false, reloaded ],
 			[ "respawning", listed(respawning, config), "dhcp", false, reloaded ],

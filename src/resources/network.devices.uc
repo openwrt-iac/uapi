@@ -70,6 +70,9 @@ return {
 	package: "network",
 	type: "device",
 	reload: ["network"],
+	// odhcpd reads this config and has a procd trigger on it. dnsmasq and unbound, which LuCI's
+	// ucitrack also reloads, read only ula_prefix and the interface names here: see docs/raw.md.
+	reload_if_running: ["odhcpd"],
 	unique_field: "name",
 	// A device write can change the ports of the bridge carrying the request, or rename it,
 	// which reaches the caller without touching `config interface`.
