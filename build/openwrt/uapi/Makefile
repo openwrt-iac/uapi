@@ -18,7 +18,7 @@ define Package/uapi
   URL:=https://github.com/openwrt-iac/uapi
   PKGARCH:=all
   DEPENDS:=+uhttpd +uhttpd-mod-ucode +ucode +ucode-mod-ubus +ucode-mod-uci \
-           +ucode-mod-fs +ucode-mod-digest +ucode-mod-log +rpcd-mod-iwinfo
+           +ucode-mod-fs +ucode-mod-digest +ucode-mod-log +ucode-mod-io +rpcd-mod-iwinfo
 endef
 
 define Package/uapi/description

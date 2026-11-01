@@ -177,15 +177,60 @@ function send(resp) {
 const MAX_BODY_BYTES = 262144;
 const MAX_BODY_CONTAINERS = 2000;
 
-// uhttpd.recv() returns at the first read that finds less than it asked for, so a body that
-// arrives in several parts takes several calls. Each part keeps a buffer of about 1 KiB however
-// little it holds, so a body at the bound sent a byte at a time took about 300 MB until every 64
-// parts were joined into one block.
-function read_body(n) {
+// A client that declared a body and stopped sending held its request process, and one of the
+// requests that uhttpd runs at a time with LuCI, 3 by default, until the script timeout of uhttpd,
+// 60 s. A body at the bound arrives within 10 s at about 210 kbit/s, and the read leaves most of
+// that timeout to the write.
+const BODY_READ_S = 10;
+
+// A require that fails stops uhttpd at its start, LuCI with it, and a package built without the
+// dependency on ucode-mod-io installs none. Without it, a body is read from the blocking pipe, with
+// no deadline. io.new() only wraps the number, so this handle made in the uhttpd parent reads the
+// stdin of each request process.
+let io = null;
+try { io = require("io"); }
+catch (e) {
+	log.syslog(log.LOG_WARNING, "uapi-body-deadline: ucode-mod-io is not installed, so a request " +
+		"body that does not arrive holds its request until the script timeout of uhttpd");
+}
+const STDIN = io ? io.new(0) : null;
+
+function elapsed_ms(start) {
+	let now = clock(true);
+	return int((now[0] - start[0]) * 1000 + (now[1] - start[1]) / 1000000);
+}
+
+// The next part of the body that uhttpd passes on stdin, "" at its end, or null when the deadline
+// passes while the pipe is empty. handle_request makes stdin non-blocking, so the read of the io
+// handle returns at once, and uhttpd.recv(1) waits up to 1 s for a byte. uhttpd.recv() alone
+// answers null both at the end and after a second without data, and with a larger length it reads
+// on while each read fills its buffer: a client that sent 1 KiB every 0.5 s held one call until the
+// script timeout.
+//
+// The deadline is checked only when the pipe is empty, so that the drain after a write that took
+// longer still reads a body that has arrived, and does not count it as late. A body that keeps
+// arriving faster than it is read is bounded by its Content-Length or its last chunk and by the
+// script timeout, not by the deadline. The read stops at the bound of the body anyway.
+function body_part(n, start) {
+	if (STDIN == null)
+		return uhttpd.recv(n) ?? "";
+	while (true) {
+		let part = STDIN.read(n);
+		if (part != null) return part;
+		if (elapsed_ms(start) >= BODY_READ_S * 1000) return null;
+		part = uhttpd.recv(1);
+		if (part != null) return part;
+	}
+}
+
+// A body that arrives a byte at a time comes as one part for each byte: 150 KB sent so took 9 MB
+// until every 64 parts were joined into one block.
+function read_body(n, start) {
 	let blocks = [], parts = [], got = 0;
 	while (got < n) {
-		let chunk = uhttpd.recv(n - got);
-		if (chunk == null) break;
+		let chunk = body_part(n - got, start);
+		if (chunk == null) return null;
+		if (chunk == "") break;
 		push(parts, chunk);
 		got += length(chunk);
 		if (length(parts) == 64) {
@@ -777,7 +822,7 @@ function maybe_304(resp, ctx) {
 	return { status: 304, headers: h, body: null };
 }
 
-function dispatch(env) {
+function dispatch(env, start) {
 	// uhttpd's CGI env drops If-Match/If-None-Match/X-Request-Id/Idempotency-Key.
 	// Fall back to query params; reverse proxies that forward the headers still
 	// work via the header path.
@@ -840,8 +885,14 @@ function dispatch(env) {
 		// uhttpd closes the pipe after the last chunk.
 		let n = env.headers["transfer-encoding"] == "chunked"
 			? MAX_BODY_BYTES + 1 : int(env.CONTENT_LENGTH || "0", 0);
-		body_text = (type(n) == "int" && n >= 0 && n <= MAX_BODY_BYTES + 1) ? read_body(n) : null;
-		if (body_text == null || length(body_text) > MAX_BODY_BYTES)
+		let in_bound = type(n) == "int" && n >= 0 && n <= MAX_BODY_BYTES + 1;
+		body_text = in_bound ? read_body(n, start) : "";
+		if (body_text == null) {
+			ctx.body_late = true;
+			return { ctx, resp: errors.error(ctx, "bad_request",
+				sprintf("Request body did not arrive in full within %d s", BODY_READ_S)) };
+		}
+		if (!in_bound || length(body_text) > MAX_BODY_BYTES)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
 				sprintf("Request body is larger than %d bytes", MAX_BODY_BYTES)) };
 		if (length(replace(body_text, /[^{[]/g, "")) > MAX_BODY_CONTAINERS)
@@ -1173,9 +1224,13 @@ function dispatch(env) {
 
 global.handle_request = function(env) {
 	let start = clock(true);
+	// uhttpd hands the body over a blocking pipe, and body_part() keeps the deadline only on a
+	// non-blocking one.
+	if (STDIN != null)
+		STDIN.fcntl(io.F_SETFL, STDIN.fcntl(io.F_GETFL) | io.O_NONBLOCK);
 	let result;
 	try {
-		result = dispatch(env);
+		result = dispatch(env, start);
 	} catch (e) {
 		let ctx = errors.new_context();
 		log.syslog(log.LOG_ERR,
@@ -1191,8 +1246,7 @@ global.handle_request = function(env) {
 	let token = result.token;
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
-	let end = clock(true);
-	let duration_ms = int(((end[0] - start[0]) * 1000) + ((end[1] - start[1]) / 1000000));
+	let duration_ms = elapsed_ms(start);
 
 	// Idempotency store: cache 2xx POST responses so a repeated key replays.
 	// Only when the request actually carried a key (not on replay itself, the
@@ -1248,9 +1302,19 @@ global.handle_request = function(env) {
 	}
 
 	// uhttpd parses what the request process leaves unread as the next request on the
-	// connection, so what is left of a body, on any path, is read here and dropped. uhttpd closes
-	// the pipe after a body, but never for a request without one that it queued.
-	if (env.headers["transfer-encoding"] == "chunked" || int(env.CONTENT_LENGTH || "0", 0) != 0)
-		while (uhttpd.recv(65536) != null);
+	// connection, so what is left of a body, on any path, is read here and dropped, up to the
+	// deadline of the read. uhttpd closes the pipe after a body, but never for a request without
+	// one that it queued. No answer of the handler makes uhttpd close the connection, so what
+	// follows a body that missed the deadline is parsed as a request, and the miss is logged.
+	if (env.headers["transfer-encoding"] == "chunked" || int(env.CONTENT_LENGTH || "0", 0) != 0) {
+		let part = body_part(65536, start);
+		while (part != null && part != "")
+			part = body_part(65536, start);
+		if (part == null) ctx.body_late = true;
+	}
+	if (ctx.body_late)
+		log.syslog(log.LOG_WARNING,
+			sprintf("uapi-body-deadline %s %s %s status=%d remote=%s",
+				ctx.request_id, method, path, resp.status, env.REMOTE_ADDR ?? "-"));
 	send(resp);
 };

@@ -297,9 +297,7 @@ All notable changes to this project will be documented in this file. Format foll
   ran with no body, and uhttpd parsed the chunks that arrived after the response as the next request
   on the connection. uapi now reads such a body until uhttpd closes the pipe after the last chunk. A
   chunked body over 256 KiB answers `413 payload_too_large`, as one with a larger `Content-Length`
-  does. A client that does not send the last chunk holds its request process until the script
-  timeout of uhttpd, as one that sends less than its `Content-Length` does. `docs/security.md` names
-  the chunked bodies that uhttpd does not pass whole. (#296)
+  does. `docs/security.md` names the chunked bodies that uhttpd does not pass whole. (#296)
 - **A `Content-Length` that uapi does not read as a whole number from 0 to 262144 answers
   `413 payload_too_large`.** uhttpd reads the header with `strtoul()` in base 0 into an `int`, so on
   a 64-bit router it wraps a value of 2^32 or more and reads some negative values as positive ones:
@@ -313,7 +311,29 @@ All notable changes to this project will be documented in this file. Format foll
   answered before uapi read their body: a POST, PUT or PATCH to `/healthz`, `/openapi.json` or
   `/schema`, a request refused with `403 tls_required`, and a GET or DELETE with a body. uhttpd
   parsed the rest of such a body as the next request on the connection, which answered 400 or closed
-  the connection. Such a request answers as before, but once its whole body has arrived. (#296)
+  the connection. Such a request answers as before, after uapi drops the rest of its body. (#296)
+- **A request body that has not arrived in full 10 s after the start of the request answers
+  `400 bad_request`.** uapi reads the body before the bearer check, from a blocking pipe that uhttpd
+  hands over. So a POST, PUT or PATCH that declared a body and sent less, sent it slowly, or did not
+  send the last chunk of a chunked body, held its request process, and one of the `max_requests` of
+  uhttpd, 3 by default and shared with LuCI, for as long as the body took, up to the script timeout
+  of uhttpd, 60 s by default, after which uhttpd answered 502. That needed no token. uapi now makes
+  the pipe non-blocking, through the new dependency `ucode-mod-io` (`io.so`, 20 KB on x86_64),
+  answers 400 with a message that names the 10 s, and logs a `uapi-body-deadline` line with the
+  request id, the method, the path and the address of the client. The drop of what is left of a body
+  stops at the same deadline. So a request that answers without reading its body gets its normal
+  answer 10 s after it started when that body does not arrive, and logs the same line: a 413, a POST
+  to `/healthz`, or a GET or DELETE with a declared body, and a DELETE has then already been
+  applied. So does a request that uhttpd queued with a `Content-Length` that it reads as 0, such as
+  `4294967296`, whose pipe uhttpd never closes. uhttpd keeps the connection open after the answer,
+  and uapi cannot make it close it, so uhttpd parses what the client sends after a late body as a
+  new request. A reverse proxy that streams request bodies to uhttpd and reuses its connections
+  should buffer each body, or close a connection on which it did not finish sending a request. A
+  package built without `ucode-mod-io` still starts, logs one line when uhttpd starts, and reads a
+  body with no deadline. This refuses a body that 3.2.0 read when it arrived between 10 s and 60 s
+  after the request started, under the security carve-out of `docs/versioning.md`: holding a slot of
+  uhttpd needs no token, and a body at the bound of 256 KiB arrives within 10 s at about 210 kbit/s.
+  It fails loudly, with the 400. (#299)
 - **`network/wireguard_peers.allowed_ips` reads a printf %b escape and a comma as wg does, and the
   routes of `route_allowed_ips` follow the words that wireguard.sh routes.** wireguard.sh gives wg
   the line `AllowedIPs=` through `printf %b`, and wg splits it at commas, so `option allowed_ips

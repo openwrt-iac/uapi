@@ -58,9 +58,11 @@ Dependencies (pulled in automatically):
 
 ```
 uhttpd uhttpd-mod-ucode ucode
-ucode-mod-ubus ucode-mod-uci ucode-mod-fs ucode-mod-digest ucode-mod-log
+ucode-mod-ubus ucode-mod-uci ucode-mod-fs ucode-mod-digest ucode-mod-log ucode-mod-io
 rpcd-mod-iwinfo
 ```
+
+`main.uc` uses `ucode-mod-io` to make the stdin of a request non-blocking, so that a request body that does not arrive answers 400 after 10 s instead of holding the request until the script timeout of uhttpd (`docs/security.md`, Public endpoints). It installs `/usr/lib/ucode/io.so`, 20 KB on x86_64 (a 7 KB apk). A package built without the dependency still runs, but has no deadline: uapi then reads a body from the blocking pipe, and logs one `uapi-body-deadline` line when uhttpd starts.
 
 ## Build steps
 

@@ -56,7 +56,7 @@ bootstrap_uapi() {
 		return 0
 	fi
 
-	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest 2>&1' | tail -3
+	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest ucode-mod-io 2>&1' | tail -3
 	# shellcheck disable=SC2086
 	if ! tar c -C . $PUSH_PATHS \
 		| $SSH '
