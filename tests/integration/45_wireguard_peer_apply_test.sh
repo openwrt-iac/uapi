@@ -79,6 +79,7 @@ $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "netdev $IFACE never appeared
 
 kernel_peers() { $SSH "wg show $IFACE peers 2>/dev/null" || true; }
 has_peer() { kernel_peers | grep -qxF "$1"; }
+read_peer() { body_of "$(call "$URL/network/wireguard_peers/$1")" | jq -c "$2"; }
 
 echo "--- POST a peer reaches the kernel with no ifup ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
@@ -89,12 +90,20 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 pid=$(id_of "$r")
 has_peer "$PEER1" || fail "peer not in kernel after POST; wg show: $(kernel_peers)"
 
+echo "--- a read reports what the kernel holds for the peer, and a write does not read it ---"
+[ "$(body_of "$r" | jq -c .runtime)" = '{}' ] || fail "the POST answered the runtime $(body_of "$r" | jq -c .runtime)"
+rt=$(read_peer "$pid" '.runtime | [.in_kernel, .endpoint, .allowed_ips, .persistent_keepalive, (.latest_handshake | type), (.rx_bytes | type), (.tx_bytes | type)]')
+[ "$rt" = '[true,"198.51.100.7:51820",["10.98.99.2/32"],0,"number","number","number"]' ] \
+	|| fail "the runtime after the POST reads $rt; wg show: $($SSH "wg show $IFACE dump | sed 1d | cut -f1,3-8")"
+
 echo "--- PATCH the endpoint reaches the kernel ---"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$pid" \
 	-d '{"endpoint_host":"198.51.100.9"}')
 [ "$(status_of "$r")" = "200" ] || fail "PATCH peer: $(body_of "$r")"
 $SSH "wg show $IFACE endpoints" | grep -q '198.51.100.9' \
 	|| fail "endpoint not updated in kernel: $($SSH "wg show $IFACE endpoints")"
+[ "$(read_peer "$pid" '[.endpoint_host, .runtime.endpoint]')" = '["198.51.100.9","198.51.100.9:51820"]' ] \
+	|| fail "the runtime after the PATCH reads $(read_peer "$pid" .runtime)"
 
 # A PATCH that changed nothing still reloaded network and set the peer again in the kernel, which
 # for a peer without an endpoint is a remove and a set, and resets its session. A PUT of the read
@@ -117,6 +126,8 @@ assert_noop() {
 	[ "$(keepalive)" = 77 ] || fail "$1 changed nothing and set the peer again: keepalive $(keepalive)"
 }
 $SSH "wg set $IFACE peer $PEER1 persistent-keepalive 77"
+[ "$(read_peer "$pid" '[.persistent_keepalive, .runtime.in_kernel, .runtime.persistent_keepalive]')" = '[null,true,77]' ] \
+	|| fail "a read does not report the keepalive that wg set by hand: $(read_peer "$pid" '[.persistent_keepalive, .runtime]')"
 for body in '{}' '{"endpoint_host": "198.51.100.9", "endpoint_port": 51820}'; do
 	assert_noop "PATCH $body" "$(patch_headers "$body")" 200
 done
@@ -132,6 +143,8 @@ echo "$h" | head -1 | grep -q ' 200 ' || fail "PATCH preshared_key: $h $(cat /tm
 echo "$h" | grep -qix 'X-Kernel-Status: ok' && echo "$h" | grep -qix "X-Kernel-Applied: $IFACE" \
 	|| fail "a new preshared key did not reach the kernel: $h"
 $SSH "wg show $IFACE preshared-keys" | grep -qF "$PSK" || fail "wg holds another preshared key"
+body_of "$(call "$URL/network/wireguard_peers/$pid")" | grep -qF "$PSK" && fail "a read shows the preshared key"
+call "$URL/network/wireguard_peers" | grep -qF "$PSK" && fail "a collection read shows the preshared key"
 
 echo "--- DELETE actually revokes the peer ---"
 r=$(call -X DELETE "$URL/network/wireguard_peers/$pid")
@@ -149,6 +162,18 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operati
 [ "$(status_of "$r")" = "207" ] || fail "batch: $(body_of "$r")"
 has_peer "$PEER1" || fail "batch peer 1 not in kernel"
 has_peer "$PEER2" || fail "batch peer 2 not in kernel"
+held=$(body_of "$(call "$URL/network/wireguard_peers")" | jq -c --arg i "$IFACE" --arg a "$PEER1" --arg b "$PEER2" \
+	'[.[] | select(.interface == $i and (.public_key == $a or .public_key == $b)) | [.public_key == $a, .runtime.in_kernel, .runtime.allowed_ips]] | sort')
+[ "$held" = '[[false,true,["10.98.99.5/32"]],[true,true,["10.98.99.4/32"]]]' ] || fail "a collection read reports the batch peers as $held"
+bid=$(body_of "$r" | jq -r '.results[0].body.id')
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"PATCH\",\"body\":{\"description\":\"b\"}},
+	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
+[ "$(status_of "$r")" = "207" ] || fail "batch of a PATCH and a GET: $(body_of "$r")"
+[ "$(body_of "$r" | jq -c '[.results[].body.runtime]')" = '[{},{}]' ] || fail "a batch that writes read the kernel: $(body_of "$r")"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
+	-d "{\"operations\":[{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
+[ "$(body_of "$r" | jq -c '.results[0].body.runtime.in_kernel')" = true ] || fail "a batch of reads did not read the kernel: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel torn down by the batch"
 
 # The whole reason the apply is per-peer rather than a netifd interface renew. A
@@ -301,6 +326,8 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 	-d '{"disabled":true}')
 [ "$(status_of "$r")" = "200" ] || fail "PATCH disabled: $(body_of "$r")"
 has_peer "$PEER4" && fail "disabled peer is still installed in the kernel"
+[ "$(read_peer "$rid" '[.disabled, .runtime.in_kernel, .runtime.endpoint, .runtime.allowed_ips]')" = '[true,false,null,null]' ] \
+	|| fail "the read of the disabled peer reports $(read_peer "$rid" .runtime)"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$rid" \
 	-d '{"disabled":false}')
 [ "$(status_of "$r")" = "200" ] || fail "PATCH re-enable: $(body_of "$r")"
@@ -405,6 +432,8 @@ $SSH "uci set network.uapi45esc=wireguard_$IFACE; uci set network.uapi45esc.publ
 	uci add_list network.uapi45esc.allowed_ips=10.98.99.70/32; uci commit network; ifup $IFACE"
 sleep 5
 has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
+[ "$(read_peer uapi45esc '[.runtime.in_kernel, .runtime.allowed_ips]')" = '[true,["10.98.99.70/32"]]' ] \
+	|| fail "the read does not match the key with an escape to the peer of the kernel: $(read_peer uapi45esc .runtime)"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
 	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
@@ -720,6 +749,7 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER4\",
 	    \"allowed_ips\":[\"10.98.99.6/32\"]}")
 [ "$(status_of "$r")" = "200" ] || fail "POST to down tunnel expected 200: $(body_of "$r")"
+[ "$(read_peer "$(id_of "$r")" .runtime)" = '{}' ] || fail "the read of a peer on a down tunnel reports $(read_peer "$(id_of "$r")" .runtime)"
 
 # Nothing cascades a peer delete off an interface delete, so leftover peers are a
 # normal state to clean up, and a Terraform destroy can order the interface first.

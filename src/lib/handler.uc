@@ -819,12 +819,22 @@ function make(resource, opts) {
 		for (let op in ops) push(sink, op);
 	}
 
+	// `read_runtime` is a runtime that a GET reads and a write does not, such as the `wg show` of
+	// network/wireguard_peers. Read in a write, it would run under the package lock and come from
+	// before the kernel apply, so the write would answer as drift what its apply then changes. A GET
+	// in a /batch that writes runs before the apply of the batch too.
+	function read_view(s, conn, ctx) {
+		let r = resource.fromUci(s, conn);
+		if (resource.read_runtime != null && !ctx.batch_writes) r.runtime = resource.read_runtime(s, conn);
+		return r;
+	}
+
 	function list(conn, ctx, query) {
 		let want_managed = query.managed;
 		let out = [];
 		conn.uci_foreach(pkg, null, function(s) {
 			if (!type_predicate(s['.type'])) return;
-			let r = resource.fromUci(s, conn);
+			let r = read_view(s, conn, ctx);
 			if (want_managed == "true" && !r.managed) return;
 			if (want_managed == "false" && r.managed) return;
 			push(out, r);
@@ -837,7 +847,7 @@ function make(resource, opts) {
 		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
 			                    sprintf("No %s with id %J", sec_type, id));
-		let body = resource.fromUci(s, conn);
+		let body = read_view(s, conn, ctx);
 		return set_etag_header(errors.ok(ctx, body), body);
 	}
 

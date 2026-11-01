@@ -568,7 +568,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	let kernel_ops = [];
 	let run_ops = function(c) {
 		for (let i = 0; i < length(ops); i++) {
-			let sub_ctx = { request_id: ctx.request_id + "." + i, kernel_sink: kernel_ops };
+			let sub_ctx = { request_id: ctx.request_id + "." + i, kernel_sink: kernel_ops, batch_writes: length(pkgs) > 0 };
 			let resp = batch_run_one(c, sub_ctx, ops[i]);
 			push(results, { status: resp.status, body: resp.body });
 			if (resp.status >= 400) {

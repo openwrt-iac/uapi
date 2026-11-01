@@ -171,6 +171,12 @@ without uci state change.
    then answers, unless another writer commits to the package while the
    request runs. `runtime` is read before the reload, and the commit replays
    the writes over such a commit, which the body does not show.
+   `network/wireguard_peers` diverges: its `runtime` comes from `wg show`, which
+   only a GET runs (`read_runtime`), so a write answers `runtime: {}` and reads
+   no kernel state under the lock. Read in `fn`, it would come from before the
+   kernel apply of step 7, and the write would answer as drift what the apply
+   then changes. A GET in a `/batch` that writes answers `{}` for the same
+   reason, since every sub-request runs before the apply of the batch.
 5. **Snapshot and commit.** `uci_export(<package>)` captures the package file
    into an in-memory string, the snapshot that step 8 restores. When the request
    wrote to the package, `uci_commit(<package>)` then loads the package file

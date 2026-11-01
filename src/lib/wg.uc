@@ -166,20 +166,33 @@ function peer_sections(conn, iface) {
 	return out;
 }
 
-// Peer lines carry 8 tab-separated fields: public key, preshared key, endpoint,
-// allowed ips, last handshake, rx, tx, keepalive, with "(none)"/"off" sentinels.
-// The first line describes the interface, not a peer. The preshared key is in
-// there, so this output must never be logged.
-function installed_pubkeys(iface) {
+// dump_print() in src/show.c of wireguard-tools, 1.0.20250521 in OpenWrt 25.12, prints the
+// interface on the first line in 4 tab-separated fields, its private key first, then a line per peer
+// of 8: public key, preshared key, endpoint, allowed IPs joined with commas, latest handshake in
+// epoch seconds or 0, rx bytes, tx bytes and keepalive. An unset key, endpoint or allowed IPs prints
+// `(none)`, and no keepalive `off`. The output holds both keys, so it must never be logged, and only
+// the fields below leave here. The fields are read by position, so a dump in another shape reads as
+// a failed one, null: a field more after the public key would put the preshared key in `endpoint`,
+// and a line skipped would read as a peer that the kernel does not hold.
+function kernel_peers(iface) {
 	let r = run([ "wg", "show", iface, "dump" ]);
 	if (!r.ok) return null;
-	let keys = [];
+	let peers = {};
 	let lines = split(r.output, "\n");
+	if (length(split(lines[0], "\t")) != 4) return null;
 	for (let i = 1; i < length(lines); i++) {
 		let f = split(lines[i], "\t");
-		if (length(f) >= 8 && match(f[0], WG_KEY_RE)) push(keys, f[0]);
+		if (length(f) != 8 || !match(f[0], WG_KEY_RE)) return null;
+		peers[f[0]] = {
+			endpoint: (f[2] == "(none)") ? null : f[2],
+			allowed_ips: (f[3] == "(none)") ? [] : split(f[3], ","),
+			persistent_keepalive: (f[7] == "off") ? 0 : int(f[7]),
+			latest_handshake: int(f[4]),
+			rx_bytes: int(f[5]),
+			tx_bytes: int(f[6]),
+		};
 	}
-	return keys;
+	return peers;
 }
 
 // `wg set` takes a preshared key only as a file, never as an argument, which is
@@ -458,6 +471,26 @@ function is_up(conn, iface) {
 	return type(status) == "object" && status.up === true;
 }
 
+const NOT_HELD = { endpoint: null, allowed_ips: null, persistent_keepalive: null, latest_handshake: null,
+                   rx_bytes: null, tx_bytes: null };
+
+// What the kernel holds under the key that wg reads from a stored public_key. Empty when uapi did not
+// read the kernel, so that a failed read never looks like a missing peer: the interface is not up,
+// wg fails, or the value gives wg more than a key or is too long to expand, so that uapi cannot tell
+// which peer wg set for it. A collection GET reads every peer, so each interface is read once and
+// kept on the connection, which lasts one request.
+function runtime(conn, iface, public_key) {
+	let key = kernel_key(public_key);
+	if (conn == null || key === false) return {};
+	conn.wg_peers ??= {};
+	if (!exists(conn.wg_peers, iface))
+		conn.wg_peers[iface] = is_up(conn, iface) ? kernel_peers(iface) : null;
+	let peers = conn.wg_peers[iface];
+	if (peers == null) return {};
+	let held = key ? peers[key] : null;
+	return { in_kernel: held != null, ...(held ?? NOT_HELD) };
+}
+
 // Bring the kernel in line with what uci now holds for these interfaces: drop
 // peers uci no longer lists, then apply every peer it does. Used on the rollback
 // path, where a batch may have applied some peers before failing on a later one,
@@ -486,10 +519,9 @@ function reconcile(conn, interfaces, ops) {
 			if (key) wanted[key] = true;
 		}
 
-		let current = installed_pubkeys(iface);
-		if (current != null)
-			for (let pk in current)
-				if (!wanted[pk]) remove_peer(iface, pk);
+		let current = kernel_peers(iface);
+		for (let pk in current)
+			if (!wanted[pk]) remove_peer(iface, pk);
 
 		let wanted_routes = [];
 		for (let s in sections)
@@ -505,7 +537,7 @@ function reconcile(conn, interfaces, ops) {
 			let key = kernel_key(s.public_key);
 			if (!key) continue;
 			if (kernel_key(s.preshared_key) === null && (s.preshared_key ?? "") != "") {
-				if (named[iface + "|" + key] || index(current ?? [], key) < 0)
+				if (named[iface + "|" + key] || current?.[key] == null)
 					missing = sprintf("not restoring a peer with a malformed preshared key on %s", iface);
 				continue;
 			}
@@ -592,5 +624,5 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
+return { apply, reconcile, runtime, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
          route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line };
