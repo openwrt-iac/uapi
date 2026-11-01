@@ -60,9 +60,10 @@ function strict_bool(v) {
 	return v === "1" || v === 1 || v === true;
 }
 
-// config_get in /lib/functions.sh gives a script a list option as its items joined by spaces.
+// config_get in /lib/functions.sh gives a script a list option as its items joined by spaces, and
+// `append` adds nothing for an empty item.
 function config_get(v) {
-	return (type(v) == "array") ? join(" ", v) : v;
+	return (type(v) == "array") ? join(" ", filter(v, (e) => e !== "")) : v;
 }
 
 // A value that reaches a line-oriented config file, a shell argument or a stdin prompt cannot
@@ -282,6 +283,17 @@ function service_port(v, read_services, unresolved) {
 // wg cuts a line of its config at `#` and strips every whitespace character from it.
 function wg_line(l) {
 	return replace(split(l, "#")[0], /[[:space:]]/g, "");
+}
+
+// wireguard.sh writes the allowed IPs of a peer as config_get gives them, with each space turned
+// into a comma, and wg cuts the line at `#` and refuses an empty entry. So a tab does not separate
+// two entries, and a second space adds an empty one. The escapes that printf %b expands in that
+// line are not modelled.
+function wg_allowed_ips(v) {
+	v = config_get(v);
+	if (type(v) != "string") return null;
+	v = split(v, "#")[0];
+	return (v != "") ? split(v, " ") : null;
 }
 
 // wireguard.sh leaves an empty value out of the config for wg, and writes any other after
@@ -788,7 +800,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
-	netifd_string, rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
+	netifd_string, rt_table_id, config_get, service_port, wg_line, wg_allowed_ips, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,

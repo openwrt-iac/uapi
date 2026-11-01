@@ -4,7 +4,6 @@ let wg = require('wg');
 let shell_bool = values.shell_bool;
 let config_get = values.config_get;
 let as_list = values.as_list;
-let as_word_list_or_null = values.as_word_list_or_null;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 let as_int = values.as_int;
@@ -30,7 +29,7 @@ function fromUci(section) {
 		description: section.description ?? null,
 		public_key: section.public_key ?? null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
-		allowed_ips: as_word_list_or_null(section.allowed_ips),
+		allowed_ips: values.wg_allowed_ips(section.allowed_ips),
 		endpoint_host: config_get(section.endpoint_host) ?? null,
 		endpoint_port: read_port(section.endpoint_port),
 		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
@@ -96,6 +95,10 @@ function validate(json, conn, id, delta) {
 	// refused the bare form that `wg show` itself prints back. No allowed IP at all
 	// is valid too: LuCI leaves the list optional, and wireguard.sh and wg take it.
 	let aips = as_list(json.allowed_ips);
+	// wg refuses the whole config for one entry that it cannot parse, and wireguard.sh leaves a
+	// disabled peer out of that config, so a peer that stores such an entry can still be disabled.
+	if (json.disabled === true)
+		aips = as_list((delta ?? json).allowed_ips);
 	for (let i = 0; i < length(aips); i++) {
 		if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
@@ -224,8 +227,9 @@ return {
 		if (iface == null || iface == "") return [];
 
 		// route_allowed_ips routes outlive the peer, and the apply needs the previous
-		// allowed_ips to know which prefixes this write may have orphaned.
-		let prev_ips = (existing != null) ? (as_word_list_or_null(existing.allowed_ips) ?? []) : [];
+		// allowed_ips to know which prefixes this write may have orphaned. wireguard.sh installs
+		// them from the words of the option, which it splits at a tab too.
+		let prev_ips = (existing != null) ? (values.config_get_words(existing.allowed_ips) ?? []) : [];
 		// `existing` is the raw uci section, so this needs the netifd-faithful read:
 		// a section written by hand or by another tool can carry `true`, and reading
 		// that as false tells the apply the old config installed no routes, so the
@@ -253,7 +257,7 @@ return {
 			iface: iface,
 			action: "set",
 			public_key: opts.public_key,
-			allowed_ips: as_list(opts.allowed_ips),
+			allowed_ips: values.wg_allowed_ips(opts.allowed_ips) ?? [],
 			endpoint_host: opts.endpoint_host,
 			endpoint_port: as_int(opts.endpoint_port),
 			persistent_keepalive: as_int(opts.persistent_keepalive),
@@ -283,7 +287,7 @@ return {
 		                        description: "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it." },
 		has_preshared_key:    { type: "boolean", readOnly: true },
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
-		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host" },
+		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg splits them: wireguard.sh joins a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line at `#`. So two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A backslash escape, which wireguard.sh expands, is not modelled. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends." },
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },

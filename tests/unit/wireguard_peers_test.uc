@@ -383,9 +383,9 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(r.status, 422);
 	});
 
-	// allowed_ips keeps the rule it had on main: every write checks it, so the peer answers 422
-	// rather than letting wg refuse it with a 500.
-	t.it('a stored invalid allowed IP blocks every write until one replaces it', () => {
+	// allowed_ips keeps the rule it had on main for a peer that the write leaves enabled: the write
+	// checks it, so the peer answers 422 rather than letting wg refuse it with a 500.
+	t.it('a stored invalid allowed IP blocks every write that leaves the peer enabled until one replaces it', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.allowed_ips = [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ];
 		let h = make_handler();
@@ -537,6 +537,8 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_true(index(r.body.errors[0].message, 'g_ip (allowed_ips[1])') >= 0, r.body.errors[0].message);
 		for (let off in [ { disabled: '1' }, { public_key: null } ])
 			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ], ...off } }), ctx(), 'wg1', WG).status, 200, off);
+		r = h.patch(world(STATIC, { g_tab: { allowed_ips: '10.42.0.2/32\t10.42.1.0/24' } }), ctx(), 'wg1', WG);
+		t.assert_true(index(r.body.errors[0].message, 'g_tab (allowed_ips[0])') >= 0, r.body.errors[0].message);
 	});
 
 	t.it('the way out that the message gives works: switch disabled, fix the peer, enable', () => {
@@ -695,6 +697,22 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		let ops = [];
 		op_tracking_handler(ops).remove(c, ctx(), 'g_existing');
 		t.assert_true(ops[0].prev_route_allowed_ips);
+	});
+
+	// wireguard.sh routes each word of the allowed IPs and gives wg the entries split at spaces, so
+	// a list entry of two prefixes is two routes and two allowed IPs.
+	t.it('withdraws the route of each prefix of a list entry that holds two, and sets both', () => {
+		for (let body in [ { route_allowed_ips: false }, { disabled: true } ]) {
+			let c = with_wg();
+			c._state.uci.network.g_existing.allowed_ips = [ '10.42.0.2/32 10.42.1.0/24' ];
+			c._state.uci.network.g_existing.route_allowed_ips = '1';
+			let ops = [];
+			t.assert_equal(op_tracking_handler(ops).patch(c, ctx(), 'g_existing', body).status, 200, sprintf("%J", body));
+			let last = ops[length(ops) - 1];
+			t.assert_deep_equal(last.prev_allowed_ips, [ '10.42.0.2/32', '10.42.1.0/24' ], sprintf("%J", body));
+			if (last.action == "set")
+				t.assert_deep_equal(last.allowed_ips, [ '10.42.0.2/32', '10.42.1.0/24' ]);
+		}
 	});
 
 	t.it('leaves prev_route_allowed_ips false when the option is absent', () => {
@@ -923,6 +941,59 @@ t.describe('network.wireguard_peers reads a scalar allowed_ips as words', () => 
 	t.it('kernel_ops on remove', () => {
 		let ops = wgp.kernel_ops('remove', null, 'wireguard_wg0', sec);
 		t.assert_deep_equal(ops[0].prev_allowed_ips, [ '10.0.0.2/32', '10.0.1.0/24' ]);
+	});
+});
+
+// wireguard.sh writes `AllowedIPs=${peer_a_ips// /, }`, and wg strips the whitespace of the line and
+// splits it at commas. A tab is no comma, so wg gets the one entry `10.42.0.2/3210.42.1.0/24` and
+// refuses the config. The read gave two entries, which a PUT then stored as a list that wg takes.
+t.describe('network.wireguard_peers reads allowed_ips as wg gets them', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(wgp, { tx });
+	let read = (aips) => wgp.fromUci({ '.name': 'p1', '.type': 'wireguard_wg1', public_key: PK, allowed_ips: aips }, null).allowed_ips;
+	function stored(aips, disabled) {
+		let c = with_wg();
+		c._state.uci.network.g_existing.allowed_ips = aips;
+		if (disabled) c._state.uci.network.g_existing.disabled = '1';
+		return c;
+	}
+	function body_of(c) {
+		let b = h.get_one(c, ctx(), 'g_existing').body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete b[k];
+		return b;
+	}
+
+	t.it('reads a tab as part of an entry, an extra space as an empty entry, and a list entry as its words', () => {
+		t.assert_deep_equal(read('10.42.0.2/32\t10.42.1.0/24'), [ '10.42.0.2/32\t10.42.1.0/24' ]);
+		t.assert_deep_equal(read('10.42.0.2/32 '), [ '10.42.0.2/32', '' ]);
+		t.assert_deep_equal(read([ '10.42.0.2/32 10.42.1.0/24' ]), [ '10.42.0.2/32', '10.42.1.0/24' ]);
+	});
+
+	t.it('a PUT of the read of such an option answers 422 and leaves it as stored', () => {
+		for (let aips in [ '10.42.0.2/32\t10.42.1.0/24', '10.42.0.2/32  10.42.1.0/24' ]) {
+			let c = stored(aips);
+			let r = h.replace(c, ctx(), 'g_existing', body_of(c));
+			t.assert_equal(r.status, 422, aips);
+			t.assert_equal(c._state.uci.network.g_existing.allowed_ips, aips);
+		}
+	});
+
+	t.it('a PUT of the read of a list entry with two prefixes stores the two entries that wg got', () => {
+		let c = stored([ '10.42.0.2/32 10.42.1.0/24' ]);
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', body_of(c)).status, 200);
+		t.assert_deep_equal(c._state.uci.network.g_existing.allowed_ips, [ '10.42.0.2/32', '10.42.1.0/24' ]);
+	});
+
+	t.it('a write that disables the peer passes, and one that leaves it enabled or sends the entry does not', () => {
+		let aips = '10.42.0.2/32\t10.42.1.0/24';
+		let c = stored(aips);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
+		t.assert_deep_equal([ c._state.uci.network.g_existing.disabled, c._state.uci.network.g_existing.allowed_ips ], [ '1', aips ]);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ aips ] }).status, 422);
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', body_of(c)).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422);
 	});
 });
 

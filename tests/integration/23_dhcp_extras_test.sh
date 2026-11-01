@@ -52,6 +52,14 @@ stored=$($SSH "uci -q get dhcp.$sid.dhcpv4; uci -q get dhcp.$sid.ra_flags; uci -
 [ "$stored" = "server|managed-config other-config|1|" ] || fail "PUT of the read stored $stored"
 assert_dnsmasq_loads
 
+echo "--- dhcp/servers: an ra_flags option of spaces, which gives odhcpd no flag, reads as none and a PUT of the read keeps none ---"
+$SSH "uci -q delete dhcp.$sid.ra_flags; uci set dhcp.$sid.ra_flags='  '; uci commit dhcp"
+view=$(call "$URL/dhcp/servers/$sid" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '.ra_flags')" = '["none"]' ] || fail "the ra_flags of spaces read wrong: $view"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/dhcp/servers/$sid" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$r" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $r"
+[ "$($SSH "uci -q get dhcp.$sid.ra_flags")" = "none" ] || fail "PUT of the read stored ra_flags $($SSH "uci -q get dhcp.$sid.ra_flags" || true)"
+
 echo "--- dhcp/servers: DELETE ---"
 call -X DELETE "$URL/dhcp/servers/$sid" | tail -1 | grep -q '^204$' || fail "DELETE servers expected 204"
 assert_dnsmasq_loads
@@ -71,6 +79,19 @@ echo "$patched" | grep -q '"noresolv": true' || fail "PATCH did not update nores
 # dnsmasq reads a # as a comment only after whitespace, so the port stays part of the value.
 assert_dnsmasq_emits "server=127.0.0.1#5353"
 assert_dnsmasq_loads
+
+echo "--- dhcp/dnsmasq: a server option, which dnsmasq.init skips, reads as null and a PATCH of the read keeps it ---"
+dns_sec=$($SSH "uci show dhcp" | sed -n 's/^dhcp\.\([^.=]*\)=dnsmasq$/\1/p' | head -1)
+[ -n "$dns_sec" ] || fail "the test box has no config dnsmasq section"
+$SSH "uci -q delete 'dhcp.$dns_sec.server'; uci set 'dhcp.$dns_sec.server=127.0.0.1#5354'; uci commit dhcp; /etc/init.d/dnsmasq reload"
+assert_dnsmasq_omits "server=127.0.0.1#5354"
+view=$(call "$URL/dhcp/dnsmasq" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '.server')" = 'null' ] || fail "a server option should read as null: $view"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of the read expected 200: $r"
+[ "$($SSH "uci -q get 'dhcp.$dns_sec.server'")" = "127.0.0.1#5354" ] || fail "the PATCH of the read changed the server option"
+assert_dnsmasq_omits "server=127.0.0.1#5354"
+$SSH "uci -q delete 'dhcp.$dns_sec.server'; uci commit dhcp; /etc/init.d/dnsmasq reload"
 
 echo "--- dhcp/dnsmasq: a double quote or a # after whitespace answers 422 ---"
 for body in '{"domain":"lan\"x"}' '{"server":["1.2.3.4 #x"]}' '{"leasefile":"/tmp/dhcp\"leases"}'; do
@@ -103,5 +124,19 @@ call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" -d '{
 echo "--- dhcp/odhcpd singleton: GET returns the existing config ---"
 got=$(call "$URL/dhcp/odhcpd")
 echo "$got" | tail -1 | grep -q '^200$' || fail "odhcpd GET expected 200"
+
+echo "--- dhcp/odhcpd: maindhcp reads true only for 1, which odhcpd and dnsmasq.init both take ---"
+saved=$($SSH "uci -q get dhcp.odhcpd.maindhcp" || true)
+for v in true yes 2 1; do
+	$SSH "uci set dhcp.odhcpd.maindhcp=$v; uci commit dhcp"
+	want=false; [ "$v" = "1" ] && want=true
+	[ "$(call "$URL/dhcp/odhcpd" | sed '$d' | jq -c '.maindhcp')" = "$want" ] || fail "maindhcp=$v should read $want"
+done
+echo "--- dhcp/odhcpd: a PATCH of false stores 0 over true, which reads false already ---"
+$SSH "uci set dhcp.odhcpd.maindhcp=true; uci commit dhcp"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/odhcpd" -d '{"maindhcp":false}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of maindhcp false expected 200: $r"
+[ "$($SSH "uci -q get dhcp.odhcpd.maindhcp")" = "0" ] || fail "PATCH of false kept maindhcp $($SSH "uci -q get dhcp.odhcpd.maindhcp" || true)"
+if [ -n "$saved" ]; then $SSH "uci set dhcp.odhcpd.maindhcp=$saved; uci commit dhcp"; else $SSH "uci -q delete dhcp.odhcpd.maindhcp; uci commit dhcp"; fi
 
 echo "dhcp/servers + dnsmasq + odhcpd ok."

@@ -5,15 +5,8 @@ let is_valid_ip = values.is_valid_ip;
 const LEASETIME_RE = /^[0-9]+[smhdwMY]?$/;
 const DUID_RE = /^[0-9A-Fa-f]{2}([:]?[0-9A-Fa-f]{2})+$/;
 const IPV6_HOSTID_RE = /^[0-9A-Fa-f:]+$/;
-
-// Splitting a stored scalar on read is what settles the wire shape; a read never touches storage.
-// A write does converge it, since toUci hands uci the array and uci stores a list, so the
-// first write-back turns `option tag 'a b'` into `list tag`. That is safe here only
-// because the view is stable across it: dnsmasq treats the two identically, and a body
-// read and written back unchanged reads back unchanged, which is what read honesty asks.
-// The earlier design refused to normalize on write for that reason and then kept the raw
-// shape on read too, which is the part that did not follow.
-let split_tags = values.as_word_list_or_null;
+// dnsmasq takes `*` for a whole octet of a dhcp-host MAC, and so does LuCI's host form.
+const HOST_MAC_RE = /^([0-9A-Fa-f]{2}|\*)(:([0-9A-Fa-f]{2}|\*)){5}$/;
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -21,13 +14,14 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		// dnsmasq.init reads `mac` with config_get and splits it into words: see config_get_words().
+		// dnsmasq.init reads `mac` and `tag` with config_get and splits them into words: see
+		// config_get_words().
 		macs: values.config_get_words(section.mac),
 		duid: section.duid ?? null,
 		hostid: section.hostid ?? null,
 		ip: section.ip ?? null,
 		leasetime: section.leasetime ?? null,
-		tag: split_tags(section.tag),
+		tag: values.config_get_words(section.tag),
 		// dnsmasq's init script reads match_tag with config_list_foreach, which skips a scalar
 		// option, so only the list form filters anything (measured: `option match_tag 'x'`
 		// compiles to a host line with no tag). Reporting a scalar as a filter would claim a
@@ -53,6 +47,8 @@ function toUci(json) {
 	if (json.hostid != null)    out.hostid = json.hostid;
 	if (json.ip != null)        out.ip = json.ip;
 	if (json.leasetime != null) out.leasetime = json.leasetime;
+	// The first write-back turns `option tag 'a b'` into `list tag`, which dnsmasq.init reads the
+	// same: it joins a list with spaces and splits the words.
 	if (type(json.tag) == "array" && length(json.tag) > 0) out.tag = json.tag;
 	else if (json.tag != null && type(json.tag) != "array") out.tag = json.tag;
 	if (type(json.match_tag) == "array" && length(json.match_tag) > 0) out.match_tag = json.match_tag;
@@ -74,9 +70,9 @@ function validate(json, conn) {
 		             message: "either macs (for DHCPv4) or duid (for DHCPv6) is required" });
 
 	for (let i = 0; i < length(macs); i++) {
-		if (!match(macs[i], values.MAC_RE))
+		if (!match(macs[i], HOST_MAC_RE))
 			push(errs, { field: sprintf("macs[%d]", i), code: "invalid_format",
-			             message: "must be a MAC address like 00:11:22:33:44:55" });
+			             message: "must be a MAC address like 00:11:22:33:44:55, where * can stand for an octet" });
 	}
 
 	if (has_duid && !match(json.duid, DUID_RE))
@@ -94,7 +90,7 @@ function validate(json, conn) {
 
 	// name, tag and match_tag all land in the one dhcp-host line the init script writes.
 	for (let field in ["tag", "match_tag"]) {
-		let items = (field == "tag") ? split_tags(json.tag) : json.match_tag;
+		let items = (field == "tag") ? values.as_word_list_or_null(json.tag) : json.match_tag;
 		if (type(items) != "array") continue;
 		for (let i = 0; i < length(items); i++) {
 			let p = (type(items[i]) == "string") ? values.dnsmasq_value_problem(items[i]) : null;
@@ -152,7 +148,7 @@ return {
 	],
 	schema_properties: {
 		macs:        { type: ["array", "null"], items: { type: "string" },
-		               description: "MAC addresses for this reservation, the whole uci `list mac`." },
+		               description: "MAC addresses for this reservation, the whole uci `list mac`. dnsmasq.init splits the entries into words, and a read gives those words. An octet can be `*`, which dnsmasq matches against any value, as in `00:11:22:33:44:*`. odhcpd skips the whole host when it cannot parse one of its MACs, as it cannot parse one with `*`, so it then gives this host no lease, not even for its duid." },
 		duid:        { type: ["string", "null"],
 		               description: "Client DUID for DHCPv6 reservation" },
 		hostid:      { type: ["string", "null"],
@@ -167,7 +163,7 @@ return {
 		name:          { type: ["string", "null"],
 		               description: "Hostname dnsmasq answers for this reservation. A comma, a double quote, a `#` or a control character is refused, because the name goes into dnsmasq's config line." },
 		tag:           { type: ["array", "null"], items: { type: "string" },
-		                 description: "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused." },
+		                 description: "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). dnsmasq.init joins a list with spaces and splits the tags into words, and a read gives those words, so a stored `option tag 'a b'` and a list entry `a b` both read as two tags. A comma, a double quote, a `#` or a control character is refused." },
 		match_tag:     { type: ["array", "null"], items: { type: "string" },
 		                 description: "dnsmasq tags a request must carry for this reservation to apply (LuCI's Match Tag), the uci `list match_tag`; `!` negates. Only a tag dnsmasq sets from the request before it looks up hosts can match, such as one from a `config vendorclass`, `config userclass` or `config mac` rule. `known` and the DHCP range's own tag are set later, so `known` never matches and `!known` always does (measured on dnsmasq 2.93). A scalar `option match_tag` reads as null, because dnsmasq ignores it. A comma, a double quote, a `#`, a control character or a blank value is refused." },
 		// Untyped until 2.5.0, so `dns: "0"` was a truthy string that wrote dns=1,

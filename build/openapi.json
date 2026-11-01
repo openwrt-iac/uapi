@@ -29602,7 +29602,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host"
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg splits them: wireguard.sh joins a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line at `#`. So two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A backslash escape, which wireguard.sh expands, is not modelled. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends."
 					},
 					"endpoint_host": {
 						"type": [
@@ -29691,7 +29691,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host"
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg splits them: wireguard.sh joins a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line at `#`. So two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A backslash escape, which wireguard.sh expands, is not modelled. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends."
 					},
 					"endpoint_host": {
 						"type": [
@@ -31251,7 +31251,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "MAC addresses for this reservation, the whole uci `list mac`."
+						"description": "MAC addresses for this reservation, the whole uci `list mac`. dnsmasq.init splits the entries into words, and a read gives those words. An octet can be `*`, which dnsmasq matches against any value, as in `00:11:22:33:44:*`. odhcpd skips the whole host when it cannot parse one of its MACs, as it cannot parse one with `*`, so it then gives this host no lease, not even for its duid."
 					},
 					"duid": {
 						"type": [
@@ -31289,7 +31289,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). dnsmasq.init joins a list with spaces and splits the tags into words, and a read gives those words, so a stored `option tag 'a b'` and a list entry `a b` both read as two tags. A comma, a double quote, a `#` or a control character is refused."
 					},
 					"match_tag": {
 						"type": [
@@ -31366,7 +31366,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "MAC addresses for this reservation, the whole uci `list mac`."
+						"description": "MAC addresses for this reservation, the whole uci `list mac`. dnsmasq.init splits the entries into words, and a read gives those words. An octet can be `*`, which dnsmasq matches against any value, as in `00:11:22:33:44:*`. odhcpd skips the whole host when it cannot parse one of its MACs, as it cannot parse one with `*`, so it then gives this host no lease, not even for its duid."
 					},
 					"duid": {
 						"type": [
@@ -31404,7 +31404,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). A stored `option tag 'a b'` reads back as an array, because dnsmasq word-splits it the same way. A comma, a double quote, a `#` or a control character is refused."
+						"description": "dnsmasq tags set on a request this reservation matches, for other options to match on (LuCI's Set Tag). dnsmasq.init joins a list with spaces and splits the tags into words, and a read gives those words, so a stored `option tag 'a b'` and a list entry `a b` both read as two tags. A comma, a double quote, a `#` or a control character is refused."
 					},
 					"match_tag": {
 						"type": [
@@ -31734,7 +31734,7 @@
 								"none"
 							]
 						},
-						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation."
+						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. A read gives the flags that odhcpd sets: uci passes it the words of an option split at spaces and tabs, or each list entry whole, and odhcpd stops at the first word that is no flag name and keeps the flags before it. When it sets none, such as for an option of spaces, the read gives `none`. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation."
 					},
 					"ra_slaac": {
 						"type": "boolean",
@@ -31893,7 +31893,7 @@
 								"none"
 							]
 						},
-						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation."
+						"description": "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. A read gives the flags that odhcpd sets: uci passes it the words of an option split at spaces and tabs, or each list entry whole, and odhcpd stops at the first word that is no flag name and keeps the flags before it. When it sets none, such as for an option of spaces, the read gives `none`. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation."
 					},
 					"ra_slaac": {
 						"type": "boolean",
@@ -32160,7 +32160,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Upstream DNS servers, each a dnsmasq `server`, the uci `list server`. dnsmasq.init passes only the entries of a list, so a stored `option server`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place."
 					},
 					"address": {
 						"type": [
@@ -32169,7 +32170,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Fixed answers, each a dnsmasq `address`, such as `/example.lan/192.0.2.1`, the uci `list address`. dnsmasq.init passes only the entries of a list, so a stored `option address`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place."
 					},
 					"nonwildcard": {
 						"type": "boolean",
@@ -32276,7 +32278,8 @@
 						"items": {
 							"type": "string",
 							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
-						}
+						},
+						"description": "Upstream DNS servers, each a dnsmasq `server`, the uci `list server`. dnsmasq.init passes only the entries of a list, so a stored `option server`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place."
 					},
 					"address": {
 						"type": [
@@ -32286,7 +32289,8 @@
 						"items": {
 							"type": "string",
 							"pattern": "^#*([^\"\n\r \t#]#*|[ \t])*$"
-						}
+						},
+						"description": "Fixed answers, each a dnsmasq `address`, such as `/example.lan/192.0.2.1`, the uci `list address`. dnsmasq.init passes only the entries of a list, so a stored `option address`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place."
 					},
 					"nonwildcard": {
 						"type": "boolean",
@@ -32441,7 +32445,7 @@
 					"maindhcp": {
 						"type": "boolean",
 						"default": false,
-						"description": "Use odhcpd as the IPv4 DHCP server too"
+						"description": "Use odhcpd as the DHCPv4 server in place of dnsmasq. A read gives true only for `1` in the section named `odhcpd`, as dnsmasq.init reads it: dnsmasq stops serving DHCPv4 for a number above 0 there, while odhcpd is installed, unless odhcpd is disabled and dnsmasq has DHCPv6 support. odhcpd takes `1` and `true` from any `config odhcpd` section, and for any other value or no option keeps the value that it has, which is false after a start, because a reload does not reset it. So a stored `true` reads false while odhcpd and dnsmasq both serve DHCPv4, and a stored `2` reads false while dnsmasq stops and odhcpd serves only if it did before. A write of true stores `1` and a write of false stores `0`, also when the read already gives that value, so a write that sends the field makes both daemons agree. null removes the option, and odhcpd then keeps its value until it restarts. In a section that is not named `odhcpd`, a read gives false, and a write of true stores `1` and still reads false. LuCI shows any value other than `1` unchecked, and removes the option when it saves the form."
 					},
 					"leasefile": {
 						"type": [
@@ -32485,7 +32489,7 @@
 					"maindhcp": {
 						"type": "boolean",
 						"default": false,
-						"description": "Use odhcpd as the IPv4 DHCP server too"
+						"description": "Use odhcpd as the DHCPv4 server in place of dnsmasq. A read gives true only for `1` in the section named `odhcpd`, as dnsmasq.init reads it: dnsmasq stops serving DHCPv4 for a number above 0 there, while odhcpd is installed, unless odhcpd is disabled and dnsmasq has DHCPv6 support. odhcpd takes `1` and `true` from any `config odhcpd` section, and for any other value or no option keeps the value that it has, which is false after a start, because a reload does not reset it. So a stored `true` reads false while odhcpd and dnsmasq both serve DHCPv4, and a stored `2` reads false while dnsmasq stops and odhcpd serves only if it did before. A write of true stores `1` and a write of false stores `0`, also when the read already gives that value, so a write that sends the field makes both daemons agree. null removes the option, and odhcpd then keeps its value until it restarts. In a section that is not named `odhcpd`, a read gives false, and a write of true stores `1` and still reads false. LuCI shows any value other than `1` unchecked, and removes the option when it saves the form."
 					},
 					"leasefile": {
 						"type": [

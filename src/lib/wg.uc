@@ -42,8 +42,7 @@ function run(argv) {
 function to_peer(section) {
 	return {
 		public_key: section.public_key,
-		// wireguard.sh reads the option with config_get, so a scalar holds one prefix per word.
-		allowed_ips: values.as_word_list_or_null(section.allowed_ips) ?? [],
+		allowed_ips: values.wg_allowed_ips(section.allowed_ips) ?? [],
 		endpoint_host: values.config_get(section.endpoint_host),
 		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
 		// Read as wg reads it, since a stored value reaches here from uci without passing through
@@ -268,8 +267,9 @@ function routes_from(allowed_ips, enabled) {
 	return out;
 }
 
+// wireguard.sh installs a route for each word of `for allowed_ip in $peer_a_ips`.
 function peer_routes(section) {
-	return routes_from(values.as_word_list_or_null(section.allowed_ips) ?? [],
+	return routes_from(values.config_get_words(section.allowed_ips) ?? [],
 	                   values.shell_bool(values.config_get(section.route_allowed_ips), false));
 }
 

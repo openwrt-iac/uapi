@@ -146,6 +146,14 @@ t.describe('wg.to_peer', () => {
 		t.assert_deep_equal(wg.to_peer({ allowed_ips: '10.0.0.2/32 10.0.1.0/24' }).allowed_ips,
 		                    ['10.0.0.2/32', '10.0.1.0/24']);
 	});
+	// wireguard.sh joins the list with spaces and makes each space a comma, so wg gets two prefixes
+	// from such an entry, and one entry from two prefixes that a tab separates.
+	t.it('gives the entries that wg gets from a list entry of two prefixes, or from a tab', () => {
+		t.assert_deep_equal(wg.to_peer({ allowed_ips: [ '10.0.0.2/32 10.0.1.0/24' ] }).allowed_ips,
+		                    ['10.0.0.2/32', '10.0.1.0/24']);
+		t.assert_deep_equal(wg.to_peer({ allowed_ips: '10.0.0.2/32\t10.0.1.0/24' }).allowed_ips,
+		                    ['10.0.0.2/32\t10.0.1.0/24']);
+	});
 	t.it('reads the port and the keepalive as numbers, so nothing else reaches the command', () => {
 		let p = wg.to_peer({ public_key: PK, allowed_ips: ['10.0.0.2/32'], endpoint_port: ' 51820',
 		                     persistent_keepalive: ' 25 ' });
@@ -447,6 +455,16 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
 		                    [ 'wg|set|wg1|peer|' + PK + '|allowed-ips|10.0.0.2/32|preshared-key|/dev/null',
 		                      set_of(PK2, '10.0.0.3/32') + '|endpoint|192.0.2.1:51820' ]);
+	});
+
+	// ifup gives wg both prefixes of such an entry, and routes both, so the restore does too.
+	t.it('sets and routes both prefixes of a list entry that holds two', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: [ '10.0.0.2/32 10.0.1.0/24' ], route_allowed_ips: '1' }) } });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0), [ set_of(PK, '10.0.0.2/32,10.0.1.0/24') ]);
+		for (let pfx in [ '10.0.0.2/32', '10.0.1.0/24' ])
+			t.assert_equal(length(filter(r.commands, (l) => match(l, /^ip\|.*route/) && index(l, '|' + pfx + '|') >= 0)), 1, pfx);
 	});
 
 	// wireguard.sh writes no [Peer] for a section without a key, and no AllowedIPs line for a peer

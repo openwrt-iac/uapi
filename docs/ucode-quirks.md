@@ -156,10 +156,21 @@ netifd's is the strict one:
 | fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default | `normalize_bool` |
 | shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default | `shell_bool` |
 | raw compare, `[ "$x" != "1" ]` | `1` | everything else | there is no else | `strict_bool` |
+| numeric test, `[ "$x" -gt 0 ]` | a number above 0, whitespace around it included | `0`, a number below it, and any word, `true` included | there is no else | see below |
 | libvalidate `:bool:` via `uci_validate_section` | unverified | unverified | section **dropped**, see below | `normalize_bool` |
 
 So `option auto 'no'` on an interface does not disable autostart: netifd drops
 the value and uses its own `true`.
+
+When two daemons read one option with different rows, read true only for a value
+that both take as true. `dhcp/odhcpd.maindhcp` goes to odhcpd through the blob
+converter and to dnsmasq.init through `[ "$x" -gt 0 ]`, so only `1` reads true,
+with `strict_bool`. odhcpd serves DHCPv4 for `true` while dnsmasq does too, and
+dnsmasq stops for `2`. odhcpd then keeps the value that it had, because the
+converter drops `2` and a reload does not reset `main_dhcpv4`, so it serves only
+if it did before. A write that sends the field stores `1` or `0` even when the
+read already gives that value (`rewrite_when_named` of the module), so that both
+daemons agree.
 
 **Pick the row, do not pick a default.** This table previously said "`platform_bool`
 for netifd-owned fields and `normalize_bool` for the rest", and that "the rest"
@@ -206,19 +217,34 @@ config, where `atoi()` reads NaN as 0. `ucode_int` reads `reassociation_deadline
 wrong for netifd. `netifd_int` reads `""` and a value past int32 as null, where
 blob.c gives 0 and a truncated number that differs between 32- and 64-bit targets.
 A proto script that loops `for a in ${addresses}` splits a scalar the same way as
-an ARRAY option. A shell reader that goes through `config_get`, as `wireguard.sh`
-does for a peer's `allowed_ips`, also joins a list with spaces, so it splits a
-list entry that holds several words, where `as_word_list_or_null` keeps that
-entry whole and validation then refuses it. `config_get_words` reads such a value
-as the shell gets it, split at a newline too, and `lldpd/config.interface` and
-`dhcp/hosts.macs` use it, where LuCI's `L.toArray` keeps the entry whole. A
-peer's `allowed_ips` still reads with `as_word_list_or_null`. `config_get_bool`
-gets a list joined the same way, so `list disabled '1'` disables a wireguard
-peer: read such a value with `config_get` before `shell_bool`.
+an ARRAY option. A shell reader that goes through `config_get` also joins a list
+with spaces, so it splits a list entry that holds several words, where
+`as_word_list_or_null` keeps that entry whole. `config_get_words` reads such a
+value as the shell gets it, split at a tab and a newline too, and
+`lldpd/config.interface`, `dhcp/hosts.macs` and `dhcp/hosts.tag` use it, where
+LuCI's `L.toArray` keeps the entry whole. `config_get` leaves out an empty list
+entry, as `append` adds nothing for it. `wireguard.sh` does not split a peer's
+`allowed_ips` for wg: it turns each space into a comma, and wg cuts the line at
+`#` and strips the rest of the whitespace, so a tab joins two prefixes into one
+entry, and a second space adds an empty one, which wg refuses. `wg_allowed_ips`
+reads it that way, and does not expand the escapes of printf %b. The routes of
+`route_allowed_ips` go to each word of the shell's split, so the route side reads
+with `config_get_words`. `config_get_bool` gets a list joined the same way, so
+`list disabled '1'` disables a wireguard peer: read such a value with `config_get`
+before `shell_bool`. `config_list_foreach` is the opposite case: it walks the
+entries of a list and skips an option, so `dhcp/hosts.match_tag` and the `server`
+and `address` of `dhcp/dnsmasq` read an option as null.
 
 The reverse also holds: blob.c drops a `list` given to an attribute that is not an ARRAY, so
 6rd, map and 464xlat, which declare `ip6prefix` as a string, lose a listed value. That is why
 uapi writes one `ip6prefix` as a scalar and only several as a list.
+
+blob.c splits an option at spaces and tabs only, and passes a list entry whole, a
+newline included. An option without a word, such as one of spaces, is an empty
+ARRAY, which is not the same as no option. odhcpd sets no RA flag for an empty
+`ra_flags`, `other-config` for an absent one, and stops at the first word that is
+no flag name, keeping the flags before it, so `dhcp/servers` reads the flags that
+it sets, and `["none"]` when there are none.
 
 busybox `ip` reports an id above 255 in `/etc/iproute2/rt_tables` as "database
 tables is corrupted", and `ip route show table 4255` answers "invalid argument",

@@ -267,7 +267,8 @@ const CASES = [
 		section: { noresolv: '1', rebind_protection: '0', expandhosts: '1', domainneeded: '0', boguspriv: '0', filterwin2k: '1', authoritative: '0', readethers: '0', nonwildcard: '0', '.type': 'dnsmasq', domain: 'lan', local: '/lan/', leasefile: '/tmp/dhcp.leases' },
 	},
 	{
-		file: "dhcp.odhcpd.uc", id: "odh", pkg: "dhcp",
+		// dnsmasq.init reads maindhcp only from the section named odhcpd.
+		file: "dhcp.odhcpd.uc", id: "odhcpd", pkg: "dhcp",
 		singleton: true,
 		section: { '.type': 'odhcpd', maindhcp: '1', leasefile: '/tmp/hosts/odhcpd' },
 	},

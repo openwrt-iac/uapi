@@ -100,6 +100,32 @@ t.describe('dhcp.dnsmasq.fromUci', () => {
 	});
 });
 
+// dnsmasq.init passes server and address with config_list_foreach, which reads only the entries of
+// a list, so dnsmasq gets nothing from an option.
+t.describe('dhcp.dnsmasq server and address', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make_singleton(dnsmasq, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let stored = (opts) => ubus.stub({ uci: { dhcp: { main: { '.type': 'dnsmasq', '.anonymous': false, ...opts } } } });
+	let two = (o) => [ o.server, o.address ];
+
+	t.it('reads an option as null and a list as its entries', () => {
+		t.assert_deep_equal(two(h.get(stored({ server: '192.0.2.53', address: '/x.lan/192.0.2.1' }), ctx).body), [ null, null ]);
+		t.assert_deep_equal(two(h.get(stored({ server: [ '192.0.2.53' ], address: [ '/x.lan/192.0.2.1' ] }), ctx).body),
+		                    [ [ '192.0.2.53' ], [ '/x.lan/192.0.2.1' ] ]);
+	});
+
+	t.it('a PATCH of the read keeps the option, and a PATCH of a list stores the list in its place', () => {
+		let c = stored({ server: '192.0.2.53', address: '/x.lan/192.0.2.1' });
+		let body = h.get(c, ctx).body;
+		for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+		t.assert_equal(h.patch(c, ctx, body).status, 200);
+		t.assert_deep_equal(two(c._state.uci.dhcp.main), [ '192.0.2.53', '/x.lan/192.0.2.1' ]);
+		t.assert_equal(h.patch(c, ctx, { server: [ '192.0.2.54' ] }).status, 200);
+		t.assert_deep_equal(c._state.uci.dhcp.main.server, [ '192.0.2.54' ]);
+	});
+});
+
 t.describe('dhcp.dnsmasq.validate', () => {
 	t.it('rejects port out of range', () => {
 		let errs = full_validate(dnsmasq, { port: 99999 }, null);
@@ -126,6 +152,35 @@ t.describe('dhcp.odhcpd contract', () => {
 		let errs = full_validate(odhcpd, { loglevel: 10 }, null);
 		let le = filter(errs, function(e) { return e.field == "loglevel"; });
 		t.assert_equal(le[0].code, "out_of_range");
+	});
+
+	// odhcpd takes 1 and true, and dnsmasq.init a number above 0 in the section named odhcpd.
+	t.it('reads maindhcp true only for a 1 in the section named odhcpd, which both daemons take', () => {
+		let read = (v, name) => odhcpd.fromUci({ '.name': name ?? 'odhcpd', '.type': 'odhcpd', maindhcp: v }).maindhcp;
+		t.assert_true(read('1'));
+		for (let v in [ null, '0', 'true', 'yes', 'on', 'enabled', '2', '01', ' 1', [ '1' ] ])
+			t.assert_false(read(v), sprintf("%J", v));
+		t.assert_false(read('1', 'cfg01'));
+	});
+
+	// odhcpd keeps main_dhcpv4 across a reload when the option is absent or holds a value that its
+	// converter drops, so a write that names the field stores 1 or 0, also when the read gives it.
+	t.it('a PATCH that names maindhcp stores 1 or 0 over any other value, and one that does not keeps it', () => {
+		let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+		let h = handler.make_singleton(odhcpd, { tx });
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let stored = (v) => ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', '.anonymous': false, leasefile: '/tmp/x',
+		                                                         ...((v != null) ? { maindhcp: v } : {}) } } } });
+		for (let c in [ [ 'true', false, '0' ], [ 'yes', false, '0' ], [ null, false, '0' ], [ '2', true, '1' ], [ '0', false, '0' ] ]) {
+			let conn = stored(c[0]);
+			t.assert_equal(h.patch(conn, ctx, { maindhcp: c[1] }).status, 200, sprintf("%J", c));
+			t.assert_equal(conn._state.uci.dhcp.odhcpd.maindhcp, c[2], sprintf("%J", c));
+		}
+		let conn = stored('true');
+		t.assert_equal(h.patch(conn, ctx, { leasefile: '/tmp/y' }).status, 200);
+		t.assert_equal(conn._state.uci.dhcp.odhcpd.maindhcp, 'true');
+		t.assert_equal(h.patch(conn, ctx, { maindhcp: null }).status, 200);
+		t.assert_false(exists(conn._state.uci.dhcp.odhcpd, 'maindhcp'));
 	});
 
 	// dnsmasq.init reads maindhcp, so a PATCH of it that reloaded odhcpd alone left both daemons
@@ -276,6 +331,23 @@ t.describe('dhcp.servers dhcpv4, ra_flags and ra_slaac', () => {
 	t.it('reads an ra_flags option as its words', () => {
 		t.assert_deep_equal(h.get_one(stored({ ra_flags: 'managed-config other-config' }), ctx, 'lan').body.ra_flags,
 		                    [ 'managed-config', 'other-config' ]);
+	});
+
+	// uci's blob converter gives odhcpd the words of an option split at spaces and tabs, or each
+	// list entry whole, and odhcpd stops at the first word that is no flag. Read as null or as the
+	// raw words, a PUT of the read removed the option or stored flags that odhcpd did not set.
+	t.it('reads the ra_flags that odhcpd sets, and a PUT of the read stores them', () => {
+		for (let v in [ [ '  ', [ 'none' ] ], [ '\t', [ 'none' ] ], [ [ '  ' ], [ 'none' ] ], [ 'managed-config\n', [ 'none' ] ],
+		                [ 'managed-config other-config\n', [ 'managed-config' ] ], [ [ 'none', 'other-config' ], [ 'other-config' ] ] ]) {
+			let c = stored({ ra_flags: v[0] });
+			let body = h.get_one(c, ctx, 'lan').body;
+			t.assert_deep_equal(body.ra_flags, v[1], sprintf("%J", v[0]));
+			t.assert_equal(h.patch(c, ctx, 'lan', { leasetime: '24h' }).status, 200);
+			t.assert_deep_equal(c._state.uci.dhcp.lan.ra_flags, v[0]);
+			for (let k in [ 'id', 'managed', 'runtime' ]) delete body[k];
+			t.assert_equal(h.replace(c, ctx, 'lan', body).status, 200);
+			t.assert_deep_equal(c._state.uci.dhcp.lan.ra_flags, v[1]);
+		}
 	});
 
 	t.it('stores none, and removes ra_flags for []', () => {

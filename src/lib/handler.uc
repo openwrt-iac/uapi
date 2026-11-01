@@ -570,7 +570,15 @@ function default_footprint(resource, existing, old_opts, new_opts) {
 	return resource.toUci(resource.fromUci(post, null));
 }
 
-function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
+// A field of `rewrite_when_named` carries the name of its uci option.
+function named_rewrites(resource, delta) {
+	let out = {};
+	for (let k in resource.rewrite_when_named ?? [])
+		if (type(delta) == "object" && exists(delta, k)) out[k] = true;
+	return out;
+}
+
+function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults, named) {
 	let wrote = false;
 	for (let k in old_opts) {
 		if (substr(k, 0, 1) == ".") continue;
@@ -611,7 +619,9 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		let unchanged = exists(old_opts, k) && sprintf("%J", old_opts[k]) == sprintf("%J", nv);
 		let is_default = (defaults != null) && exists(defaults, k)
 		                 && sprintf("%J", defaults[k]) == sprintf("%J", nv);
-		if (!clearing && unchanged && (exists(existing, k) || is_default))
+		// An option of rewrite_when_named is written when the request names it, because the read
+		// gives one value for spellings that two daemons read differently.
+		if (!clearing && unchanged && (exists(existing, k) || is_default) && !named[k])
 			continue;
 		c.uci_set(p, id, k, new_opts[k]);
 		wrote = true;
@@ -951,7 +961,8 @@ function make(resource, opts) {
 				let new_opts = resource.toUci(r.merged);
 				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				let wrote = diff_apply_patch(c, p, id, existing, old_opts, new_opts,
-				                             default_footprint(resource, existing, old_opts, new_opts));
+				                             default_footprint(resource, existing, old_opts, new_opts),
+				                             named_rewrites(resource, r.delta));
 				let out = resource.fromUci(load_section(c, p, id), conn);
 				// The ops come from new_opts, which a PATCH builds whether it wrote or not, and a peer
 				// without an endpoint is removed and set again, which resets its session.
@@ -1179,7 +1190,8 @@ function make_singleton(resource, opts) {
 				let new_opts = resource.toUci(r.merged);
 				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
-				                 default_footprint(resource, existing, old_opts, new_opts));
+				                 default_footprint(resource, existing, old_opts, new_opts),
+				                 named_rewrites(resource, r.delta));
 				return { ok: true, body: resource.fromUci(load_section(c, p, id), conn) };
 			},
 		}));

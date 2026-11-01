@@ -121,6 +121,50 @@ All notable changes to this project will be documented in this file. Format foll
   Patch of such a peer still answers 422 on `public_key`, because its schema check reads the
   patched document, which holds the stored key, and a merge-patch PATCH does not. No request or
   response schema changes. (#289)
+- **`network/wireguard_peers.allowed_ips` reads the entries as wg splits them.** wireguard.sh joins
+  a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line
+  at `#` and refuses an empty entry. So two prefixes that a tab separates are one entry, and a space
+  at either end or next to another adds an empty entry, and wg refuses the config for either, so the
+  interface does not come up. Such an option read as clean entries, so a PUT of the read stored a
+  list that wg takes. It now reads as wg splits it, a list entry of two prefixes reads as two
+  entries, and text after `#` is left out. A backslash escape, which wireguard.sh expands, is not
+  modelled. Under the tightening carve-out in `docs/versioning.md`, three writes that passed now
+  answer 422 for such an option: a write that leaves the peer enabled, a write of
+  `network/interfaces` that switches its interface to wireguard or enables it, and a PUT of the read
+  of a disabled peer. The first two left wg refusing the interface, and a PUT of the read stored
+  entries that wg takes in place of ones that it refuses, without being asked. A write that leaves a
+  peer disabled checks only the allowed IPs that it sends, so a peer that stores any allowed IP that
+  wg cannot parse can now be disabled. The routes of `route_allowed_ips` are read from each word of
+  the option, split at tabs and newlines too, as wireguard.sh installs them, and the restore gives
+  wg the entries as it splits them, so a list entry of two prefixes keeps both routes and both
+  allowed IPs. (#290)
+- **`dhcp/hosts.tag` reads a list entry as the tags that dnsmasq.init sets.** dnsmasq.init joins the
+  list with spaces and splits the words, so `list tag 'guest iot'` sets two tags, which read as one
+  entry. An entry with a tab or a newline is split too, where before it made every write of the host
+  answer 422. (#290)
+- **`dhcp/dnsmasq.server` and `address` read an option as null.** dnsmasq.init passes them with
+  `config_list_foreach`, which skips an option, so dnsmasq ignores an `option server`, which read as
+  a list of one entry. A PATCH keeps such an option, and a write of a list stores the list in its
+  place. (#290)
+- **`dhcp/hosts.macs` takes `*` for a whole octet**, as dnsmasq does ("Ethernet addresses (but not
+  client-ids) may have wildcard bytes", in its man page) and as the host form of LuCI does. Such a
+  MAC answered 422. odhcpd cannot parse it and skips the whole host, as it does for one that LuCI
+  stores, and the description says so. (#290)
+- **`dhcp/odhcpd.maindhcp` reads true only for `1`, and a write that sends it stores `1` or `0`.**
+  It read `yes` and `on` as true. dnsmasq.init stops serving DHCPv4 for a number above 0 in the
+  section named `odhcpd`, and odhcpd takes `1` and `true` and keeps the value that it has for any
+  other value or no option, because a reload does not reset it. So `yes` read true while dnsmasq
+  kept serving, and `true` now reads false while odhcpd serves DHCPv4 and dnsmasq does too. A PATCH
+  that sent the value that the read gave wrote nothing, so a PATCH of true kept `yes` and one of
+  false kept `2`. A PATCH that sends the field now stores `1` or `0` even when the read already
+  gives that value, so that both daemons agree. null still removes the option, and odhcpd then keeps
+  its value until it restarts. The description says what each daemon and LuCI do. (#290)
+- **`dhcp/servers.ra_flags` reads the flags that odhcpd sets.** uci's blob converter gives odhcpd
+  the words of an option split at spaces and tabs, or each list entry whole, and odhcpd stops at the
+  first word that is no flag name and keeps the flags before it. An option of spaces read null,
+  which the description gives as `other-config`, so a PUT of the read removed it and turned the O
+  flag on, and a word that ends in a newline read as a flag that odhcpd does not set. It now reads
+  `["none"]` when odhcpd sets no flag. (#290)
 
 ## [3.2.0] - 2026-10-29
 
