@@ -28956,7 +28956,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 32766
+						"maximum": 32766,
+						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same."
 					},
 					"lookup": {
 						"type": [
@@ -29000,6 +29001,54 @@
 						],
 						"description": "Match fwmark (value or value/mask)"
 					},
+					"suppress_prefixlength": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": -2147483648,
+						"maximum": 2147483647,
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and a write may send it back unchanged."
+					},
+					"tos": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": -2147483648,
+						"maximum": 2147483647,
+						"description": "Match this TOS value. A write takes 0, 4, 8, 12, 16, 20, 24 or 28: netifd drops a rule whose tos is above 255, and the kernel refuses an IPv4 rule whose tos sets a bit outside 0x1c, so the rule is not installed. 0 matches every packet. A read reports what netifd reads, as for `suppress_prefixlength`, so the 10 that LuCI suggests reads 10."
+					},
+					"uidrange": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write may send back unchanged a form that it refuses, such as `1000-1005x`, which netifd reads as 1000-1005."
+					},
+					"ipproto": {
+						"type": [
+							"integer",
+							"string",
+							"null"
+						],
+						"minimum": 0,
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write may send one back unchanged."
+					},
+					"sport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match this source port, or a range of ports such as `1000-2000`, each from 1 to 65534. The kernel refuses a range that holds 0 or 65535 or runs backwards, as the `0-65535` that LuCI suggests does, and netifd wraps a larger number. A read reports the stored text, as for `uidrange`."
+					},
+					"dport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match this destination port, or a range of ports such as `1000-2000`, each from 1 to 65534. The kernel refuses a range that holds 0 or 65535 or runs backwards, as the `0-65535` that LuCI suggests does, and netifd wraps a larger number. A read reports the stored text, as for `uidrange`."
+					},
 					"disabled": {
 						"type": "boolean",
 						"default": false,
@@ -29011,35 +29060,6 @@
 					}
 				},
 				"allOf": [
-					{
-						"anyOf": [
-							{
-								"required": [
-									"in"
-								]
-							},
-							{
-								"required": [
-									"out"
-								]
-							},
-							{
-								"required": [
-									"src"
-								]
-							},
-							{
-								"required": [
-									"dest"
-								]
-							},
-							{
-								"required": [
-									"mark"
-								]
-							}
-						]
-					},
 					{
 						"if": {
 							"properties": {
@@ -29119,7 +29139,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 32766
+						"maximum": 32766,
+						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same."
 					},
 					"lookup": {
 						"type": [
@@ -29163,6 +29184,69 @@
 						],
 						"description": "Match fwmark (value or value/mask)"
 					},
+					"suppress_prefixlength": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 32,
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and a write may send it back unchanged."
+					},
+					"tos": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": -2147483648,
+						"maximum": 2147483647,
+						"description": "Match this TOS value. A write takes 0, 4, 8, 12, 16, 20, 24 or 28: netifd drops a rule whose tos is above 255, and the kernel refuses an IPv4 rule whose tos sets a bit outside 0x1c, so the rule is not installed. 0 matches every packet. A read reports what netifd reads, as for `suppress_prefixlength`, so the 10 that LuCI suggests reads 10.",
+						"enum": [
+							null,
+							0,
+							4,
+							8,
+							12,
+							16,
+							20,
+							24,
+							28
+						]
+					},
+					"uidrange": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write may send back unchanged a form that it refuses, such as `1000-1005x`, which netifd reads as 1000-1005.",
+						"pattern": "^[0-9]{1,10}(-[0-9]{1,10})?$"
+					},
+					"ipproto": {
+						"type": [
+							"integer",
+							"string",
+							"null"
+						],
+						"minimum": 1,
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write may send one back unchanged.",
+						"maximum": 255
+					},
+					"sport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match this source port, or a range of ports such as `1000-2000`, each from 1 to 65534. The kernel refuses a range that holds 0 or 65535 or runs backwards, as the `0-65535` that LuCI suggests does, and netifd wraps a larger number. A read reports the stored text, as for `uidrange`.",
+						"pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$"
+					},
+					"dport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Match this destination port, or a range of ports such as `1000-2000`, each from 1 to 65534. The kernel refuses a range that holds 0 or 65535 or runs backwards, as the `0-65535` that LuCI suggests does, and netifd wraps a larger number. A read reports the stored text, as for `uidrange`.",
+						"pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$"
+					},
 					"disabled": {
 						"type": "boolean",
 						"default": false,
@@ -29170,35 +29254,6 @@
 					}
 				},
 				"allOf": [
-					{
-						"anyOf": [
-							{
-								"required": [
-									"in"
-								]
-							},
-							{
-								"required": [
-									"out"
-								]
-							},
-							{
-								"required": [
-									"src"
-								]
-							},
-							{
-								"required": [
-									"dest"
-								]
-							},
-							{
-								"required": [
-									"mark"
-								]
-							}
-						]
-					},
 					{
 						"if": {
 							"properties": {
@@ -29317,6 +29372,63 @@
 							"string",
 							"null"
 						]
+					},
+					"suppress_prefixlength": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0,
+						"maximum": 32
+					},
+					"tos": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": -2147483648,
+						"maximum": 2147483647,
+						"enum": [
+							null,
+							0,
+							4,
+							8,
+							12,
+							16,
+							20,
+							24,
+							28
+						]
+					},
+					"uidrange": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9]{1,10}(-[0-9]{1,10})?$"
+					},
+					"ipproto": {
+						"type": [
+							"integer",
+							"string",
+							"null"
+						],
+						"minimum": 1,
+						"maximum": 255
+					},
+					"sport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$"
+					},
+					"dport": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$"
 					},
 					"disabled": {
 						"type": [

@@ -36,12 +36,6 @@ status=$(echo "$rule" | tail -1)
 [ "$status" = "200" ] || fail "rules POST expected 200, got $status"
 plid=$(echo "$rule" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 
-echo "--- network/rules: missing selector rejected ---"
-bad_rule=$(call -X POST -H 'Content-Type: application/json' "$URL/network/rules" -d '{
-	"lookup": 42
-}')
-echo "$bad_rule" | tail -1 | grep -q '^422$' || fail "no-selector rule expected 422"
-
 echo "--- network/rules: DELETE ---"
 call -X DELETE "$URL/network/rules/$plid" | tail -1 | grep -q '^204$' || fail "DELETE rules expected 204"
 

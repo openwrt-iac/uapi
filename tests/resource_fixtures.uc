@@ -153,8 +153,10 @@ const CASES = [
 	},
 	{
 		file: "network.rules.uc", id: "nr1", pkg: "network",
+		modify: { key: "dport", value: "8443" },
 		section: { action: 'unreachable', invert: '1', '.type': 'rule', src: '10.0.0.0/8', lookup: '42', priority: '100',
-		           disabled: '1' },
+		           suppress_prefixlength: '0', tos: '16', uidrange: '1000-1005', ipproto: '6', sport: '1000-2000',
+		           dport: '443', disabled: '1' },
 	},
 	{
 		file: "network.bridge_vlans.uc", id: "bv1", pkg: "network",
@@ -188,6 +190,13 @@ const CASES = [
 		// Without a priority, any goto from 1 up passes validate(), which the request bound needs.
 		file: "network.rules.uc", id: "nr4", pkg: "network",
 		section: { invert: '1', '.type': 'rule', src: '10.3.0.0/16', 'goto': '7', disabled: '1' },
+	},
+	{
+		// What LuCI or a hand edit stores and a write refuses: forms that netifd installs, and the tos 10
+		// and ports 0-65535 that the kernel refuses.
+		file: "network.rules.uc", id: "nr5", pkg: "network",
+		section: { invert: '1', '.type': 'rule', src: '10.4.0.0/16', lookup: '43', suppress_prefixlength: '64',
+		           tos: '10', uidrange: '1000-1005x', ipproto: 'tcp', sport: '0-65535', dport: '80 ', disabled: '1' },
 	},
 	{
 		file: "network.devices.uc", id: "dev2", pkg: "network",
