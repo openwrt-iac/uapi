@@ -57,7 +57,7 @@ return {
     singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
     unique_field: "name",              // optional. Value of this field must be unique among same-type sections in this package. See "Cross-section reference fields" below.
     rewrite_when_named: ["<option>"], // optional. Options that a PATCH writes whenever the request names their field, which must carry the option's name, even when uci holds another spelling of the value that the read gives. For an option that two daemons read differently, such as `maindhcp` of dhcp/odhcpd, so that a write makes them agree.
-    reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as odhcpd reads dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd lists the service, and skipped without a 503 otherwise. A POST /batch reloads and lists its services sorted.
+    reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as dnsmasq, odhcpd and unbound read dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd lists the service, and skipped without a 503 otherwise. A resource whose every daemon is such a daemon lists them all here and declares no `reload`. A POST /batch reloads and lists its services sorted.
 };
 ```
 

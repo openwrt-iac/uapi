@@ -123,8 +123,12 @@ function with_reload(result, reload_info) {
 	body.reload_services = result.reload_services;
 	if (!reload_info.known)
 		body.reload_note = "no reload service is known for this package; configuration is on disk but no daemon was notified";
-	else if (!body.reloaded)
+	else if (result.unchanged)
 		body.reload_note = "the write changed nothing, so no daemon was reloaded";
+	else if (!body.reloaded)
+		body.reload_note = "no daemon that reads this package runs, so none was reloaded";
+	else if (result.unverified != null)
+		body.reload_note = result.unverified;
 	return result;
 }
 

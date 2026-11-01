@@ -19,6 +19,7 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 SAVED=/tmp/uapi_odhcpd_loglevel
 cleanup() {
 	$SSH "uci -q delete dhcp.tdhcp6
+	      case \"\$(uci -q get system.@system[0].notes)\" in uapi-t58*) uci delete system.@system[0].notes; uci commit system;; esac
 	      if [ -f $SAVED ]; then
 	          v=\$(cat $SAVED)
 	          if [ -n \"\$v\" ]; then uci set dhcp.odhcpd.loglevel=\"\$v\"; else uci -q delete dhcp.odhcpd.loglevel; fi
@@ -26,7 +27,7 @@ cleanup() {
 	      fi
 	      uci commit dhcp
 	      uci -q delete network.tdhcp6; uci -q delete network.br_tdhcp6; uci commit network
-	      ubus call network reload; /etc/init.d/dnsmasq reload; /etc/init.d/odhcpd reload" >/dev/null 2>&1 || true
+	      ubus call network reload; /etc/init.d/dnsmasq start; /etc/init.d/odhcpd reload" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
@@ -34,6 +35,10 @@ $SSH "test -x /etc/init.d/odhcpd && ubus call service list '{\"name\":\"odhcpd\"
 	|| fail "odhcpd does not run on the test box, so this case proves nothing"
 $SSH 'uci -q get dhcp.odhcpd >/dev/null' || fail "the test box has no config odhcpd section"
 cleanup
+# A dhcp or system write reloads unbound too while procd runs it, which a box with the openwrt-iac
+# feed may have from test 40.
+UNB="" UNBJ=""
+if $SSH "ubus call service list '{\"name\":\"unbound\"}'" | grep -q '"unbound"'; then UNB=",unbound" UNBJ=',"unbound"'; fi
 
 # A reload makes odhcpd log for a while, and a line of the last reload after a new mark would be
 # read as one of the next write.
@@ -109,7 +114,7 @@ services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
 rm -f "$hdrs"
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH of ra expected 200: $r"
 await_ndp "the PATCH" "$services"
-[ "$services" = "X-Reload-Services: dnsmasq,odhcpd" ] || fail "expected the PATCH to name dnsmasq and odhcpd: $services"
+[ "$services" = "X-Reload-Services: dnsmasq,odhcpd$UNB" ] || fail "expected the PATCH to name dnsmasq and odhcpd: $services"
 [ "$($SSH 'uci -q get dhcp.tdhcp6.ra')" = "server" ] || fail "uci does not hold ra=server"
 
 echo "--- a raw PATCH of ra reloads odhcpd, and its body names it ---"
@@ -118,7 +123,7 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/raw/dhcp/tdhcp6" -d 
 body=$(echo "$r" | sed '$d')
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "raw PATCH of ra expected 200: $r"
 await_ndp "the raw PATCH" "$(echo "$body" | jq -c '.reload_services')"
-echo "$body" | jq -e '.reload_services == ["dnsmasq","odhcpd"]' >/dev/null \
+[ "$(echo "$body" | jq -c '.reload_services')" = "[\"dnsmasq\",\"odhcpd\"$UNBJ]" ] \
 	|| fail "expected the raw PATCH to name dnsmasq and odhcpd: $body"
 [ "$($SSH 'uci -q get dhcp.tdhcp6.ra')" = "disabled" ] || fail "uci does not hold ra=disabled"
 
@@ -131,8 +136,46 @@ services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
 rm -f "$hdrs"
 [ "$status" = "207" ] || fail "batch expected 207, got $status"
 await_ndp "the batch" "$services"
-[ "$services" = "X-Reload-Services: dnsmasq,odhcpd" ] || fail "expected the batch to name dnsmasq and odhcpd: $services"
+[ "$services" = "X-Reload-Services: dnsmasq,odhcpd$UNB" ] || fail "expected the batch to name dnsmasq and odhcpd: $services"
 [ "$($SSH 'uci -q get dhcp.tdhcp6.ra')" = "server" ] || fail "uci does not hold ra=server"
 [ "$($SSH 'uci -q get dhcp.tdhcp6.ndp')" = "uapi-no-such-mode" ] || fail "a write of ra changed ndp"
 
-echo "dhcp/servers, raw dhcp and /batch writes reload odhcpd ok."
+# odhcpd reads the timezone of the system section, and its procd trigger on system does not fire
+# for a commit through libuci either.
+patch_system() {
+	hdrs=$(mktemp)
+	r=$(curl -sS -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
+		"$URL/system" -d "{\"notes\":\"$1\"}")
+	services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
+	rm -f "$hdrs"
+	[ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH of system expected 200: $r"
+}
+dnsmasq_listed() {
+	$SSH "ubus call service list '{\"name\":\"dnsmasq\"}'" | grep -q '"dnsmasq"'
+}
+
+echo "--- a PATCH of system reloads dnsmasq and odhcpd ---"
+mark system
+patch_system uapi-t58
+await_ndp "the system PATCH" "$services"
+[ "$services" = "X-Reload-Services: system,log,dnsmasq,odhcpd$UNB" ] || fail "expected the system PATCH to name dnsmasq and odhcpd: $services"
+
+echo "--- with dnsmasq stopped, a dhcp or system write reloads odhcpd and leaves dnsmasq stopped ---"
+$SSH '/etc/init.d/dnsmasq stop'
+dnsmasq_listed && fail "procd still lists dnsmasq after its stop, so the case below proves nothing"
+mark stopped
+hdrs=$(mktemp)
+r=$(curl -sS -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
+	"$URL/dhcp/servers/tdhcp6" -d '{"ra":"disabled"}')
+services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
+rm -f "$hdrs"
+[ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH of ra with dnsmasq stopped expected 200: $r"
+await_ndp "the PATCH with dnsmasq stopped" "$services"
+[ "$services" = "X-Reload-Services: odhcpd$UNB" ] || fail "expected the PATCH to name odhcpd alone: $services"
+dnsmasq_listed && fail "the dhcp write started the dnsmasq that was stopped"
+patch_system uapi-t58-2
+[ "$services" = "X-Reload-Services: system,log,odhcpd$UNB" ] || fail "expected the system PATCH to leave out dnsmasq: $services"
+dnsmasq_listed && fail "the system write started the dnsmasq that was stopped"
+$SSH '/etc/init.d/dnsmasq start'
+
+echo "dhcp/servers, raw dhcp, /batch and system writes reload odhcpd, and leave a stopped dnsmasq stopped, ok."

@@ -34,9 +34,9 @@ function validate(json) {
 return {
 	package: "dhcp",
 	type: "odhcpd",
-	reload: ["odhcpd"],
-	// dnsmasq.init reads maindhcp to decide whether dnsmasq serves DHCPv4.
-	reload_if_running: ["dnsmasq"],
+	// dnsmasq.init reads maindhcp to decide whether dnsmasq serves DHCPv4, and the init of unbound
+	// makes the directory of leasefile when it takes records from odhcpd.
+	reload_if_running: ["odhcpd", "dnsmasq", "unbound"],
 	rewrite_when_named: ["maindhcp"],
 	fromUci: fromUci,
 	toUci: toUci,

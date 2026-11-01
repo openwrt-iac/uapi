@@ -4,6 +4,7 @@ let handler = require('handler');
 let servers = loadfile('src/resources/dhcp.servers.uc')();
 let dnsmasq = loadfile('src/resources/dhcp.dnsmasq.uc')();
 let odhcpd = loadfile('src/resources/dhcp.odhcpd.uc')();
+let hosts = loadfile('src/resources/dhcp.hosts.uc')();
 
 function full_validate(r, body, conn) {
 	let out = [];
@@ -16,39 +17,85 @@ t.describe('dhcp.servers contract', () => {
 	t.it('declares package, type, reload', () => {
 		t.assert_equal(servers.package, "dhcp");
 		t.assert_equal(servers.type, "dhcp");
-		t.assert_deep_equal(servers.reload, ["dnsmasq"]);
-		t.assert_deep_equal(servers.reload_if_running, ["odhcpd"]);
+		t.assert_equal(servers.reload, null);
+		t.assert_deep_equal(servers.reload_if_running, ["dnsmasq", "odhcpd", "unbound"]);
 	});
 });
 
-// odhcpd reads ra, dhcpv6 and ra_default, and reloads on its procd trigger only, which a commit
-// through libuci does not fire. A PATCH of ra answered 200 and odhcpd kept its old config.
-t.describe('dhcp.servers reloads odhcpd while procd runs it', () => {
+// procd reloads dnsmasq, odhcpd and unbound on a LuCI save of dhcp only while they run, and a
+// commit through libuci fires none of their triggers. A PATCH of ra answered 200 while odhcpd kept
+// its old config, the reload of dnsmasq.init started a dnsmasq that the operator stopped, and a
+// write on a router without dnsmasq answered 503.
+t.describe('a dhcp write reloads each daemon that reads it while procd runs it', () => {
 	let ctx = { request_id: "01hx0000000000000000000000" };
-	function patch_ra(missing, stopped) {
+	const WRITES = {
+		servers: [ "dnsmasq,odhcpd,unbound", (c, tx) => handler.make(servers, { tx }).patch(c, ctx, 'lan', { ra: 'server' }) ],
+		hosts: [ "dnsmasq,odhcpd,unbound", (c, tx) => handler.make(hosts, { tx }).patch(c, ctx, 'printer', { name: 'printer2' }) ],
+		dnsmasq: [ "dnsmasq,unbound", (c, tx) => handler.make_singleton(dnsmasq, { tx }).patch(c, ctx, { domain: 'home.arpa' }) ],
+		odhcpd: [ "odhcpd,dnsmasq,unbound", (c, tx) => handler.make_singleton(odhcpd, { tx }).patch(c, ctx, { maindhcp: true }) ],
+	};
+	function write(name, missing, stopped, watch) {
 		let ran = [];
-		let tx = { acquire: () => ({}), release: () => null,
+		let tx = { acquire: () => ({}), release: () => null, watch,
 		           reload: (s) => { push(ran, ...s); return null; },
-		           check_services: (s) => (index(s, missing) >= 0) ? "init script not found" : null };
-		let c = ubus.stub({ uci: {
-			dhcp: { lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' } },
-		} });
-		c.set_ubus_response("service", "list", (a) => (a.name == stopped) ? {} : { [a.name]: {} });
-		let r = handler.make(servers, { tx }).patch(c, ctx, 'lan', { ra: 'server' });
-		return { status: r.status, header: r.headers["X-Reload-Services"], ran };
+		           check_services: (s) => (length(filter(s, (svc) => index(missing, svc) >= 0)) > 0)
+		                                  ? "init script not found" : null };
+		let c = ubus.stub({ uci: { dhcp: {
+			lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' },
+			printer: { '.type': 'host', '.anonymous': false, name: 'printer', mac: 'aa:bb:cc:dd:ee:ff', ip: '192.168.1.50' },
+			main: { '.type': 'dnsmasq', '.anonymous': false, domain: 'lan' },
+			odhcpd: { '.type': 'odhcpd', '.anonymous': false, maindhcp: '0' },
+		} } });
+		c.set_ubus_response("service", "list", (stopped == null) ? { _error: "ubus call service.list: Request timed out" }
+		                                       : (a) => (index(stopped, a.name) >= 0) ? {} : { [a.name]: {} });
+		let r = WRITES[name][1](c, tx);
+		return { status: r.status, header: r.headers["X-Reload-Services"], ran: join(",", ran),
+		         reload: r.headers["X-Reload-Status"] };
 	}
+	let without = (list, svc) => join(",", filter(split(list, ","), (s) => s != svc));
 
-	t.it('a PATCH of ra reloads dnsmasq and odhcpd', () => {
-		t.assert_deep_equal(patch_ra(null), { status: 200, header: "dnsmasq,odhcpd", ran: [ "dnsmasq", "odhcpd" ] });
+	t.it('reloads and names each one that procd lists', () => {
+		for (let name, w in WRITES)
+			t.assert_deep_equal(write(name, [], []), { status: 200, header: w[0], ran: w[0], reload: "ok" }, name);
 	});
 
-	t.it('on a router without odhcpd, or with odhcpd stopped, it reloads dnsmasq and answers 200', () => {
-		t.assert_deep_equal(patch_ra("odhcpd"), { status: 200, header: "dnsmasq", ran: [ "dnsmasq" ] });
-		t.assert_deep_equal(patch_ra(null, "odhcpd"), { status: 200, header: "dnsmasq", ran: [ "dnsmasq" ] });
+	t.it('does not reload a stopped dnsmasq, which the reload of dnsmasq.init would start', () => {
+		for (let name, w in WRITES)
+			t.assert_deep_equal(write(name, [], [ "dnsmasq" ]),
+			                    { status: 200, header: without(w[0], "dnsmasq"), ran: without(w[0], "dnsmasq"), reload: "ok" }, name);
 	});
 
-	t.it('on a router without dnsmasq it answers 503, as before', () => {
-		t.assert_deep_equal(patch_ra("dnsmasq"), { status: 503, header: null, ran: [] });
+	t.it('skips a stopped unbound or odhcpd the same way', () => {
+		for (let svc in [ "unbound", "odhcpd" ])
+			for (let name, w in WRITES)
+				t.assert_deep_equal(write(name, [], [ svc ]),
+				                    { status: 200, header: without(w[0], svc), ran: without(w[0], svc), reload: "ok" }, name);
+	});
+
+	t.it('answers 200 on a router without dnsmasq or without odhcpd, where it answered 503', () => {
+		for (let svc in [ "dnsmasq", "odhcpd" ])
+			for (let name, w in WRITES)
+				t.assert_deep_equal(write(name, [ svc ], []),
+				                    { status: 200, header: without(w[0], svc), ran: without(w[0], svc), reload: "ok" }, name);
+	});
+
+	t.it('reloads nothing when none of them runs, and says so', () => {
+		for (let name in WRITES)
+			t.assert_deep_equal(write(name, [], [ "dnsmasq", "odhcpd", "unbound" ]),
+			                    { status: 200, header: null, ran: "", reload: "no_reload" }, name);
+	});
+
+	// A ubus call that fails or times out tells nothing about the daemons, and skipping them answered
+	// 2xx with no_reload while each kept its old config.
+	t.it('reloads each of them when the service list call fails', () => {
+		for (let name, w in WRITES)
+			t.assert_deep_equal(write(name, [], null), { status: 200, header: w[0], ran: w[0], reload: "ok" }, name);
+	});
+
+	t.it('answers unverified when the dnsmasq check does not finish, and keeps the write', () => {
+		let unfinished = () => () => ({ unverified: "dnsmasq --test did not finish on its config main" });
+		for (let name, w in WRITES)
+			t.assert_deep_equal(write(name, [], [], unfinished), { status: 200, header: w[0], ran: w[0], reload: "unverified" }, name);
 	});
 });
 
@@ -82,8 +129,8 @@ t.describe('dhcp.dnsmasq contract', () => {
 	t.it('declares package, type, reload', () => {
 		t.assert_equal(dnsmasq.package, "dhcp");
 		t.assert_equal(dnsmasq.type, "dnsmasq");
-		t.assert_deep_equal(dnsmasq.reload, ["dnsmasq"]);
-		t.assert_equal(dnsmasq.reload_if_running, null);
+		t.assert_equal(dnsmasq.reload, null);
+		t.assert_deep_equal(dnsmasq.reload_if_running, ["dnsmasq", "unbound"]);
 	});
 });
 
@@ -145,8 +192,8 @@ t.describe('dhcp.odhcpd contract', () => {
 	t.it('declares package, type, reload', () => {
 		t.assert_equal(odhcpd.package, "dhcp");
 		t.assert_equal(odhcpd.type, "odhcpd");
-		t.assert_deep_equal(odhcpd.reload, ["odhcpd"]);
-		t.assert_deep_equal(odhcpd.reload_if_running, ["dnsmasq"]);
+		t.assert_equal(odhcpd.reload, null);
+		t.assert_deep_equal(odhcpd.reload_if_running, ["odhcpd", "dnsmasq", "unbound"]);
 	});
 	t.it('rejects loglevel out of range', () => {
 		let errs = full_validate(odhcpd, { loglevel: 10 }, null);
@@ -181,27 +228,6 @@ t.describe('dhcp.odhcpd contract', () => {
 		t.assert_equal(conn._state.uci.dhcp.odhcpd.maindhcp, 'true');
 		t.assert_equal(h.patch(conn, ctx, { maindhcp: null }).status, 200);
 		t.assert_false(exists(conn._state.uci.dhcp.odhcpd, 'maindhcp'));
-	});
-
-	// dnsmasq.init reads maindhcp, so a PATCH of it that reloaded odhcpd alone left both daemons
-	// serving DHCPv4, or neither.
-	t.it('a PATCH of maindhcp reloads dnsmasq too, while procd runs it', () => {
-		let patch = (missing, stopped) => {
-			let ran = [];
-			let tx = { acquire: () => ({}), release: () => null,
-			           reload: (s) => { push(ran, ...s); return null; },
-			           check_services: (s) => (index(s, missing) >= 0) ? "init script not found" : null };
-			let c = ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', '.anonymous': false, maindhcp: '0' } } } });
-			c.set_ubus_response("service", "list", (a) => (a.name == stopped) ? {} : { [a.name]: {} });
-			let r = handler.make_singleton(odhcpd, { tx }).patch(c, { request_id: "01hx0000000000000000000000" },
-			                                                    { maindhcp: true });
-			return { status: r.status, header: r.headers["X-Reload-Services"], ran };
-		};
-		t.assert_deep_equal(patch(null), { status: 200, header: "odhcpd,dnsmasq", ran: [ "odhcpd", "dnsmasq" ] });
-		t.assert_deep_equal(patch("dnsmasq"), { status: 200, header: "odhcpd", ran: [ "odhcpd" ] });
-		// The unbound README's setup with odhcpd stops and disables dnsmasq, and dnsmasq.init's reload
-		// would start it again.
-		t.assert_deep_equal(patch(null, "dnsmasq"), { status: 200, header: "odhcpd", ran: [ "odhcpd" ] });
 	});
 });
 

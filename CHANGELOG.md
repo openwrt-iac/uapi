@@ -44,6 +44,15 @@ All notable changes to this project will be documented in this file. Format foll
   sends `"allowed_ips": null`, which removes the list from uci and, on an up interface, from the
   peer in the kernel. `allowed_ips` leaves the `required` list of the Request schema. It stays
   required in the Response schema, because every read returns it, as null when unset. (#289)
+- **`X-Reload-Status: unverified`** says that every init script of a write exited 0, but that the
+  `dnsmasq --test` check after a dhcp write did not finish. The check is now killed after 10 s, and
+  uapi cannot tell that bound from another `SIGKILL`, such as the OOM killer's. A killed check
+  judges nothing, so the write keeps its commit and answers 2xx with this value. A raw write answers
+  `reloaded: true` and a `reload_note` that says so, and a `POST /batch` that commits `dhcp` answers
+  it in its 207. A client treats the value as a write that landed and whose dnsmasq config uapi did
+  not confirm. A router that takes longer than 10 s to parse its dnsmasq config, such as a slow one
+  with large adblock lists, answers it on every dhcp write. The value is new in the
+  `X-Reload-Status` enum, which is an addition under `docs/versioning.md`. (#291)
 
 ### Changed
 
@@ -165,6 +174,58 @@ All notable changes to this project will be documented in this file. Format foll
   which the description gives as `other-config`, so a PUT of the read removed it and turned the O
   flag on, and a word that ends in a newline read as a flag that odhcpd does not set. It now reads
   `["none"]` when odhcpd sets no flag. (#290)
+- **A write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, `dhcp/odhcpd` or the raw `dhcp` package
+  reloads unbound too, while procd runs it.** unbound reads `interface` and `ignore` of each server
+  section, makes records of the `name` and `ip` of a host when `add_extra_dns` is set, reads
+  `domain` and `port` of the dnsmasq section when it forwards local names to dnsmasq, and makes the
+  directory of the odhcpd `leasefile`. It reloads on its procd trigger on `dhcp`, which a commit
+  through libuci does not fire, so unbound kept its old config after a write that answered 200.
+  unbound.init has no `reload_service`, so its reload starts the daemon, and uapi reloads it only
+  while procd lists the service. `X-Reload-Services` names `unbound` last, and a `POST /batch` lists
+  it sorted. While unbound runs, such a write waits 2 s for it to keep running and takes the lock of
+  the `unbound` package, as a write to `unbound/server` does. Two requests that 3.2.0 accepted can
+  now be refused. A write after which unbound stops within 2 s answers `500 reload_failed_restored`
+  and restores the previous config: this uses the carve-out in `docs/versioning.md` for payloads
+  that produced a state no caller can rely on, here DNS down, and it fails loudly. A write at the
+  same moment as a write to `unbound/server`, `unbound/srv`, `unbound/ext` or `system` that also
+  reloads unbound answers `423 locked`: no payload is refused, the same request succeeds on a retry,
+  which a client already makes for 423, so `docs/versioning.md` counts no breaking change. (#291)
+- **A write to `system` reloads dnsmasq, odhcpd and unbound, and a write to `system/timeservers`
+  reloads dnsmasq, each while procd runs it.** dnsmasq.init reads the hostname and
+  `system.ntp.enabled`, odhcpd reads `timezone` and `zonename`, and unbound reads the hostname.
+  dnsmasq and odhcpd have a procd trigger on `system`, and LuCI's ucitrack has `system` affect
+  `dhcp`, on which unbound has one. uapi reloaded only `system` and `log`, or `sysntpd`, so these
+  daemons kept the old values after a write that answered 200. A raw `system` write reloads the
+  three daemons too. These writes run no `dnsmasq --test` check, so a dnsmasq config that was
+  refused before, or that parses slowly, does not fail or undo a hostname or NTP change. With every
+  daemon running, `X-Reload-Services` reads `system,log,dnsmasq,odhcpd,unbound` and
+  `sysntpd,dnsmasq`. While unbound runs, a `system` write waits the full 2 s for it to keep running
+  and takes the lock of the `unbound` package. So the two refusals of the entry above apply to a
+  `system` write too: `500 reload_failed_restored` when unbound stops after it, under the same
+  carve-out, and `423 locked` at the same moment as a write to `unbound/server`, `unbound/srv`,
+  `unbound/ext` or a dhcp write that reloads unbound, which is no breaking change. (#291)
+- **A dhcp write no longer starts a dnsmasq that the operator stopped, and no longer answers
+  `503 init_script_missing` on a router without dnsmasq or without odhcpd.** `dhcp/servers`,
+  `dhcp/hosts`, `dhcp/dnsmasq` and a raw `dhcp` write reloaded dnsmasq whether it ran or not, and
+  dnsmasq.init implements reload as `start_service`, so the write started a dnsmasq that was
+  stopped, for example to give port 53 to unbound. #280 avoided this only for `dhcp/odhcpd`. LuCI
+  never starts it, because `stop` removes the procd service and its triggers. The same writes
+  answered 503 on an image without dnsmasq, where odhcpd reads these sections, and a `dhcp/odhcpd`
+  write answered 503 on an image without odhcpd. Every dhcp write now reloads dnsmasq, odhcpd and
+  unbound each only while procd runs it, and when the `service list` call fails, since uapi then
+  cannot tell. A write that answered 503 now answers 200. A write when none of the three runs
+  answers `X-Reload-Status: no_reload` without `X-Reload-Services`, where `no_reload` meant until
+  now that the write changed nothing, and a raw write then answers the `reload_note`
+  `no daemon that reads this package runs, so none was reloaded`. A write while dnsmasq is stopped
+  runs no `dnsmasq --test` check. (#291)
+- **The `dnsmasq --test` check after a dhcp write is killed after 10 s.** It ran through a pipe with
+  no time bound, so a config that dnsmasq could not finish reading, such as a `conf-file` on a mount
+  that hangs, held the locks of the write until uhttpd killed the request at its 60 s script
+  timeout. The client got no answer, and uci kept the new config without a restore. A killed check
+  now judges nothing: the write keeps its commit and answers `X-Reload-Status: unverified`, see
+  Added. The parse of a `conf-dir` with 500k adblock lines took 0.6 s on x86. `--test` now reads its
+  stdin from `/dev/null`, as procd gives dnsmasq. The reload of an init script still has no time
+  bound of its own. (#291)
 
 ## [3.2.0] - 2026-10-29
 

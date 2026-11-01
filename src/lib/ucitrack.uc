@@ -4,12 +4,14 @@ const FALLBACK = {
 	network: ["network"],
 	wireless: ["network"],
 	firewall: ["firewall"],
-	dhcp: ["dnsmasq"],
+	dhcp: [],
+	system: ["system"],
 };
-// LuCI's /usr/share/ucitrack/luci-mod-network-dnsmasq.json has dhcp affect odhcpd, which an image
-// can lack and an operator can stop.
+// The daemons with a procd trigger on the package, or on dhcp, which LuCI's ucitrack has system
+// affect. An image can lack each of them and an operator can stop it.
 const FALLBACK_IF_RUNNING = {
-	dhcp: ["odhcpd"],
+	dhcp: ["dnsmasq", "odhcpd", "unbound"],
+	system: ["dnsmasq", "odhcpd", "unbound"],
 };
 
 function default_init_exists(pkg) {

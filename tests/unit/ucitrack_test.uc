@@ -70,16 +70,17 @@ t.describe('ucitrack.reload_services, fallback table', () => {
 		t.assert_deep_equal(r.services, ['network']);
 	});
 
-	t.it('maps dhcp to dnsmasq via fallback', () => {
-		let c = ubus.stub();
-		let r = ucitrack.reload_services(c, 'dhcp');
-		t.assert_deep_equal(r.services, ['dnsmasq']);
+	// procd reloads them on a LuCI save only while they run, and dnsmasq.init and unbound.init start
+	// a stopped daemon on reload. Their triggers do not fire for a commit through libuci.
+	t.it('reloads dnsmasq, odhcpd and unbound for dhcp only while procd runs them', () => {
+		let r = ucitrack.reload_services(ubus.stub(), 'dhcp');
+		t.assert_deep_equal([ r.known, r.services, r.if_running ], [ true, [], ['dnsmasq', 'odhcpd', 'unbound'] ]);
+		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'network').if_running, []);
 	});
 
-	// As LuCI's ucitrack does. odhcpd's procd trigger does not fire for a commit through libuci.
-	t.it('reloads odhcpd for dhcp too, while procd runs it', () => {
-		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'dhcp').if_running, ['odhcpd']);
-		t.assert_deep_equal(ucitrack.reload_services(ubus.stub(), 'network').if_running, []);
+	t.it('reloads them for system too, after the system service', () => {
+		let r = ucitrack.reload_services(ubus.stub(), 'system', { init_exists: () => false });
+		t.assert_deep_equal([ r.known, r.services, r.if_running ], [ true, ['system'], ['dnsmasq', 'odhcpd', 'unbound'] ]);
 	});
 
 	t.it('maps wireless to network via fallback', () => {
@@ -125,6 +126,6 @@ t.describe('ucitrack.reload_services, init.d fallback', () => {
 		let r = ucitrack.reload_services(c, 'dhcp', {
 			init_exists: function(pkg) { return true; },
 		});
-		t.assert_deep_equal(r.services, ['dnsmasq']);
+		t.assert_deep_equal(r.services, []);
 	});
 });

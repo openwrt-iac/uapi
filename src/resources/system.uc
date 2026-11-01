@@ -45,6 +45,10 @@ return {
 	package: "system",
 	type: "system",
 	reload: ["system", "log"],
+	// dnsmasq.init reads hostname, odhcpd timezone and zonename, and the init of unbound hostname.
+	// dnsmasq and odhcpd have a procd trigger on system, and LuCI's ucitrack has system affect dhcp,
+	// on which unbound has one.
+	reload_if_running: ["dnsmasq", "odhcpd", "unbound"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
