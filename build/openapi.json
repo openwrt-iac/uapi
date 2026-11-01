@@ -27118,7 +27118,7 @@
 					"private_key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "WireGuard private key; accepted on write, masked on read"
+						"description": "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it."
 					},
 					"has_private_key": {
 						"type": "boolean",
@@ -27703,7 +27703,7 @@
 					"private_key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "WireGuard private key; accepted on write, masked on read"
+						"description": "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it."
 					},
 					"listen_port": {
 						"type": [
@@ -29737,8 +29737,7 @@
 				},
 				"required": [
 					"interface",
-					"public_key",
-					"allowed_ips"
+					"public_key"
 				]
 			},
 			"NetworkWireguardPeersPatch": {

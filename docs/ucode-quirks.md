@@ -74,7 +74,7 @@ There is no type name for it: `type(null)` is the null value itself, so `type(x)
 
 ### `match()` and `json()` stop at the first NUL
 
-`match("rule\u0000 x", /^[!-~]+$/)` returns `[ "rule" ]`: an anchored pattern checks only the prefix and passes. uci takes C strings and then stores `rule`. `json()` also cuts an object key at its first NUL, so `{"k\u0000x": 1}` parses as `{ "k": 1 }`. `main.uc` therefore refuses the NUL escape in the request text (`values.json_has_nul`) before any handler runs.
+`match("rule\u0000 x", /^[!-~]+$/)` returns `[ "rule" ]`: an anchored pattern checks only the prefix and passes. uci takes C strings and then stores `rule`. `json()` also cuts an object key at its first NUL, so `{"k\u0000x": 1}` parses as `{ "k": 1 }`. `main.uc` therefore refuses the NUL escape in the request text (`values.json_has_nul`) before any handler runs. `replace()` with a regex stops there too: `replace("AB\u0000 CD", /[[:space:]]/g, "")` returns `AB`. `wg.uc` relies on it to end a line of a WireGuard config at a NUL byte, as wg does.
 
 ### `const` is real
 

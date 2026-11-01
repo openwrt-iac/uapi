@@ -334,6 +334,49 @@ r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45words")
 has_peer "$WORDS_PEER" && fail "the hand-written peer is still in the kernel after its DELETE"
 [ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
 
+# wireguard.sh hands its config to wg through printf %b, so ifup gives wg a public_key that ends in
+# `\075` with an `=` there. A write refuses such a key, and one written by hand keeps it. On an up
+# interface, the write that disabled such a peer and its DELETE answered 500, and so did the
+# restore of any failed write of the interface.
+echo "--- a hand-written key with an escape: ifup sets the key that wg reads, and a write restores around, disables and deletes the peer ---"
+ESC_PEER=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45esc=wireguard_$IFACE; uci set network.uapi45esc.public_key='${ESC_PEER%=}\\075'
+	uci add_list network.uapi45esc.allowed_ips=10.98.99.70/32; uci commit network; ifup $IFACE"
+sleep 5
+has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
+	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the peer with an escape: $(body_of "$r")"
+has_peer "$ESC_PEER" || fail "the restore removed the peer with an escape from the kernel"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":true}')
+[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of the peer with an escape: $(body_of "$r")"
+has_peer "$ESC_PEER" && fail "the disabled peer with an escape is still in the kernel"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
+$SSH "uci set network.uapi45esc.disabled=0; uci commit network; ifup $IFACE"
+sleep 5
+has_peer "$ESC_PEER" || fail "ifup did not set the re-enabled peer with an escape: $(kernel_peers)"
+r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45esc")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer with an escape: $(body_of "$r")"
+has_peer "$ESC_PEER" && fail "the deleted peer with an escape is still in the kernel"
+
+# LuCI leaves the allowed IPs of a peer optional, and wg sets such a peer with none. A write
+# required them, so a peer without any took no write, not even the one that disables it.
+echo "--- a peer without allowed IPs is created, disabled and deleted, and the kernel holds it with none ---"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\"}")
+[ "$(status_of "$r")" = "200" ] || fail "POST of a peer without allowed IPs: $(body_of "$r")"
+noips=$(id_of "$r")
+aips=$($SSH "wg show $IFACE allowed-ips" | awk -v k="$PEER3" '$1 == k { print $2 }')
+[ "$aips" = "(none)" ] || fail "the peer without allowed IPs holds '$aips' in the kernel, not (none)"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$noips" -d '{"disabled":true}')
+[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of a peer without allowed IPs: $(body_of "$r")"
+has_peer "$PEER3" && fail "the disabled peer without allowed IPs is still in the kernel"
+r=$(call -X DELETE "$URL/network/wireguard_peers/$noips")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of a peer without allowed IPs: $(body_of "$r")"
+
 # Routes were compared as written, so a PUT that respelled a prefix deleted the route that it had
 # just installed, and the restore after a failed write deleted a route that the kernel prints in
 # another spelling than uci holds.

@@ -168,6 +168,12 @@ curl -sS -H "$ADMIN" -D /tmp/uapi53x_get.h -o /tmp/uapi53x_get.json "$URL/networ
 [ "$(etag_of /tmp/uapi53x_patch.h)" = "$(etag_of /tmp/uapi53x_get.h)" ] \
 	|| fail "the switch answered ETag $(etag_of /tmp/uapi53x_patch.h), and a GET $(etag_of /tmp/uapi53x_get.h)"
 rm -f /tmp/uapi53x_patch.h /tmp/uapi53x_get.h /tmp/uapi53x_get.json
+# The read masks private_key, so a PATCH that switched away from wireguard kept it, where a PUT
+# and LuCI's protocol switch remove it.
+r=$(send PATCH /uapi53x '{"proto":"static","ipaddrs":["10.253.53.1/24"]}')
+[ "$(status "$r")" = 200 ] || fail "the switch of uapi53x back to static expected 200: $r"
+[ -z "$(uci_get uapi53x.private_key)" ] && [ -z "$(uci_get uapi53x.listen_port)" ] \
+	|| fail "the switch back to static kept private_key or listen_port"
 
 echo "--- every read validates against the published Response schema ---"
 r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,

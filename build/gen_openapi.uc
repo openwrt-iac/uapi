@@ -1590,8 +1590,9 @@ function build_schemas() {
 			"properties": resp_props,
 		};
 
-		if (type(mod.openapi_required) == "array" && length(mod.openapi_required) > 0)
-			s.required = mod.openapi_required;
+		let resp_required = [ ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
+		if (length(resp_required) > 0)
+			s.required = resp_required;
 
 		// A response carries its writeOnly properties so the request half stays a subset of it,
 		// which is what keeps a generated client from treating a settable field as computed.

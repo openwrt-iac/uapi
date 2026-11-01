@@ -79,13 +79,13 @@ t.describe('network.wireguard_peers.fromUci', () => {
 });
 
 t.describe('network.wireguard_peers.validate', () => {
-	t.it('rejects missing interface, public_key, allowed_ips', () => {
+	t.it('requires interface and public_key, and takes a peer without allowed IPs, which LuCI allows', () => {
 		let errs = wgp.validate({}, null);
 		let fields = {};
 		for (let e in errs) fields[e.field] = e.code;
 		t.assert_equal(fields.interface, "required");
 		t.assert_equal(fields.public_key, "required");
-		t.assert_equal(fields.allowed_ips, "required");
+		t.assert_false(exists(fields, "allowed_ips"));
 	});
 	t.it('rejects bad public_key shape', () => {
 		let errs = full_validate(wgp, {
@@ -257,6 +257,17 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			t.assert_equal(length(h.sweep(c)), 1, extra);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422, extra);
 		}
+	});
+
+	// The checks run under the lock of `network`, and the key check once expanded the escapes of a
+	// request key byte by byte: a 160 KB key held the lock for 14 s.
+	t.it('refuses a long public_key in bounded time', () => {
+		let key = replace(sprintf('%160000s', ''), ' ', 'A');
+		let t0 = clock();
+		let r = make_handler().create(with_wg(), ctx(), { interface: 'wg1', public_key: key, allowed_ips: [ '10.42.0.9/32' ] });
+		let t1 = clock();
+		t.assert_equal(r.status, 422);
+		t.assert_true((t1[0] - t0[0]) + (t1[1] - t0[1]) / 1e9 < 2, 'took longer than 2 s');
 	});
 
 	let fields_of = (r) => map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
@@ -766,6 +777,24 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		});
 		t.assert_equal(length(ops), 1);
 		t.assert_equal(ops[0].action, "set");
+	});
+
+	// validate() required allowed IPs, so a stored peer without any, which LuCI writes, took no
+	// write at all, not even the one that disables it. wg sets such a peer with none.
+	t.it('a peer without allowed IPs takes a PATCH, a disable, a create and a PUT, and is set with none', () => {
+		let c = with_wg();
+		delete c._state.uci.network.g_existing.allowed_ips;
+		let ops = [];
+		let h = op_tracking_handler(ops);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
+		let r = h.create(c, ctx(), { interface: 'wg1', public_key: PK2 });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_false(exists(c._state.uci.network[r.body.id], 'allowed_ips'));
+		t.assert_deep_equal(map(ops, (o) => [ o.action, o.allowed_ips ]), [ [ 'set', [] ], [ 'remove', null ], [ 'set', [] ] ]);
+		let c2 = with_wg();
+		t.assert_equal(h.replace(c2, ctx(), 'g_existing', { interface: 'wg1', public_key: PK }).status, 200);
+		t.assert_false(exists(c2._state.uci.network.g_existing, 'allowed_ips'));
 	});
 
 	// netifd omits a disabled peer when it builds the config, so the kernel must

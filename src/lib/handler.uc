@@ -543,11 +543,13 @@ function diff_apply(c, p, id, existing, new_opts) {
 }
 
 // PATCH semantics: a partial update must not wipe options the resource does
-// not model. old_opts is toUci(fromUci(existing)) -- exactly the modeled keys
-// the section currently carries. We only delete within that footprint (a key
-// the patch cleared); raw uci options outside it (toUci cannot emit them) are
-// left untouched. Without this, a PATCH that touches one field would delete
-// every stock/operator option the resource happens not to model.
+// not model. old_opts is toUci(fromUci(existing)) with the masked secrets put
+// back -- exactly the modeled keys the section currently carries. We only delete
+// within that footprint (a key the patch cleared, or one that toUci drops, as it
+// drops private_key on a switch away from wireguard); raw uci options outside it
+// (toUci cannot emit them) are left untouched. Without this, a PATCH that touches
+// one field would delete every stock/operator option the resource happens not to
+// model.
 // The modeled keys the section would carry after this write if every key that is absent from uci
 // and unchanged by the request stayed absent: fromUci's defaults, given the rest of the section.
 // A default can depend on another key, as a field that applies to one proto exists only under
@@ -602,8 +604,8 @@ function diff_apply_patch(c, p, id, existing, old_opts, new_opts, defaults) {
 		let clearing = (nv == null) || (type(nv) == "array" && length(nv) == 0);
 		if (clearing && !exists(existing, k))
 			continue;
-		// A value that uci already holds is no write either. A stored secret is one: the read masks
-		// it, so old_opts lacks it, and new_opts carries it back, so every PATCH wrote it again.
+		// A value that uci already holds is no write either, such as a secret that the read of the
+		// old proto hides and that a switch to a proto that reads it carries back.
 		if (!clearing && exists(existing, k) && sprintf("%J", existing[k]) == sprintf("%J", nv))
 			continue;
 		let unchanged = exists(old_opts, k) && sprintf("%J", old_opts[k]) == sprintf("%J", nv);
@@ -947,7 +949,7 @@ function make(resource, opts) {
 				mgmt_device = mgmt_device_of(resource, r.merged, existing_view);
 
 				let new_opts = resource.toUci(r.merged);
-				let old_opts = resource.toUci(existing_view);
+				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				let wrote = diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                             default_footprint(resource, existing, old_opts, new_opts));
 				let out = resource.fromUci(load_section(c, p, id), conn);
@@ -1175,7 +1177,7 @@ function make_singleton(resource, opts) {
 					return { ok: false, kind: "validation", errors: errs };
 
 				let new_opts = resource.toUci(r.merged);
-				let old_opts = resource.toUci(existing_view);
+				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                 default_footprint(resource, existing, old_opts, new_opts));
 				return { ok: true, body: resource.fromUci(load_section(c, p, id), conn) };

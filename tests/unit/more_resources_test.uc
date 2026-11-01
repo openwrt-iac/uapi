@@ -366,6 +366,38 @@ t.describe('network.interfaces', () => {
 			'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
 	});
 
+	// The read masks private_key, so a PATCH did not count it among the options of the old proto,
+	// and a switch away from wireguard kept it, where a PUT and LuCI's protocol switch remove it.
+	t.it('a PATCH of either kind that switches away from wireguard removes private_key, as a PUT does, and one that does not switch keeps a hidden key', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let seed = () => ubus.stub({ uci: { network: {
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
+			       private_key: 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=',
+			       addresses: ['10.42.0.1/16'], listen_port: '51820', mtu: '1420' },
+		} } });
+		let to_static = { proto: 'static', ipaddrs: ['10.42.0.1/16'] };
+		let jp = [ { op: 'replace', path: '/proto', value: 'static' }, { op: 'add', path: '/ipaddrs', value: to_static.ipaddrs } ];
+		for (let w in [ [ ctx, to_static, 'patch' ], [ { ...ctx, json_patch: true }, jp, 'patch' ], [ ctx, to_static, 'replace' ] ]) {
+			let c = seed();
+			let r = ifh[w[2]](c, w[0], 'wg1', w[1]);
+			t.assert_equal(r.status, 200, r.body);
+			let s = c._state.uci.network.wg1;
+			t.assert_deep_equal([ s.proto, s.private_key, s.listen_port, s.addresses ], [ 'static', null, null, null ], w);
+		}
+		let c = seed();
+		t.assert_equal(ifh.patch(c, ctx, 'wg1', to_static).status, 200);
+		t.assert_equal(c._state.uci.network.wg1.mtu, '1420');
+		c._state.uci.network.wg1.private_key = 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=';
+		t.assert_equal(ifh.patch(c, ctx, 'wg1', { mtu: 1400 }).status, 200);
+		t.assert_equal(c._state.uci.network.wg1.private_key, 'kK1+oLkW2yqs82bEN6FzVuOmIesYjY9hbAJTSAJfBVA=');
+	});
+
 	// wg refuses a key whose 2 unused bits are not zero. A PUT carries the stored key forward, so
 	// it is refused for a stored one until it sends a new key.
 	t.it('refuses a private_key that wg refuses, also a stored one that a PUT carries', () => {
