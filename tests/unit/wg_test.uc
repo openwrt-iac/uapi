@@ -9,14 +9,15 @@ const LONG = replace(sprintf('%600s', ''), ' ', 'x');
 
 // `wg` and `ip` are scripts here that log each command with its arguments joined by `|`, and print
 // the file named after the command when a test wrote one, so a test reads what an apply runs
-// without a WireGuard interface. The call runs in a child, whose PATH finds the scripts first.
-function run_wg(uci, call, outputs) {
+// without a WireGuard interface. A command that matches the shell pattern `fail` exits 1. The call
+// runs in a child, whose PATH finds the scripts first.
+function run_wg(uci, call, outputs, fail) {
 	let mk = fs.popen("mktemp -d /tmp/uapi-wg-apply.XXXXXX");
 	let dir = trim(mk.read("all") ?? "");
 	mk.close();
 	for (let name in [ "wg", "ip" ]) {
-		fs.writefile(dir + "/" + name, sprintf("#!/bin/sh\nIFS='|'\necho \"%s|$*\" >> %s/log\ncat \"%s/%s|$*\" 2>/dev/null\nexit 0\n",
-		                                       name, dir, dir, name));
+		fs.writefile(dir + "/" + name, sprintf("#!/bin/sh\nIFS='|'\necho \"%s|$*\" >> %s/log\ncase \"%s|$*\" in %s) exit 1 ;; esac\ncat \"%s/%s|$*\" 2>/dev/null\nexit 0\n",
+		                                       name, dir, name, fail ?? "''", dir, name));
 		fs.chmod(dir + "/" + name, 0o755);
 	}
 	for (let cmd, text in outputs ?? {}) fs.writefile(dir + "/" + cmd, text);
@@ -89,6 +90,7 @@ t.describe('wg.kernel_key', () => {
 		t.assert_equal(wg.kernel_key(long + '\\075'), false);
 		t.assert_equal(wg.kernel_keys(long + '\\075'), false);
 		t.assert_equal(wg.kernel_key(long), null);
+		t.assert_equal(length(wg.allowed_ips(long + '\\054')), 1);
 		let t1 = clock();
 		t.assert_true((t1[0] - t0[0]) + (t1[1] - t0[1]) / 1e9 < 1, 'took longer than 1 s');
 	});
@@ -105,6 +107,53 @@ t.describe('wg.kernel_keys', () => {
 		t.assert_deep_equal(wg.kernel_keys(PK + '\nPublicKey=' + substr(PK2, 0, 43) + '\\075'), [ PK, PK2 ]);
 		t.assert_deep_equal(wg.kernel_keys(PK + '\\n[Peer]\\nPublicKey=' + PK2), [ PK, PK2 ]);
 		t.assert_deep_equal(wg.kernel_keys(PK + '\\c\nPublicKey=' + PK2), [ PK ]);
+	});
+});
+
+t.describe('wg.allowed_ips', () => {
+	t.it('splits at each space and each comma, as wg splits the line that wireguard.sh writes', () => {
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8 fd00::/8'), [ '10.0.0.0/8', 'fd00::/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\t10.1.0.0/16'), [ '10.0.0.0/8\t10.1.0.0/16' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8  10.1.0.0/16 '), [ '10.0.0.0/8', '', '10.1.0.0/16', '' ]);
+		t.assert_deep_equal(wg.allowed_ips([ '10.0.0.0/8 10.1.0.0/16', 'fd00::/8' ]), [ '10.0.0.0/8', '10.1.0.0/16', 'fd00::/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8,10.1.0.0/16'), [ '10.0.0.0/8', '10.1.0.0/16' ]);
+	});
+	t.it('drops an empty list item, as config_get does, and what follows a #, as wg does', () => {
+		t.assert_deep_equal(wg.allowed_ips([ '10.0.0.0/8', '', '10.1.0.0/16' ]), [ '10.0.0.0/8', '10.1.0.0/16' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8#c 10.1.0.0/16'), [ '10.0.0.0/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8 #c'), [ '10.0.0.0/8', '' ]);
+	});
+	t.it('is null when wireguard.sh writes no AllowedIPs line', () => {
+		t.assert_equal(wg.allowed_ips(null), null);
+		t.assert_equal(wg.allowed_ips(''), null);
+		t.assert_equal(wg.allowed_ips([ '' ]), null);
+	});
+	// wireguard.sh writes `AllowedIPs=` for any value that is not empty, and wg refuses a line that
+	// holds nothing once it cuts it, so the whole interface stays down.
+	t.it('reads one empty entry when wg reads nothing from the line that wireguard.sh writes', () => {
+		for (let v in [ '#c', '\\0', '\\04310.0.0.0/8', [ '#c', '10.0.0.0/8' ] ])
+			t.assert_deep_equal(wg.allowed_ips(v), [ '' ], v);
+	});
+	// `\054` and `\x2c` are commas for wg, `\043` is a #, a NUL byte ends the line, and `\040` is a
+	// space, which wg strips. A backslash before the space that config_get joins a list with stays.
+	t.it('expands the escapes of printf %b, as wg gets the line', () => {
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\054192.168.0.0/16'), [ '10.0.0.0/8', '192.168.0.0/16' ]);
+		t.assert_deep_equal(wg.allowed_ips([ '10.0.0.0/8\\x2c10.1.0.0/16', 'fd00::/8' ]), [ '10.0.0.0/8', '10.1.0.0/16', 'fd00::/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\043 10.1.0.0/16'), [ '10.0.0.0/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\0 10.1.0.0/16'), [ '10.0.0.0/8' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.1\\04010.0.0.2'), [ '10.0.0.1 10.0.0.2' ]);
+		t.assert_deep_equal(wg.allowed_ips([ '10.0.0.1\\', '10.0.0.2' ]), [ '10.0.0.1\\', '10.0.0.2' ]);
+	});
+	// ifup gives wg each later line as more config, and nothing after `\c`, which no entry can say.
+	t.it('reads unexpanded a value that printf %b gives a second line or the end of the config, or that is too long', () => {
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\n[Peer]'), [ '10.0.0.0/8\\n[Peer]' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\c 10.1.0.0/16'), [ '10.0.0.0/8\\c', '10.1.0.0/16' ]);
+		t.assert_deep_equal(wg.allowed_ips('10.0.0.0/8\\054' + LONG), [ '10.0.0.0/8\\054' + LONG ]);
+	});
+	// No address holds such a byte, and a byte above 127 broke the UTF-8 of the response.
+	t.it('reads unexpanded a value that printf %b gives a byte that is not printable ASCII', () => {
+		for (let v in [ '10.0.0.1\\377', '10.0.0.1\\303\\251', '10.0.0.1\\x01 10.0.0.2' ])
+			t.assert_deep_equal(wg.allowed_ips(v), split(replace(v, ' ', ','), ','), v);
 	});
 });
 
@@ -328,15 +377,16 @@ t.describe('wg.apply against logging wg and ip', () => {
 
 	t.it('installs the masked prefix, which netifd installs and ip route takes', () => {
 		let r = apply({ network: { wg1: WG1 } },
-		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.1/24' ], route_allowed_ips: true } ]);
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.1/24' ], route_words: [ '10.0.0.1/24' ],
+		                  route_allowed_ips: true } ]);
 		t.assert_equal(r.result, 'ok');
 		t.assert_equal(r.commands[2], 'ip|route|replace|10.0.0.0/24|dev|wg1|proto|static|scope|link');
 	});
 
 	t.it('keeps the route of a prefix that a write respells', () => {
 		let r = apply({ network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: [ 'fd00::/64' ], route_allowed_ips: '1' }) } },
-		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ 'fd00::/64' ], route_allowed_ips: true,
-		                  prev_allowed_ips: [ 'FD00:0::/64' ], prev_route_allowed_ips: true } ]);
+		              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ 'fd00::/64' ], route_words: [ 'fd00::/64' ],
+		                  route_allowed_ips: true, prev_allowed_ips: [ 'FD00:0::/64' ], prev_route_allowed_ips: true } ]);
 		t.assert_equal(r.result, 'ok');
 		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'),
 		                    [ 'ip|-6|route|replace|fd00:0:0:0:0:0:0:0/64|dev|wg1|proto|static' ]);
@@ -495,6 +545,54 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 		                      set_of(PK2, '10.0.0.3/32') ]);
 	});
 
+	// ifup gives wg the two prefixes that `\054` separates, and routes the word as uci holds it.
+	t.it('sets the allowed IPs that printf %b gives wg, and routes the words of the option', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.0/8\\054192.168.0.0/16', route_allowed_ips: '1' }) } });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0), [ set_of(PK, '10.0.0.0/8,192.168.0.0/16') ]);
+		t.assert_deep_equal(filter(r.commands, (l) => match(l, /^ip\|route\|replace/)),
+		                    [ 'ip|route|replace|10.0.0.0/16|dev|wg1|proto|static|scope|link' ]);
+	});
+
+	// ifup sets no peer at all for a preshared key that wg cannot read. Set with /dev/null, the peer
+	// lost the key that the kernel held for it, and a refusal stopped the restore of the peers after it.
+	t.it('keeps a peer whose preshared key wg cannot read as the kernel holds it, and sets the peers after it', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' }),
+		                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } },
+		                  { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t(none)\t10.0.0.2/32\t0\t0\t0\toff\n", PK) });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|peer|' + PK + '|') >= 0), []);
+		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+	});
+
+	t.it('sets the peers after a peer whose preshared key wg cannot read, and fails when the kernel does not hold that peer', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' }),
+		                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } });
+		t.assert_equal(r.result, 'not restoring a peer with a malformed preshared key on wg1');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|peer|' + PK + '|') >= 0), []);
+		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+	});
+
+	// The kernel then holds what the request gave it, under a key that the restore cannot set. In a
+	// batch, a later operation of another peer is the one that fails.
+	t.it('fails, after it sets the other peers, when an operation of the request named such a peer that the kernel holds', () => {
+		let uci = { network: { wg1: WG1,
+		                       a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' }),
+		                       b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } };
+		let dump = { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t(none)\t10.0.0.2/32\t0\t0\t0\toff\n", PK) };
+		for (let ops in [ [ { iface: 'wg1', action: 'set', public_key: PK } ],
+		                  [ { iface: 'wg1', action: 'remove', public_key: PK + ' ' }, { iface: 'wg1', action: 'set', public_key: PK2 } ] ]) {
+			let r = run_wg(uci, sprintf("wg.reconcile(c, [ 'wg1' ], %J)", ops), dump);
+			t.assert_equal(r.result, 'not restoring a peer with a malformed preshared key on wg1', ops);
+			t.assert_deep_equal(filter(r.commands, (l) => index(l, '|peer|' + PK + '|') >= 0), [], ops);
+			t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+		}
+		t.assert_equal(run_wg(uci, sprintf("wg.reconcile(c, [ 'wg1' ], %J)", [ { iface: 'wg1', action: 'set', public_key: PK2 } ]), dump).result, 'ok');
+	});
+
 	// The restore set the first key of such a value with the allowed IPs of the section and removed
 	// the others, where ifup gives them to the keys after it. It refuses, as it did before it read an
 	// escape, and changes nothing in the kernel.
@@ -505,15 +603,19 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 			                  { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t(none)\t(none)\t0\t0\t0\toff\n", PK2) });
 			t.assert_equal(r.result, 'refusing to apply a peer with a malformed public key on wg1', v);
 			t.assert_deep_equal(r.commands, [], v);
+			r = reconcile({ network: { wg1: WG1, a: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }),
+			                           b: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: v }) } });
+			t.assert_equal(r.result, 'refusing to apply a peer with a malformed preshared key on wg1', v);
+			t.assert_deep_equal(r.commands, [], v);
 		}
 	});
 });
 
 // A peer write through the handler and its transaction. With fail_reload the reload of the write
 // fails and that of the restore passes, so the restore reconciles the interface.
-function peer_write(uci, call, fail_reload) {
+function peer_write(uci, call, fail_reload, outputs, fail) {
 	return run_wg(uci, sprintf("(function() { let n = 0; let h = require('handler').make(loadfile('src/resources/network.wireguard_peers.uc')(), { tx: { acquire: () => ({}), release: () => null, check_services: () => null, reload: () => (%J && n++ == 0) ? 'refused' : null } }); let r = h.%s; return sprintf('%%d %%s', r.status, r.body?.code ?? ''); })()",
-	                           fail_reload, call));
+	                           fail_reload, call), outputs, fail);
 }
 
 t.describe('a peer write on an up interface, against logging wg and ip', () => {
@@ -552,6 +654,50 @@ t.describe('a peer write on an up interface, against logging wg and ip', () => {
 		t.assert_equal(r.result, '204');
 		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'),
 		                    [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
+	});
+
+	// Its schema check read the whole patched document, which holds the stored key, so a JSON Patch
+	// answered 422 where a merge patch of the same change passed.
+	t.it('takes a JSON Patch of another field of a peer whose stored key holds an escape, and refuses one that sets such a key', () => {
+		const JCTX = "{ request_id: '01hx0000000000000000000000', json_patch: true }";
+		let r = peer_write(escaped(), "patch(c, " + JCTX + ", 'a', [ { op: 'replace', path: '/description', value: 'x' } ])", false);
+		t.assert_equal(r.result, '200');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+		let ops = [ { op: 'replace', path: '/public_key', value: substr(PK, 0, 43) + '\\075' } ];
+		r = peer_write(escaped(), sprintf("patch(c, %s, 'b', %J)", JCTX, ops), false);
+		t.assert_equal(r.result, '422 validation_failed');
+		t.assert_deep_equal(r.commands, []);
+		ops = [ { op: 'add', path: '/bogus', value: 1 }, { op: 'remove', path: '/bogus' } ];
+		t.assert_equal(peer_write(escaped(), sprintf("patch(c, %s, 'b', %J)", JCTX, ops), false).result, '200');
+	});
+
+	// The PATCH set the key and the new allowed IP in the kernel before its route failed, and the
+	// restore answered that it had restored the peer that it left out.
+	t.it('a failed write that set a peer whose stored preshared key wg cannot read answers that the restore failed', () => {
+		let uci = { network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' }) } };
+		let body = { preshared_key: PK2, allowed_ips: [ '10.0.0.2/32', '10.9.0.0/16' ], route_allowed_ips: true };
+		let r = peer_write(uci, sprintf("patch(c, %s, 'a', %J)", CTX, body), false,
+		                   { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t(none)\t10.0.0.2/32\t0\t0\t0\toff\n", PK) },
+		                   'ip\\|route\\|replace\\|*');
+		t.assert_equal(r.result, '500 reload_failed_unrecovered');
+		t.assert_true(index(r.commands, 'wg|set|wg1|peer|' + PK + '|allowed-ips|10.0.0.2/32,10.9.0.0/16|persistent-keepalive|0|preshared-key|/var/run/uapi.wg.psk') >= 0,
+		              r.commands);
+	});
+
+	// ifup gives wg the entries that printf %b expands and routes the words that uci holds. A PATCH
+	// that leaves allowed_ips as it is keeps that option, and a PUT of the read stores the entries.
+	t.it('routes the words that uci holds after a write of a peer whose allowed_ips holds an escape', () => {
+		let uci = { network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: '10.0.0.0/8\\054192.168.0.0/16', route_allowed_ips: '1' }) } };
+		let route = (verb, pfx) => sprintf('ip|route|%s|%s|dev|wg1|proto|static|scope|link', verb, pfx);
+		let r = peer_write(uci, "patch(c, " + CTX + ", 'a', { description: 'x' })", false);
+		t.assert_equal(r.result, '200');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.0/8,192.168.0.0/16')) >= 0, r.commands);
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'), [ route('replace', '10.0.0.0/16') ]);
+		let put = { interface: 'wg1', public_key: PK, allowed_ips: [ '10.0.0.0/8', '192.168.0.0/16' ], route_allowed_ips: true };
+		r = peer_write(uci, sprintf("replace(c, %s, 'a', %J)", CTX, put), false);
+		t.assert_equal(r.result, '200');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'ip|'),
+		                    [ route('replace', '10.0.0.0/8'), route('replace', '192.168.0.0/16'), route('del', '10.0.0.0/16') ]);
 	});
 });
 
@@ -631,6 +777,25 @@ t.describe('wg route prefixes', () => {
 	t.it('spells one prefix one way, with the address masked', () => {
 		t.assert_deep_equal(map(wg.route_prefixes(['FD00:0::1/64', 'fd00::/64', '10.0.0.1/24'], true), (r) => r.prefix),
 		                    [ 'fd00:0:0:0:0:0:0:0/64', 'fd00:0:0:0:0:0:0:0/64', '10.0.0.0/24' ]);
+	});
+
+	// wireguard.sh routes the words of the option, which printf %b never sees, and takes the address
+	// before the first `/` of a word and the length after the last, in the family of its case.
+	// netifd reads the length with strtoul in base 0, or, with a dot, as an IPv4 mask whose leading
+	// ones it counts.
+	t.it('reads the length of a word as netifd does', () => {
+		t.assert_deep_equal(map(wg.route_prefixes([ '10.0.0.0/', '10.0.0.0/0x10', '10.0.0.0/+8', 'fd00::/0x40', '10.0.0.0/255.255.0.0',
+		                                           '10.0.0.0/255.0.255.0', '10.0.0.0/255.255', '10.0.0.0/8#/255.255.0.0' ], true), (r) => r.prefix),
+		                    [ '0.0.0.0/0', '10.0.0.0/16', '10.0.0.0/8', 'fd00:0:0:0:0:0:0:0/64', '10.0.0.0/16', '10.0.0.0/8', '10.0.0.0/8',
+		                      '10.0.0.0/16' ]);
+		t.assert_deep_equal(wg.route_prefixes([ '10.0.0.0/-8', '10.0.0.0/+', '10.0.0.0/0x', '10.0.0.0/256.0.0.0', '10.0.0.0/1.2.3.4.5',
+		                                        'fd00::/255.0.0.0', '10.0.0.0/0x21' ], true), []);
+	});
+
+	t.it('routes a word with an escape as the case of wireguard.sh splits it', () => {
+		t.assert_deep_equal(wg.route_prefixes([ '10.0.0.0/8\\054192.168.0.0/16', 'fd00::/8\\05410.0.0.0/16' ], true),
+		                    [ { prefix: '10.0.0.0/16', v6: false }, { prefix: 'fd00:0:0:0:0:0:0:0/16', v6: true } ]);
+		t.assert_deep_equal(wg.route_prefixes([ '10.0.0.0/8\\054fd00::/16', '10.0.0.1,10.0.0.2', '10.0.0.1\\054', 'a/b:c' ], true), []);
 	});
 
 	// netifd installs no route for a length that base 0 cannot read, such as 08.

@@ -242,11 +242,11 @@ the others as in a 422. A write of one resource can make the stored values of an
 `validate()` of `network/interfaces` runs `validate_new()` of `network/wireguard_peers` over the
 peers of an interface that a write switches to wireguard or enables, and refuses their live
 errors. `validate()` and the schema check run as before: `validate()` sees the
-whole section, and the schema check sees what the caller sent, which for a JSON Patch is the read
-with the operations applied. The schema check does not see a write-only field that the handler
-carries from uci, because uci can hold it in a shape that the schema does not declare, such as an
-option where the schema says list, and the caller can neither see it nor send it. `validate()`
-sees it.
+whole section, and the schema check sees what the caller sent, which for a JSON Patch is each field
+that its operations name and leave in the document, as they leave it. The schema check does not see a write-only field that
+the handler carries from uci, because uci can hold it in a shape that the schema does not declare,
+such as an option where the schema says list, and the caller can neither see it nor send it.
+`validate()` sees it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

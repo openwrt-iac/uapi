@@ -352,10 +352,15 @@ the proto handler, so the apply installs them too: without that the peer is in
 the kernel with no path to it and the flag only half works. They are spelled to
 match netifd exactly (`proto static`, `scope link` on v4) and go into `ip4table`
 / `ip6table` when the interface sets one, since netifd puts them there rather
-than in main. A route is the prefix as netifd installs it: the length read in
-base 0, as netifd and `ip` read it, and the address masked to that length. Routes
-are compared in that one spelling, so a respelled prefix, or the spelling that
-the kernel prints, is the same route. A prefix is only withdrawn when no
+than in main. A route is the prefix as netifd installs it: the length as
+netifd reads it, and the address masked to that length.
+wireguard.sh routes each word of the option as uci holds it, before printf %b
+expands the escapes that it gives wg, and takes the address before the first
+`/` of the word and the length after its last. So a write takes the words of
+the section as it stages it: a PATCH that leaves `allowed_ips` as it is keeps
+an option with an escape, whose route differs from the allowed IPs of the
+read. Routes are compared in that one spelling, so a respelled prefix, or the
+spelling that the kernel prints, is the same route. A prefix is only withdrawn when no
 remaining peer and no `config route` section still wants it, because two peers
 can carry overlapping `allowed_ips`. The kernel is never scanned for strays on the request path, only
 on the reconcile that follows a rollback, so a route uapi did not install is not
@@ -365,8 +370,9 @@ One consequence to know: netifd reports the routes it installs in
 `network.interface.<name> status`, and routes installed here are not in that
 list until the next `ifup`. The kernel is correct; netifd's bookkeeping lags.
 
-A resource opts in with a `kernel_ops(kind, opts, sec_type, existing)` hook
-returning the operations to apply. It reads the uci options rather than the
+A resource opts in with a `kernel_ops(kind, opts, sec_type, existing, staged)`
+hook returning the operations to apply, where `staged` is the section as the
+write leaves it in uci. It reads the uci options rather than the
 resource view because the view masks `preshared_key`, and the parent interface
 off the section type because it is not stored as an option, so a `DELETE` can
 only learn it from the section it is about to remove. A rotated public key emits
@@ -380,8 +386,16 @@ holds one peer per key, so a remove then sets again each other enabled section o
 the interface that holds one of these keys, in uci order, as ifup does. A set, in
 a write or in the reconcile after a failed write, takes a stored value that wg
 reads as the key alone. It refuses any other value, and the reconcile refuses it
-before it changes the kernel of the interface. The reconcile skips a peer whose
-stored key wg cannot read, because the kernel holds no peer under it.
+before it changes the kernel of the interface, as it refuses a stored
+`preshared_key` that wg reads as more than the key alone. The reconcile skips a
+peer whose stored key wg cannot read, because the kernel holds no peer under it.
+It does not set a peer whose stored `preshared_key` wg cannot read either: wg
+refuses the whole config at ifup, so it never gets that peer without its key,
+and a set with `/dev/null` would take the key that the kernel holds from the
+peer. The kernel keeps the peer as it holds it, and the reconcile sets the peers
+after it. That restores the peer only when the kernel holds it and no operation
+of the request set or removed it, so the reconcile takes the operations of the
+request, and fails otherwise.
 
 An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also
@@ -443,15 +457,19 @@ walks it on every write to enforce:
   `tags[1]`)
 - `properties` (nested object recursion)
 
-A merge PATCH schema-checks the WIRE DELTA only (the merged-with-existing
-post-image inherits fromUci's string-form view of integer-typed fields, so
-type-checking the merge would falsely 422 on integer-untouched patches). A
-JSON Patch body synthesises the full post-image, so that is what gets
-schema-checked. The full merged body still goes through
-`resource.validate()` for cross-field logic, next to the fields that the
-request names (a JSON Patch without its `test` operations), so a rule can
-blame only what the request sent. `docs/adding-a-resource.md` says when to
-use which.
+A PATCH schema-checks only the fields that the request names: the body of a
+merge PATCH, and the fields that the paths of a JSON Patch name and leave in the
+document, without its `test` operations, with their values after the
+operations. The post-image
+merged with the stored section inherits fromUci's string-form view of
+integer-typed fields, so type-checking it would falsely 422 on
+integer-untouched patches. It also holds every stored value, so a JSON Patch
+failed on a stored value that breaks a pattern, such as a WireGuard key with a
+backslash that another writer stored, where a merge PATCH of the same change
+passed. A JSON Patch with an operation on the whole document names every field.
+The full merged body still goes through `resource.validate()` for cross-field
+logic, next to the fields that the request names, so a rule can blame only what
+the request sent. `docs/adding-a-resource.md` says when to use which.
 
 ### Unmodeled uci options: PUT replaces, PATCH preserves
 

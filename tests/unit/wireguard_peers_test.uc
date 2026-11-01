@@ -539,6 +539,8 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ], ...off } }), ctx(), 'wg1', WG).status, 200, off);
 		r = h.patch(world(STATIC, { g_tab: { allowed_ips: '10.42.0.2/32\t10.42.1.0/24' } }), ctx(), 'wg1', WG);
 		t.assert_true(index(r.body.errors[0].message, 'g_tab (allowed_ips[0])') >= 0, r.body.errors[0].message);
+		r = h.patch(world(STATIC, { g_hash: { allowed_ips: '#c' } }), ctx(), 'wg1', WG);
+		t.assert_true(index(r.body.errors[0].message, 'g_hash (allowed_ips[0])') >= 0, r.body.errors[0].message);
 	});
 
 	t.it('the way out that the message gives works: switch disabled, fix the peer, enable', () => {
@@ -975,6 +977,16 @@ t.describe('network.wireguard_peers reads allowed_ips as wg gets them', () => {
 			let r = h.replace(c, ctx(), 'g_existing', body_of(c));
 			t.assert_equal(r.status, 422, aips);
 			t.assert_equal(c._state.uci.network.g_existing.allowed_ips, aips);
+		}
+	});
+
+	// wireguard.sh writes `AllowedIPs=` for such a value, and wg refuses the line, so the interface
+	// did not come up while every write of the peer passed.
+	t.it('a value that wg reads as nothing refuses a write that leaves the peer enabled, and takes one that disables it', () => {
+		for (let aips in [ '#c', '\\04310.42.0.2/32' ]) {
+			let r = h.patch(stored(aips), ctx(), 'g_existing', { description: 'x' });
+			t.assert_deep_equal(map(r.body?.errors ?? [], (e) => [ e.field, e.code ]), [ [ 'allowed_ips[0]', 'invalid_format' ] ], aips);
+			t.assert_equal(h.patch(stored(aips), ctx(), 'g_existing', { disabled: true }).status, 200, aips);
 		}
 	});
 
