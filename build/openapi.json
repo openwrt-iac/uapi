@@ -24212,7 +24212,7 @@
 				"properties": {
 					"name": {
 						"type": "string",
-						"pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$"
+						"pattern": "^[A-Za-z0-9_]{1,63}$"
 					},
 					"scopes": {
 						"type": "array",
@@ -24279,6 +24279,7 @@
 					"uptime_seconds",
 					"resources_loaded",
 					"lock_state",
+					"state_dirs",
 					"request_id"
 				],
 				"properties": {
@@ -24311,6 +24312,16 @@
 								}
 							}
 						}
+					},
+					"state_dirs": {
+						"type": "object",
+						"additionalProperties": {
+							"type": [
+								"boolean",
+								"null"
+							]
+						},
+						"description": "Each state directory under /var/run, keyed by its path, as uapi finds it. The read creates and changes nothing. true: a directory owned by the effective uid of the request process, with mode 0700, which uapi uses. false: the path holds anything else, and uapi does not use it as it stands. null: the path does not exist yet, and uapi creates it at its first write there."
 					},
 					"management_path": {
 						"type": "object",

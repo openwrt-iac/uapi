@@ -4,7 +4,7 @@ let state_dir = require('state_dir');
 // Last 20 error envelopes surfaced via /diagnostics.
 // Best-effort: any fs failure is swallowed because logging must never
 // disrupt the actual response.
-const DIR = "/var/run/uapi-error-ring";
+const DIR = state_dir.DIRS.error_ring;
 const PATH = DIR + "/ring.json";
 const CAP = 20;
 // The ring outlives the request in tmpfs, and the 400 for a control character in a body

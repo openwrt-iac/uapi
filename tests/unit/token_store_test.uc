@@ -174,6 +174,14 @@ t.describe('token_store.create validation', () => {
 		t.assert_equal(r.kind, "conflict");
 	});
 
+	t.it('refuses a name that another section of the token store already holds', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		c._state.uci.uapi.taken = { '.type': 'other', x: '1' };
+		let r = token_store.create(c, { name: "taken", scopes: [ "*:ro" ] }, [ "*:rw" ], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "conflict");
+		t.assert_deep_equal(c._state.uci.uapi.taken, { '.type': 'other', x: '1' });
+	});
+
 	t.it('creates and returns a bearer on the happy path', () => {
 		let c = bus.stub({}); seed_tokens(c);
 		let r = token_store.create(c,
@@ -315,6 +323,38 @@ t.describe('token_store, the tmpfs state of a token', () => {
 		t.assert_equal(fs.stat(MARKERS + "gone"), null);
 	});
 
+	t.it('a mint reaps before its commit, so that a kill during the reap cannot lose the bearer of a committed token', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		plant_state([ "readonly", "gone" ]);
+		let commit = c.uci_commit, at_commit = null;
+		c.uci_commit = function(pkg) {
+			at_commit = { bucket: fs.stat(BUCKETS + "gone.txt"), series: has_series("gone"),
+			              marker: fs.stat(MARKERS + "gone") };
+			return commit(pkg);
+		};
+		t.assert_true(token_store.create(c, { name: "run_4", scopes: [ "*:ro" ] },
+		                                 [ "*:rw" ], 1700000000, noop_tx()).ok);
+		t.assert_deep_equal(at_commit, { bucket: null, series: false, marker: null });
+		t.assert_true(fs.stat(BUCKETS + "readonly.txt") != null);
+	});
+
+	t.it('a mint whose commit fails has reaped only the state of the tokens that no longer authenticate', () => {
+		let c = bus.stub({}); seed_tokens(c);
+		plant_state([ "admin", "readonly", "gone" ]);
+		c.uci_commit = function() { die("No space left on device"); };
+		let err = null;
+		try {
+			token_store.create(c, { name: "run_5", scopes: [ "*:ro" ] }, [ "*:rw" ], 1700000000, noop_tx());
+		} catch (e) { err = e; }
+		t.assert_true(err != null);
+		t.assert_equal(fs.stat(BUCKETS + "gone.txt"), null);
+		for (let n in [ "admin", "readonly" ]) {
+			t.assert_true(fs.stat(BUCKETS + n + ".txt") != null, n);
+			t.assert_true(has_series(n), n);
+			t.assert_true(fs.stat(MARKERS + n) != null, n);
+		}
+	});
+
 	t.it('reap_state keeps a token whose expiry is ahead, and one with no expiry', () => {
 		plant_state([ "later", "never", "past" ]);
 		token_store.reap_state([ { name: "later", expires_at: 1700000001 },
@@ -358,42 +398,77 @@ t.describe('token_store.update_last_used, the last-used marker', () => {
 	});
 });
 
+// Only uapi-token can create such a token.
+t.describe('token_store, a token whose name is longer than 63 characters', () => {
+	t.it('stamps its last use, and its marker and bucket, named by the sha256 of its name, stay while it is live', () => {
+		let ts = t.load_with({ digest: t.digest }, [ "state_dir", "ratelimit", "metrics", "token_store" ]);
+		let rl = t.load_with({ digest: t.digest }, [ "state_dir", "ratelimit" ]);
+		let c = bus.stub({}); seed_tokens(c);
+		let long = sprintf("ts_unit_%070d", 0), now = time();
+		c._state.uci.uapi[long] = { '.type': 'token', salt: 's', hash: 'h', scopes: [ '*:ro' ] };
+		let marker = MARKERS + t.digest.sha256(long), bucket = BUCKETS + t.digest.sha256(long) + ".txt";
+		fs.unlink(marker);
+		ts.update_last_used(c, long, null, now);
+		rl.check(long, { now: 1000 });
+		t.assert_equal(c._state.uci.uapi[long].last_used_at, "" + now);
+		ts.reap_state([ { name: long, expires_at: null } ], now);
+		t.assert_true(fs.stat(marker) != null);
+		t.assert_true(fs.stat(bucket) != null);
+		ts.reap_state([], now);
+		t.assert_equal(fs.stat(marker), null);
+		t.assert_equal(fs.stat(bucket), null);
+	});
+});
+
 // uapi-token writes through its own cursor, so this runs it in a child, with a stub of libuci found
 // before the real module. Its locks go to /tmp, because the container of the unit job can lack
-// /var/lock. A create checks /etc/config/uapi with the real fs first, which no unit host holds.
-t.describe('uapi-token revoke, a commit that libuci refuses', () => {
-	function revoke(commit) {
-		let mk = fs.popen("mktemp -d /tmp/uapi-token-cli.XXXXXX");
-		let dir = trim(mk.read("all") ?? "");
-		mk.close();
-		fs.writefile(dir + "/uci.uc", sprintf(`return { cursor: function() {
-			let tokens = { admin: { '.type': 'token', '.name': 'admin', salt: 's', hash: 'h', scopes: [ '*:rw' ] } };
-			return {
-				foreach: function(p, t, fn) { for (let n, s in tokens) fn({ ...s }); return true; },
-				get_all: (p, n) => tokens[n],
-				delete: function(p, n) { delete tokens[n]; return true; },
-				commit: () => %s,
-				error: () => "No space left on device",
-			};
-		} };`, commit));
-		fs.writefile(dir + "/digest.uc", "return { sha256: (s) => s };");
-		fs.writefile(dir + "/transaction.uc", sprintf("let real = loadfile(%J)();\n" +
-			"return { ...real, acquire_pkg_waiting: (pkg, ms) => real.acquire_pkg_waiting(pkg, ms, %J, %J) };\n",
-			fs.getcwd() + "/src/lib/transaction.uc", dir + "/global.lock", dir + "/pkg."));
-		let p = fs.popen(sprintf("ucode -L %s -L src/lib cli/uapi-token revoke admin 2>%s/err; echo $?", dir, dir));
-		let code = trim(p.read("all") ?? "");
-		p.close();
-		let err = fs.readfile(dir + "/err") ?? "";
-		let locked = fs.stat(dir + "/pkg.uapi.lock") != null;
-		system([ "rm", "-rf", dir ]);
-		return { code, err, locked };
-	}
+// /var/lock. No unit host holds /etc/config/uapi, which a create looks for first, so the child runs
+// with an fs whose stat finds it. The stub's commit writes what it saw to <dir>/commit.
+const ADMIN_ONLY = { admin: { '.type': 'token', salt: 's', hash: 'h', scopes: [ '*:rw' ] } };
 
+function uapi_token(args, sections, commit) {
+	let mk = fs.popen("mktemp -d /tmp/uapi-token-cli.XXXXXX");
+	let dir = trim(mk.read("all") ?? "");
+	mk.close();
+	fs.writefile(dir + "/uci.uc", sprintf(`let fs = require('fs');
+return { cursor: function() {
+	let s = %J;
+	return {
+		foreach: function(p, t, fn) { for (let n, v in s) if (v['.type'] == t) fn({ ...v, '.name': n }); return true; },
+		get_all: (p, n) => (n in s) ? { ...s[n], '.name': n } : null,
+		set: function(p, n, o, v) { if (v == null) s[n] = { '.type': o }; else s[n][o] = v; return true; },
+		delete: function(p, n) { delete s[n]; return true; },
+		commit: function() {
+			fs.writefile(%J, sprintf("%%J", { sections: s, gone_bucket: fs.stat(%J) != null }));
+			return %s;
+		},
+		error: () => "No space left on device",
+	};
+} };`, sections, dir + "/commit", BUCKETS + "gone.txt", commit));
+	fs.writefile(dir + "/digest.uc", "return { sha256: (s) => s };");
+	fs.writefile(dir + "/transaction.uc", sprintf("let real = loadfile(%J)();\n" +
+		"return { ...real, acquire_pkg_waiting: (pkg, ms) => real.acquire_pkg_waiting(pkg, ms, %J, %J) };\n",
+		fs.getcwd() + "/src/lib/transaction.uc", dir + "/global.lock", dir + "/pkg."));
+	fs.writefile(dir + "/run.uc", "let real = require('fs');\n" +
+		"global.modules.fs = { ...real, stat: (p) => (p == '/etc/config/uapi') ? { type: 'file' } : real.stat(p) };\n" +
+		"loadfile(shift(ARGV))();\n");
+	let p = fs.popen(sprintf("ucode -L %s -L src/lib %s/run.uc cli/uapi-token %s >%s/out 2>%s/err; echo $?",
+		dir, dir, join(" ", map(args, (a) => "'" + a + "'")), dir, dir));
+	let code = trim(p.read("all") ?? "");
+	p.close();
+	let seen = fs.readfile(dir + "/commit");
+	let r = { code, out: fs.readfile(dir + "/out") ?? "", err: fs.readfile(dir + "/err") ?? "",
+	          locked: fs.stat(dir + "/pkg.uapi.lock") != null, at_commit: seen ? json(seen) : null };
+	system([ "rm", "-rf", dir ]);
+	return r;
+}
+
+t.describe('uapi-token revoke, a commit that libuci refuses', () => {
 	// It printed that it revoked the token, exited 0, and reaped the state of a token that still
 	// authenticates.
 	t.it('exits non-zero, says that the token still authenticates, and keeps its state', () => {
 		plant_state([ "admin" ]);
-		let r = revoke("null");
+		let r = uapi_token([ "revoke", "admin" ], ADMIN_ONLY, "null");
 		t.assert_true(r.code != "0", r.err);
 		t.assert_match(r.err, /uapi-token revoke: cannot commit \/etc\/config\/uapi: No space left on device, so token "admin" still authenticates/);
 		t.assert_true(index(r.err, "Revoked") < 0, r.err);
@@ -403,11 +478,39 @@ t.describe('uapi-token revoke, a commit that libuci refuses', () => {
 
 	t.it('a commit that works revokes and reaps, so the stub drives the command', () => {
 		plant_state([ "admin" ]);
-		let r = revoke("true");
+		let r = uapi_token([ "revoke", "admin" ], ADMIN_ONLY, "true");
 		t.assert_equal(r.code, "0", r.err);
 		t.assert_true(r.locked);
 		t.assert_match(r.err, /Revoked token "admin"/);
 		t.assert_equal(fs.stat(BUCKETS + "admin.txt"), null);
 		t.assert_false(has_series("admin"));
+	});
+});
+
+t.describe('uapi-token create', () => {
+	t.it('reaps before its commit, then prints the bearer', () => {
+		plant_state([ "admin", "gone" ]);
+		let r = uapi_token([ "create", "--name", "fresh", "--scope", "*:ro" ], ADMIN_ONLY, "true");
+		t.assert_equal(r.code, "0", r.err);
+		t.assert_true(r.locked);
+		t.assert_false(r.at_commit.gone_bucket);
+		t.assert_equal(r.at_commit.sections.fresh['.type'], "token");
+		t.assert_match(r.out, /^[0-9a-f]{32}\n$/);
+		t.assert_true(fs.stat(BUCKETS + "admin.txt") != null);
+	});
+
+	t.it('prints no bearer when libuci refuses the commit', () => {
+		let r = uapi_token([ "create", "--name", "fresh", "--scope", "*:ro" ], ADMIN_ONLY, "null");
+		t.assert_true(r.code != "0", r.err);
+		t.assert_equal(r.out, "");
+		t.assert_match(r.err, /cannot commit \/etc\/config\/uapi: No space left on device, so token "fresh" does not exist/);
+	});
+
+	t.it('refuses a name that another section of the token store already holds', () => {
+		let r = uapi_token([ "create", "--name", "taken", "--scope", "*:ro" ],
+		                   { ...ADMIN_ONLY, taken: { '.type': 'other', x: '1' } }, "true");
+		t.assert_true(r.code != "0", r.err);
+		t.assert_match(r.err, /token name "taken" already exists in \/etc\/config\/uapi/);
+		t.assert_equal(r.at_commit, null);
 	});
 });

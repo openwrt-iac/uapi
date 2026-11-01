@@ -2,18 +2,17 @@ let fs = require('fs');
 let state_dir = require('state_dir');
 
 // Atomic tmpfile+rename writes; no flock (every authed request passes here).
-const DIR = "/var/run/uapi-ratelimit";
+const DIR = state_dir.DIRS.ratelimit;
 const DEFAULT_RATE = 100;
 const DEFAULT_BURST = 200;
-const SAFE_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$/;
 
 function _now_ms(now_epoch_seconds) {
 	if (now_epoch_seconds == null) return null;
 	return now_epoch_seconds * 1000;
 }
 
-function _read_state(token_id) {
-	let path = DIR + "/" + token_id + ".txt";
+function _read_state(file) {
+	let path = DIR + "/" + file + ".txt";
 	let f = fs.open(path, "r");
 	if (!f) return null;
 	let line = f.read("line") ?? "";
@@ -31,8 +30,8 @@ function _read_state(token_id) {
 	return { tokens, last_ms };
 }
 
-function _write_state(token_id, state) {
-	let path = DIR + "/" + token_id + ".txt";
+function _write_state(file, state) {
+	let path = DIR + "/" + file + ".txt";
 	return state_dir.replace(path + ".tmp", path, sprintf("%.4f %d\n", state.tokens, state.last_ms));
 }
 
@@ -41,13 +40,13 @@ function check(token_id, opts) {
 	let rate = o.rate ?? DEFAULT_RATE;
 	let burst = o.burst ?? DEFAULT_BURST;
 	let now_ms = _now_ms(o.now);
+	let file = (token_id == null) ? null : state_dir.token_file(token_id);
 	// Without a directory of its own the limiter allows every request. Under /var/run only root
 	// can cause that, and refusing instead would answer 429 to every token.
-	if (token_id == null || !match(token_id, SAFE_NAME_RE) || now_ms == null
-	    || !state_dir.owned(DIR))
+	if (file == null || now_ms == null || !state_dir.owned(DIR))
 		return { allowed: true, retry_after_seconds: 0 };
 
-	let state = _read_state(token_id);
+	let state = _read_state(file);
 	if (state == null)
 		state = { tokens: burst, last_ms: now_ms };
 
@@ -64,7 +63,7 @@ function check(token_id, opts) {
 		retry = int((deficit * 1000.0 / rate) + 1);
 		if (retry < 1) retry = 1;
 	}
-	_write_state(token_id, { tokens: new_tokens, last_ms: now_ms });
+	_write_state(file, { tokens: new_tokens, last_ms: now_ms });
 	return { allowed, retry_after_seconds: retry };
 }
 
@@ -107,8 +106,10 @@ function effective_limits(global, token_record) {
 // unbounded tmpfs, which is RAM.
 function reap(live) {
 	if (!state_dir.owned(DIR)) return;
+	let keep = {};
+	for (let name in live) keep[state_dir.token_file(name)] = true;
 	for (let name in fs.lsdir(DIR) ?? [])
-		if (!live[split(name, ".")[0]]) fs.unlink(DIR + "/" + name);
+		if (!keep[split(name, ".")[0]]) fs.unlink(DIR + "/" + name);
 }
 
 return { check, load_config, effective_limits, reap };

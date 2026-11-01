@@ -14,8 +14,39 @@ All notable changes to this project will be documented in this file. Format foll
   as `other-config` only, and `["none"]` sets no flag. `dhcpv4` takes the four modes of `ra`.
   `ra_slaac` reads true when unset, as odhcpd does. The description of `ra_default` now says what
   odhcpd does with each value. (#283)
+- **`GET /diagnostics` reports whether uapi uses each state directory.** The new field
+  `state_dirs` holds each state directory under `/var/run`, keyed by its path, as uapi finds it,
+  and the read creates and changes none of them. A directory reads `true` when uapi uses it,
+  `false` when it does not, and `null` when it does not exist yet, as uapi creates it at its first
+  write there. (#287)
 
 ### Fixed
+
+- **`POST /tokens` cleans up before its commit, so a request killed during the cleanup loses no
+  bearer.** A mint removed the rate-limit buckets and the last-used markers of the tokens that no
+  longer authenticate, and folded their metric series into `token_id="-retired"`, after it
+  committed the new token and before it answered. So a request that uhttpd killed during that
+  cleanup left a committed token whose bearer no one had received. The mint now cleans up before
+  its commit, under the same lock. `uapi-token create` cleans up before its commit too, so a name
+  created again with it no longer keeps the state of the token that held the name before. No
+  response changes. (#287)
+- **`POST /tokens` and `uapi-token create` refuse a name that another section of the token store
+  already holds.** `POST /tokens` answers `409 conflict`, and `uapi-token create` exits non-zero,
+  as both did for a name that a token holds. This refuses a request that 3.2.0 accepted, under
+  the carve-out of `docs/versioning.md` for a payload that produced state no caller can rely on.
+  (#287)
+- **The OpenAPI pattern of the token `name` in `POST /tokens` is `^[A-Za-z0-9_]{1,63}$`**, the
+  names that the server takes. It admitted a hyphen, which the server refuses with 422. No request
+  answers differently. (#287)
+- **A token whose name is longer than 63 characters is rate-limited, and its last use is
+  stamped.** Only `uapi-token` creates such a token, since `POST /tokens` takes at most 63
+  characters. Its bucket file was named by the token, and the limiter took no name longer than 63
+  characters, so every request of such a token was allowed. The last-used marker had the same
+  limit, so `last_used_at` stayed unset. Both files of a longer name are now named by the sha256
+  of the name. Such a token now gets `429 too_many_requests` past its rate, as every other token
+  does, and `GET /tokens` and `/auth/whoami` show its `last_used_at`. The CLI takes the same names
+  as before. A name longer than 238 characters still gets no series in `/metrics`, whose files are
+  named by their labels. (#287)
 
 - **An upgrade no longer leaves `/etc/config/uapi.apk-new`.** The package shipped a template at
   `/etc/config/uapi`, and apk keeps a changed file of `/etc` at an upgrade and writes the shipped

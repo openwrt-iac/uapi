@@ -20,6 +20,7 @@ let ratelimit = require("ratelimit");
 let metrics = require("metrics");
 let idempotency = require("idempotency");
 let error_ring = require("error_ring");
+let state_dir = require("state_dir");
 let mgmt = require("mgmt");
 let values = require("values");
 
@@ -706,6 +707,7 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 		uptime_seconds: uptime_s,
 		resources_loaded,
 		lock_state: { global_held, per_package: pkg_held },
+		state_dirs: state_dir.used(),
 		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
 	};

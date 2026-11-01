@@ -476,6 +476,10 @@ the headers still works via the header path.
 
 Per-token bucket, file-backed at `/var/run/uapi-ratelimit/<token-id>.txt`
 containing a float and an integer: `<tokens_remaining> <last_refill_epoch_ms>`.
+A token name holds up to 63 characters over HTTP and any number with
+`uapi-token`, and a file name holds 255 bytes, so a name longer than 63
+characters is replaced by its sha256 in the file name
+(`state_dir.token_file`). The last-used sentinel is named the same way.
 
 On each authed request:
 
@@ -520,10 +524,13 @@ with atomic rename; concurrent forks may lose increments under heavy
 contention - acceptable for operational metrics, not for billing.
 
 A token mint and a token revoke, over HTTP and with `uapi-token`, run
-`token_store.reap_state` after their commit and under the lock of the
-`uapi` package: the bucket and the last-used sentinel of each token that no
-longer authenticates are unlinked, and each of its `uapi_requests_total`
-and `uapi_rate_limit_drops_total` files is added to the file with the same
+`token_store.reap_state` under the lock of the `uapi` package. A mint, over
+HTTP and with `uapi-token create`, runs it before its commit, so that a
+request that uhttpd kills during the reap cannot lose the bearer of a token
+that it committed. A revoke runs it after its commit. The bucket and the
+last-used sentinel of each token that no longer authenticates are
+unlinked, and each of its `uapi_requests_total` and
+`uapi_rate_limit_drops_total` files is added to the file with the same
 other labels and `token_id=-retired`, then unlinked once the add is on
 disk. A token that revokes itself records its revoke after the fold, and a
 request of a token in flight at its revoke can write its bucket, sentinel
@@ -632,3 +639,7 @@ idempotency entries, metrics counters, recent errors and sentinels reset on
 reboot. This is acceptable: operational counters that span uptime aren't a
 uapi responsibility - point a `node_exporter` or central collector at the
 box and aggregate there.
+
+`GET /diagnostics` reports in `state_dirs` whether uapi uses each of these
+directories, as it finds them, without creating or narrowing one.
+`docs/operations.md` § Diagnostics says what each value means and costs.

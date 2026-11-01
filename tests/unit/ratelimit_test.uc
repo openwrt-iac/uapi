@@ -45,9 +45,17 @@ t.describe('ratelimit.check, exhausting the bucket', () => {
 });
 
 t.describe('ratelimit.check, malformed inputs', () => {
-	t.it('allows when token id has unsafe shape (best-effort silently allow)', () => {
-		t.assert_true(ratelimit.check("bad name", { now: 1000 }).allowed);
+	t.it('allows when there is no token id', () => {
 		t.assert_true(ratelimit.check(null, { now: 1000 }).allowed);
+	});
+
+	t.it('keeps the bucket of a token id that is not a file name in the directory', () => {
+		let rl = t.load_with({ digest: t.digest }, [ "state_dir", "ratelimit" ]);
+		let id = "../rl_unit_escape";
+		rl.check(id, { now: 1000 });
+		t.assert_equal(fs.stat("/var/run/rl_unit_escape.txt"), null);
+		t.assert_true(fs.stat("/var/run/uapi-ratelimit/" + t.digest.sha256(id) + ".txt") != null);
+		clean(t.digest.sha256(id));
 	});
 
 	t.it('allows when now is null (clockless router)', () => {
@@ -105,6 +113,20 @@ t.describe('ratelimit.effective_limits', () => {
 		let eff = ratelimit.effective_limits({ rate: 100, burst: 200 }, {});
 		t.assert_equal(eff.rate, 100);
 		t.assert_equal(eff.burst, 200);
+	});
+});
+
+t.describe('ratelimit, a token whose name is longer than 63 characters', () => {
+	t.it('is limited, in a bucket named by the sha256 of its name, which the reap keeps while it is live', () => {
+		let rl = t.load_with({ digest: t.digest }, [ "state_dir", "ratelimit" ]);
+		let live = sprintf("rl_unit_live_%070d", 0), dead = sprintf("rl_unit_dead_%070d", 0);
+		t.assert_true(rl.check(live, { now: 1000, rate: 1, burst: 1 }).allowed);
+		t.assert_false(rl.check(live, { now: 1000, rate: 1, burst: 1 }).allowed);
+		rl.check(dead, { now: 1000 });
+		rl.reap({ [live]: true });
+		t.assert_true(fs.stat("/var/run/uapi-ratelimit/" + t.digest.sha256(live) + ".txt") != null);
+		t.assert_equal(fs.stat("/var/run/uapi-ratelimit/" + t.digest.sha256(dead) + ".txt"), null);
+		clean(t.digest.sha256(live));
 	});
 });
 

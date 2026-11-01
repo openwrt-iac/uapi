@@ -1,7 +1,7 @@
 let fs = require('fs');
 let state_dir = require('state_dir');
 
-const DIR = "/var/run/uapi-idempotency";
+const DIR = state_dir.DIRS.idempotency;
 const TTL_SECONDS = 86400;
 const SWEEP_SECONDS = 3600;
 const KEY_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$/;

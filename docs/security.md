@@ -222,7 +222,9 @@ config token 'ci_bot'
 ```
 
 - Cleartext token is shown exactly once at creation (`uapi-token create`
-  CLI or `POST /tokens` HTTP). Never logged.
+  CLI or `POST /tokens` HTTP). Never logged. A `POST /tokens` that carries an
+  `Idempotency-Key` returns it again to a retry with the same key and body,
+  see `docs/tokens.md`.
 - Salt is 64 random bits (16 hex chars); hash is `sha256(salt || ":" || token)`.
 - `/etc/config/uapi` has mode 0600, which the install hook sets, and is no
   file of the package, so apk keeps it across upgrades and removal.
@@ -230,7 +232,8 @@ config token 'ci_bot'
   `/etc/config/` in its keep.d, and `/lib/upgrade/keep.d/uapi` names it
   while the package is installed.
 - last-used tracking is throttled to ~1 write/minute per token via a tmpfs
-  sentinel (`/var/run/uapi-token-update/<token-id>`); the wire response
+  sentinel (`/var/run/uapi-token-update/<token-id>`, or the sha256 of a
+  name longer than 63 characters); the wire response
   never depends on the audit write.
 
 The `salt`+`hash` design defends against an offline attacker who reads the
