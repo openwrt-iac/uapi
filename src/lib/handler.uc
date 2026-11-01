@@ -669,9 +669,10 @@ function carry_write_only(resource, body, existing) {
 }
 
 // Reduce a PATCH body against existing state to a post-image plus a schema-
-// validation target. JSON Patch (RFC 6902) synthesises the full post-image,
-// so we schema-check that; merge-patch (RFC 7396) is partial, so we schema-
-// check only the delta. Returns either { ok: true, merged, schema_body, delta } or
+// validation target. Both flavours schema-check only the fields that the request names: the
+// whole post-image of a JSON Patch (RFC 6902) holds every stored value, so a peer key with a
+// backslash that another writer stored failed every JSON Patch of the peer, where a merge patch
+// (RFC 7396) of the same change passed. Returns either { ok: true, merged, schema_body, delta } or
 // an error result that the caller short-circuits with. `delta` holds only the fields the
 // request named, with their requested values.
 // The top-level fields a JSON Patch names, taken from the first segment of each op path. A
@@ -720,8 +721,13 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 			                        resource.merge_for_patch(post, touched), existing);
 		// From jp.value, not post: post carries the write-only secret back in from uci, which
 		// the caller did not send.
-		return { ok: true, merged: post, schema_body: jp.value,
-		         delta: patch_touched_fields(body, jp.value) ?? jp.value };
+		let delta = patch_touched_fields(body, jp.value) ?? jp.value;
+		// Only the fields that the operations leave in the document, which 3.2.0 checked whole, so an
+		// add and a remove of a field that the resource does not declare still passes.
+		let checked = {};
+		for (let k, v in delta)
+			if (exists(jp.value, k)) checked[k] = v;
+		return { ok: true, merged: post, schema_body: checked, delta };
 	}
 	// A merge patch is a partial object. Anything else used to be folded into the read
 	// view and answered 200 without writing anything, so a malformed body was
@@ -806,9 +812,9 @@ function make(resource, opts) {
 	// into one ordered list applied once. A PUT or a PATCH that wrote nothing
 	// collects nothing: the ops come from opts, which it builds either way, and a
 	// peer without an endpoint is removed and set again, which resets its session.
-	function collect_kernel_ops(sink, kind, opts, sec_type, existing) {
+	function collect_kernel_ops(sink, kind, opts, sec_type, existing, staged) {
 		if (resource.kernel_ops == null) return;
-		let ops = resource.kernel_ops(kind, opts, sec_type, existing);
+		let ops = resource.kernel_ops(kind, opts, sec_type, existing, staged);
 		if (type(ops) != "array") return;
 		for (let op in ops) push(sink, op);
 	}
@@ -871,8 +877,9 @@ function make(resource, opts) {
 				let resolved_type = create_type(body);
 				c.uci_create_section(p, new_id, resolved_type);
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
-				let out = resource.fromUci(load_section(c, p, new_id), conn);
-				collect_kernel_ops(kops, "create", new_opts, resolved_type, null);
+				let staged = load_section(c, p, new_id);
+				let out = resource.fromUci(staged, conn);
+				collect_kernel_ops(kops, "create", new_opts, resolved_type, null, staged);
 				return { ok: true, body: out };
 			},
 		}));
@@ -932,9 +939,10 @@ function make(resource, opts) {
 				let wrote = diff_apply(c, p, id, existing, old_opts, new_opts,
 				                       default_footprint(resource, existing, old_opts, new_opts, true));
 				c.uci_require(p, id);
-				let out = resource.fromUci(load_section(c, p, id), conn);
+				let staged = load_section(c, p, id);
+				let out = resource.fromUci(staged, conn);
 				if (wrote)
-					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing, staged);
 				return { ok: true, body: out };
 			},
 		}));
@@ -989,9 +997,10 @@ function make(resource, opts) {
 				                             default_footprint(resource, existing, old_opts, new_opts),
 				                             named_rewrites(resource, r.delta));
 				c.uci_require(p, id);
-				let out = resource.fromUci(load_section(c, p, id), conn);
+				let staged = load_section(c, p, id);
+				let out = resource.fromUci(staged, conn);
 				if (wrote)
-					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing);
+					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing, staged);
 				return { ok: true, body: out };
 			},
 		}));

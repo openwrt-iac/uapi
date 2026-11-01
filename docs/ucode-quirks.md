@@ -224,16 +224,21 @@ value as the shell gets it, split at a tab and a newline too, and
 `lldpd/config.interface`, `dhcp/hosts.macs` and `dhcp/hosts.tag` use it, where
 LuCI's `L.toArray` keeps the entry whole. `config_get` leaves out an empty list
 entry, as `append` adds nothing for it. `wireguard.sh` does not split a peer's
-`allowed_ips` for wg: it turns each space into a comma, and wg cuts the line at
-`#` and strips the rest of the whitespace, so a tab joins two prefixes into one
-entry, and a second space adds an empty one, which wg refuses. `wg_allowed_ips`
-reads it that way, and does not expand the escapes of printf %b. The routes of
-`route_allowed_ips` go to each word of the shell's split, so the route side reads
-with `config_get_words`. `config_get_bool` gets a list joined the same way, so
-`list disabled '1'` disables a wireguard peer: read such a value with `config_get`
-before `shell_bool`. `config_list_foreach` is the opposite case: it walks the
-entries of a list and skips an option, so `dhcp/hosts.match_tag` and the `server`
-and `address` of `dhcp/dnsmasq` read an option as null.
+`allowed_ips` for wg: it turns each space into a comma, printf %b expands the
+line, and wg cuts it at a NUL byte and at `#`, splits it at commas and strips the
+rest of the whitespace, so `\054` separates two prefixes, a tab joins two
+prefixes into one entry, and a second space adds an empty one, which wg refuses.
+`wg.allowed_ips` reads it that way, and keeps the whitespace in an entry so that
+a tab shows. The routes of `route_allowed_ips` go to each word of the shell's
+split, which printf %b never sees, so the route side reads with
+`config_get_words`, and takes the address before the first `/` of a word and the
+length after its last, as the `case` of wireguard.sh does, and reads the length
+as netifd does, with strtoul in base 0 or as an IPv4 mask. `config_get_bool` gets
+a list joined the same way, so `list disabled '1'` disables a wireguard peer: read
+such a value with `config_get` before `shell_bool`. `config_list_foreach` is the
+opposite case: it walks the entries of a list and skips an option, so
+`dhcp/hosts.match_tag` and the `server` and `address` of `dhcp/dnsmasq` read an
+option as null.
 
 The reverse also holds: blob.c drops a `list` given to an attribute that is not an ARRAY, so
 6rd, map and 464xlat, which declare `ip6prefix` as a string, lose a listed value. That is why

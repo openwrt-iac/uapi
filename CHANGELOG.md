@@ -134,27 +134,24 @@ All notable changes to this project will be documented in this file. Format foll
   and by the restore, which then answers `reload_failed_unrecovered` before it changes the kernel
   of that interface. Its DELETE and a PATCH that disables it work. A value with a backslash that is
   longer than 512 bytes, which uapi does not read, is refused in the same way, and its DELETE
-  answers 500 too. A write that sets such a key, or enables such a peer, still answers 422. A JSON
-  Patch of such a peer still answers 422 on `public_key`, because its schema check reads the
-  patched document, which holds the stored key, and a merge-patch PATCH does not. No request or
-  response schema changes. (#289)
+  answers 500 too. A write that sets such a key, or enables such a peer, still answers 422. No
+  request or response schema changes. (#289)
 - **`network/wireguard_peers.allowed_ips` reads the entries as wg splits them.** wireguard.sh joins
   a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line
   at `#` and refuses an empty entry. So two prefixes that a tab separates are one entry, and a space
   at either end or next to another adds an empty entry, and wg refuses the config for either, so the
   interface does not come up. Such an option read as clean entries, so a PUT of the read stored a
   list that wg takes. It now reads as wg splits it, a list entry of two prefixes reads as two
-  entries, and text after `#` is left out. A backslash escape, which wireguard.sh expands, is not
-  modelled. Under the tightening carve-out in `docs/versioning.md`, three writes that passed now
-  answer 422 for such an option: a write that leaves the peer enabled, a write of
-  `network/interfaces` that switches its interface to wireguard or enables it, and a PUT of the read
-  of a disabled peer. The first two left wg refusing the interface, and a PUT of the read stored
-  entries that wg takes in place of ones that it refuses, without being asked. A write that leaves a
-  peer disabled checks only the allowed IPs that it sends, so a peer that stores any allowed IP that
-  wg cannot parse can now be disabled. The routes of `route_allowed_ips` are read from each word of
-  the option, split at tabs and newlines too, as wireguard.sh installs them, and the restore gives
-  wg the entries as it splits them, so a list entry of two prefixes keeps both routes and both
-  allowed IPs. (#290)
+  entries, and text after `#` is left out. Under the tightening carve-out in `docs/versioning.md`,
+  three writes that passed now answer 422 for such an option: a write that leaves the peer enabled,
+  a write of `network/interfaces` that switches its interface to wireguard or enables it, and a PUT
+  of the read of a disabled peer. The first two left wg refusing the interface, and a PUT of the
+  read stored entries that wg takes in place of ones that it refuses, without being asked. A write
+  that leaves a peer disabled checks only the allowed IPs that it sends, so a peer that stores any
+  allowed IP that wg cannot parse can now be disabled. The routes of `route_allowed_ips` are read
+  from each word of the option, split at tabs and newlines too, as wireguard.sh installs them, and
+  the restore gives wg the entries as it splits them, so a list entry of two prefixes keeps both
+  routes and both allowed IPs. (#290)
 - **`dhcp/hosts.tag` reads a list entry as the tags that dnsmasq.init sets.** dnsmasq.init joins the
   list with spaces and splits the words, so `list tag 'guest iot'` sets two tags, which read as one
   entry. An entry with a tab or a newline is split too, where before it made every write of the host
@@ -299,6 +296,64 @@ All notable changes to this project will be documented in this file. Format foll
   `/schema`, a request refused with `403 tls_required`, and a GET or DELETE with a body. uhttpd
   parsed the rest of such a body as the next request on the connection, which answered 400 or closed
   the connection. Such a request answers as before, but once its whole body has arrived. (#296)
+- **`network/wireguard_peers.allowed_ips` reads a printf %b escape and a comma as wg does, and the
+  routes of `route_allowed_ips` follow the words that wireguard.sh routes.** wireguard.sh gives wg
+  the line `AllowedIPs=` through `printf %b`, and wg splits it at commas, so `option allowed_ips
+  '10.0.0.0/8\054192.168.0.0/16'` gives wg two prefixes, and so does a comma, while the read gave
+  one entry. On an enabled peer, a write of the peer and a write of `network/interfaces` that
+  switches its interface to wireguard or enables it answered 422 for that entry, and the restore
+  after a failed write of any peer of the interface gave wg the entry as it stands, which wg
+  refused, so it answered `500 reload_failed_unrecovered` and set none of the peers after it. The
+  read, the kernel apply and the restore now give the entries that wg gets, so these writes answer
+  200 and the restore sets the peer. A value that the escapes would give a second line, the end of
+  the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512
+  bytes, reads unexpanded, so its backslash shows in an entry. A value that wg reads as an empty
+  line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still
+  writes the line and wg refuses it, so the interface does not come up, and a write that leaves the
+  peer enabled refuses it. wireguard.sh routes each word of the option as uci holds it, which printf
+  %b never sees, with the address before the first `/` of the word and the length after its last, so
+  the word above routes 10.0.0.0/16, and netifd reads that length in more forms than a decimal. A
+  write took no route from such a word, so a disable or a DELETE left that route in the kernel, and
+  the restore withdrew it. They now take the route that ifup installs, with the length read as
+  netifd reads it. A PATCH that leaves `allowed_ips` as it is keeps the stored option and its route.
+  A PUT of the read stores the two entries, and their routes replace it. Only the description of
+  `allowed_ips` changes in the spec. Three requests answer otherwise than in 3.2.0, and none needs a
+  carve-out of `docs/versioning.md`, because no request that 3.2.0 accepted is refused and each
+  answer now says what wg and netifd do: a GET of such a peer gives the entries that wg holds, a
+  write that disables or deletes it also withdraws the route that ifup installed for the word, and a
+  failed write whose restore meets it answers `reload_failed_restored` where it answered
+  `reload_failed_unrecovered`. (#297)
+- **A JSON Patch that leaves a stored value as it is answers as a merge-patch PATCH does.** A JSON
+  Patch (`Content-Type: application/json-patch+json`) schema-checked the whole patched document,
+  which holds every stored value. So a peer whose stored `public_key` holds a backslash, which
+  another writer such as `/raw` or a shell stored, answered 422 `invalid_format` on `public_key` for
+  a JSON Patch of any other field, while a merge-patch PATCH of the same change answered 200 since
+  #289. A JSON Patch now schema-checks only the fields that its operations name and leave in the
+  document, with their values after the operations, as a merge patch checks only its body. This
+  holds on every resource: a stored value that breaks a pattern, an enum or a bound of the request
+  schema, such as a `clientid` with dashes, no longer fails a JSON Patch of another field. A JSON
+  Patch that names such a value, such as one that sets a key with a backslash, still answers 422,
+  and `validate()` still sees the whole section. No request that 3.2.0 accepted answers otherwise:
+  only some that it refused with 422 now pass. (#297)
+- **The restore after a failed write sets the WireGuard peers that follow a peer whose stored
+  `preshared_key` wg cannot read.** The restore after a failed write of a peer sets every peer of
+  the interface again from uci. It refused a peer whose stored preshared key is not a key, which
+  only another writer such as `/raw` or a shell can store, and set none of the peers after it, so
+  the write answered `500 reload_failed_unrecovered`. At ifup, wg refuses the whole config for such
+  a key and so never sets that peer without one, and a set without the key would take from the peer
+  the key that the kernel holds. The restore now leaves that peer as the kernel holds it and sets
+  the peers after it. When the failed write did not name that peer and the kernel holds it, that
+  restores it, and the write answers `500 reload_failed_restored`. When the write, or an earlier
+  operation of its batch, set or removed that peer, or the kernel does not hold it, the restore
+  cannot put it back: it sets the other peers and then answers `reload_failed_unrecovered`. A stored
+  preshared key that wg reads as more than a key, through a later line or `\c`, is refused before
+  the restore changes the kernel of the interface, as such a `public_key` is. For a later line,
+  3.2.0 set the peer with the key of the first line. A write that sets a peer with such a key still
+  answers 500. No schema changes. Two failed writes answer with another code than in 3.2.0, and
+  neither needs a carve-out of `docs/versioning.md`, because both still answer 500: one of another
+  peer whose restore meets a preshared key that wg cannot read answers `reload_failed_restored`
+  where it answered `reload_failed_unrecovered`, and one whose restore meets a preshared key with a
+  later line answers `reload_failed_unrecovered` where it answered `reload_failed_restored`. (#297)
 
 ## [3.2.0] - 2026-10-29
 

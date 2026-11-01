@@ -39,24 +39,11 @@ function run(argv) {
 	return { ok: code == 0, code: code, output: trim(output) };
 }
 
-function to_peer(section) {
-	return {
-		public_key: section.public_key,
-		allowed_ips: values.wg_allowed_ips(section.allowed_ips) ?? [],
-		endpoint_host: values.config_get(section.endpoint_host),
-		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
-		// Read as wg reads it, since a stored value reaches here from uci without passing through
-		// validate(), and set_peer_argv() gives it to `wg set` with %d.
-		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
-		preshared_key: section.preshared_key,
-	};
-}
-
 const ESCAPES = { a: 7, b: 8, e: 27, f: 12, n: 10, r: 13, t: 9, v: 11, "\\": 92 };
 
 // printf_b() walks a value byte by byte under the lock of `network`. A key line that escapes each of
 // its 44 characters as `\0ooo` is 220 bytes long. A value with a backslash that is longer than this
-// bound is not expanded, and uapi then does not say which key wg reads from it.
+// bound is not expanded, and uapi then does not say which key or allowed IPs wg reads from it.
 const ESCAPED_MAX = 512;
 
 // wireguard.sh hands its config to wg through busybox's `printf %b`, which expands the escapes of
@@ -133,6 +120,37 @@ function kernel_keys(v) {
 		if (key != null && match(key, WG_KEY_RE)) push(out, key);
 	}
 	return out;
+}
+
+// The allowed IPs that wg reads from a stored value: config_get joins a list with spaces,
+// wireguard.sh makes each space a comma, printf %b expands the line, so `\054` separates two entries
+// and `\040` does not, and wg cuts the line at a NUL byte and at `#` and splits it at commas. wg also
+// strips the whitespace, which an entry keeps here so that a tab between two prefixes shows.
+// wireguard.sh writes the line for any value that is not empty, and wg refuses the line when nothing
+// is left of it, so that reads as one empty entry, which a write refuses too. A value that the
+// expansion would give a second line, the end of the config or a byte that is not printable ASCII,
+// none of which an address holds, or that is too long to expand, reads unexpanded, so that its
+// backslash shows in an entry and the response stays valid UTF-8.
+function allowed_ips(v) {
+	let s = values.config_get(v);
+	if (type(s) != "string" || s == "") return null;
+	s = replace(s, " ", ",");
+	let x = (index(s, "\\") >= 0 && length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
+	let t = (x != null && !x.stopped && index(x.text, "\n") < 0) ? split(split(x.text, chr(0))[0], "#")[0] : null;
+	return split((t != null && match(t, /^[ -~]*$/)) ? t : split(s, "#")[0], ",");
+}
+
+function to_peer(section) {
+	return {
+		public_key: section.public_key,
+		allowed_ips: allowed_ips(section.allowed_ips) ?? [],
+		endpoint_host: values.config_get(section.endpoint_host),
+		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
+		// Read as wg reads it, since a stored value reaches here from uci without passing through
+		// validate(), and set_peer_argv() gives it to `wg set` with %d.
+		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
+		preshared_key: section.preshared_key,
+	};
 }
 
 function peer_sections(conn, iface) {
@@ -223,24 +241,44 @@ function remove_peer(iface, pubkey) {
 	return run([ "wg", "set", iface, "peer", pubkey, "remove" ]);
 }
 
+// The length of a route as parse_netmask_string() in netifd reads it: strtoul in base 0, which skips
+// leading whitespace and takes a sign, or, with a dot, an IPv4 mask that inet_aton reads, whose
+// leading ones it counts. null for a length that netifd refuses.
+function netmask_len(s, v6) {
+	let num = (t) => match(t, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/) ? int(t, 0) : null;
+	if (index(s, ".") < 0) {
+		if (s == "") return 0;
+		let m = match(s, /^[[:space:]]*([+-]?)(.*)$/);
+		let n = num(m[2]);
+		return (m[1] == "-" && n !== 0) ? null : n;
+	}
+	let parts = map(split(s, "."), num);
+	if (v6 || length(parts) > 4 || length(filter(parts, (p) => type(p) != "int")) > 0
+	    || length(filter(slice(parts, 0, -1), (p) => p > 255)) > 0 || parts[-1] >= 1 << (8 * (5 - length(parts))))
+		return null;
+	let mask = parts[-1], ones = 0;
+	for (let i = 0; i < length(parts) - 1; i++) mask |= parts[i] << (24 - 8 * i);
+	while (ones < 32 && ((mask >> (31 - ones)) & 1)) ones++;
+	return ones;
+}
+
 // `route_allowed_ips` asks netifd to install a route per allowed IP, which it
 // does from the proto handler, so a peer-level apply has to install them too or
 // the peer is present in the kernel with no path to it. Mirrors the mapping in
 // wireguard.sh: a bare address becomes a host route.
 //
-// `prefix` is one spelling of the route that netifd installs: the length read in base 0, as netifd
-// and `ip` read it, and the address masked to it, because `ip route` refuses an IPv4 prefix with
-// host bits. Routes are compared by it. Compared as written, a PUT that respelled `FD00::/64`
-// deleted the route that it had just installed, and so did a rollback for a route that the kernel
-// prints in another spelling than uci holds.
+// `prefix` is one spelling of the route that netifd installs: the length as netifd reads it, and the
+// address masked to it, because `ip route` refuses an IPv4 prefix with host bits. Routes are
+// compared by it. Compared as written, a PUT that respelled `FD00::/64` deleted the route that it
+// had just installed, and so did a rollback for a route that the kernel prints in another spelling
+// than uci holds.
 function route_prefix(allowed_ip) {
 	if (type(allowed_ip) != "string") return null;
 	let parts = split(allowed_ip, "/");
 	if (length(parts) > 2) return null;
 	let v6 = index(parts[0], ":") >= 0;
 	let bits = v6 ? 128 : 32;
-	let len = (length(parts) == 1) ? bits
-	        : match(parts[1], /^(0[0-7]*|[1-9][0-9]*)$/) ? int(parts[1], 0) : null;
+	let len = (length(parts) == 1) ? bits : netmask_len(parts[1], v6);
 	if (type(len) != "int" || len > bits) return null;
 	if (v6) {
 		let words = values.ipv6_words(parts[0]);
@@ -257,11 +295,27 @@ function route_prefix(allowed_ip) {
 	         v6: false };
 }
 
-function routes_from(allowed_ips, enabled) {
+// wireguard.sh routes each word of the option as uci holds it, which printf %b never sees, through a
+// case: a `:` before the last `/` makes the word an IPv6 prefix, else a `.` before it an IPv4 one,
+// else a `:` or a `.` makes it a host. The address is what precedes the first `/` and the length
+// what follows the last, so `10.0.0.0/8\054192.168.0.0/16`, which gives wg two prefixes, routes
+// 10.0.0.0/16.
+function word_route(w) {
+	let slash = rindex(w, "/"), colon = index(w, ":"), dot = index(w, ".");
+	let v6 = colon >= 0 && colon < slash, len;
+	if (v6 || (dot >= 0 && dot < slash)) len = substr(w, slash + 1);
+	else if (colon >= 0) { v6 = true; len = "128"; }
+	else if (dot >= 0) len = "32";
+	else return null;
+	let r = route_prefix(split(w, "/")[0] + "/" + len);
+	return (r?.v6 === v6) ? r : null;
+}
+
+function routes_from(words, enabled) {
 	if (!enabled) return [];
 	let out = [];
-	for (let a in (type(allowed_ips) == "array" ? allowed_ips : [])) {
-		let r = route_prefix(a);
+	for (let w in (type(words) == "array" ? words : [])) {
+		let r = word_route(w);
 		if (r != null) push(out, r);
 	}
 	return out;
@@ -408,8 +462,12 @@ function is_up(conn, iface) {
 // peers uci no longer lists, then apply every peer it does. Used on the rollback
 // path, where a batch may have applied some peers before failing on a later one,
 // so replaying the request's own operations would not undo the applied ones.
-function reconcile(conn, interfaces) {
-	let seen = {};
+// `ops` are those operations, which name the peers that the request may have changed in the kernel.
+function reconcile(conn, interfaces, ops) {
+	let seen = {}, missing = null, named = {};
+	for (let op in ops ?? [])
+		for (let k in ((op.action == "remove") ? kernel_keys(op.public_key) : [ kernel_key(op.public_key) ]) || [])
+			if (k) named[op.iface + "|" + k] = true;
 	for (let iface in interfaces) {
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) continue;
 		if (seen[iface]) continue;
@@ -423,6 +481,8 @@ function reconcile(conn, interfaces) {
 			// Refused before anything changes in the kernel, as apply_peer() refuses it.
 			if (key === false)
 				return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
+			if (key && kernel_key(s.preshared_key) === false)
+				return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
 			if (key) wanted[key] = true;
 		}
 
@@ -436,21 +496,31 @@ function reconcile(conn, interfaces) {
 			for (let r in peer_routes(s)) push(wanted_routes, r);
 
 		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it, and
-		// the kernel holds no peer under a key that wg cannot read.
+		// the kernel holds no peer under a key that wg cannot read. A preshared key that wg cannot read
+		// makes wg refuse the whole config at ifup, so wg never sets that peer without it: set with
+		// /dev/null here, the peer would lose the key that the kernel holds. So the peer stays as the
+		// kernel holds it, which restores it only when the request did not set or remove it and the
+		// kernel holds it. Otherwise it fails the restore, once the other peers are set.
 		for (let s in sections) {
-			if (!kernel_key(s.public_key)) continue;
+			let key = kernel_key(s.public_key);
+			if (!key) continue;
+			if (kernel_key(s.preshared_key) === null && (s.preshared_key ?? "") != "") {
+				if (named[iface + "|" + key] || index(current ?? [], key) < 0)
+					missing = sprintf("not restoring a peer with a malformed preshared key on %s", iface);
+				continue;
+			}
 			let err = apply_peer(iface, to_peer(s));
 			if (err != null) return err;
 		}
 
-		// Withdraw what uci no longer wants. The request's own operations are not
-		// available here, so the previously-wanted set comes from the kernel, and
+		// Withdraw what uci no longer wants. The previously-wanted set comes from the
+		// kernel, which holds what a batch applied before it failed, and
 		// route_still_wanted keeps a prefix another peer or a `config route`
 		// section claims.
 		let err = apply_routes(conn, iface, wanted_routes, installed_routes(conn, iface));
 		if (err != null) return err;
 	}
-	return null;
+	return missing;
 }
 
 // ops are {iface, action: "set"|"remove", ...peer fields}, in the order the
@@ -506,7 +576,7 @@ function apply(conn, ops, applied) {
 		let err = apply_peer(iface, op);
 		if (err != null) return err;
 		err = apply_routes(conn, iface,
-		                   routes_from(op.allowed_ips, op.route_allowed_ips), previous);
+		                   routes_from(op.route_words, op.route_allowed_ips), previous);
 		if (err != null) return err;
 	}
 	return null;
@@ -522,5 +592,5 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys,
+return { apply, reconcile, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
          route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line };

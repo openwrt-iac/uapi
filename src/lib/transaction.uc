@@ -387,7 +387,7 @@ function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 		let err = reload(services);
 		if (err == null) err = run_check(watch);
 		if (err != null) return err;
-		return wg_reconcile(conn, wg.interfaces_of(ops));
+		return wg_reconcile(conn, wg.interfaces_of(ops), ops);
 	};
 }
 

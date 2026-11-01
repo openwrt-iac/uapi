@@ -298,26 +298,6 @@ t.describe('values.wg_line', () => {
 	});
 });
 
-t.describe('values.wg_allowed_ips', () => {
-	t.it('splits at each space only, as wireguard.sh does before wg reads the line', () => {
-		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8 fd00::/8'), [ '10.0.0.0/8', 'fd00::/8' ]);
-		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8\t10.1.0.0/16'), [ '10.0.0.0/8\t10.1.0.0/16' ]);
-		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8  10.1.0.0/16 '), [ '10.0.0.0/8', '', '10.1.0.0/16', '' ]);
-		t.assert_deep_equal(v.wg_allowed_ips([ '10.0.0.0/8 10.1.0.0/16', 'fd00::/8' ]), [ '10.0.0.0/8', '10.1.0.0/16', 'fd00::/8' ]);
-	});
-	t.it('drops an empty list item, as config_get does, and what follows a #, as wg does', () => {
-		t.assert_deep_equal(v.wg_allowed_ips([ '10.0.0.0/8', '', '10.1.0.0/16' ]), [ '10.0.0.0/8', '10.1.0.0/16' ]);
-		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8#c 10.1.0.0/16'), [ '10.0.0.0/8' ]);
-		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8 #c'), [ '10.0.0.0/8', '' ]);
-	});
-	t.it('is null when wireguard.sh writes no AllowedIPs line, or wg reads none from it', () => {
-		t.assert_equal(v.wg_allowed_ips(null), null);
-		t.assert_equal(v.wg_allowed_ips(''), null);
-		t.assert_equal(v.wg_allowed_ips([ '' ]), null);
-		t.assert_equal(v.wg_allowed_ips('#c'), null);
-	});
-});
-
 t.describe('values.ipv4_to_int', () => {
 	t.it('reads the octets as one number', () => {
 		t.assert_equal(v.ipv4_to_int('10.0.0.1'), 167772161);

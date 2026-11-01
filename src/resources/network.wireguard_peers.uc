@@ -29,7 +29,7 @@ function fromUci(section) {
 		description: section.description ?? null,
 		public_key: section.public_key ?? null,
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
-		allowed_ips: values.wg_allowed_ips(section.allowed_ips),
+		allowed_ips: wg.allowed_ips(section.allowed_ips),
 		endpoint_host: config_get(section.endpoint_host) ?? null,
 		endpoint_port: read_port(section.endpoint_port),
 		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
@@ -222,7 +222,10 @@ return {
 	// it builds the config, so it is removed rather than set.
 	// `opts` is always toUci output, so its booleans are "1"/"0" and can be
 	// compared literally. `existing` is a raw uci section and cannot.
-	kernel_ops: function(kind, opts, sec_type, existing) {
+	// `staged` is the section as the write leaves it in uci. The routes go to its words, which can
+	// differ from the allowed IPs of the read that `opts` holds: a PATCH that leaves allowed_ips as
+	// it is keeps an option with an escape, whose words wireguard.sh routes before printf %b.
+	kernel_ops: function(kind, opts, sec_type, existing, staged) {
 		let iface = parent_from_type(sec_type);
 		if (iface == null || iface == "") return [];
 
@@ -257,7 +260,8 @@ return {
 			iface: iface,
 			action: "set",
 			public_key: opts.public_key,
-			allowed_ips: values.wg_allowed_ips(opts.allowed_ips) ?? [],
+			allowed_ips: wg.allowed_ips(opts.allowed_ips) ?? [],
+			route_words: values.config_get_words(staged.allowed_ips) ?? [],
 			endpoint_host: opts.endpoint_host,
 			endpoint_port: as_int(opts.endpoint_port),
 			persistent_keepalive: as_int(opts.persistent_keepalive),
@@ -287,7 +291,7 @@ return {
 		                        description: "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it." },
 		has_preshared_key:    { type: "boolean", readOnly: true },
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
-		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg splits them: wireguard.sh joins a list with spaces, leaving out an empty entry, and makes each space a comma, and wg cuts the line at `#`. So two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A backslash escape, which wireguard.sh expands, is not modelled. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends." },
+		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends." },
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
