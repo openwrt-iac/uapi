@@ -18,8 +18,8 @@ URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
-body_of() { echo "$1" | sed '$d'; }
-status_of() { echo "$1" | tail -1; }
+body_of() { printf '%s\n' "$1" | sed '$d'; }
+status_of() { printf '%s\n' "$1" | tail -1; }
 id_of() { echo "$1" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//'; }
 
 # apk-tools 3 `list -i` prints any package present in the INDEX, installed or
@@ -377,6 +377,26 @@ has_peer "$PEER3" && fail "the disabled peer without allowed IPs is still in the
 r=$(call -X DELETE "$URL/network/wireguard_peers/$noips")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of a peer without allowed IPs: $(body_of "$r")"
 
+# A list entry is joined like an option, so it reads as its two prefixes, which wg holds and which
+# have a route each. Read whole, it answered 422, and a write that turned the routes off kept both.
+echo "--- a list entry of two prefixes reads as both, and turning its routes off withdraws both ---"
+$SSH "uci set network.uapi45list=wireguard_$IFACE; uci set network.uapi45list.public_key='$WORDS_PEER'
+	uci add_list network.uapi45list.allowed_ips='10.98.142.0/24 10.98.143.7'; uci set network.uapi45list.route_allowed_ips=1
+	uci commit network; ifup $IFACE"
+sleep 5
+static_routes | grep -q '^10.98.142.0/24 ' || fail "ifup installed no route for the first prefix: $(static_routes)"
+static_routes | grep -q '^10.98.143.7 ' || fail "ifup installed no route for the second prefix: $(static_routes)"
+view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45list")")
+[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.142.0/24","10.98.143.7"]' ] || fail "the list entry read wrong: $view"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45list" -d '{"route_allowed_ips":false}')
+[ "$(status_of "$r")" = "200" ] || fail "turning the routes off expected 200, got $(status_of "$r"): $(body_of "$r")"
+[ -z "$(static_routes)" ] || fail "routes left behind by turning them off: $(static_routes)"
+aips=$($SSH "wg show $IFACE allowed-ips" | awk -v k="$WORDS_PEER" '$1 == k { $1 = ""; print }')
+for pfx in 10.98.142.0/24 10.98.143.7/32; do
+	case " $aips " in *" $pfx "*) ;; *) fail "wg does not hold $pfx: $aips" ;; esac
+done
+call -X DELETE "$URL/network/wireguard_peers/uapi45list" >/dev/null
+
 # Routes were compared as written, so a PUT that respelled a prefix deleted the route that it had
 # just installed, and the restore after a failed write deleted a route that the kernel prints in
 # another spelling than uci holds.
@@ -480,6 +500,31 @@ n=0
 until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
 	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with its fixed peer"; sleep 1
 done
+
+# wireguard.sh writes `AllowedIPs=${peer_a_ips// /, }`, so a tab between two prefixes reaches wg as
+# one entry, which it refuses. The read gave two entries, and a PUT of it stored a list that wg takes.
+echo "--- a tab between two allowed IPs reads as one entry, wg refuses it, a PUT of the read is refused and disabling passes ---"
+TAB_PEER=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45tab=wireguard_$IFACE2; uci set network.uapi45tab.public_key='$TAB_PEER'
+	uci set network.uapi45tab.allowed_ips=\"\$(printf '10.98.95.2/32\t10.98.95.3/32')\"; uci commit network"
+view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45tab")")
+[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.95.2/32\t10.98.95.3/32"]' ] || fail "the allowed IPs read wrong: $view"
+r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+[ "$(status_of "$r")" = "422" ] || fail "PUT of the read expected 422, got $(status_of "$r"): $(body_of "$r")"
+[ "$($SSH "uci -q get network.uapi45tab.allowed_ips" | tr '\t' '|')" = "10.98.95.2/32|10.98.95.3/32" ] \
+	|| fail "the refused PUT changed the stored allowed IPs"
+$SSH "ifup $IFACE2"
+sleep 10
+$SSH "ubus call network.interface.$IFACE2 status" | grep -q '"up": true' \
+	&& fail "$IFACE2 came up with the tab, so wg took what the read gives as one entry"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d '{"disabled":true}')
+[ "$(status_of "$r")" = "200" ] || fail "disabling the peer expected 200, got $(status_of "$r"): $(body_of "$r")"
+$SSH "ifup $IFACE2"
+n=0
+until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
+	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the tab peer disabled"; sleep 1
+done
+call -X DELETE "$URL/network/wireguard_peers/uapi45tab" >/dev/null
 
 # The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
 # gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. Either way out

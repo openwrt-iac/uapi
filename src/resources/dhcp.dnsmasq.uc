@@ -1,7 +1,6 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
 let as_int = values.as_int;
-let as_list_or_null = values.as_list_or_null;
 
 // values.SHELL_WORD_RE, because the init script expands these unquoted, plus a double quote,
 // which opens a string in dnsmasq's config.
@@ -25,8 +24,9 @@ function fromUci(section) {
 		readethers: shell_bool(section.readethers, true),
 		leasefile: section.leasefile ?? null,
 		resolvfile: section.resolvfile ?? null,
-		server: as_list_or_null(section.server),
-		address: as_list_or_null(section.address),
+		// dnsmasq.init passes these with config_list_foreach, which skips an option.
+		server: (type(section.server) == "array") ? section.server : null,
+		address: (type(section.address) == "array") ? section.address : null,
 		nonwildcard: shell_bool(section.nonwildcard, true),
 		runtime: {},
 	};
@@ -85,8 +85,10 @@ return {
 		readethers:        { type: "boolean", default: true },
 		leasefile:         { type: ["string", "null"], pattern: FILE_RE },
 		resolvfile:        { type: ["string", "null"], pattern: FILE_RE },
-		server:            { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE } },
-		address:           { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE } },
+		server:            { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE },
+		                     description: "Upstream DNS servers, each a dnsmasq `server`, the uci `list server`. dnsmasq.init passes only the entries of a list, so a stored `option server`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place." },
+		address:           { type: ["array", "null"], items: { type: "string", pattern: values.DNSMASQ_TEXT_RE },
+		                     description: "Fixed answers, each a dnsmasq `address`, such as `/example.lan/192.0.2.1`, the uci `list address`. dnsmasq.init passes only the entries of a list, so a stored `option address`, which dnsmasq ignores, reads as null. A write that sends a list stores the list in its place." },
 		nonwildcard:       { type: "boolean", default: true },
 	},
 };

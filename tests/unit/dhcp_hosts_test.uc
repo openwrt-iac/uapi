@@ -84,6 +84,15 @@ t.describe('dhcp.hosts.validate', () => {
 		t.assert_equal(length(errs), 0);
 	});
 
+	// dnsmasq's parse_hex takes `*` for a whole octet only, and LuCI's isValidMAC the same.
+	t.it('accepts a * octet, which dnsmasq and LuCI take, and refuses one mixed with a digit', () => {
+		for (let m in [ '00:11:22:33:44:*', '*:*:*:*:*:*', 'AA:*:cc:dd:ee:ff' ])
+			t.assert_deep_equal(hosts.validate({ macs: [ m ], ip: '10.0.0.1' }, null), [], m);
+		for (let m in [ '00:11:22:33:44:5*', '00:11:22:33:44:**', '00:11:22:33:44', '00:11:22:33:44:*:66' ])
+			t.assert_deep_equal(map(hosts.validate({ macs: [ m ], ip: '10.0.0.1' }, null), (e) => [ e.field, e.code ]),
+			                    [ [ 'macs[0]', 'invalid_format' ] ], m);
+	});
+
 	// The index has to be the loop counter, not a constant. Every other case here puts the
 	// bad entry first, which a hardcoded `macs[0]` would satisfy, so a caller fixing the
 	// address the error named would have been editing the wrong list entry.
@@ -247,6 +256,12 @@ t.describe('dhcp.hosts tag always reads as an array', () => {
 	});
 	t.it('a stored list is unchanged', () => {
 		t.assert_deep_equal(view(['x', 'y']).tag, ['x', 'y']);
+	});
+	// dnsmasq.init reads the tags with config_get and loops over them unquoted, so it sets one tag
+	// per word of a list entry too.
+	t.it('a list entry, or a value with a tab or a newline, is split into words as dnsmasq.init splits it', () => {
+		t.assert_deep_equal(view(['guest iot', 'lab']).tag, ['guest', 'iot', 'lab']);
+		t.assert_deep_equal(view('guest\tiot\nlab').tag, ['guest', 'iot', 'lab']);
 	});
 	t.it('absent stays null, not an empty array', () => {
 		t.assert_equal(view(null).tag, null);
@@ -440,5 +455,30 @@ t.describe('dhcp/hosts macs of several words in one value', () => {
 		let c = stored(TWO);
 		t.assert_equal(h.patch(c, ctx, 'h1', { leasetime: '24h' }).status, 200);
 		t.assert_equal(c._state.uci.dhcp.h1.mac, TWO);
+	});
+});
+
+t.describe('dhcp/hosts tag of several words in one list entry', () => {
+	let handler = require('handler');
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let h = handler.make(hosts, { tx });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+
+	t.it('reads the entry as its words, and a PUT of the read stores the tags that dnsmasq set', () => {
+		let c = ubus.stub({ uci: { dhcp: { h1: { '.type': 'host', '.anonymous': false, mac: '00:11:22:33:44:55',
+		                                         ip: '192.168.1.50', tag: [ 'guest iot' ] } } } });
+		let body = h.get_one(c, ctx, 'h1').body;
+		t.assert_deep_equal(body.tag, [ 'guest', 'iot' ]);
+		delete body.runtime;
+		t.assert_equal(h.replace(c, ctx, 'h1', body).status, 200);
+		t.assert_deep_equal(c._state.uci.dhcp.h1.tag, [ 'guest', 'iot' ]);
+	});
+
+	// Read whole, an entry with a tab failed the control-character rule, so every write answered 422.
+	t.it('takes a PATCH of another field of a host whose tag entry holds a tab, and keeps the entry', () => {
+		let c = ubus.stub({ uci: { dhcp: { h1: { '.type': 'host', '.anonymous': false, mac: '00:11:22:33:44:55',
+		                                         ip: '192.168.1.50', tag: [ 'guest\tiot' ] } } } });
+		t.assert_equal(h.patch(c, ctx, 'h1', { leasetime: '24h' }).status, 200);
+		t.assert_deep_equal(c._state.uci.dhcp.h1.tag, [ 'guest\tiot' ]);
 	});
 });

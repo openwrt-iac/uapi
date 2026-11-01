@@ -124,4 +124,31 @@ for store in "uci set dhcp.$mm_id.mac='$TWO'" "uci -q delete dhcp.$mm_id.mac; uc
 done
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$mm_id"
 
+echo "--- tag: a list entry of two words reads as the two tags that dnsmasq sets ---"
+tg=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
+	"name": "tagged", "macs": ["aa:bb:cc:dd:ee:04"], "ip": "192.168.1.54"
+}')
+echo "$tg" | tail -1 | grep -q '^200$' || fail "POST for the tag case expected 200: $tg"
+tg_id=$(echo "$tg" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+$SSH "uci add_list dhcp.$tg_id.tag='guest iot'; uci commit dhcp; /etc/init.d/dnsmasq reload"
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:04,set:guest,set:iot,192.168.1.54,tagged"
+view=$(call "$URL/dhcp/hosts/$tg_id" | sed '$d')
+[ "$(printf '%s' "$view" | jq -c '.tag')" = '["guest","iot"]' ] || fail "the tag list entry read wrong: $view"
+put=$(call -X PUT -H 'Content-Type: application/json' "$URL/dhcp/hosts/$tg_id" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+echo "$put" | tail -1 | grep -q '^200$' || fail "PUT of the read expected 200: $put"
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:04,set:guest,set:iot,192.168.1.54,tagged"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$tg_id"
+
+echo "--- macs: a * octet, which LuCI takes, reaches dnsmasq, and dnsmasq loads ---"
+wc=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/hosts" -d '{
+	"name": "wildcard", "macs": ["aa:bb:cc:dd:ee:*"], "ip": "192.168.1.55"
+}')
+echo "$wc" | tail -1 | grep -q '^200$' || fail "POST with a * octet expected 200: $wc"
+wc_id=$(echo "$wc" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
+assert_dnsmasq_emits "dhcp-host=aa:bb:cc:dd:ee:*,192.168.1.55,wildcard"
+assert_dnsmasq_loads
+bad=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/hosts/$wc_id" -d '{"macs": ["aa:bb:cc:dd:ee:f*"]}')
+echo "$bad" | tail -1 | grep -q '^422$' || fail "a * mixed with a digit expected 422: $bad"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$wc_id"
+
 echo "dhcp hosts CRUD ok"

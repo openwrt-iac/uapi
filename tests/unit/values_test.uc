@@ -285,6 +285,7 @@ t.describe('values.netifd_string', () => {
 t.describe('values.config_get', () => {
 	t.it('joins a list with spaces and leaves a scalar alone', () => {
 		t.assert_equal(v.config_get([ 'a', 'b c' ]), 'a b c');
+		t.assert_equal(v.config_get([ '', 'a', '', ' ' ]), 'a  ');
 		t.assert_equal(v.config_get('1'), '1');
 		t.assert_equal(v.config_get(null), null);
 	});
@@ -294,6 +295,26 @@ t.describe('values.wg_line', () => {
 	t.it('cuts at the first # and removes every whitespace character, as wg does', () => {
 		t.assert_equal(v.wg_line(' a b\t# c # d'), 'ab');
 		t.assert_equal(v.wg_line('#x'), '');
+	});
+});
+
+t.describe('values.wg_allowed_ips', () => {
+	t.it('splits at each space only, as wireguard.sh does before wg reads the line', () => {
+		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8 fd00::/8'), [ '10.0.0.0/8', 'fd00::/8' ]);
+		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8\t10.1.0.0/16'), [ '10.0.0.0/8\t10.1.0.0/16' ]);
+		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8  10.1.0.0/16 '), [ '10.0.0.0/8', '', '10.1.0.0/16', '' ]);
+		t.assert_deep_equal(v.wg_allowed_ips([ '10.0.0.0/8 10.1.0.0/16', 'fd00::/8' ]), [ '10.0.0.0/8', '10.1.0.0/16', 'fd00::/8' ]);
+	});
+	t.it('drops an empty list item, as config_get does, and what follows a #, as wg does', () => {
+		t.assert_deep_equal(v.wg_allowed_ips([ '10.0.0.0/8', '', '10.1.0.0/16' ]), [ '10.0.0.0/8', '10.1.0.0/16' ]);
+		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8#c 10.1.0.0/16'), [ '10.0.0.0/8' ]);
+		t.assert_deep_equal(v.wg_allowed_ips('10.0.0.0/8 #c'), [ '10.0.0.0/8', '' ]);
+	});
+	t.it('is null when wireguard.sh writes no AllowedIPs line, or wg reads none from it', () => {
+		t.assert_equal(v.wg_allowed_ips(null), null);
+		t.assert_equal(v.wg_allowed_ips(''), null);
+		t.assert_equal(v.wg_allowed_ips([ '' ]), null);
+		t.assert_equal(v.wg_allowed_ips('#c'), null);
 	});
 });
 
