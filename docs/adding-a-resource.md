@@ -49,6 +49,7 @@ return {
 
     // Optional, less common:
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
+    read_runtime:    function(section, conn) { ... },  // a runtime that a GET reads and a write does not. See "Runtime that only a GET reads" below.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
     id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
@@ -261,6 +262,17 @@ that populate a non-empty `runtime: {...}`, define its sub-shape in
 `openapi_runtime` so clients can see the keys without reading source.
 
 For cross-reference validation (e.g. "this firewall rule's `src_zone` must be a real zone"), use the `conn` argument. See `firewall.rules.uc`'s `load_zones(conn)` for the pattern.
+
+### Runtime that only a GET reads (`read_runtime`)
+
+`fromUci` builds `runtime` on every path, writes included, where it runs inside the transaction
+before the reload and the kernel apply. A runtime that comes from a process, or that the apply of
+the write changes, belongs in `read_runtime(section, conn)` instead: the handler calls it for a GET
+and a list, and puts what it returns in `runtime`, while `fromUci` returns `runtime: {}`. So a write
+answers `{}` and runs nothing under the lock for it, and so does a GET in a `/batch` that writes,
+whose sub-requests run before the apply of the batch: `main.uc` marks them with `batch_writes`. `network/wireguard_peers` reads `wg show` this
+way: read in a write, it would come from before the apply, and a POST would answer
+`in_kernel: false` beside `X-Kernel-Status: ok`.
 
 ## 3. JSON conventions
 

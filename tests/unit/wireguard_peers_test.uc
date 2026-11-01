@@ -1042,3 +1042,186 @@ t.describe('network.wireguard_peers reads endpoint_host and persistent_keepalive
 		t.assert_equal(read('persistent_keepalive', ' 25 '), 25);
 	});
 });
+
+// `wg` is a stub here: `wg show <if> dump` prints the text that a test gives for the interface, and
+// fails for any other. The dump carries the private key of the interface and the preshared key of
+// each peer, as wg prints them.
+t.describe('network.wireguard_peers runtime', () => {
+	let fs = require('fs');
+	let wg = require('wg');
+	const PK3 = 'mDpFbfhjQlpPqYFJRSKBRRJdPjRlnQhqBSVvhoLLRWc=';
+	const PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+	const PSK = 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWY=';
+	let dump_of = (iface) => wg.command_line([ 'wg', 'show', iface, 'dump' ]) + ' 2>&1';
+	let peer_line = (key, endpoint, aips, keepalive, handshake) =>
+		sprintf("%s\t%s\t%s\t%s\t%d\t1234\t5678\t%s\n", key, PSK, endpoint, aips, handshake ?? 1730000000, keepalive);
+	let dump = (lines) => sprintf("%s\t%s\t51820\toff\n", PRIV, PK2) + join("", lines);
+	let wgif = { '.type': 'interface', '.anonymous': false, proto: 'wireguard' };
+	let peer = (iface, extra) => ({ '.type': 'wireguard_' + iface, '.anonymous': false, ...extra });
+	const STORED = { public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: '192.0.2.1',
+	                 endpoint_port: '51820', persistent_keepalive: '25' };
+
+	function kernel(network, dumps, up) {
+		let k = { ran: [] };
+		let real = global.modules.wg;
+		global.modules.wg = t.load_with_fs({ ...fs, popen: function(cmd) {
+			push(k.ran, cmd);
+			let iface = match(cmd, /^'wg' 'show' '([^']*)' 'dump' 2>&1$/)?.[1];
+			let out = (iface != null) ? dumps[iface] : null;
+			return { read: () => out ?? "Unable to access interface: No such device\n", close: () => (out != null) ? 0 : 1 };
+		} }, [ 'wg' ]);
+		k.mod = loadfile('src/resources/network.wireguard_peers.uc')();
+		global.modules.wg = real;
+		k.conn = ubus.stub({ uci: { network } });
+		for (let i in up ?? keys(dumps)) k.conn.set_ubus_response('network.interface.' + i, 'status', { up: true });
+		k.read = (id) => handler.make(k.mod).get_one(k.conn, ctx(), id).body;
+		return k;
+	}
+
+	t.it('reads the peer that the kernel holds, and neither key of the dump', () => {
+		let k = kernel({ wg1: wgif, a: peer('wg1', STORED) },
+		               { wg1: dump([ peer_line(PK, '192.0.2.1:51820', '10.0.0.2/32', '25') ]) });
+		let view = k.read('a');
+		t.assert_deep_equal(view.runtime, { in_kernel: true, endpoint: '192.0.2.1:51820', allowed_ips: [ '10.0.0.2/32' ],
+		                                    persistent_keepalive: 25, latest_handshake: 1730000000, rx_bytes: 1234, tx_bytes: 5678 });
+		let text = sprintf("%J", view);
+		t.assert_true(index(text, PSK) < 0 && index(text, PRIV) < 0, text);
+		t.assert_deep_equal(k.ran, [ dump_of('wg1') ]);
+	});
+
+	t.it('reads the endpoint, keepalive and allowed IPs of the kernel beside the ones that uci holds', () => {
+		let k = kernel({ wg1: wgif, a: peer('wg1', STORED), b: peer('wg1', { public_key: PK2 }) },
+		               { wg1: dump([ peer_line(PK2, '(none)', '(none)', 'off', 0),
+		                             peer_line(PK, '198.51.100.9:51820', '10.0.0.2/32,10.0.0.3/32', '77') ]) });
+		let view = k.read('a');
+		t.assert_equal(view.runtime.endpoint, '198.51.100.9:51820');
+		t.assert_deep_equal(view.runtime.allowed_ips, [ '10.0.0.2/32', '10.0.0.3/32' ]);
+		t.assert_equal(view.runtime.persistent_keepalive, 77);
+		t.assert_equal(view.endpoint_host, '192.0.2.1');
+		t.assert_deep_equal(view.allowed_ips, [ '10.0.0.2/32' ]);
+		t.assert_equal(view.persistent_keepalive, 25);
+		t.assert_deep_equal(k.read('b').runtime, { in_kernel: true, endpoint: null, allowed_ips: [], persistent_keepalive: 0,
+		                                           latest_handshake: 0, rx_bytes: 1234, tx_bytes: 5678 });
+	});
+
+	t.it('reads a peer that the kernel does not hold, and a stored value that is not a key, as not in the kernel', () => {
+		let k = kernel({ wg1: wgif, a: peer('wg1', STORED), b: peer('wg1', { public_key: 'not-a-key' }) },
+		               { wg1: dump([ peer_line(PK2, '(none)', '10.0.0.9/32', 'off') ]) });
+		let absent = { in_kernel: false, endpoint: null, allowed_ips: null, persistent_keepalive: null,
+		               latest_handshake: null, rx_bytes: null, tx_bytes: null };
+		t.assert_deep_equal(k.read('a').runtime, absent);
+		t.assert_deep_equal(k.read('b').runtime, absent);
+	});
+
+	t.it('reads nothing for an interface that is not up, and an empty runtime, not a missing peer, when wg fails', () => {
+		let down = kernel({ wg1: wgif, a: peer('wg1', STORED) }, {}, []);
+		t.assert_deep_equal(down.read('a').runtime, {});
+		t.assert_deep_equal(down.ran, []);
+		let failing = kernel({ wg1: wgif, a: peer('wg1', STORED) }, {}, [ 'wg1' ]);
+		t.assert_deep_equal(failing.read('a').runtime, {});
+		t.assert_deep_equal(failing.ran, [ dump_of('wg1') ]);
+	});
+
+	// The fields are read by position. A field more after the public key put the preshared key in
+	// `endpoint`, and a short line was skipped, so a peer that the kernel holds read as not in it.
+	t.it('reads every peer of a dump that holds a line of another shape as not read', () => {
+		let fields = [ PK, PSK, '203.0.113.7:51820', '10.0.0.2/32', '1730000000', '1234', '5678', '25' ];
+		let other = peer_line(PK2, '(none)', '10.0.0.9/32', 'off');
+		let dumps = {
+			short: dump([ other, join("\t", slice(fields, 0, 7)) + "\n" ]),
+			long: dump([ other, join("\t", [ PK, 'EXTRA', ...slice(fields, 1) ]) + "\n" ]),
+			interface: sprintf("%s\tEXTRA\t%s\t51820\toff\n", PRIV, PK2) + other + join("\t", fields) + "\n",
+		};
+		for (let shape, text in dumps) {
+			let k = kernel({ wg1: wgif, a: peer('wg1', STORED), b: peer('wg1', { public_key: PK2 }) }, { wg1: text });
+			let r = handler.make(k.mod).list(k.conn, ctx(), {});
+			t.assert_deep_equal(map(r.body, (v) => v.runtime), [ {}, {} ], shape);
+			let read = sprintf("%J", r.body);
+			for (let f in [ PSK, 'EXTRA', '203.0.113.7', '10.0.0.9/32', '1730000000', '5678' ])
+				t.assert_true(index(read, f) < 0, sprintf("%s: %s in %s", shape, f, read));
+		}
+	});
+
+	// Read inside a write, the runtime would come from before the kernel apply, so a POST would answer
+	// in_kernel false beside X-Kernel-Status ok, and every write would run `wg show` under the lock.
+	t.it('a write answers an empty runtime and reads no kernel state, and a GET after it reads the kernel', () => {
+		let k = kernel({ wg1: wgif, a: peer('wg1', STORED) },
+		               { wg1: dump([ peer_line(PK, '198.51.100.9:51820', '10.0.0.2/32', '77'),
+		                             peer_line(PK2, '(none)', '10.0.0.3/32', 'off') ]) });
+		let applied = [];
+		let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null,
+		           wg_apply: function(c, ops) { push(applied, ...ops); return null; }, wg_reconcile: () => null };
+		let h = handler.make(k.mod, { tx });
+		let bare = handler.make(k.mod, { tx: { bare: true } });
+		let jctx = { ...ctx(), json_patch: true };
+		let writes = [
+			[ 'POST', h.create(k.conn, ctx(), { id: 'b', interface: 'wg1', public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] }) ],
+			[ 'PATCH', h.patch(k.conn, ctx(), 'a', { persistent_keepalive: 30 }) ],
+			[ 'PUT', h.replace(k.conn, ctx(), 'a', { interface: 'wg1', public_key: PK, allowed_ips: [ '10.0.0.2/32' ], persistent_keepalive: 25 }) ],
+			[ 'JSON Patch', h.patch(k.conn, jctx, 'a', [ { op: 'replace', path: '/description', value: 'x' } ]) ],
+			[ 'batch POST', bare.create(k.conn, { ...ctx(), kernel_sink: [] }, { id: 'c', interface: 'wg1', public_key: PK3 }) ],
+			[ 'batch PATCH', bare.patch(k.conn, { ...ctx(), kernel_sink: [] }, 'a', { description: 'y' }) ],
+		];
+		for (let w in writes)
+			t.assert_true(w[1].status == 200 && type(w[1].body.runtime) == "object" && length(w[1].body.runtime) == 0,
+			              sprintf("%s answered %d %J", w[0], w[1].status, w[1].body));
+		t.assert_equal(h.patch(k.conn, ctx(), 'a', { persistent_keepalive: -1 }).status, 422);
+		t.assert_equal(h.remove(k.conn, ctx(), 'c').status, 204);
+		t.assert_true(length(applied) > 0, 'no write reached the apply');
+		t.assert_deep_equal(k.ran, []);
+		t.assert_equal(length(filter(k.conn._state.ubus_calls, (c) => c[1] == 'status')), 0);
+		t.assert_deep_equal(k.read('b').runtime, { in_kernel: true, endpoint: null, allowed_ips: [ '10.0.0.3/32' ], persistent_keepalive: 0,
+		                                           latest_handshake: 1730000000, rx_bytes: 1234, tx_bytes: 5678 });
+		t.assert_equal(k.read('a').runtime.persistent_keepalive, 77);
+		t.assert_deep_equal(k.ran, [ dump_of('wg1') ]);
+	});
+
+	t.it('reads each interface once in a collection GET', () => {
+		let k = kernel({ wg1: wgif, wg2: wgif, wg3: wgif,
+		                 a: peer('wg1', STORED), b: peer('wg2', { public_key: PK3 }), c: peer('wg1', { public_key: PK2 }),
+		                 d: peer('wg3', STORED), e: peer('wg2', { public_key: PK }) },
+		               { wg1: dump([ peer_line(PK, '192.0.2.1:51820', '10.0.0.2/32', '25') ]),
+		                 wg2: dump([ peer_line(PK3, '(none)', '10.0.1.2/32', 'off'), peer_line(PK, '(none)', '10.0.1.3/32', 'off') ]) },
+		               [ 'wg1', 'wg2' ]);
+		let r = handler.make(k.mod).list(k.conn, ctx(), {});
+		t.assert_equal(r.status, 200);
+		let rt = {};
+		for (let v in r.body) rt[v.id] = v.runtime;
+		t.assert_deep_equal(sort(k.ran), sort([ dump_of('wg1'), dump_of('wg2') ]));
+		t.assert_equal(length(filter(k.conn._state.ubus_calls, (c) => c[1] == 'status')), 3);
+		t.assert_true(rt.a.in_kernel && rt.b.in_kernel && rt.e.in_kernel && !rt.c.in_kernel, sprintf("%J", rt));
+		t.assert_deep_equal([ rt.a.allowed_ips, rt.b.allowed_ips, rt.e.allowed_ips ], [ [ '10.0.0.2/32' ], [ '10.0.1.2/32' ], [ '10.0.1.3/32' ] ]);
+		t.assert_deep_equal(rt.d, {});
+	});
+
+	// A /batch runs every sub-request before its commit and its kernel apply, so a GET in a batch that
+	// writes would answer as drift what the apply of the batch then changes. A batch of reads has no apply.
+	t.it('a GET in a batch that writes answers an empty runtime and reads no kernel state', () => {
+		let k = kernel({ wg1: wgif, a: peer('wg1', STORED) }, { wg1: dump([ peer_line(PK, '(none)', '10.0.0.2/32', 'off') ]) });
+		let bare = handler.make(k.mod, { tx: { bare: true } });
+		let in_batch = (writes) => ({ ...ctx(), kernel_sink: [], batch_writes: writes });
+		t.assert_deep_equal(bare.get_one(k.conn, in_batch(true), 'a').body.runtime, {});
+		t.assert_deep_equal(map(bare.list(k.conn, in_batch(true), {}).body, (v) => v.runtime), [ {} ]);
+		t.assert_deep_equal(k.ran, []);
+		t.assert_equal(length(filter(k.conn._state.ubus_calls, (c) => c[1] == 'status')), 0);
+		t.assert_true(bare.get_one(k.conn, in_batch(false), 'a').body.runtime.in_kernel);
+		t.assert_deep_equal(k.ran, [ dump_of('wg1') ]);
+	});
+
+	// wireguard.sh gives wg the key through printf %b, so `\075` is the `=` of the key, and wg cuts a
+	// line at `#` and strips its whitespace. A value that gives wg a second line, or one with a
+	// backslash that is too long to expand, matches no peer, since uapi cannot tell which one wg set.
+	t.it('matches a stored key as wg reads it, escapes included', () => {
+		let held = { a: substr(PK, 0, 43) + '\\075', b: ' ' + PK + '\t# peer a', c: [ PK ], d: substr(PK, 0, 40) + '\\x2b' + substr(PK, 41) };
+		let unknown = { e: PK + '\\nPublicKey=' + PK2, f: PK + '\\t#' + replace(sprintf('%600s', ''), ' ', 'x') };
+		let network = { wg1: wgif };
+		for (let id, key in { ...held, ...unknown }) network[id] = peer('wg1', { public_key: key });
+		let plus = substr(PK, 0, 40) + '+' + substr(PK, 41);
+		let k = kernel(network, { wg1: dump([ peer_line(PK, '(none)', '10.0.0.2/32', 'off'), peer_line(plus, '(none)', '10.0.0.3/32', 'off') ]) });
+		for (let id in [ 'a', 'b', 'c' ])
+			t.assert_deep_equal(k.read(id).runtime.allowed_ips, [ '10.0.0.2/32' ], id);
+		t.assert_deep_equal(k.read('d').runtime.allowed_ips, [ '10.0.0.3/32' ]);
+		for (let id in keys(unknown))
+			t.assert_deep_equal(k.read(id).runtime, {}, id);
+	});
+});

@@ -61,6 +61,24 @@ All notable changes to this project will be documented in this file. Format foll
   under the security carve-out of `docs/versioning.md`: no curated request comes near them, since
   `/batch` takes at most 50 operations, and only a raw section with a list of thousands of entries
   could. uapi reads such a body and drops it, so the connection stays in step. (#293)
+- **`network/wireguard_peers.runtime` reports what the kernel holds for the peer.** It was always
+  empty, so a peer that `wg` changed by hand, or that a failed apply left behind, read as uci holds
+  it, and since a PUT that changes nothing no longer sets the peer again, nothing reported the
+  drift. uapi reads one `wg show <iface> dump` for each interface that a request reads, a
+  collection GET included, and gives each peer `in_kernel`, whether the kernel holds a peer under
+  the key that wg reads from the stored `public_key`, then the `endpoint`, `allowed_ips` and
+  `persistent_keepalive` of the kernel, beside the fields that uci holds, and `latest_handshake`,
+  `rx_bytes` and `tx_bytes`. The fields are null when the kernel holds no such peer.
+  `allowed_ips` is in the form that the kernel prints, with the host bits cleared and IPv6 in its
+  short form. uapi compares nothing and corrects nothing. Only a GET reads the runtime: a write
+  answers `runtime: {}` and runs nothing for it under the lock, because its body comes before its
+  kernel apply, and `X-Kernel-Status` says whether the apply landed. A GET in a `/batch` that
+  writes answers `{}` too, since it runs before the apply of the batch. `runtime` is also `{}` when
+  uapi did not read the kernel: the interface is not up, wg fails, wg prints a dump in a shape that
+  uapi does not read, or the stored key gives wg more than a key or is too long to expand, so that
+  a failed read never reads as a missing peer. The dump holds the private key of the interface and
+  the preshared keys, and uapi drops them as it parses it. The Response schema documents the
+  fields, which are new response fields under `docs/versioning.md`. (#298)
 
 ### Changed
 

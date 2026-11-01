@@ -355,13 +355,17 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   rate-limit buckets, the error ring and the last-used markers of the tokens keep their files
   under `/var/run`, in directories of mode 0700 with files of mode 0600 (#266, #270).
 
-## Features (additive, future minor bumps in v3.x)
+## Shipped in 3.3.0
 
-- **A read of `network/wireguard_peers` does not report the peer in the kernel.** Its `runtime` is
-  empty, so a peer that `wg` changed by hand, or that a failed apply left behind, reads as uci
-  holds it. A PUT of the read set the peer again until a PUT that changes nothing stopped writing,
-  and now nothing sets it again and nothing reports the drift. Fields under `runtime` from
-  `wg show` would report it, and a read reports drift rather than correct it.
+- **A read of `network/wireguard_peers` reports the peer in the kernel.** Its `runtime` comes
+  from one `wg show <iface> dump` for each interface: whether the kernel holds a peer under the
+  key that wg reads from the stored one, the endpoint, allowed IPs and keepalive of the kernel
+  beside the fields of uci, and the handshake and byte counters. A peer that `wg` changed by
+  hand, or that a failed apply left behind, read as uci holds it, and since a PUT that changes
+  nothing no longer sets the peer again, nothing reported the drift. A read now reports it, and
+  uapi corrects nothing ([#281](https://github.com/openwrt-iac/uapi/issues/281)).
+
+## Features (additive, future minor bumps in v3.x)
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
