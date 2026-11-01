@@ -52,7 +52,7 @@ t.describe('errors.error', () => {
 			bad_request: 400, unauthorized: 401, invalid_token: 401,
 			insufficient_scope: 403, tls_required: 403,
 			not_found: 404, method_not_allowed: 405,
-			conflict: 409, unmanaged_resource: 409,
+			conflict: 409, unmanaged_resource: 409, payload_too_large: 413,
 			unsupported_media_type: 415, validation_failed: 422,
 			locked: 423,
 			internal_error: 500, reload_failed_restored: 500,

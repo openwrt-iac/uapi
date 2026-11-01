@@ -190,6 +190,8 @@ Three endpoints skip the bearer-token requirement:
 
 All three still pass the TLS check; only the bearer requirement is waived. Plain HTTP from a non-loopback source still returns `403 tls_required` before the public-endpoint short-circuit runs.
 
+uapi reads and parses the body of a POST, PUT or PATCH before the bearer check, on every path. `json()` takes about 1.6 KB for each object or array, so 1 MiB of `[{},{},...]` took 560 MB. A `Content-Length` over 256 KiB, or a body with more than 2000 `{` and `[` characters, answers `413 payload_too_large` before the parse, which keeps the parse of a body without a token under about 13 MB (measured with ucode 2026.01.16 on x86_64). uapi still reads a body that is too large and drops it, because uhttpd parses what the request process leaves unread as the next request on the connection. A client that declares a body and sends less, or sends it slowly, holds its request process until the script timeout of uhttpd, 60 s by default, because the process reads its body from a blocking pipe.
+
 ## TLS posture
 
 - `uhttpd` serves both HTTP and HTTPS. `tls_check()` permits HTTP only

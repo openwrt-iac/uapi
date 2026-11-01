@@ -52,4 +52,35 @@ echo "$r" | tail -1 | grep -q '^400$' || fail "long-key POST expected 400: $(ech
 len=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq '[.recent_errors[] | .message | length] | max')
 [ "$len" -le 515 ] || fail "the error ring kept a message of $len bytes"
 
+echo "--- a body that arrives in several parts is read whole ---"
+# uhttpd.recv() stops at the first short read, so a body that curl sends at 32 KB per second always
+# reached the handler cut and answered 400. A target that does not exist answers 422, which needs
+# the whole body parsed.
+body=/tmp/uapi_big_body.json
+printf '{"name": "%s", "target": "uapi-no-such-target"}' "$(head -c 65536 /dev/zero | tr '\0' a)" > "$body"
+for i in 1 2; do
+	s=$(curl -sS -o /dev/null -w '%{http_code}' --limit-rate 32k -H "$ADMIN" -H 'Content-Type: application/json' \
+		-X POST "$URL/firewall/rules" --data-binary @"$body")
+	[ "$s" = 422 ] || fail "a 64 KB body sent in parts expected 422 at try $i, got $s"
+done
+
+echo "--- a body over 256 KiB answers 413 before the bearer check, and the connection stays in step ---"
+# uhttpd parses what the handler leaves unread as the next request on the connection, so the
+# handler drops the body. curl sends the second request on the same connection.
+head -c 262145 /dev/zero | tr '\0' ' ' > "$body"
+s=$(curl -sS -o /dev/null -w '%{http_code} ' -H 'Content-Type: application/json' \
+	-X POST "$URL/firewall/rules" --data-binary @"$body" --next -o /dev/null -w '%{http_code}' "$URL/healthz")
+[ "$s" = "413 200" ] || fail "a body of 256 KiB and 1 byte, then GET /healthz, expected 413 then 200, got $s"
+
+echo "--- a body with more than 2000 objects and arrays answers 413 before the bearer check ---"
+printf '[%s{}]' "$(yes '{},' | head -n 1998 | tr -d '\n')" > "$body"
+s=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+	-X POST "$URL/firewall/rules" --data-binary @"$body")
+[ "$s" = 401 ] || fail "a body with 2000 objects and arrays without a token expected 401, got $s"
+printf '[%s{}]' "$(yes '{},' | head -n 1999 | tr -d '\n')" > "$body"
+s=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+	-X POST "$URL/firewall/rules" --data-binary @"$body")
+[ "$s" = 413 ] || fail "a body with 2001 objects and arrays without a token expected 413, got $s"
+rm -f "$body"
+
 echo "api skeleton ok"

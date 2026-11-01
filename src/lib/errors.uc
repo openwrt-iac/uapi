@@ -17,6 +17,7 @@ const STATUS_BY_CODE = {
 	locked: 423,
 	too_many_requests: 429,
 	precondition_failed: 412,
+	payload_too_large: 413,
 	invalid_cursor: 400,
 	idempotency_key_conflict: 409,
 	// batch_partial_failure body is emitted directly with the failing sub
@@ -49,7 +50,7 @@ const ALL_CODES = [
 	"insufficient_scope", "scope_escalation_blocked", "tls_required",
 	"not_found", "method_not_allowed",
 	"conflict", "unmanaged_resource", "idempotency_key_conflict",
-	"precondition_failed", "unsupported_media_type",
+	"precondition_failed", "payload_too_large", "unsupported_media_type",
 	"validation_failed", "locked", "too_many_requests",
 	"internal_error", "reload_failed_restored", "reload_failed_unrecovered",
 	"service_unavailable", "init_script_missing", "config_missing",
