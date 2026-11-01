@@ -42,7 +42,7 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 409  | `unmanaged_resource`            | Tried to write to a section that needs to be adopted first   |
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
 | 412  | `precondition_failed`           | Stale `If-Match` ETag, a matching `If-None-Match` on a write, or JSON Patch `test` op mismatch |
-| 413  | `payload_too_large`             | A POST, PUT or PATCH whose `Content-Length` is over 262144 bytes (256 KiB), or whose body holds more than 2000 `{` and `[` characters. Both are checked before the bearer check and before the JSON parse. uapi reads a body that is too large and drops it, so the connection stays in step |
+| 413  | `payload_too_large`             | A POST, PUT or PATCH whose body is over 262144 bytes (256 KiB), sent with a `Content-Length` or chunked, whose `Content-Length` is not a whole number from 0 to 262144, or whose body holds more than 2000 `{` and `[` characters. All are checked before the bearer check and before the JSON parse. On every path, uapi reads and drops what is left of a body before it answers |
 | 415  | `unsupported_media_type`        | Reserved, never returned. See the note below before branching on it |
 | 422  | `validation_failed`             | Body parsed but failed schema or per-field rules             |
 | 423  | `locked`                        | Another write transaction holds a lock on the same package (or the global lock for a non-uci writer); retry. The response message names the specific lock. |

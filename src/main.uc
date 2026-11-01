@@ -178,26 +178,23 @@ const MAX_BODY_BYTES = 262144;
 const MAX_BODY_CONTAINERS = 2000;
 
 // uhttpd.recv() returns at the first read that finds less than it asked for, so a body that
-// arrives in several parts takes several calls.
+// arrives in several parts takes several calls. Each part keeps a buffer of about 1 KiB however
+// little it holds, so a body at the bound sent a byte at a time took about 300 MB until every 64
+// parts were joined into one block.
 function read_body(n) {
-	let parts = [], got = 0;
+	let blocks = [], parts = [], got = 0;
 	while (got < n) {
 		let chunk = uhttpd.recv(n - got);
 		if (chunk == null) break;
 		push(parts, chunk);
 		got += length(chunk);
+		if (length(parts) == 64) {
+			push(blocks, join("", parts));
+			parts = [];
+		}
 	}
-	return join("", parts);
-}
-
-// uhttpd parses what the request process leaves unread as the next request on the connection, so a
-// body that is refused for its size is still read, and dropped.
-function drop_body(n) {
-	while (n > 0) {
-		let chunk = uhttpd.recv(n > 65536 ? 65536 : n);
-		if (chunk == null) break;
-		n -= length(chunk);
-	}
+	push(blocks, join("", parts));
+	return join("", blocks);
 }
 
 function parse_query(qs) {
@@ -836,14 +833,17 @@ function dispatch(env) {
 	let body = null;
 	let body_text = "";
 	if (method == "POST" || method == "PUT" || method == "PATCH") {
-		// uhttpd reads Content-Length with strtoul() in base 0, so 0x10 and 010 are 16 and 8 there.
-		let n = int(env.CONTENT_LENGTH ?? "0", 0);
-		if (n > MAX_BODY_BYTES) {
-			drop_body(n);
+		// uhttpd reads Content-Length with strtoul() in base 0 into an int: 0x10 and 010 are 16 and
+		// 8, an empty value is 0, and a value of 2^32 or more wraps. A value that int() does not
+		// read as 0 to the bound answers 413, whatever uhttpd made of it, and handle_request drops
+		// the body. A chunked body comes de-chunked and without Content-Length, and ends where
+		// uhttpd closes the pipe after the last chunk.
+		let n = env.headers["transfer-encoding"] == "chunked"
+			? MAX_BODY_BYTES + 1 : int(env.CONTENT_LENGTH || "0", 0);
+		body_text = (type(n) == "int" && n >= 0 && n <= MAX_BODY_BYTES + 1) ? read_body(n) : null;
+		if (body_text == null || length(body_text) > MAX_BODY_BYTES)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
 				sprintf("Request body is larger than %d bytes", MAX_BODY_BYTES)) };
-		}
-		body_text = read_body(n);
 		if (length(replace(body_text, /[^{[]/g, "")) > MAX_BODY_CONTAINERS)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
 				sprintf("Request body holds more than %d { and [ characters", MAX_BODY_CONTAINERS)) };
@@ -1247,5 +1247,10 @@ global.handle_request = function(env) {
 				env.REMOTE_ADDR ?? "-"));
 	}
 
+	// uhttpd parses what the request process leaves unread as the next request on the
+	// connection, so what is left of a body, on any path, is read here and dropped. uhttpd closes
+	// the pipe after a body, but never for a request without one that it queued.
+	if (env.headers["transfer-encoding"] == "chunked" || int(env.CONTENT_LENGTH || "0", 0) != 0)
+		while (uhttpd.recv(65536) != null);
 	send(resp);
 };

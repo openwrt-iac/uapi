@@ -276,6 +276,29 @@ All notable changes to this project will be documented in this file. Format foll
   could answer `400 bad_request` "Request body is not valid JSON" now and then, a large `/batch`
   included. On an OpenWrt 25.12.5 VM, a 16 KB body failed 2 times in 8. uapi now reads until it
   has `Content-Length` bytes, which it reads in base 0 as uhttpd does, so `0x10` is 16. (#293)
+- **A request body sent with `Transfer-Encoding: chunked` is read.** uhttpd passes such a body
+  de-chunked and with no `Content-Length`, and uapi read `Content-Length` bytes, so it read none of
+  it. A chunked PUT or PATCH answered `400 bad_request` "Request body is required", a chunked POST
+  ran with no body, and uhttpd parsed the chunks that arrived after the response as the next request
+  on the connection. uapi now reads such a body until uhttpd closes the pipe after the last chunk. A
+  chunked body over 256 KiB answers `413 payload_too_large`, as one with a larger `Content-Length`
+  does. A client that does not send the last chunk holds its request process until the script
+  timeout of uhttpd, as one that sends less than its `Content-Length` does. `docs/security.md` names
+  the chunked bodies that uhttpd does not pass whole. (#296)
+- **A `Content-Length` that uapi does not read as a whole number from 0 to 262144 answers
+  `413 payload_too_large`.** uhttpd reads the header with `strtoul()` in base 0 into an `int`, so on
+  a 64-bit router it wraps a value of 2^32 or more and reads some negative values as positive ones:
+  it passes 2 bytes for `4294967298` and 262145 bytes for `-4294705151`. uapi read another length
+  for such a value, so the body that it read was not the body that uhttpd passed. uapi now reads and
+  drops what uhttpd passes. An empty value reads as 0, as uhttpd reads it. This refuses requests
+  that 3.2.0 accepted, under the security carve-out of `docs/versioning.md`: no HTTP client sends
+  such a value, and uapi and uhttpd disagreed on where its body ended. It fails loudly, with the
+  413. (#296)
+- **uapi reads what is left of a request body before it answers, on every path.** Some requests
+  answered before uapi read their body: a POST, PUT or PATCH to `/healthz`, `/openapi.json` or
+  `/schema`, a request refused with `403 tls_required`, and a GET or DELETE with a body. uhttpd
+  parsed the rest of such a body as the next request on the connection, which answered 400 or closed
+  the connection. Such a request answers as before, but once its whole body has arrived. (#296)
 
 ## [3.2.0] - 2026-10-29
 
