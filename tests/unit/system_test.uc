@@ -137,13 +137,15 @@ t.describe('a system write reloads the dhcp daemons that read it while procd run
 	let timeservers = loadfile('src/resources/system.timeservers.uc')();
 	function write(name, stopped) {
 		let ran = [];
-		let tx = { acquire: () => ({}), release: () => null, check_services: () => null,
+		let tx = { acquire: () => ({}), release: () => null, check_services: () => null, watch: () => null,
 		           reload: (s) => { push(ran, ...s); return null; } };
 		let c = bus.stub({ uci: { system: {
 			cfg01: { '.type': 'system', '.anonymous': true, hostname: 'OpenWrt', timezone: 'UTC' },
 			ntp: { '.type': 'timeserver', '.anonymous': false, enabled: '1', server: [ '0.openwrt.pool.ntp.org' ] },
 		} } });
-		c.set_ubus_response("service", "list", (a) => (index(stopped, a.name) >= 0) ? {} : { [a.name]: {} });
+		c.set_ubus_response("service", "list", (a) => (index(stopped, a.name) >= 0) ? {}
+			: { [a.name]: { instances: { [a.name]: { running: true, pid: 10 } },
+			                triggers: [ [ "config.change", [ "if", [ "eq", "package", "dhcp" ], [ "run_script", "/etc/init.d/" + a.name, "reload" ] ], 1000 ] ] } });
 		let r = (name == "system")
 			? handler.make_singleton(system_resource, { tx }).patch(c, ctx(), { hostname: 'gw' })
 			: handler.make(timeservers, { tx }).patch(c, ctx(), 'ntp', { enabled: false });

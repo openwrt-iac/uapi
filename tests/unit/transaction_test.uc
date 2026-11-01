@@ -43,6 +43,15 @@ function reload_flaky(initial_calls_failing) {
 function noop_reload(services) { return null; }
 function noop_check(services) { return null; }
 
+// How procd keeps a `procd_add_reload_trigger "dhcp"` of an init script.
+const DHCP_TRIGGER = [ "config.change", [ "if", [ "eq", "package", "dhcp" ], [ "run_script", "/etc/init.d/x", "reload" ] ], 1000 ];
+
+function running_now(conn, names) {
+	conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0)
+		? { [a.name]: { instances: { [a.name]: { running: true, pid: 10 } }, triggers: [ DHCP_TRIGGER ] } } : {});
+	return conn;
+}
+
 function build_params(overrides) {
 	let p = {
 		package: "fw",
@@ -834,7 +843,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 	// The state before the write is read before its reload, and the restore checks against it.
 	function daemon(conn, after_write, after_restore) {
 		let state = UP, reloads = 0;
-		conn.set_ubus_response("service", "list", (args) => ({ unbound: { instances: { unbound: state } } }));
+		conn.set_ubus_response("service", "list", (args) => ({ unbound: { instances: { unbound: state }, triggers: [ DHCP_TRIGGER ] } }));
 		return function(s) { state = (reloads++ == 0) ? after_write : after_restore; return null; };
 	}
 
@@ -898,11 +907,9 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 	t.it('a dhcp or system write takes the lock of unbound while unbound runs', () => {
 		let also_of = (pkg, names) => {
 			let also = null;
-			let conn = ubus.stub();
-			conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0) ? { [a.name]: {} } : {});
-			tx.transaction(conn, build_params({
+			tx.transaction(running_now(ubus.stub(), names), build_params({
 				package: pkg, reload_services: [], reload_if_running: [ "dnsmasq", "odhcpd", "unbound" ],
-				acquire: function(p, a) { also = a; return {}; }, release: function() {},
+				acquire: function(p, a) { also = a; return {}; }, release: function() {}, watch: () => null,
 			}));
 			return also;
 		};
@@ -918,11 +925,12 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		held.lock("xn");
 		let conn = ubus.stub({ uci: { system: { cfg01: { '.type': 'system', hostname: 'OpenWrt' } } } });
 		let batch = (names) => {
-			conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0) ? { [a.name]: {} } : {});
+			running_now(conn, names);
 			return tx.multi_transaction(conn, {
 				packages: [ "system" ], reload_services: { system: [ "system" ] },
 				reload_if_running: { system: [ "dnsmasq", "odhcpd", "unbound" ] },
 				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload: noop_reload,
+				watch: () => null,
 				fn: function(c) { c.uci_set("system", "cfg01", "hostname", "gw"); return { ok: true }; },
 			});
 		};
@@ -1200,14 +1208,9 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 // its old config, and the reload of a stopped dnsmasq starts it.
 t.describe('transaction, a service to reload only while procd runs it', () => {
 	let missing = (svc) => (s) => (index(s, svc) >= 0) ? sprintf("init script /etc/init.d/%s not found", svc) : null;
-	// procd lists a service from its start to its stop, also with no instance running.
-	function listed(conn, names) {
-		conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0) ? { [a.name]: {} } : {});
-		return conn;
-	}
 	function dhcp_write(check_services, names, reload) {
 		let calls = [];
-		let conn = listed(ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ra: 'disabled' } } } }), names);
+		let conn = running_now(ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ra: 'disabled' } } } }), names);
 		let r = tx.transaction(conn, build_params({
 			package: "dhcp", reload_services: [ "dnsmasq" ], reload_if_running: [ "odhcpd" ],
 			acquire: function() { return {}; }, release: function() {}, check_services,
@@ -1217,7 +1220,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		return { r, calls };
 	}
 
-	t.it('reloads it after the required services when procd lists it', () => {
+	t.it('reloads it after the required services while procd runs it', () => {
 		let w = dhcp_write(noop_check, [ "dnsmasq", "odhcpd" ]);
 		t.assert_true(w.r.ok);
 		t.assert_deep_equal(w.calls, [ [ "dnsmasq", "odhcpd" ] ]);
@@ -1231,10 +1234,67 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		t.assert_deep_equal(w.r.reload_services, [ "dnsmasq" ]);
 	});
 
+	// A LuCI save fires each config.change trigger that procd holds, whatever the instances show, and
+	// procd answers the triggers only to a verbose call. At boot unbound.init registers only one on
+	// interface events, which starts unbound 3 s after the last of them, and the reload started it
+	// early. unbound has no trigger on system, which reaches it through ucitrack's `affects`.
+	t.it('reloads one that procd lists with a config trigger, as a LuCI save does', () => {
+		let prefix = "/tmp/uapi-test-trigger-pkg.", global = "/tmp/uapi-test-trigger-global.lock";
+		let write = (answer, pkg, batch) => {
+			let also = null;
+			let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ra: 'disabled' } },
+			                             system: { cfg01: { '.type': 'system', hostname: 'OpenWrt' } } } });
+			conn.set_ubus_response("service", "list", answer);
+			let fn = (c) => {
+				if (pkg == "system") c.uci_set(pkg, "cfg01", "hostname", "gw");
+				else c.uci_set(pkg, "lan", "ra", "server");
+				return { ok: true, body: {} };
+			};
+			let p = { check_services: noop_check, reload: noop_reload, watch: () => null };
+			let r = batch
+				? tx.multi_transaction(conn, { ...p, packages: [ pkg ], reload_services: { [pkg]: [] },
+				                               reload_if_running: { [pkg]: [ "unbound" ] },
+				                               lock_path: global, pkg_lock_prefix: prefix, fn })
+				: tx.transaction(conn, build_params({ ...p, package: pkg, reload_services: [],
+				                                      reload_if_running: [ "unbound" ], fn,
+				                                      acquire: function(g, a) { also = a; return {}; },
+				                                      release: function() {} }));
+			for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
+			return batch ? r.reload_services : [ r.reload_services, also ];
+		};
+		let listed = (instances, triggers) => (a) => {
+			let svc = (instances != null) ? { instances } : {};
+			if (a.verbose) svc.triggers = triggers;
+			return { [a.name]: svc };
+		};
+		let on = (pkg) => [ "config.change", [ "if", [ "eq", "package", pkg ],
+		                                       [ "run_script", "/etc/init.d/unbound", "reload" ] ], 1000 ];
+		let ifup = [ "interface.*.up", [ [ "run_script", "/etc/init.d/unbound", "restart" ] ], 3000 ];
+		let config = [ on("unbound"), on("dhcp") ];
+		const RESPAWN = { threshold: 3600, timeout: 5, retry: 5 };
+		let up = { unbound: { running: true, pid: 10, respawn: RESPAWN } };
+		let respawning = { unbound: { running: false, exit_code: 1, respawn: RESPAWN } };
+		let exhausted = { unbound: { running: false, exit_code: 1 } };
+		let reloaded = [ [ "unbound" ], [ "unbound" ] ], skipped = [ [], [] ];
+		let cases = [
+			[ "running", listed(up, config), "dhcp", false, reloaded ],
+			[ "respawning", listed(respawning, config), "dhcp", false, reloaded ],
+			[ "crash loop exhausted", listed(exhausted, config), "dhcp", false, reloaded ],
+			[ "no instance, as dnsmasq with every section disabled", listed(null, [ on("dhcp"), on("system") ]), "dhcp", false, reloaded ],
+			[ "boot", listed(null, [ ifup ]), "dhcp", false, skipped ],
+			[ "stopped", {}, "dhcp", false, skipped ],
+			[ "system write", listed(up, config), "system", false, reloaded ],
+			[ "only a trigger on a package other than the written one and dhcp", listed(up, [ on("unbound") ]), "dhcp", false, reloaded ],
+			[ "batch, crash loop exhausted", listed(exhausted, config), "dhcp", true, [ "unbound" ] ],
+			[ "batch, boot", listed(null, [ ifup ]), "dhcp", true, [] ],
+		];
+		t.assert_deep_equal(map(cases, (c) => [ c[0], write(c[1], c[2], c[3]) ]), map(cases, (c) => [ c[0], c[4] ]));
+	});
+
 	// A ubus call that fails or times out tells nothing about the daemon, and skipping it answered
 	// 2xx with no_reload while the daemon kept its old config.
 	t.it('reloads one whose service list call fails', () => {
-		let failing = listed(ubus.stub({ uci: { dhcp: {} } }), []);
+		let failing = ubus.stub({ uci: { dhcp: {} } });
 		failing.set_ubus_response("service", "list", { _error: "ubus: Request timed out" });
 		let r = tx.transaction(failing, build_params({
 			package: "dhcp", reload_services: [], reload_if_running: [ "odhcpd" ],
@@ -1248,7 +1308,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		t.assert_true(w.r.ok);
 		t.assert_deep_equal(w.calls, [ [ "dnsmasq" ] ]);
 		t.assert_deep_equal(w.r.reload_services, [ "dnsmasq" ]);
-		let real = tx.transaction(listed(ubus.stub(), [ "this-daemon-definitely-not-installed-anywhere" ]), build_params({
+		let real = tx.transaction(running_now(ubus.stub(), [ "this-daemon-definitely-not-installed-anywhere" ]), build_params({
 			reload_services: [], reload_if_running: [ "this-daemon-definitely-not-installed-anywhere" ],
 			acquire: function() { return {}; }, release: function() {}, check_services: null,
 		}));
@@ -1271,7 +1331,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		let prefix = "/tmp/uapi-test-optional-pkg.", global = "/tmp/uapi-test-optional-global.lock";
 		let batch = (names, committed) => {
 			let calls = [];
-			let conn = listed(ubus.stub({ uci: { dhcp: {}, fw: {} } }), names);
+			let conn = running_now(ubus.stub({ uci: { dhcp: {}, fw: {} } }), names);
 			conn.uci_commit = (pkg) => index(committed, pkg) >= 0;
 			let r = tx.multi_transaction(conn, {
 				packages: [ "dhcp", "fw" ],
@@ -1296,7 +1356,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 			let tested = [];
 			let conn = ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', maindhcp: '0' } } } });
 			conn.set_ubus_response("service", "list", (args) => (index(names, args.name) < 0) ? {} : { [args.name]: { instances: {
-				main: { running: true, command: [ "/usr/sbin/dnsmasq", "-C", "/var/etc/dnsmasq.conf.main" ] } } } });
+				main: { running: true, command: [ "/usr/sbin/dnsmasq", "-C", "/var/etc/dnsmasq.conf.main" ] } }, triggers: [ DHCP_TRIGGER ] } });
 			let p = {
 				acquire: function() { return {}; }, release: function() {}, check_services: noop_check,
 				reload: noop_reload,
@@ -1332,7 +1392,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		let odhcpd_write = (names) => {
 			let conn = ubus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', maindhcp: '0' } } } });
 			conn.set_ubus_response("service", "list", (a) => (index(names, a.name) < 0) ? {}
-				: { [a.name]: { instances: { main: { running: true, command: [ dir + "/" + a.name, "-C", "x" ] } } } });
+				: { [a.name]: { instances: { main: { running: true, command: [ dir + "/" + a.name, "-C", "x" ] } }, triggers: [ DHCP_TRIGGER ] } });
 			return tx.transaction(conn, build_params({
 				package: "dhcp", reload_services: [ "odhcpd" ], reload_if_running: [ "dnsmasq" ],
 				acquire: function() { return {}; }, release: function() {},

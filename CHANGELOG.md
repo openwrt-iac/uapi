@@ -189,15 +189,18 @@ All notable changes to this project will be documented in this file. Format foll
   directory of the odhcpd `leasefile`. It reloads on its procd trigger on `dhcp`, which a commit
   through libuci does not fire, so unbound kept its old config after a write that answered 200.
   unbound.init has no `reload_service`, so its reload starts the daemon, and uapi reloads it only
-  while procd lists the service. `X-Reload-Services` names `unbound` last, and a `POST /batch` lists
-  it sorted. While unbound runs, such a write waits 2 s for it to keep running and takes the lock of
-  the `unbound` package, as a write to `unbound/server` does. Two requests that 3.2.0 accepted can
-  now be refused. A write after which unbound stops within 2 s answers `500 reload_failed_restored`
-  and restores the previous config: this uses the carve-out in `docs/versioning.md` for payloads
-  that produced a state no caller can rely on, here DNS down, and it fails loudly. A write at the
-  same moment as a write to `unbound/server`, `unbound/srv`, `unbound/ext` or `system` that also
-  reloads unbound answers `423 locked`: no payload is refused, the same request succeeds on a retry,
-  which a client already makes for 423, so `docs/versioning.md` counts no breaking change. (#291)
+  while procd holds a `config.change` trigger for it, which it reads with a verbose `service list`,
+  as a LuCI save does. That leaves unbound alone at boot, when unbound.init registers only a trigger
+  on interface events, which starts unbound 3 s after the last of them. `X-Reload-Services` names
+  `unbound` last, and a `POST /batch` lists it sorted. Such a write takes the lock of the `unbound`
+  package, as a write to `unbound/server` does, and when unbound ran before the write, it waits 2 s
+  for unbound to keep running. Two requests that 3.2.0 accepted can now be refused. A write after
+  which unbound stops within 2 s answers `500 reload_failed_restored` and restores the previous
+  config: this uses the carve-out in `docs/versioning.md` for payloads that produced a state no
+  caller can rely on, here DNS down, and it fails loudly. A write at the same moment as a write to
+  `unbound/server`, `unbound/srv`, `unbound/ext` or `system` that also reloads unbound answers
+  `423 locked`: no payload is refused, the same request succeeds on a retry, which a client already
+  makes for 423, so `docs/versioning.md` counts no breaking change. (#291)
 - **A write to `system` reloads dnsmasq, odhcpd and unbound, and a write to `system/timeservers`
   reloads dnsmasq, each while procd runs it.** dnsmasq.init reads the hostname and
   `system.ntp.enabled`, odhcpd reads `timezone` and `zonename`, and unbound reads the hostname.
@@ -207,11 +210,12 @@ All notable changes to this project will be documented in this file. Format foll
   three daemons too. These writes run no `dnsmasq --test` check, so a dnsmasq config that was
   refused before, or that parses slowly, does not fail or undo a hostname or NTP change. With every
   daemon running, `X-Reload-Services` reads `system,log,dnsmasq,odhcpd,unbound` and
-  `sysntpd,dnsmasq`. While unbound runs, a `system` write waits the full 2 s for it to keep running
-  and takes the lock of the `unbound` package. So the two refusals of the entry above apply to a
-  `system` write too: `500 reload_failed_restored` when unbound stops after it, under the same
-  carve-out, and `423 locked` at the same moment as a write to `unbound/server`, `unbound/srv`,
-  `unbound/ext` or a dhcp write that reloads unbound, which is no breaking change. (#291)
+  `sysntpd,dnsmasq`. A `system` write that reloads unbound takes the lock of the `unbound` package,
+  and when unbound ran before the write, it waits the full 2 s for unbound to keep running. So the
+  two refusals of the entry above apply to a `system` write too: `500 reload_failed_restored` when
+  unbound stops after it, under the same carve-out, and `423 locked` at the same moment as a write
+  to `unbound/server`, `unbound/srv`, `unbound/ext` or a dhcp write that reloads unbound, which is
+  no breaking change. (#291)
 - **A dhcp write no longer starts a dnsmasq that the operator stopped, and no longer answers
   `503 init_script_missing` on a router without dnsmasq or without odhcpd.** `dhcp/servers`,
   `dhcp/hosts`, `dhcp/dnsmasq` and a raw `dhcp` write reloaded dnsmasq whether it ran or not, and
