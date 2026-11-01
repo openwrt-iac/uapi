@@ -2,10 +2,11 @@ name: ci
 
 # Triggers:
 #   - push to main: run unit + lint + integration (no release).
-#   - pull_request: run unit + lint + integration (no release).
-#   - push of a v* tag: run unit + lint + integration, then release-apk if all passed.
-#   - workflow_dispatch: useful for re-running CI manually; release-apk only fires
-#     when dispatched against a v* tag ref (the job-level `if:` enforces it).
+#   - pull_request: run unit + lint + integration, and package when the pull request changes
+#     what goes into the APK or how it is built and tested (no release).
+#   - push of a v* tag: run unit + lint + integration + package, then release-apk if all passed.
+#   - workflow_dispatch: useful for re-running CI manually, package included; release-apk only
+#     fires when dispatched against a v* tag ref (the job-level `if:` enforces it).
 on:
   push:
     # GitHub trigger filter-patterns are NOT regex: `+` is literal, `[0-9]` is a
@@ -21,7 +22,7 @@ on:
   workflow_dispatch:
 
 # Workflow-level permissions are read-only by default; release-apk overrides
-# to contents: write at the job level so unit/lint/integration run least-privilege.
+# to contents: write at the job level so every other job runs least-privilege.
 permissions:
   contents: read
 
@@ -74,17 +75,34 @@ jobs:
     timeout-minutes: 10
     container:
       image: alpine:3.24
+    outputs:
+      package_changed: ${{ steps.package.outputs.changed }}
     steps:
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
         run: pip install --break-system-packages --quiet openapi-spec-validator
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       # checkout adds this under a temporarily-overridden HOME and then restores it, so by
       # the time make runs git distrusts the workspace's ownership and refuses. Without it
       # lint-emdash cannot list tracked files, which is how it went unenforced.
       - name: Trust the workspace (container checkout)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # In lint rather than a job of its own: package would skip when a job it needs fails, and a
+      # skipped job passes as a required check. An error of git diff counts as a change.
+      - name: Does the pull request change the package?
+        id: package
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --quiet HEAD^ HEAD -- src build/openapi.json build/openwrt build/sdk.sha256 \
+              files cli/uapi-token Makefile VERSION tools tests/vm \
+              tests/integration/release_apk_smoke.sh .github/workflows/ci.yml; then
+            echo changed=false >> "$GITHUB_OUTPUT"
+          else
+            echo changed=true >> "$GITHUB_OUTPUT"
+          fi
       - name: Lint (em-dash, ucode syntax, reserved names, $ref integrity, OpenAPI shape, defaults, doc refs)
         run: make lint
       - name: Every gate fails when its subject is broken
@@ -159,19 +177,14 @@ jobs:
         if: always()
         run: tests/vm/stop.sh
 
-  # release-apk attaches the APK to the GitHub Release. The apk feed
-  # itself is rebuilt elsewhere (openwrt-iac/openwrt-iac.github.io's
-  # publish.yml pulls latest stable from each source repo); this job just
-  # makes sure a successful tag has a downloadable asset. Three guards
-  # apply: needs:[unit,lint,integration], job-level v* tag check, and a
-  # step-level if on the release-upload step. Smoke test in QEMU runs
-  # before the upload; a failing smoke keeps the apk off the GitHub Release.
-  # The SDK cache is what keeps a release build from compiling mbedtls, openssl and wolfssl
-  # from source, which is 20 of release-apk's 26 minutes. It never helped, because a cache
-  # saved on a tag ref is not readable from another tag ref: `gh cache list` showed two
-  # 2.05 GiB entries under the same key, minutes apart, from two tag runs, neither of which
-  # could see the other's. Caches written on the default branch are readable everywhere, so
-  # warming it here is what makes the tag run's restore hit.
+  # The SDK cache is what keeps the package job from compiling mbedtls, openssl and wolfssl
+  # from source: the release builds took 22-27 minutes cold, and 10-12 on a hit, which every
+  # tag since 3.0.0-rc3 had. Most of what remains is the SDK packaging every kmod again, which
+  # it does on a hit too. The cache never helped at first, because a cache saved on a tag ref is
+  # not readable from another tag ref: `gh cache list` showed two 2.05 GiB entries under the
+  # same key, minutes apart, from two tag runs, neither of which could see the other's. Caches
+  # written on the default branch are readable everywhere, so warming it here is what makes
+  # the restore of a tag or pull request run hit.
   #
   # Costs nothing while the cache is warm: on a hit the job is a checkout and an exit. It
   # pays the full build only when the entry is missing, which is the first run and after
@@ -228,23 +241,27 @@ jobs:
           make defconfig
           make package/uapi/compile
 
-  release-apk:
+  # A job apart from release-apk so that a pull request builds under the read-only token.
+  package:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [unit, lint, integration]
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
+    needs: [unit, lint]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      || needs.lint.outputs.package_changed == 'true'
     steps:
+      # verify-tag needs the tag object, which a checkout of depth 1 does not bring. The '0' is a
+      # string because a number 0 is falsy, and `&& 0 || 1` would always give 1.
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # need tag object for verify-tag
+          fetch-depth: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
 
       # Tags MUST be signed by a key in .github/release-signers.asc. CI
       # imports the file's keys into a clean keyring and runs `git verify-tag`;
-      # an unsigned tag or one signed by a non-listed key fails the workflow
-      # before any artifact is built or published.
+      # an unsigned tag or one signed by a non-listed key fails this job before
+      # it builds anything, so release-apk never publishes it.
       - name: Verify tag signature
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           if ! grep -q 'BEGIN PGP PUBLIC KEY BLOCK' .github/release-signers.asc; then
@@ -264,8 +281,10 @@ jobs:
             build-essential libncurses-dev libssl-dev python3 \
             unzip gawk gettext xsltproc rsync wget
 
-      - name: Cache OpenWrt SDK
-        uses: actions/cache@v6
+      # Restore only, warm-sdk-cache being the one writer: an entry saved here is readable from
+      # this pull request or tag ref alone, and each takes 2 GiB of the repository's 10 GB.
+      - name: Restore the OpenWrt SDK cache
+        uses: actions/cache/restore@v6
         with:
           path: build/sdk
           key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
@@ -343,7 +362,7 @@ jobs:
           path: build/sbom.spdx.json
 
       # Smoke test the built APK in a fresh VM before publishing anywhere.
-      # If the smoke test fails the publish steps below never run.
+      # If the smoke test fails, release-apk never runs.
       - name: Setup VM
         run: tests/vm/setup.sh
 
@@ -374,6 +393,32 @@ jobs:
         if: always()
         run: tests/vm/stop.sh
 
+  # release-apk attaches the APK that the package job built and smoke-tested to the GitHub
+  # Release. The apk feed itself is rebuilt elsewhere (openwrt-iac/openwrt-iac.github.io's
+  # publish.yml pulls latest stable from each source repo); this job just makes sure a
+  # successful tag has a downloadable asset. Three guards apply: needs (integration, and
+  # package, which needs unit and lint), job-level v* tag check, and a step-level if on the
+  # release-upload step. A failing smoke in package keeps the apk off the GitHub Release.
+  release-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [integration, package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: uapi-apk
+          path: dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: uapi-sbom
+          path: dist
+
       # Step-level guard 3a: only attach to a GitHub release on a real v* tag push.
       # Redundant with the job-level if; kept so a future loosening of the job guard
       # still cannot publish a release from a non-tag ref.
@@ -398,11 +443,11 @@ jobs:
               gh release create "$TAG" $PRE --title "$TAG" --generate-notes
             fi
           fi
-          gh release upload "$TAG" "${{ steps.find_apk.outputs.apk }}" --clobber
+          gh release upload "$TAG" dist/uapi-*.apk --clobber
           # SBOM lives next to the APK; gh release upload is best-effort on the
           # SBOM (the APK is the gate, the SBOM is supplementary metadata).
-          [ -r build/sbom.spdx.json ] && \
-            gh release upload "$TAG" build/sbom.spdx.json --clobber || true
+          [ -r dist/sbom.spdx.json ] && \
+            gh release upload "$TAG" dist/sbom.spdx.json --clobber || true
           # Deleting a tag in order to move it reverts its release to a draft, and
           # `gh release view` succeeds on a draft, so the create branch above is skipped
           # and the rebuilt artifacts land in a release nobody can see or download.
