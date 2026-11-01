@@ -405,7 +405,11 @@ t.describe('transaction, the restore keeps what another writer committed during 
 		let conn = ubus.stub();
 		conn.uci_export = (pkg) => file[pkg];
 		conn.uci_commit = function(pkg) { file[pkg] += "+request"; return true; };
-		conn.uci_import = function(pkg, snapshot) { file[pkg] = snapshot; return true; };
+		conn.uci_import = function(pkg, snapshot, committed) {
+			if (file[pkg] != committed) return false;
+			file[pkg] = snapshot;
+			return true;
+		};
 		return conn;
 	}
 
@@ -432,6 +436,259 @@ t.describe('transaction, the restore keeps what another writer committed during 
 			require('fs').unlink("/tmp/uapi-test-kept-" + f);
 		t.assert_equal(r.kind, "reload_failed_restored");
 		t.assert_deep_equal(file, { aa: "seed+luci", bb: "seed+shell" });
+	});
+
+	// A commit by LuCI or a shell after the commit of the request, while the daemons reload, goes into
+	// the file that the request committed. The snapshot predates it, and writing it back undid it too.
+	const LEFT = "another writer committed to the package %s after the commit of the request, so the restore left it as that writer left it";
+	// The first reload fails after the other writer appends to the packages in `commits`.
+	function reload_during(file, commits) {
+		let calls = [];
+		return { calls, fn: function(services) {
+			push(calls, services);
+			if (length(calls) > 1) return null;
+			for (let pkg, w in commits) file[pkg] += w;
+			return "fw4: bad";
+		} };
+	}
+	function write(file, commits) {
+		let reload = reload_during(file, commits);
+		let r = tx.transaction(on(file), build_params({
+			acquire: function() { return {}; }, release: function() {},
+			reload: reload.fn, fn: () => ({ ok: true, body: {} }),
+		}));
+		return { r, reloads: length(reload.calls) };
+	}
+	function batch(file, commits) {
+		let reload = reload_during(file, commits);
+		let r = tx.multi_transaction(on(file), {
+			packages: keys(file), reload_services: { aa: [ "a" ], bb: [ "b" ] },
+			lock_path: "/tmp/uapi-test-left-global.lock", pkg_lock_prefix: "/tmp/uapi-test-left-pkg.",
+			fn: () => ({ ok: true, body: {} }), reload: reload.fn, check_services: noop_check,
+		});
+		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock" ])
+			require('fs').unlink("/tmp/uapi-test-left-" + f);
+		return { r, reloads: reload.calls };
+	}
+
+	t.it('a write leaves the package that another writer committed to during the reload, and reloads nothing again', () => {
+		let file = { fw: "seed" };
+		let w = write(file, { fw: "+luci" });
+		t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.r.restore_error, w.reloads ],
+		                    [ "reload_failed_unrecovered", "fw4: bad", sprintf(LEFT, "fw"), 1 ]);
+		t.assert_equal(file.fw, "seed+request+luci");
+		file = { fw: "seed" };
+		w = write(file, {});
+		t.assert_deep_equal([ w.r.kind, w.reloads, file.fw ], [ "reload_failed_restored", 2, "seed" ]);
+	});
+
+	t.it('a write leaves a package whose file it could not read after its commit, and says why', () => {
+		let file = { fw: "seed" };
+		let conn = on(file), exports = 0;
+		conn.uci_export = (pkg) => (exports++ == 0) ? file[pkg] : null;
+		let r = tx.transaction(conn, build_params({
+			acquire: function() { return {}; }, release: function() {},
+			reload: reload_failing("fw4: bad"), fn: () => ({ ok: true, body: {} }),
+		}));
+		t.assert_deep_equal([ r.kind, r.restore_error, file.fw ],
+		                    [ "reload_failed_unrecovered", "the file of the package fw could not be read after the commit "
+		                      + "of the request, so the restore left it as it is", "seed+request" ]);
+	});
+
+	t.it('a batch leaves that package, and restores and reloads the others as before', () => {
+		let file = { aa: "seed", bb: "seed" };
+		let b = batch(file, { aa: "+shell" });
+		t.assert_deep_equal([ b.r.kind, b.r.reload_error, b.r.restore_error ],
+		                    [ "reload_failed_unrecovered", "fw4: bad", sprintf(LEFT, "aa") ]);
+		t.assert_deep_equal(file, { aa: "seed+request+shell", bb: "seed" });
+		t.assert_deep_equal(b.reloads, [ [ "a", "b" ], [ "b" ] ]);
+		file = { aa: "seed", bb: "seed" };
+		b = batch(file, { aa: "+shell", bb: "+luci" });
+		t.assert_equal(b.r.restore_error, sprintf(LEFT, "aa") + "; " + sprintf(LEFT, "bb"));
+		t.assert_deep_equal(file, { aa: "seed+request+shell", bb: "seed+request+luci" });
+		t.assert_deep_equal(b.reloads, [ [ "a", "b" ] ]);
+		file = { aa: "seed", bb: "seed" };
+		b = batch(file, {});
+		t.assert_deep_equal([ b.r.kind, length(b.reloads), file ], [ "reload_failed_restored", 2, { aa: "seed", bb: "seed" } ]);
+	});
+
+	// The daemon of a package that the restore left holds the config that just failed.
+	t.it('a batch checks after the restore only the daemons of the packages that it wrote back', () => {
+		let file = { aa: "seed", bb: "seed" }, checked = [];
+		let reload = reload_during(file, { aa: "+shell" });
+		tx.multi_transaction(on(file), {
+			packages: [ "aa", "bb" ], reload_services: { aa: [ "a" ], bb: [ "b" ] },
+			lock_path: "/tmp/uapi-test-left-global.lock", pkg_lock_prefix: "/tmp/uapi-test-left-pkg.",
+			fn: () => ({ ok: true, body: {} }), reload: reload.fn, check_services: noop_check,
+			watch: () => function(only) { push(checked, only); return null; },
+		});
+		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock" ])
+			require('fs').unlink("/tmp/uapi-test-left-" + f);
+		t.assert_deep_equal(checked, [ [ "b" ] ]);
+	});
+
+	t.it('a batch reconciles the kernel after the restore only when it wrote the network package back', () => {
+		for (let left in [ true, false ]) {
+			let file = { network: "seed", bb: "seed" }, reconciled = null;
+			let reload = reload_during(file, left ? { network: "+luci" } : {});
+			tx.multi_transaction(on(file), {
+				packages: [ "network", "bb" ], reload_services: { network: [ "n" ], bb: [ "b" ] },
+				lock_path: "/tmp/uapi-test-left-global.lock", pkg_lock_prefix: "/tmp/uapi-test-left-pkg.",
+				fn: () => ({ ok: true, body: {} }), reload: reload.fn, check_services: noop_check,
+				wg_ops: [ { iface: "wg0", action: "set", public_key: "k" } ], wg_apply: () => null,
+				wg_reconcile: (c, ifaces) => { reconciled = ifaces; return null; },
+			});
+			for (let f in [ "global.lock", "pkg.network.lock", "pkg.bb.lock" ])
+				require('fs').unlink("/tmp/uapi-test-left-" + f);
+			t.assert_deep_equal(reconciled, left ? [] : [ "wg0" ]);
+		}
+	});
+});
+
+// A reload that did not end, or whose descendants kept its pipe open, held the request and its
+// locks until uhttpd killed it at its 60 s script timeout: the client got a 502, and uci kept the
+// new config with no restore. Killing the reload at a bound made the restore wait on the procd lock
+// that its child still held.
+t.describe('transaction, the time that uapi waits for the reloads of a request', () => {
+	let fs = require('fs');
+	const DIR = "/tmp/uapi-test-reload-budget";
+	const STILL = (svc, s) => sprintf("%s reload was still running when the %s s that uapi waits for the reloads of a request "
+	                                   + "ran out, so its result is unknown", svc, s);
+	// Each reload takes the next line of `plan`: `hang` runs 2 s, `slow` 0.3 s, `fail` exits 3,
+	// `slowfail` does both, and `detach` leaves a process that holds its output. Each script appends
+	// its name to `ran` when it ends. `w` waits for its own child first. Each call gets a directory
+	// of its own, so that a reload that an earlier test left running writes nowhere that a later one reads.
+	let dir = null, calls = 0;
+	function scripts(plan) {
+		dir = sprintf("%s/%d", DIR, ++calls);
+		system(sprintf("rm -rf %s; mkdir -p %s", dir, dir));
+		fs.writefile(dir + "/plan", join("\n", plan) + "\n");
+		for (let svc in [ "firewall", "a", "b", "c" ]) {
+			fs.writefile(dir + "/" + svc, "#!/bin/sh\n[ \"$1\" = reload ] || exit 2\n"
+				+ sprintf("p=$(head -n 1 %s/plan); sed -i 1d %s/plan; trap 'echo %s >>%s/ran' EXIT\n", dir, dir, svc, dir)
+				+ sprintf("case $p in\nhang) echo '%s: applying'; sleep 2 ;;\nslow|slowfail) sleep 0.3 ;;\n", svc)
+				+ "detach) sleep 2 & ;;\nesac\n"
+				+ sprintf("case $p in\n*fail) echo '%s: bad rule'; exit 3 ;;\nesac\nexit 0\n", svc));
+			fs.chmod(dir + "/" + svc, 0755);
+		}
+		fs.writefile(dir + "/w", "#!/bin/sh\nsleep 0.1 & wait $!\nexit 0\n");
+		fs.writefile(dir + "/fds", "#!/bin/sh\nls -l /proc/$$/fd | grep -c uapi-reload\nexit 1\n");
+		for (let svc in [ "w", "fds" ]) fs.chmod(dir + "/" + svc, 0755);
+	}
+	function ran() { return trim(fs.readfile(dir + "/ran") ?? ""); }
+	function write(batch, services, budget_ms) {
+		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } } });
+		let budget = { ms: budget_ms ?? 300 };
+		let p = { check_services: noop_check, reload: (s) => tx.default_reload(s, budget, dir) };
+		let start = clock(true);
+		let r = batch
+			? tx.multi_transaction(conn, { ...p, packages: [ "fw" ], reload_services: { fw: services ?? [ "firewall" ] },
+			                               lock_path: "/tmp/uapi-test-bound-global.lock", pkg_lock_prefix: "/tmp/uapi-test-bound-pkg.",
+			                               fn: (c) => { c.uci_set("fw", "r1", "target", "DROP"); return { ok: true, body: {} }; } })
+			: tx.transaction(conn, build_params({ ...p, reload_services: services ?? [ "firewall" ],
+			                                      acquire: function() { return {}; }, release: function() {},
+			                                      fn: function(c, pkg) { c.uci_set(pkg, "r1", "target", "DROP"); return { ok: true, body: {} }; } }));
+		let end = clock(true);
+		for (let f in [ "/tmp/uapi-test-bound-global.lock", "/tmp/uapi-test-bound-pkg.fw.lock" ]) fs.unlink(f);
+		return { r, took: (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000, target: conn._state.uci.fw.r1.target };
+	}
+
+	t.it('answers unverified for a reload still running when the time is up, and keeps the commit', () => {
+		scripts([ "hang", "hang" ]);
+		for (let batch in [ false, true ]) {
+			let w = write(batch);
+			t.assert_deep_equal([ w.r.ok, w.r.reload_status, w.r.unverified, w.target ],
+			                    [ true, "unverified", STILL("firewall", "0.3"), "DROP" ]);
+			t.assert_true(w.took < 1500, sprintf("the write waited for %d ms", w.took));
+		}
+		t.assert_equal(ran(), "", "a reload ended before the time ran out");
+		sleep(2200);
+		t.assert_equal(ran(), "firewall\nfirewall", "uapi killed a reload");
+	});
+
+	// A system write reloads up to five services. Three reloads of 0.3 s each fit in 0.8 s apart.
+	t.it('waits for the reloads of all services for that time in all', () => {
+		scripts([ "slow", "slow", "slow" ]);
+		let w = write(false, [ "a", "b", "c" ], 800);
+		t.assert_equal(w.r.reload_status, "unverified");
+		t.assert_match(w.r.unverified, /^[bc] reload was still running when the 0.8 s /);
+	});
+
+	t.it('reloads the services after the one still running once it ends, unless it fails', () => {
+		scripts([ "hang", "ok", "ok" ]);
+		let w = write(false, [ "a", "b", "c" ]);
+		t.assert_equal(w.r.unverified, STILL("a", "0.3") + ", and the reloads of b, c follow it unless it fails");
+		sleep(2200);
+		t.assert_equal(ran(), "a\nb\nc");
+		scripts([ "slowfail", "ok" ]);
+		w = write(false, [ "a", "b" ], 100);
+		sleep(500);
+		t.assert_deep_equal([ w.r.reload_status, ran() ], [ "unverified", "a" ]);
+	});
+
+	t.it('restores after a reload that fails within the time, and the reload of the restore shares it', () => {
+		scripts([ "fail", "ok" ]);
+		let w = write(false);
+		t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.target ], [ "reload_failed_restored", "firewall exited with code 3: firewall: bad rule", "ACCEPT" ]);
+		// The failed reload takes 0.3 s of the 0.5 s, and the reload of the restore 0.3 s more.
+		for (let batch in [ false, true ]) {
+			scripts([ "slowfail", "slow" ]);
+			w = write(batch, null, 500);
+			t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.r.restore_error, w.target ],
+			                    [ "reload_failed_unrecovered", "firewall exited with code 3: firewall: bad rule",
+			                      "reload during restore did not finish: " + STILL("firewall", "0.5"), "ACCEPT" ]);
+		}
+	});
+
+	t.it('returns when the script exits, while a process that it started keeps its output open', () => {
+		scripts([ "detach" ]);
+		let w = write(false, null, 5000);
+		t.assert_deep_equal([ w.r.reload_status, w.target ], [ "ok", "DROP" ]);
+		t.assert_true(w.took < 1500, sprintf("the write waited for %d ms", w.took));
+	});
+
+	// system() with a timeout blocks SIGCHLD in its child, and ash then never sees a child end that
+	// it waits for before it has waited for any command in the foreground.
+	t.it('runs a script that waits for its own child', () => {
+		scripts([]);
+		t.assert_equal(write(false, [ "w" ], 1000).r.reload_status, "ok");
+	});
+
+	// A daemon that a script starts held the files of every other reload of the request.
+	t.it('gives each script its own output file and no other', () => {
+		scripts([ "ok" ]);
+		t.assert_equal(tx.default_reload([ "a", "fds" ], { ms: 2000 }, dir), "fds exited with code 1: 2");
+	});
+
+	// A shell that cannot fork the reloads exits 2, and uapi waited out the time for them.
+	t.it('fails a reload that the shell could not start, and one whose exit codes have no room', () => {
+		scripts([ "ok" ]);
+		let saved = { system: global.system, mkstemp: fs.mkstemp };
+		global.system = () => 2;
+		let shell = tx.default_reload([ "firewall" ], { ms: 300 }, dir);
+		global.system = saved.system;
+		fs.mkstemp = function(t) {
+			let f = saved.mkstemp(t);
+			return { write: () => 0, flush: () => true, seek: (o) => f.seek(o), fileno: () => f.fileno(), close: () => f.close() };
+		};
+		let full = tx.default_reload([ "firewall" ], { ms: 300 }, dir);
+		fs.mkstemp = saved.mkstemp;
+		t.assert_deep_equal([ shell, full ], [ "could not start the reload of firewall: the shell exited with code 2",
+		                                       "could not start the reload of firewall: cannot reserve a file for its exit codes" ]);
+	});
+
+	t.it('keeps the output and the exit code of a reload that fails', () => {
+		scripts([ "fail" ]);
+		t.assert_equal(tx.default_reload([ "firewall" ], { ms: 300 }, dir), "firewall exited with code 3: firewall: bad rule");
+	});
+
+	t.it('waits 20 s by default', () => {
+		scripts([ "ok" ]);
+		let budget = {}, start = clock(true);
+		t.assert_equal(tx.default_reload([ "firewall" ], budget, dir), null);
+		let from = budget.until - (start[0] * 1000 + start[1] / 1000000);
+		t.assert_true(from >= 20000 && from < 20500, sprintf("the time ran out %d ms after the start", from));
+		system("rm -rf " + DIR);
 	});
 });
 
@@ -784,6 +1041,13 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		t.assert_equal(tx.default_watch(unbound([ null ]), [ "unbound" ], 0, 0), null);
 	});
 
+	// A batch restores only some of its packages and reloads only their services.
+	t.it('after a restore, watches only the daemons of the services that it reloaded', () => {
+		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], 0, 0)([ "firewall" ]), null);
+		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], 0, 0)([ "unbound" ]),
+		               "unbound stopped after the reload, with exit code 1");
+	});
+
 	t.it('passes while unbound runs, a new pid included, and fails when it stops', () => {
 		t.assert_equal(tx.default_watch(unbound([ UP, UP2 ]), [ "unbound" ], 0, 0)(), null);
 		t.assert_equal(tx.default_watch(unbound([ UP, DOWN ]), [ "unbound" ], 0, 0)(),
@@ -1025,6 +1289,12 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		let conn = fake([ { main: true } ]);
 		t.assert_equal(tx.dnsmasq_check(conn, [ "firewall", "unbound" ], tests.run), null);
 		t.assert_equal(length(conn._state.ubus_calls), 0);
+	});
+
+	t.it('tests nothing after a restore that did not reload dnsmasq', () => {
+		let tests = tester([ "main" ]);
+		t.assert_equal(tx.dnsmasq_check(fake([ { main: true } ]), [ "dnsmasq" ], tests.run)([ "firewall" ]), null);
+		t.assert_equal(length(tests.ran), 0);
 	});
 
 	t.it('fails the reload with the first line of what dnsmasq refuses', () => {

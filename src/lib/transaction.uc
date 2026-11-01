@@ -70,20 +70,84 @@ function missing_config(conn, pkg) {
 	return sprintf("/etc/config/%s not found: the package or hardware that creates it is missing on this router", pkg);
 }
 
-function default_reload(services) {
-	for (let svc in services) {
+// A popen held the request until every process that held its pipe closed it, and uhttpd killed the
+// request at its 60 s script timeout, with no restore and no answer. Killing a reload at a bound does
+// not help: a child of the script, such as fw4, runs on and holds the lock that procd_lock of
+// rc.common takes for the service, so the reload of the restore waited on it and was killed too.
+// So uapi waits for the reloads of a request, those of the restore included, for 20 s in all, and
+// then answers without them: they run on, and the write keeps its commit and answers unverified.
+// 20 s, the checks after the reloads and the flock wait of a restore fit in the 60 s.
+const RELOAD_MS = 20000;
+
+function now_ms() {
+	let c = clock(true);
+	return c[0] * 1000 + c[1] / 1000000;
+}
+
+// One shell runs the reloads in order, stops at the first that fails, and writes the exit code of
+// each to a file. system() with a timeout kills its child and blocks SIGCHLD in it, and the mask
+// outlives exec, so a script that runs `x & wait` hung. Without one it waits only for the shell
+// that puts the reloads in the background. uapi reads the file through /proc, because the shell
+// moves the offset of the descriptor that both hold. `budget` is shared by the reloads of a request.
+function default_reload(services, budget, init_dir) {
+	for (let svc in services)
 		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
-		let cmd = sprintf("/etc/init.d/%s reload 2>&1", svc);
-		let p = fs.popen(cmd, "r");
-		if (p == null)
-			return sprintf("could not exec %s", cmd);
-		let output = p.read("all") ?? "";
-		let exit_code = p.close();
-		if (exit_code != 0)
-			return sprintf("%s exited with code %d: %s", svc, exit_code, trim(output));
+	if (length(services) == 0) return null;
+	budget ??= {};
+	budget.ms ??= RELOAD_MS;
+	budget.until ??= now_ms() + budget.ms;
+	let n = length(services);
+	let files = map([ ...services, null ], () => fs.mkstemp("uapi-reload"));
+	let read = (f) => fs.readfile("/proc/self/fd/" + f.fileno()) ?? "";
+	let unstarted = (why) => sprintf("could not start the reload of %s: %s", join(", ", services), why);
+	let err = null;
+	if (index(files, null) >= 0)
+		err = unstarted("cannot create a file for its output");
+	else {
+		// The output of a script can take the last pages of a full tmpfs, and an exit code that
+		// then cannot be written reads as a reload still running, so a failed reload answered
+		// unverified with no restore. A code written over bytes reserved here needs no new page.
+		let pad = join("", map(services, () => "    "));
+		files[n].write(pad);
+		files[n].flush();
+		files[n].seek(0);
+		if (read(files[n]) != pad)
+			err = unstarted("cannot reserve a file for its exit codes");
 	}
-	return null;
+	if (err == null) {
+		// Each script keeps only its own output, on stdout and stderr. busybox ash 1.38 also closed
+		// a descriptor of 10 or above in the calling shell for `cmd N>&-`, so a subshell closes them.
+		let fds = map(files, (f) => f.fileno());
+		let closed = join(" ", map(fds, (fd) => fd + ">&-"));
+		let steps = map(services, (svc, i) => sprintf("(exec %s; exec %s reload) >&%d 2>&1; c=$?; echo $c >&%d; [ $c = 0 ] || exit",
+			closed, wg.command_line([ (init_dir ?? "/etc/init.d") + "/" + svc ]), fds[i], fds[n]));
+		try {
+			let code = system(sprintf("(%s) </dev/null >/dev/null 2>&1 &", join("; ", steps)));
+			if (code != 0) err = unstarted(sprintf("the shell exited with code %d", code));
+		} catch (e) {
+			err = unstarted(e.message);
+		}
+	}
+	while (err == null) {
+		let done = split(read(files[n]), "\n");
+		pop(done);
+		let k = length(done);
+		if (k > 0 && done[k - 1] != "0")
+			err = sprintf("%s exited with code %s: %s", services[k - 1], done[k - 1], trim(read(files[k - 1])));
+		else if (k == n)
+			break;
+		else if (now_ms() >= budget.until)
+			err = { unverified: sprintf("%s reload was still running when the %g s that uapi waits for the reloads "
+			                            + "of a request ran out, so its result is unknown%s", services[k], budget.ms / 1000.0,
+			                            (k + 1 < n) ? sprintf(", and the reloads of %s follow it unless it fails",
+			                                                  join(", ", slice(services, k + 1))) : "") };
+		else
+			sleep(20);
+	}
+	for (let f in files)
+		if (f != null) f.close();
+	return err;
 }
 
 // procd starts the daemon with its new config on its own, so the init script answers 0 before the
@@ -121,10 +185,13 @@ function default_watch(conn, services, total_ms, step_ms) {
 	let was = instances(conn, names);
 	let before = filter(keys(was), (k) => was[k].running);
 	if (length(before) == 0) return null;
-	return function() {
+	return function(only) {
+		let watched = (only == null) ? before
+			: filter(before, (k) => index(stay_up_daemons(only), split(k, "/")[0]) >= 0);
+		if (length(watched) == 0) return null;
 		for (let waited = 0; ; waited += step_ms) {
 			let now = instances(conn, names);
-			for (let k in before)
+			for (let k in watched)
 				if (now[k] != null && !now[k].running)
 					return sprintf("%s stopped after the reload%s", split(k, "/")[0],
 					               (now[k]?.exit_code != null) ? sprintf(", with exit code %d", now[k].exit_code) : "");
@@ -138,7 +205,8 @@ function default_watch(conn, services, total_ms, step_ms) {
 // killed the request at its 60 s script timeout, before any restore. A write that fails runs the
 // check twice, and the parse of a conf-dir with 500k adblock lines took 0.6 s on x86. The exec
 // makes dnsmasq the child that system() kills, and procd starts dnsmasq with stdin on /dev/null.
-// system() raises when fork fails, after the commit, where a throw would skip the restore.
+// system() raises when fork fails, after the commit, where a throw would skip the restore. The
+// SIGCHLD that system() blocks harms no --test, which starts no child.
 const DNSMASQ_TEST_MS = 10000;
 
 function run_test(argv, timeout_ms) {
@@ -171,7 +239,8 @@ function run_test(argv, timeout_ms) {
 function dnsmasq_check(conn, services, run) {
 	if (index(services, "dnsmasq") < 0) return null;
 	let was = instances(conn, [ "dnsmasq" ]);
-	return function() {
+	return function(only) {
+		if (only != null && index(only, "dnsmasq") < 0) return null;
 		let unverified = null;
 		for (let k, i in { ...was, ...instances(conn, [ "dnsmasq" ]) }) {
 			let cmd = i.command;
@@ -200,10 +269,10 @@ function check_daemons(conn, services, packages, test_ms) {
 	                      ? dnsmasq_check(conn, services, (argv) => run_test(argv, test_ms ?? DNSMASQ_TEST_MS)) : null,
 	                      default_watch(conn, services, 2000, 100) ],
 	                    (c) => c != null);
-	return function() {
+	return function(only) {
 		let unverified = null;
 		for (let c in checks) {
-			let err = c();
+			let err = c(only);
 			if (type(err) == "object") unverified ??= err;
 			else if (err != null) return err;
 		}
@@ -211,8 +280,9 @@ function check_daemons(conn, services, packages, test_ms) {
 	};
 }
 
-function run_check(watch) {
-	let r = (watch.check != null) ? watch.check() : null;
+// `only` limits the checks to the daemons of those services, the ones that a restore reloaded.
+function run_check(watch, only) {
+	let r = (watch.check != null) ? watch.check(only) : null;
 	if (type(r) != "object") return r;
 	watch.unverified = r.unverified;
 	return null;
@@ -320,19 +390,34 @@ function _finalize_after_reload(reload_err, restore_fn, body, services, ops, app
 		         kernel_status: _kernel_status(ops ?? [], applied ?? []) };
 	}
 
-	let restore_err = null;
+	// restore_fn pushes to `left` why it left a package as it is, see put_back().
+	let left = [], errs = [];
 	try {
-		let r2 = restore_fn();
-		if (r2 != null) restore_err = "reload during restore failed: " + r2;
+		let r2 = restore_fn(left);
+		if (type(r2) == "object") push(errs, "reload during restore did not finish: " + r2.unverified);
+		else if (r2 != null) push(errs, "reload during restore failed: " + r2);
 	} catch (e) {
-		restore_err = "" + e;
+		push(errs, "" + e);
 	}
+	let restore_err = join("; ", [ ...left, ...errs ]);
 
-	if (restore_err != null)
+	if (restore_err != "")
 		return { ok: false, kind: "reload_failed_unrecovered",
 		         reload_error: reload_err, restore_error: restore_err };
 	return { ok: false, kind: "reload_failed_restored",
 	         reload_error: reload_err };
+}
+
+// LuCI and a shell take no uapi lock, so they can commit to a package while its daemons reload,
+// into the file that the request committed. The snapshot predates that commit, so the restore leaves
+// such a package as it is rather than undo both. Returns why it left the package, or null.
+function put_back(conn, pkg, snapshot, stored) {
+	if (snapshot == null || stored == null)
+		return sprintf("the file of the package %s could not be read %s the commit of the request, so the "
+		               + "restore left it as it is", pkg, (snapshot == null) ? "before" : "after");
+	if (conn.uci_import(pkg, snapshot, stored)) return null;
+	return sprintf("another writer committed to the package %s after the commit of the request, so the "
+	               + "restore left it as that writer left it", pkg);
 }
 
 // Only here is it known that nothing stays written: in a batch, the restore of the packages that
@@ -361,9 +446,12 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
 	if (!committed)
 		return { ..._finalize_after_reload(null, null, result.body, [], ops, applied), unchanged: true };
 
-	return _finalize_after_reload(apply(), function() {
-		conn.uci_import(pkg, snapshot);
-		return restore();
+	let stored = conn.uci_export(pkg);
+	return _finalize_after_reload(apply(), function(left) {
+		let why = put_back(conn, pkg, snapshot, stored);
+		if (why == null) return restore();
+		push(left, why);
+		return null;
 	}, result.body, services, ops, applied);
 }
 
@@ -372,12 +460,18 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
 // failed apply lands in the existing reload-failure recipe: restore the snapshot,
 // re-apply, and report reload_failed_restored. `ops` is read here rather than
 // captured by value because the handler fills it while fn runs, and fn has
-// already returned by the time this is called.
+// already returned by the time this is called. A reload still running when the
+// budget ran out is no failure, and the checks after it would judge a config
+// that it may not have written yet, so they do not run.
 function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 	return function() {
 		watch.check = watch.start(conn, services, watch.packages);
-		let err = reload(services);
-		if (err == null) err = run_check(watch);
+		let err = reload(services, watch.budget);
+		if (type(err) == "object") {
+			watch.unverified = err.unverified;
+			err = null;
+		} else if (err == null)
+			err = run_check(watch);
 		if (err != null) return err;
 		return wg_apply(conn, ops, applied);
 	};
@@ -389,10 +483,10 @@ function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 // against the restored uci converges from whatever state the kernel is in.
 function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 	return function() {
-		let err = reload(services);
-		if (err == null) err = run_check(watch);
-		if (err != null) return err;
-		return wg_reconcile(conn, wg.interfaces_of(ops), ops);
+		let r = reload(services, watch.budget);
+		if (type(r) == "string") return r;
+		let err = (r == null) ? run_check(watch, services) : null;
+		return err ?? wg_reconcile(conn, wg.interfaces_of(ops), ops) ?? r;
 	};
 }
 
@@ -408,7 +502,7 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
-	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ] };
+	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ], budget: {} };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
 	// snapshot, committing, or reloading. Used by /batch to compose many
@@ -486,7 +580,7 @@ function multi_transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
-	let watch = { start: params.watch ?? check_daemons };
+	let watch = { start: params.watch ?? check_daemons, budget: {} };
 
 	let svc_err = check_services(services_of(required, packages));
 	if (svc_err != null)
@@ -561,7 +655,7 @@ function multi_transaction(conn, params) {
 			// others are reverted, so that the cursor holds no write that uci
 			// did not store, and the reconcile after a failed reload reads the
 			// network package from the file.
-			let committed = [];
+			let committed = [], stored = {};
 			let commit_err = null, conflict = null;
 			for (let pkg in sorted) {
 				let caught_commit = null;
@@ -578,20 +672,28 @@ function multi_transaction(conn, params) {
 					                     pkg, caught_commit);
 					break;
 				}
-				if (wrote) push(committed, pkg);
+				if (wrote) {
+					push(committed, pkg);
+					stored[pkg] = conn.uci_export(pkg);
+				}
 			}
 			let ran = services_of(by_package, committed);
-			let put_back = function() {
+			// Returns the packages that it wrote back.
+			let put_back_all = function(left) {
 				for (let pkg in sorted)
 					if (index(committed, pkg) < 0) conn.uci_revert(pkg);
-				for (let pkg in committed) conn.uci_import(pkg, snapshots[pkg]);
+				return filter(committed, function(pkg) {
+					let why = put_back(conn, pkg, snapshots[pkg], stored[pkg]);
+					if (why != null) push(left, why);
+					return why == null;
+				});
 			};
 			if (commit_err != null) {
 				// The reload and the kernel apply come after every commit, so neither ran: the
 				// daemons and the kernel hold what they held before the batch, and the restored
 				// files match it again. A reload or a reconcile there would reset WireGuard
 				// sessions and undo what another writer put in the kernel by hand.
-				result = _finalize_after_reload(commit_err, function() { put_back(); return null; },
+				result = _finalize_after_reload(commit_err, function(left) { put_back_all(left); return null; },
 				                                inner.body, ran, wg_ops, wg_applied);
 				if (conflict != null && result.kind == "reload_failed_restored")
 					result = conflict_result(conflict);
@@ -600,10 +702,14 @@ function multi_transaction(conn, params) {
 			} else {
 				watch.packages = committed;
 				let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
-				let restore_apply = _make_restore(conn, reload, ran,
-				                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
-				result = _finalize_after_reload(apply(), function() { put_back(); return restore_apply(); },
-				                                inner.body, ran, wg_ops, wg_applied);
+				// The restore reloads and checks the daemons of the packages that it wrote back only: a
+				// package that it left holds the config that just failed.
+				result = _finalize_after_reload(apply(), function(left) {
+					let restored = put_back_all(left);
+					if (length(restored) == 0) return null;
+					return _make_restore(conn, reload, services_of(by_package, restored), params.wg_reconcile ?? wg.reconcile,
+					                     (index(restored, "network") >= 0) ? wg_ops : [], watch)();
+				}, inner.body, ran, wg_ops, wg_applied);
 			}
 		}
 	} catch (e) { caught = e; }

@@ -178,3 +178,36 @@ t.describe('crontab handlers refuse before any I/O', () => {
 		t.assert_equal(ct.remove_entry(ctx(), null, "../../etc/passwd").status, 404);
 	});
 });
+
+// A write whose reload of cron was still running when uapi stopped waiting answered a bare 200.
+t.describe('crontab writes and a reload still running', () => {
+	const NOTE = "cron reload was still running when the 20 s that uapi waits for the reloads of a request ran out, so its result is unknown";
+	let real = { non_uci: require('non_uci'), transaction: require('transaction') };
+	let content = "", logged = [], answers = [];
+	global.modules.non_uci = { ...real.non_uci,
+		read_file_if_present: () => content, replace_private_file: (p, c) => { content = c; return true; },
+		with_lock_translated: (c, fn) => ({ result: fn() }), audit_notice: () => null,
+		audit_warning: (c, action, fields) => push(logged, [ action, fields ]) };
+	global.modules.transaction = { ...real.transaction, default_check_services: () => null,
+		default_reload: () => shift(answers) };
+	let ct2 = loadfile('src/lib/crontab.uc')();
+	global.modules.non_uci = real.non_uci;
+	global.modules.transaction = real.transaction;
+
+	t.it('answers X-Reload-Status: unverified and logs the note, on an add and a remove', () => {
+		answers = [ { unverified: NOTE }, { unverified: NOTE } ];
+		let added = ct2.add_entry(ctx(), null, { schedule: "1 2 3 4 5", command: "true" });
+		let removed = ct2.remove_entry(ctx(), null, added.body.id);
+		t.assert_deep_equal([ added.status, added.headers["X-Reload-Status"], removed.status, removed.headers["X-Reload-Status"] ],
+		                    [ 200, "unverified", 200, "unverified" ]);
+		t.assert_deep_equal(logged, [ [ "cron-reload-unverified", { note: NOTE } ], [ "cron-reload-unverified", { note: NOTE } ] ]);
+		t.assert_equal(content, "");
+	});
+
+	t.it('answers no reload header after a reload that ended', () => {
+		answers = [ null ];
+		logged = [];
+		let r = ct2.add_entry(ctx(), null, { schedule: "1 2 3 4 6", command: "true" });
+		t.assert_deep_equal([ r.status, r.headers["X-Reload-Status"], logged ], [ 200, null, [] ]);
+	});
+});

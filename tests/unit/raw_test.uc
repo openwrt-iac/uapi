@@ -478,6 +478,18 @@ t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => 
 		                    [ 200, true, "dnsmasq --test did not finish on its config main" ]);
 	});
 
+	t.it('names a reload that was still running when uapi stopped waiting for it', () => {
+		let real = require('transaction');
+		let still = "dnsmasq reload was still running when the 20 s that uapi waits for the reloads of a request ran out, so its result is unknown";
+		global.modules.transaction = { ...real, transaction: (conn, p) => real.transaction(conn, { ...p,
+			acquire: () => ({}), release: () => null, check_services: () => null,
+			reload: () => ({ unverified: still }), watch: () => () => "a check ran after a reload that did not end" }) };
+		let raw3 = loadfile('src/raw.uc')();
+		global.modules.transaction = real;
+		let r = raw3.patch(box([ "dnsmasq" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_deep_equal([ r.status, r.body.reloaded, r.body.reload_note ], [ 200, true, still ]);
+	});
+
 	t.it('a raw system write reloads them too, after system', () => {
 		let r = raw2.patch(box([ "dnsmasq", "unbound" ]), ctx(), [ "*:rw" ], "system", "cfg01", { hostname: "gw" });
 		t.assert_equal(r.status, 200, r.body);

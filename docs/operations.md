@@ -27,8 +27,10 @@ Two signals worth wiring into your automation:
   config trigger for it, from the start of the service to its stop, whatever the instances
   show, so a write also starts again a daemon that crashed too often. At boot, unbound holds
   no such trigger until 3 s after the last interface event, and a write leaves it as it is.
-  `unverified` means that every init script exited 0, but that
-  the `dnsmasq --test` check after a dhcp write did not finish, see below.
+  `unverified` means that the write kept its commit and that whether its
+  daemons take the new config is unknown: an init script was still running
+  when uapi stopped waiting for it, or the `dnsmasq --test` check after a
+  dhcp write did not finish, see below.
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
 
@@ -83,6 +85,59 @@ refused before, or a slow parse, must not fail or undo a hostname or NTP
 change.
 OpenWrt's reload of dnsmasq can restart the daemon, which on a slow machine can
 leave it stopped for 5 s, and uapi does not report that restart.
+
+uapi runs the reloads of a write in order and waits for them for 20 s in all,
+those of a restore included. A system write reloads up to five services, and
+the 20 s cover them all. uapi does not kill a reload that runs longer: it
+answers without it, the write keeps its commit and answers 2xx with
+`X-Reload-Status: unverified`, and a raw write a `reload_note` such as
+`firewall reload was still running when the 20 s that uapi waits for the
+reloads of a request ran out, so its result is unknown, and the reloads of
+dnsmasq, odhcpd follow it unless it fails`. A `system/cron_jobs` write answers
+the header too, and logs the note to syslog as `uapi-cron-reload-unverified`.
+The reloads after the one still running start when it ends, unless it fails,
+and uapi does not learn how they end, so check the daemon. No stay-up watch or
+`dnsmasq --test` check runs after such a reload. Before 3.3.0, uhttpd killed a
+request whose reload did not end at its 60 s script timeout and answered 502,
+and uci kept the new config with no restore. Killing the reload at a bound does
+not help: rc.common's `procd_lock` keeps the lock of the service in the
+children of the script, such as fw4, so the next reload of that service waits
+until they end. A reload that exits with a code other than 0 within the 20 s
+fails the write and restores, as before. A reload that takes longer and then
+fails answers 2xx `unverified`, and the failure shows only in the daemon. The
+restore gets what is left of the 20 s, so a reload that fails after more than
+about 10 s can leave too little time for the reloads of the restore, and the
+write then answers `500 reload_failed_unrecovered`. uapi waits for the script
+alone, so a process that the script starts and leaves running no longer holds
+the write. The lock of the write is released when uapi answers, so the next
+write can commit and reload while such a reload still runs. Its reload of the
+same service waits for the lock of `procd_lock` within its own 20 s. If the
+writes to one service answer `unverified` again and again, a reload of that
+service does not end: look for its blocked init script with `ps`.
+
+A write to one package that fails and restores takes at most 20 s of reloads,
+2 s of the unbound watch and 10 s of `dnsmasq --test` per dnsmasq instance
+after the reloads of the write and again after those of the restore, and up to
+5 s of the restore waiting for libuci's flock: 49 s with one dnsmasq instance,
+inside uhttpd's default `script_timeout` of 60 s. A `POST /batch` restore adds
+up to 5 s of flock wait for each further package that it writes back, and the
+`wg set` of a kernel apply or reconcile has no time bound. uapi does not read
+`script_timeout`. Set it lower, through `uhttpd/instances` or otherwise, and
+uhttpd can kill such a request before its restore or its answer: the client
+gets a 502, and uci keeps whatever the write had reached. Keep it at 60 s or
+above on a router that uapi manages.
+
+A LuCI save or a `uci commit` in a shell takes no uapi lock, so it can commit
+to the package while uapi reloads its daemons. When that reload then fails,
+the file holds both writes, and the restore would undo the other one too. uapi
+leaves the package as that writer left it, reloads nothing for it, and answers
+`500 reload_failed_unrecovered`, whose `restore_error` names the package. The
+daemon keeps what the failed reload gave it, so check the package and reload
+it by hand. In a `POST /batch`, the other packages are restored, and the
+services of the packages that the restore wrote back are reloaded. A daemon
+that also reads the package that it left is reloaded through them and reads
+that package as it is: in a batch of `system` and `dhcp` whose `dhcp` it left,
+dnsmasq, odhcpd and unbound reload through `system`.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block

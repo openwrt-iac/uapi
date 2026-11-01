@@ -256,6 +256,10 @@ tables is corrupted", and `ip route show table 4255` answers "invalid argument",
 while netifd resolves such a name normally. A test that reads tables through `ip`
 needs an id of 255 or less.
 
+### busybox ash closes a high descriptor in the calling shell for `cmd N>&-`
+
+With busybox 1.38.0, `cmd >&12 2>&1 12>&- 13>&-` left descriptor 13 closed in the shell that ran `cmd`, so a later `echo 0 >&13` wrote nothing and reported no error. With descriptors below 10, or with only 13 closed, it did not. The busybox of OpenWrt 25.12.5 does the same. `default_reload()` closes the descriptors with `exec` in a subshell that then runs the script, `(exec 12>&- 13>&-; exec <script> reload) >&12 2>&1`, so that nothing that the calling shell needs passes through such a redirection.
+
 ### Real `ubus` and `uci` modules are `.so` packages
 
 They live in the default `REQUIRE_SEARCH_PATH` ahead of any project paths. Naming a local lib `ubus.uc` shadows nothing because the `.so` wins. uapi calls its abstraction `bus.uc` to avoid the collision.
