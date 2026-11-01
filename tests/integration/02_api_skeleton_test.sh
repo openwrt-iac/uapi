@@ -108,6 +108,45 @@ s=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -H "$ADMIN" -X POST "$URL/fire
 wait
 [ "$s" = 422 ] || fail "a POST with no body behind $slots slow requests expected 422, got $s"
 
+echo "--- a body that has not arrived 10 s after the request started answers 400, before the bearer check ---"
+# uhttpd hands the body over a blocking pipe, so a request that declared a body and did not send it
+# all held its request process, and one of the max_requests slots, until the script timeout, and
+# got 502. curl's output ends with the status and the time, and the answer must come after 9 to
+# 30 s, which leaves room for the VM.
+late() {
+	last=$(printf '%s\n' "$1" | tail -1)
+	secs=${last#* }
+	secs=${secs%%.*}
+	[ "${last%% *}" = "$2" ] && [ "$secs" -ge 9 ] && [ "$secs" -le 30 ]
+}
+missed_deadline() {
+	late "$1" 400 && printf '%s\n' "$1" | sed '$d' \
+		| jq -e '.code == "bad_request" and (.message | contains("10 s"))' >/dev/null
+}
+r=$(curl -sS -m 40 -w '\n%{http_code} %{time_total}' -H 'Content-Type: application/json' \
+	-H 'Content-Length: 100' -X POST "$URL/firewall/rules" || true)
+missed_deadline "$r" || fail "a POST that declares a body of 100 bytes and sends none expected 400 after about 10 s, got: $r"
+s=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$URL/healthz")
+[ "$s" = 200 ] || fail "GET /healthz after the 400 of a body that did not arrive expected 200, got $s"
+
+# curl sends what it reads from stdin as chunks, and the last chunk only at the end of stdin.
+r=$( (printf '{"name": "uapi-'; sleep 20) | curl -sS -m 40 -w '\n%{http_code} %{time_total}' \
+	-H 'Content-Type: application/json' -T - -X POST "$URL/firewall/rules" || true)
+missed_deadline "$r" || fail "a chunked POST without its last chunk expected 400 after about 10 s, got: $r"
+
+# A byte every 0.5 s never leaves the pipe empty for the 1 s that uhttpd.recv() waits, so only a
+# deadline on the whole body ends it. The empty Transfer-Encoding keeps curl from chunking.
+r=$( (i=0; while [ $i -lt 60 ]; do printf a; sleep 0.5; i=$((i + 1)); done) \
+	| curl -sS -m 40 -w '\n%{http_code} %{time_total}' -H 'Content-Type: application/json' \
+		-H 'Content-Length: 100' -H 'Transfer-Encoding:' -T - -X POST "$URL/firewall/rules" || true)
+missed_deadline "$r" || fail "a POST of 100 bytes sent a byte every 0.5 s expected 400 after about 10 s, got: $r"
+
+# /healthz answers without reading the body, and drops it before the answer.
+r=$(curl -sS -m 40 -w '\n%{http_code} %{time_total}' -H 'Content-Length: 100' -X POST "$URL/healthz" || true)
+late "$r" 405 || fail "a POST to /healthz that declares a body and sends none expected 405 after about 10 s, got: $r"
+s=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$URL/healthz")
+[ "$s" = 200 ] || fail "GET /healthz after a POST whose body did not arrive expected 200, got $s"
+
 echo "--- a body with more than 2000 objects and arrays answers 413 before the bearer check ---"
 printf '[%s{}]' "$(yes '{},' | head -n 1998 | tr -d '\n')" > "$body"
 s=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \

@@ -193,6 +193,9 @@ uapi[1234]: uapi-internal 01HX567890ABCDEFGHJKMNNNNN: Type error: ...
 
 # Insecure-bypass marker triggered
 uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /system status=200 remote=10.0.2.2
+
+# A request body that missed the read deadline
+uapi[1234]: uapi-body-deadline 01HX7890ABCDEFGHJKMNNNNNNN POST /firewall/rules status=400 remote=10.0.2.2
 ```
 
 By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged. Optional knobs in `/etc/config/uapi`:
@@ -547,6 +550,20 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
 ```
 
 so it shows up in `logread` and any remote-syslog collector. Delete the marker for production use.
+
+## Request body deadline
+
+The body of a request has to arrive in full within 10 s of its start (`docs/security.md`, Public endpoints). Every request that misses the deadline emits a syslog `WARNING` line, on every path, with no body content:
+
+```
+uapi-body-deadline <request_id> <method> <path> status=<n> remote=<addr>
+```
+
+The status is the answer that the request got: `400` when uapi read the body and it did not arrive in full, or the normal answer of a request that answers without reading its body, such as a 413 or a GET with a declared body. Many such lines from one address are a client that holds the request slots of uhttpd. Without `ucode-mod-io` there is no deadline, and the handler logs one line when uhttpd starts:
+
+```
+uapi-body-deadline: ucode-mod-io is not installed, so a request body that does not arrive holds its request until the script timeout of uhttpd
+```
 
 ## Capacity
 
