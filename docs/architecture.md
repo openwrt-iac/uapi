@@ -74,7 +74,7 @@ Two flock files, used in three patterns:
 | Read (any)         | none  | none                                       |
 | Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
-| uci write that restarts unbound (`unbound_srv`, `unbound_ext`, and `dhcp` or `system` while unbound runs) | SH | EX on that pkg and on `unbound` |
+| uci write that restarts unbound (`unbound_srv`, `unbound_ext`), or that can reload it (`dhcp`, and `system` but not `system/timeservers`, while `/etc/init.d/unbound` exists) | SH | EX on that pkg and on `unbound` |
 | uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
 | Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
 
@@ -88,7 +88,15 @@ The interactions:
 - Two writes that restart unbound, such as one to `unbound_srv` and one to
   `unbound_ext`, contend on the EX of `unbound` the same way. Otherwise the
   restart of one would read as a stop to the stay-up check of the other,
-  and a line that unbound refuses in one would fail the other too.
+  and a line that unbound refuses in one would fail the other too. A write
+  to `dhcp`, or to `system` through the `system` resource or `/raw` (not
+  `system/timeservers`), takes that EX whenever unbound is installed,
+  before it asks procd whether to reload unbound. So of two of these
+  writes at the same moment, or of one of them and a write to unbound, the
+  second answers `423` even while unbound does not run. Asked before the
+  locks, a write that skipped a stopped unbound took no lock of it, and a
+  write to unbound beside it started unbound on the config from before the
+  commit of the first.
 - A non-uci write (apk install / authorized_keys write) takes EX on the
   global → refused with `423 locked` while any uci transaction is in flight
   (any package), and refuses new ones the same way until it is done. Apk's
@@ -123,7 +131,8 @@ without uci state change.
    no uci write attempted. A service in the resource's `reload_if_running`
    list, a daemon that reads the package but that an image can lack or that
    the operator stopped, such as dnsmasq, odhcpd and unbound for the dhcp
-   writes, joins the reload when its init script exists and a verbose
+   writes, is kept when its init script exists. Under the locks of step 1,
+   it joins the reload when a verbose
    `service list` shows a `config.change` trigger for it. That matches a
    LuCI save, whose commit fires each such trigger that procd holds,
    whatever the instances of the daemon show. procd holds them from the
@@ -146,7 +155,11 @@ without uci state change.
    `POST /batch` answers the 503 for a DELETE too, because it commits as one
    write.
 1. **Acquire flock.** SH on global + EX on the per-package file
-   (non-blocking). `EWOULDBLOCK` → `423 locked` + `Retry-After: 1`.
+   (non-blocking), and EX on `unbound` when one of the `reload` services, or
+   of the `reload_if_running` services that step 0 kept, restarts unbound, as
+   `unbound` and `unbound-uci-ext` do. `EWOULDBLOCK` →
+   `423 locked` + `Retry-After: 1`. Then the `service list` of step 0 runs
+   for each kept service.
 2. **Unload.** `uci_unload(<package>)` drops the copy of the package that the
    preview before the lock loaded into the cursor, which serves every later read
    from that copy, so a commit by LuCI or a shell in between was invisible to the
@@ -418,7 +431,8 @@ what keeps a peer orphaned by deleting its parent interface deletable.
 2. **Only WRITE sub-requests contribute to the lock/reload set.** Pure-read
    batches skip lock+snapshot+commit+reload entirely.
 3. Acquire global SH + per-package EX in sorted package order
-   (deadlock-free).
+   (deadlock-free), `unbound` included as in step 1 of the single-package
+   recipe, then ask procd which `reload_if_running` services to reload.
 4. `uci_unload()` each package, as in step 2 of the single-package recipe. Each
    commit of step 7 takes the snapshot of its package right before it, as in
    step 5.

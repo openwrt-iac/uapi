@@ -38,6 +38,10 @@ function default_check_services(services) {
 	return null;
 }
 
+function installed(services, check_services) {
+	return filter(services ?? [], (svc) => check_services([ svc ]) == null);
+}
+
 // A daemon that reads the package but that an image can lack or that the operator stopped, as
 // dnsmasq, odhcpd and unbound read dhcp, is reloaded when a LuCI save reloads it: while procd lists
 // its service with a config.change trigger, whatever its instances show. `stop` removes the service
@@ -47,10 +51,11 @@ function default_check_services(services) {
 // any config trigger counts. The reload of dnsmasq.init and unbound.init starts a stopped daemon,
 // and refusing the write would answer 503 on every router without it. When the ubus call fails,
 // whether procd holds the service is unknown, and skipping it would answer 2xx with a daemon on its
-// old config.
-function with_config_trigger(conn, services, check_services) {
-	return filter(services ?? [], function(svc) {
-		if (check_services([ svc ]) != null) return false;
+// old config. The write asks procd only once it holds the locks of every such daemon that is
+// installed: asked before them, a write that skipped a stopped unbound took no lock of it, and a
+// write to unbound at the same moment started unbound on the config from before the commit.
+function with_config_trigger(conn, services) {
+	return filter(services, function(svc) {
 		let r = null;
 		try { r = conn.call("service", "list", { name: svc, verbose: true }); } catch (e) { return true; }
 		return length(filter(r?.[svc]?.triggers ?? [], (t) => t[0] == "config.change")) > 0;
@@ -411,16 +416,16 @@ function transaction(conn, params) {
 	if (params.bare === true)
 		return fn(conn, pkg);
 
-	let services = [ ...(params.reload_services ?? []),
-	                 ...with_config_trigger(conn, params.reload_if_running, check_services) ];
-	let svc_err = check_services(services);
+	let required = params.reload_services ?? [];
+	let if_running = installed(params.reload_if_running, check_services);
+	let svc_err = check_services(required);
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
 	let cfg_err = missing_config(conn, pkg);
 	if (cfg_err != null)
 		return { ok: false, kind: "config_missing", message: cfg_err };
 
-	let lock = acquire(path, filter(stay_up_daemons(services), (d) => d != pkg));
+	let lock = acquire(path, filter(stay_up_daemons([ ...required, ...if_running ]), (d) => d != pkg));
 	// `null` means a test/legacy stub that pre-dates the contention sentinel;
 	// treat as per-package since that's the production-default flavour.
 	if (lock == null)
@@ -436,6 +441,7 @@ function transaction(conn, params) {
 	let result = null;
 	let caught = null;
 	try {
+		let services = [ ...required, ...with_config_trigger(conn, if_running) ];
 		// The preview before the lock loaded the package into this cursor, and libuci serves
 		// every later read from that copy. A commit by LuCI or a shell in between was then
 		// invisible to fn: a PUT kept an option that it had to remove, and the response showed
@@ -472,11 +478,9 @@ function services_of(by_package, packages) {
 function multi_transaction(conn, params) {
 	let packages = params.packages ?? [];
 	let check_services = params.check_services ?? default_check_services;
-	let by_package = {};
-	for (let p in packages)
-		by_package[p] = [ ...(params.reload_services?.[p] ?? []),
-		                  ...with_config_trigger(conn, params.reload_if_running?.[p], check_services) ];
-	let services = services_of(by_package, packages);
+	let required = params.reload_services ?? {};
+	let if_running = {};
+	for (let p in packages) if_running[p] = installed(params.reload_if_running?.[p], check_services);
 	let fn = params.fn;
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
@@ -484,7 +488,7 @@ function multi_transaction(conn, params) {
 	let wg_applied = [];
 	let watch = { start: params.watch ?? check_daemons };
 
-	let svc_err = check_services(services);
+	let svc_err = check_services(services_of(required, packages));
 	if (svc_err != null)
 		return { ok: false, kind: "init_script_missing", message: svc_err };
 
@@ -506,7 +510,8 @@ function multi_transaction(conn, params) {
 	}
 
 	let locks = { ...unique };
-	for (let d in stay_up_daemons(services)) locks[d] = true;
+	let may_reload = [ ...services_of(required, packages), ...services_of(if_running, packages) ];
+	for (let d in stay_up_daemons(may_reload)) locks[d] = true;
 	locks = sort(keys(locks));
 	let lock_prefix = params.pkg_lock_prefix ?? PKG_LOCK_PREFIX;
 
@@ -537,6 +542,9 @@ function multi_transaction(conn, params) {
 	let result = null;
 	let caught = null;
 	try {
+		let by_package = {};
+		for (let p in packages)
+			by_package[p] = [ ...(required[p] ?? []), ...with_config_trigger(conn, if_running[p]) ];
 		for (let pkg in sorted) conn.uci_unload(pkg);
 		let inner = fn(conn);
 		if (!inner || inner.ok === false) {

@@ -8,9 +8,11 @@ const FALLBACK = {
 	system: ["system"],
 };
 // The daemons with a procd trigger on the package, or on dhcp, which LuCI's ucitrack has system
-// affect. An image can lack each of them and an operator can stop it.
+// affect. An image can lack each of them and an operator can stop it. LuCI's ucitrack also has
+// network affect dhcp, and docs/raw.md says why a network write reloads only odhcpd of them.
 const FALLBACK_IF_RUNNING = {
 	dhcp: ["dnsmasq", "odhcpd", "unbound"],
+	network: ["odhcpd"],
 	system: ["dnsmasq", "odhcpd", "unbound"],
 };
 

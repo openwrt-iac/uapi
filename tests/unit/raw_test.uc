@@ -415,6 +415,10 @@ t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => 
 			lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' },
 		}, system: {
 			cfg01: { '.type': 'system', '.anonymous': true, hostname: 'OpenWrt' },
+		}, network: {
+			lan: { '.type': 'interface', '.anonymous': false, proto: 'static' },
+		}, wireless: {
+			default_radio0: { '.type': 'wifi-iface', '.anonymous': false, ssid: 'OpenWrt' },
 		} } });
 		conn.set_ubus_response("service", "list", (a) => (index(running, a.name) >= 0)
 			? { [a.name]: { instances: { [a.name]: { running: true, pid: 10 } },
@@ -479,5 +483,19 @@ t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => 
 		t.assert_equal(r.status, 200, r.body);
 		t.assert_deep_equal([ reloaded, r.body.reload_services ],
 		                    [ [ [ "system", "dnsmasq", "unbound" ] ], [ "system", "dnsmasq", "unbound" ] ]);
+	});
+
+	// odhcpd reads the network config and has a procd trigger on it, and a raw network write reloaded
+	// only network. dnsmasq and unbound read only ula_prefix and the interface names there.
+	t.it('a raw network write reloads odhcpd too, after network, and a wireless write only network', () => {
+		let network = (c) => raw2.patch(c, ctx(), [ "*:rw" ], "network", "lan", { proto: "dhcp" });
+		let wireless = (c) => raw2.patch(c, ctx(), [ "*:rw" ], "wireless", "default_radio0", { ssid: "uapi" });
+		let all = [ "dnsmasq", "odhcpd", "unbound" ];
+		let r = network(box(all));
+		t.assert_deep_equal([ r.status, reloaded, r.body.reload_services ], [ 200, [ [ "network", "odhcpd" ] ], [ "network", "odhcpd" ] ]);
+		r = network(box([ "dnsmasq", "unbound" ]));
+		t.assert_deep_equal([ r.status, reloaded, r.body.reload_services ], [ 200, [ [ "network" ] ], [ "network" ] ]);
+		r = wireless(box(all));
+		t.assert_deep_equal([ r.status, reloaded, r.body.reload_services ], [ 200, [ [ "network" ] ], [ "network" ] ]);
 	});
 });

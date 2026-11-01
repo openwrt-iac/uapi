@@ -37,9 +37,11 @@ reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
 keep running. A write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`,
 `dhcp/odhcpd`, `system` or the raw `dhcp` and `system` packages reloads
 `unbound` while procd runs it, and waits the 2 s too when unbound ran before
-the write. It also takes the lock
-of `unbound`, so a write to `unbound/server`, `unbound/srv` or `unbound/ext`, or
-another of these writes, at the same moment answers `423 locked`. If an
+the write. While `/etc/init.d/unbound` exists, each of these writes also
+takes the lock of `unbound` before it asks procd, whether unbound runs or
+not, so a write to `unbound/server`, `unbound/srv` or `unbound/ext`, or
+another of these writes, at the same moment answers `423 locked`. A network
+or wireless write reloads no unbound and takes no such lock. If an
 instance stops, the write answers `500 reload_failed_restored`, and its
 `reload_error` reads `unbound stopped after the reload, with exit code 1`. So a
 2xx on these writes also means that procd did not report unbound as stopped in

@@ -207,15 +207,22 @@ All notable changes to this project will be documented in this file. Format foll
   while procd holds a `config.change` trigger for it, which it reads with a verbose `service list`,
   as a LuCI save does. That leaves unbound alone at boot, when unbound.init registers only a trigger
   on interface events, which starts unbound 3 s after the last of them. `X-Reload-Services` names
-  `unbound` last, and a `POST /batch` lists it sorted. Such a write takes the lock of the `unbound`
-  package, as a write to `unbound/server` does, and when unbound ran before the write, it waits 2 s
-  for unbound to keep running. Two requests that 3.2.0 accepted can now be refused. A write after
-  which unbound stops within 2 s answers `500 reload_failed_restored` and restores the previous
-  config: this uses the carve-out in `docs/versioning.md` for payloads that produced a state no
-  caller can rely on, here DNS down, and it fails loudly. A write at the same moment as a write to
-  `unbound/server`, `unbound/srv`, `unbound/ext` or `system` that also reloads unbound answers
-  `423 locked`: no payload is refused, the same request succeeds on a retry, which a client already
-  makes for 423, so `docs/versioning.md` counts no breaking change. (#291)
+  `unbound` last, and a `POST /batch` lists it sorted. While `/etc/init.d/unbound` exists, such a
+  write takes the lock of the `unbound` package, as a write to `unbound/server` does, whether
+  unbound runs or not, and it asks procd for the trigger only once it holds its locks. So no write
+  to unbound can restart unbound between the answer of procd and the commit, which would leave
+  unbound on the config from before the commit. A restart that procd starts on its own, such as the
+  one of the trigger on interface events at boot, takes no lock of uapi and can still fall there.
+  When unbound ran before the write, the write waits 2 s for unbound to keep running. Two requests
+  that 3.2.0 accepted can now be refused. A write after which unbound stops within 2 s answers
+  `500 reload_failed_restored` and restores the previous config, or `500 reload_failed_unrecovered`
+  when unbound stops on that config too: this uses the carve-out in `docs/versioning.md` for
+  payloads that produced a state no caller can rely on, here DNS down, and it fails loudly. On a
+  router where `/etc/init.d/unbound` exists, a write at the same moment as a write to
+  `unbound/server`, `unbound/srv` or `unbound/ext`, or as a `system` write that can reload unbound,
+  answers `423 locked`, whether unbound runs or not: no payload is refused, the same request
+  succeeds on a retry, which a client already makes for 423, so `docs/versioning.md` counts no
+  breaking change. (#291, #300)
 - **A write to `system` reloads dnsmasq, odhcpd and unbound, and a write to `system/timeservers`
   reloads dnsmasq, each while procd runs it.** dnsmasq.init reads the hostname and
   `system.ntp.enabled`, odhcpd reads `timezone` and `zonename`, and unbound reads the hostname.
@@ -225,12 +232,14 @@ All notable changes to this project will be documented in this file. Format foll
   three daemons too. These writes run no `dnsmasq --test` check, so a dnsmasq config that was
   refused before, or that parses slowly, does not fail or undo a hostname or NTP change. With every
   daemon running, `X-Reload-Services` reads `system,log,dnsmasq,odhcpd,unbound` and
-  `sysntpd,dnsmasq`. A `system` write that reloads unbound takes the lock of the `unbound` package,
-  and when unbound ran before the write, it waits the full 2 s for unbound to keep running. So the
-  two refusals of the entry above apply to a `system` write too: `500 reload_failed_restored` when
-  unbound stops after it, under the same carve-out, and `423 locked` at the same moment as a write
-  to `unbound/server`, `unbound/srv`, `unbound/ext` or a dhcp write that reloads unbound, which is
-  no breaking change. (#291)
+  `sysntpd,dnsmasq`. While `/etc/init.d/unbound` exists, a `system` write takes the lock of the
+  `unbound` package before it asks procd, whether unbound runs or not, and when unbound ran before
+  the write, it waits the full 2 s for unbound to keep running. A `system/timeservers` write takes
+  no such lock. So the two refusals of the entry above apply to a `system` write too:
+  `500 reload_failed_restored` or `500 reload_failed_unrecovered` when unbound stops after it, under
+  the same carve-out, and `423 locked` at the same moment as a write to `unbound/server`,
+  `unbound/srv`, `unbound/ext` or a dhcp write that can reload unbound, which is no breaking change.
+  (#291, #300)
 - **A dhcp write no longer starts a dnsmasq that the operator stopped, and no longer answers
   `503 init_script_missing` on a router without dnsmasq or without odhcpd.** `dhcp/servers`,
   `dhcp/hosts`, `dhcp/dnsmasq` and a raw `dhcp` write reloaded dnsmasq whether it ran or not, and
@@ -392,6 +401,32 @@ All notable changes to this project will be documented in this file. Format foll
   peer whose restore meets a preshared key that wg cannot read answers `reload_failed_restored`
   where it answered `reload_failed_unrecovered`, and one whose restore meets a preshared key with a
   later line answers `reload_failed_unrecovered` where it answered `reload_failed_restored`. (#297)
+- **A write to `network` reloads odhcpd too, while procd holds a config trigger for it.** odhcpd
+  reads the network config and has a procd trigger on `network`, which a commit through libuci does
+  not fire. So a write to `network/interfaces`, `network/devices`, `network/routes`,
+  `network/rules`, `network/bridge_vlans`, `network/wireguard_peers` or the raw `network` package
+  left odhcpd on what it read before a write that answered 200. A single write now reloads odhcpd
+  after `network`, under the rule of a `dhcp` write: only while procd holds a `config.change`
+  trigger for it, or when the `service list` call fails. A `POST /batch` reloads all its services
+  once, in sorted order. With odhcpd running, `X-Reload-Services` reads `network,odhcpd`, and a raw
+  write lists the same in `reload_services`. Only the description of `X-Reload-Services` changes in
+  the spec. This diverges from a LuCI save on purpose. LuCI's ucitrack has `network` affect `dhcp`,
+  and `wireless` affect `network`, so a LuCI save of either also reloads dnsmasq and unbound. From
+  `/etc/config/network`, dnsmasq.init reads only `ula_prefix` of the globals, which no curated
+  resource writes, and unbound reads that and the names of the interface sections. None of the three
+  daemons reads `/etc/config/wireless`, and dnsmasq and unbound reload on the netifd events of the
+  interfaces that they serve. Reloading them would make every network and wireless write take the
+  lock of `unbound`, wait 2 s while unbound runs, and fail when unbound stops for a reason of its
+  own. A `wireless` write reloads `network` only, as before, and `docs/raw.md` gives the details. A
+  network write now runs one more init script while procd holds the trigger of odhcpd,
+  `/etc/init.d/odhcpd reload`, which sends odhcpd a signal, and it holds the global SH and the lock
+  of `network` while that runs, as for the rest of the write. It takes no lock that it did not take
+  in 3.2.0, so it answers `423 locked` in no new case. One request that 3.2.0 accepted can now
+  answer otherwise: a network write whose reload of odhcpd exits non-zero answers
+  `500 reload_failed_restored` and restores the previous config, or `500 reload_failed_unrecovered`
+  when the reload fails on that config too, where it answered 200. This uses the carve-out in
+  `docs/versioning.md` for payloads that produced a state no caller can rely on, here odhcpd on its
+  old config, and it fails loudly. (#300)
 
 ## [3.2.0] - 2026-10-29
 

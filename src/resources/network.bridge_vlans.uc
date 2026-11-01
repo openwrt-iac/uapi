@@ -49,6 +49,9 @@ return {
 	package: "network",
 	type: "bridge-vlan",
 	reload: ["network"],
+	// odhcpd reads this config and has a procd trigger on it. dnsmasq and unbound, which LuCI's
+	// ucitrack also reloads, read only ula_prefix and the interface names here: see docs/raw.md.
+	reload_if_running: ["odhcpd"],
 	// A bridge-vlan turns on VLAN filtering for the whole bridge, so a write to the bridge
 	// carrying the request drops untagged traffic and takes the caller off the network. This
 	// resource never touches `config interface`, which is why the interface-name match could
