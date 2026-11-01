@@ -13,7 +13,7 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
                   [--force]
 ```
 
-- `--name`: human-readable label. Must be unique. Must match `[A-Za-z0-9_]+` (uci section-name charset; use underscores instead of hyphens). Surfaces in the audit log on every authed request.
+- `--name`: human-readable label. Must be unique: a name that another section of `/etc/config/uapi` already holds is refused. Must match `[A-Za-z0-9_]+` (uci section-name charset; use underscores instead of hyphens). Surfaces in the audit log on every authed request. `POST /tokens` takes at most 63 characters, and the CLI takes any length. A longer name keeps its rate-limit bucket and its last-used marker in a file named by the sha256 of the name, because a file name holds 255 bytes. A name longer than 238 characters gets no series in `/metrics`, whose files are named by their labels.
 - `--scope`: at least one. May repeat. Validated against the known scope tree (see below); `--force` bypasses.
 - `--expires-in`: optional duration. Suffix is one of `s`/`m`/`h`/`d`. The token returns `401 invalid_token` with `message: "Token expired"` after the deadline passes.
 - `--allowed-cidr`: optional source-IP allowlist (IPv4 or IPv6 CIDRs; may repeat). When set, the token returns `401 invalid_token` with `message: "Source IP not permitted for this token"` from any other source. Bad CIDR shape rejected at mint time.
@@ -57,8 +57,20 @@ and a stored one admits no caller. The validation sweep does not cover tokens, s
 `uapi-token list` is where a stored entry shows.
 
 The caller's scopes must cover the requested scopes, equal or narrower. Escalation
-returns `403 scope_escalation_blocked`. The same request with a name
-that's already in use returns `409 conflict`.
+returns `403 scope_escalation_blocked`. A name that a token or another
+section of the token store already holds returns `409 conflict`.
+
+A mint removes the rate-limit buckets and the last-used markers of the tokens that no longer
+authenticate, and folds their metric series into `token_id="-retired"`, before it commits the
+new token. A request that uhttpd kills during that cleanup has committed nothing, so it cannot
+lose the bearer of a token that exists. `uapi-token create` cleans up the same way, then
+commits, then prints the bearer.
+
+uapi keeps no cleartext bearer, with one exception. A `POST /tokens` that carries an
+`Idempotency-Key` is cached with its response, bearer included, for 24 h, in a file of mode 0600
+that only root can read. A retry by the same token with the same key and body gets that
+response back, so for such a client a request killed after the cache write loses no bearer
+either.
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/tokens

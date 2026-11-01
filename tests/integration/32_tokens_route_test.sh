@@ -9,6 +9,7 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 RO="Authorization: Bearer $RO_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
+LONG=cli_long_$(printf '%070d' 0)
 
 cleanup_tokens() {
 	$SSH 'uapi-token revoke api_minted 2>/dev/null || true'
@@ -19,6 +20,9 @@ cleanup_tokens() {
 	$SSH 'uapi-token revoke api_strict_rl 2>/dev/null || true'
 	$SSH 'uapi-token revoke cli_rl 2>/dev/null || true'
 	$SSH 'uapi-token revoke cli_wait 2>/dev/null || true'
+	$SSH "uapi-token revoke $LONG 2>/dev/null || true"
+	$SSH 'uapi-token revoke cli_reborn 2>/dev/null || true'
+	$SSH 'uci -q delete uapi.api_taken; uci commit uapi'
 }
 trap cleanup_tokens EXIT INT TERM
 cleanup_tokens
@@ -239,6 +243,43 @@ $SSH "uapi-token create --name cli_rl --scope '*:ro' --rate 5 --burst 9" >/dev/n
 [ "$($SSH 'uci get uapi.cli_rl.rate')" = "5" ] || fail "CLI --rate not persisted"
 [ "$($SSH 'uci get uapi.cli_rl.burst')" = "9" ] || fail "CLI --burst not persisted"
 $SSH "uapi-token revoke cli_rl 2>/dev/null || true"
+
+echo "--- a token whose name is longer than 63 characters is limited and stamped, and its revoke reaps its state ---"
+long_bearer=$($SSH "uapi-token create --name $LONG --scope 'firewall:rules:ro' --rate 1 --burst 1 2>/dev/null")
+[ -n "$long_bearer" ] || fail "uapi-token create printed no bearer for $LONG"
+codes=""
+for i in 1 2 3; do
+	codes="$codes $(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $long_bearer" "$URL/firewall/rules")"
+done
+echo "$codes" | grep -q ' 429' || fail "expected 429 within 3 requests against rate=1/burst=1 for $LONG; got:$codes"
+file=$($SSH "printf %s $LONG | sha256sum | cut -c1-64")
+$SSH "test -e /var/run/uapi-ratelimit/$file.txt" || fail "$LONG has no bucket under the sha256 of its name"
+$SSH "test -e /var/run/uapi-token-update/$file" || fail "$LONG has no last-used marker under the sha256 of its name"
+[ -n "$($SSH "uci -q get uapi.$LONG.last_used_at")" ] || fail "$LONG has no last_used_at"
+$SSH "uapi-token revoke $LONG" >/dev/null 2>&1 || fail "uapi-token revoke $LONG failed"
+$SSH "test -e /var/run/uapi-ratelimit/$file.txt" && fail "the revoke left the bucket of $LONG"
+$SSH "test -e /var/run/uapi-token-update/$file" && fail "the revoke left the last-used marker of $LONG"
+
+echo "--- POST /tokens and uapi-token create refuse a name that another section of the token store holds ---"
+$SSH 'uci set uapi.api_taken=other && uci set uapi.api_taken.x=1 && uci commit uapi'
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/tokens" -d '{"name": "api_taken", "scopes": ["firewall:rules:ro"]}')
+[ "$status" = "409" ] || fail "POST /tokens of the name api_taken expected 409, got $status"
+$SSH "uapi-token create --name api_taken --scope 'firewall:rules:ro'" >/dev/null 2>&1 \
+	&& fail "uapi-token create took the name api_taken"
+[ "$($SSH 'uci -q get uapi.api_taken')" = "other" ] || fail "a refused mint changed the section api_taken"
+[ "$($SSH 'uci -q get uapi.api_taken.x')" = "1" ] || fail "a refused mint changed the options of api_taken"
+$SSH 'uci delete uapi.api_taken && uci commit uapi'
+
+echo "--- uapi-token create of a name that a removed token held starts without its bucket ---"
+reborn=$($SSH "uapi-token create --name cli_reborn --scope 'firewall:rules:ro' 2>/dev/null")
+curl -sS -o /dev/null -H "Authorization: Bearer $reborn" "$URL/firewall/rules"
+$SSH "test -e /var/run/uapi-ratelimit/cli_reborn.txt" || fail "cli_reborn has no bucket"
+$SSH 'uci delete uapi.cli_reborn && uci commit uapi'
+$SSH "uapi-token create --name cli_reborn --scope 'firewall:rules:ro'" >/dev/null 2>&1 \
+	|| fail "uapi-token create cli_reborn failed the second time"
+$SSH "test -e /var/run/uapi-ratelimit/cli_reborn.txt" && fail "the create kept the bucket of the token that held cli_reborn before"
+$SSH 'uapi-token revoke cli_reborn' >/dev/null 2>&1 || fail "uapi-token revoke cli_reborn failed"
 
 echo "--- uapi-token waits for the lock of the uapi package, and exits 75 when it stays held ---"
 $SSH 'flock -nx /var/lock/uapi.pkg.uapi.lock -c "sleep 2" >/dev/null 2>&1 &' &

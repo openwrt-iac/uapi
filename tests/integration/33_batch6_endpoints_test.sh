@@ -128,6 +128,21 @@ for d in $dirs; do $SSH "test -d $d" || fail "$d is missing"; done
 wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)")
 [ -z "$wrong" ] || fail "these are not 0700 or 0600: $wrong"
 
+echo "--- /diagnostics reports that uapi uses each state directory ---"
+used=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq -cS .state_dirs)
+[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
+	|| fail "state_dirs reads $used"
+
+echo "--- /diagnostics reports a state directory as it finds it, and creates or narrows none ---"
+idem() { curl -sS -H "$ADMIN" "$URL/diagnostics" | jq -c '.state_dirs["/var/run/uapi-idempotency"]'; }
+$SSH 'rm -rf /var/run/uapi-idempotency'
+[ "$(idem)" = "null" ] || fail "a missing idempotency directory reads $(idem), expected null"
+$SSH 'test -e /var/run/uapi-idempotency' && fail "/diagnostics created the idempotency directory"
+$SSH 'mkdir -m 0755 /var/run/uapi-idempotency'
+[ "$(idem)" = "false" ] || fail "an idempotency directory with mode 0755 reads $(idem), expected false"
+[ "$($SSH 'ls -ld /var/run/uapi-idempotency' | cut -c1-10)" = "drwxr-xr-x" ] || fail "/diagnostics changed the mode of the idempotency directory"
+$SSH 'rmdir /var/run/uapi-idempotency'
+
 echo "--- pagination: ?limit=N returns a partial page + Link/X-Next-Cursor ---"
 # firewall/rules typically has zero managed entries on a clean install.
 # Use raw to count anything, then test pagination on a real busy resource.

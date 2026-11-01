@@ -210,17 +210,20 @@ at its next increment.
 The `token_id` label is not bounded by the operator, because a client can
 mint a token per run, as the Terraform provider's ephemeral `uapi_token`
 does. A mint and a revoke bound it, over HTTP and with `uapi-token`, under
-the lock of the `uapi` package. After its commit, each one folds every
-series of a token that no longer authenticates (revoked, expired, or
-deleted from `/etc/config/uapi` by hand) into the series with the same
-other labels and `token_id="-retired"`, which no token can be named. The
-count is added there, and the token's file is deleted once the added count
-is on disk. The values of `token_id` are then the tokens that still
-authenticated at the last mint or revoke, `-` and `-retired`, and two kinds
-that the next mint or revoke folds: a token that revoked itself, as its
-revoke is recorded after the fold, and a token with a request in flight
-at its revoke. A client that mints tokens with no expiry and never revokes
-them keeps every one of them live, and nothing bounds those.
+the lock of the `uapi` package. Each one folds every series of a token
+that no longer authenticates (revoked, expired, or deleted from
+`/etc/config/uapi` by hand) into the series with the same other labels and
+`token_id="-retired"`, which no token can be named. The count is added
+there, and the token's file is deleted once the added count is on disk. A
+mint, over HTTP and with `uapi-token create`, folds before its commit, so
+that a request that uhttpd kills during the fold cannot lose the bearer of a
+token that it committed. A revoke folds after its commit. The values of
+`token_id` are then the tokens that still authenticated at the last mint or
+revoke, `-` and `-retired`, and two kinds that the next mint or revoke
+folds: a token that revoked itself, as its revoke is recorded after the
+fold, and a token with a request in flight at its revoke. A client that
+mints tokens with no expiry and never revokes them keeps every one of them
+live, and nothing bounds those.
 
 What a scrape sees at a fold: the token's series is gone, and the
 `-retired` series of the same method, path and status has grown by the
@@ -274,6 +277,8 @@ node_exporter's config separately.
 ## Rate limiting
 
 Per-token token-bucket, file-backed at `/var/run/uapi-ratelimit/<token>.txt`.
+A token whose name is longer than 63 characters, which only `uapi-token`
+can create, has its bucket under the sha256 of its name instead.
 Defaults: **100 req/s, burst 200** per token. Tune globally via
 `/etc/config/uapi`:
 
@@ -298,8 +303,9 @@ source-IP enforcement.
 ## Diagnostics
 
 `GET /api/v3/diagnostics` returns version, uptime, loaded resources,
-the uapi lock files present under `/var/lock`, and the last 20 error
-envelopes. Scope: `uapi:diagnostics:ro`.
+the uapi lock files present under `/var/lock`, whether uapi uses each
+state directory under `/var/run`, and the last 20 error envelopes. Scope:
+`uapi:diagnostics:ro`.
 
 ```json
 {
@@ -309,6 +315,13 @@ envelopes. Scope: `uapi:diagnostics:ro`.
   "lock_state": {
     "global_held": false,
     "per_package": {}
+  },
+  "state_dirs": {
+    "/var/run/uapi-error-ring": true,
+    "/var/run/uapi-idempotency": true,
+    "/var/run/uapi-metrics": true,
+    "/var/run/uapi-ratelimit": true,
+    "/var/run/uapi-token-update": true
   },
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
@@ -403,6 +416,30 @@ which locks are held right now: `flock` is released when the fd closes
 and the file itself is never unlinked, so an entry means that package
 has been written at least once since the lock directory was last
 cleared.
+
+`state_dirs` reports each state directory under `/var/run`, keyed by its
+path, as uapi finds it. The read creates and changes nothing.
+
+- `true`: a directory that the effective uid of the request process owns,
+  with mode 0700. uapi writes there.
+- `false`: the path holds anything else, and uapi does not use it as it
+  stands. A directory that uapi narrows to 0700 at its next write there, as
+  `docs/architecture.md` § Where state lives describes, reads `false` until
+  that write.
+- `null`: the path does not exist yet. uapi creates it at its first write
+  there.
+
+`true` does not promise free space. On a full tmpfs the rate limiter allows
+every request, and the idempotency cache, the metrics and the error ring
+keep no new entry. What `false` costs while it lasts:
+
+| Directory | While it reads `false` |
+|---|---|
+| `/var/run/uapi-ratelimit` | The rate limiter allows every request. |
+| `/var/run/uapi-idempotency` | A request with an `Idempotency-Key` replays nothing, so a retry runs again. |
+| `/var/run/uapi-metrics` | `/metrics` records no series. |
+| `/var/run/uapi-error-ring` | `recent_errors` stays empty. |
+| `/var/run/uapi-token-update` | No request stamps `last_used_at`. |
 
 ## Management-path warning
 

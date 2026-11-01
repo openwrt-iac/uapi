@@ -15,7 +15,7 @@ try { _digest = require('digest'); } catch (e) {}
 
 const PACKAGE = "uapi";
 const TOKEN_TYPE = "token";
-const LAST_USED_DIR = "/var/run/uapi-token-update";
+const LAST_USED_DIR = state_dir.DIRS.last_used;
 const LAST_USED_THROTTLE_SECONDS = 60;
 // uci section-name charset. Hyphens are NOT permitted by libuci; if we let
 // one through, cursor.set returns true but the write silently never persists
@@ -154,21 +154,18 @@ function reap_state(tokens, now) {
 	ratelimit.reap(live);
 	metrics.retire_tokens(live);
 	if (!state_dir.owned(LAST_USED_DIR)) return;
+	let keep = {};
+	for (let name in live) keep[state_dir.token_file(name)] = true;
 	for (let name in fs.lsdir(LAST_USED_DIR) ?? [])
-		if (!live[name]) fs.unlink(LAST_USED_DIR + "/" + name);
+		if (!keep[name]) fs.unlink(LAST_USED_DIR + "/" + name);
 }
 
-// The reap runs as the reload, which is the step after the commit and under the uapi lock,
-// which uapi-token takes too. Before the commit, a commit that fails would lose the state of a
-// token that still authenticates. Outside the lock, two reaps could both read a series before
-// either unlinks it and count it twice, or lose an update of -retired, which then falls, and
-// Prometheus reads a fall as a reset. A throw would answer 500 for a write that is committed,
-// and the next mint or revoke reaps what this one left, so it is swallowed.
-function reap_on_commit(conn, now) {
-	return function() {
-		try { reap_state(list_public(conn), now); } catch (_) {}
-		return null;
-	};
+// A reap runs under the uapi lock, which uapi-token takes too. Outside it, two reaps could both read
+// a series before either unlinks it and count it twice, or lose an update of -retired, which then
+// falls, and Prometheus reads a fall as a reset. A throw would fail a write over state that the
+// next mint or revoke reaps, so it is swallowed.
+function reap_quietly(conn, now) {
+	try { reap_state(list_public(conn), now); } catch (_) {}
 }
 
 // Runs under the uapi-package transaction, so the lock held is the per-package flock plus a
@@ -181,17 +178,19 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 	let params = {
 		package: PACKAGE,
 		reload_services: [],
-		reload: reap_on_commit(conn, now),
 		fn: function(c, pkg) {
 			let errs = _validate_create_body(body);
 			if (length(errs) > 0)
 				return { ok: false, kind: "validation", errors: errs };
 			if (!scope.subsets(caller_scopes, body.scopes))
 				return { ok: false, kind: "scope_escalation_blocked" };
-			let existing = c.uci_get(pkg, body.name);
-			if (existing && type(existing) == "object" && existing['.type'] == TOKEN_TYPE)
+			if (c.uci_get(pkg, body.name) != null)
 				return { ok: false, kind: "conflict",
-				         message: sprintf("Token %J already exists", body.name) };
+				         message: sprintf("Token name %J already exists in the token store", body.name) };
+			// After the commit, a request that uhttpd kills during the reap would lose the bearer of
+			// a token that exists. A mint removes no token, so a commit that fails here has taken no
+			// state of a token that authenticates.
+			reap_quietly(c, now);
 			let bearer = random_hex(16);
 			let salt = random_hex(8);
 			let hash = _hash_bearer(salt, bearer);
@@ -220,7 +219,9 @@ function remove(conn, name, now, tx_overrides) {
 	let params = {
 		package: PACKAGE,
 		reload_services: [],
-		reload: reap_on_commit(conn, now),
+		// The reload is the step after the commit. A reap before it would take the state of a token
+		// that still authenticates when the commit fails.
+		reload: function() { reap_quietly(conn, now); return null; },
 		fn: function(c, pkg) {
 			let existing = c.uci_get(pkg, name);
 			if (!existing || type(existing) != "object" || existing['.type'] != TOKEN_TYPE)
@@ -241,9 +242,10 @@ function remove(conn, name, now, tx_overrides) {
 // already succeeded and the wire response must not depend on the audit write.
 function update_last_used(conn, name, addr, now) {
 	if (name == null || now == null) return;
+	let file = state_dir.token_file(name);
 	// Without its marker every authenticated request would write /etc/config/uapi.
-	if (!match(name, NAME_RE) || !state_dir.owned(LAST_USED_DIR)) return;
-	let marker = LAST_USED_DIR + "/" + name;
+	if (file == null || !state_dir.owned(LAST_USED_DIR)) return;
+	let marker = LAST_USED_DIR + "/" + file;
 	let st = fs.stat(marker);
 	if (st != null && st.mtime != null
 	    && (now - st.mtime) < LAST_USED_THROTTLE_SECONDS)

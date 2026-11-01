@@ -1342,7 +1342,7 @@ function build_schemas() {
 			"type": "object",
 			"required": ["name", "scopes"],
 			"properties": {
-				"name":   { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$" },
+				"name":   { "type": "string", "pattern": "^[A-Za-z0-9_]{1,63}$" },
 				"scopes": { "type": "array", "items": { "type": "string" }, "minItems": 1,
 				            "description": "MUST be a strict subset of the caller's own scopes; escalation returns 403 scope_escalation_blocked" },
 				"expires_in_seconds": { "type": ["integer", "null"], "minimum": 1 },
@@ -1365,7 +1365,7 @@ function build_schemas() {
 		},
 		"DiagnosticsResponse": {
 			"type": "object",
-			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "request_id"],
+			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "request_id"],
 			"properties": {
 				"version":          { "type": "string" },
 				"uptime_seconds":   { "type": "integer" },
@@ -1376,6 +1376,8 @@ function build_schemas() {
 				                  "global_held": { "type": "boolean" },
 				                  "per_package": { "type": "object", "additionalProperties": { "type": "boolean" } },
 				                } },
+				"state_dirs": { "type": "object", "additionalProperties": { "type": ["boolean", "null"] },
+				                "description": "Each state directory under /var/run, keyed by its path, as uapi finds it. The read creates and changes nothing. true: a directory owned by the effective uid of the request process, with mode 0700, which uapi uses. false: the path holds anything else, and uapi does not use it as it stands. null: the path does not exist yet, and uapi creates it at its first write there." },
 				// Present only when the route lookup resolved; `interface` is null when no
 				// uci interface claims the device the request arrived on.
 				"management_path": {

@@ -80,6 +80,60 @@ t.describe('state_dir.owned', () => {
 	});
 });
 
+t.describe('state_dir.used', () => {
+	// Each path under /var/run is looked up under DIR, and nothing may be created or changed.
+	function used_under(status) {
+		return t.load_with_fs({ ...fs,
+			lstat: (p) => fs.lstat(DIR + substr(p, length("/var/run"))),
+			mkdir: (p) => die("mkdir " + p),
+			chmod: (p) => die("chmod " + p),
+			readfile: (p) => (p == "/proc/self/status" && status != null) ? status : fs.readfile(p),
+		}, [ "state_dir" ]).used();
+	}
+
+	function plant(name, m) {
+		fs.mkdir(DIR + "/" + name);
+		fs.chmod(DIR + "/" + name, m);
+	}
+
+	t.it('reports each state directory by its path as it finds it: true, false, or null when it is missing', () => {
+		fresh();
+		fs.mkdir(DIR, 0o700);
+		plant("uapi-error-ring", 0o700);
+		plant("uapi-idempotency", 0o755);
+		fs.writefile(DIR + "/uapi-metrics", "");
+		fs.chmod(DIR + "/uapi-metrics", 0o700);
+		plant("uapi-ratelimit", 0o770);
+		t.assert_deep_equal(used_under(null), {
+			"/var/run/uapi-error-ring": true,
+			"/var/run/uapi-idempotency": false,
+			"/var/run/uapi-metrics": false,
+			"/var/run/uapi-ratelimit": false,
+			"/var/run/uapi-token-update": null,
+		});
+		t.assert_equal(mode(DIR + "/uapi-idempotency"), 0o755);
+		t.assert_equal(fs.lstat(DIR + "/uapi-token-update"), null);
+	});
+
+	t.it('reports false for a directory with mode 0700 whose owner is not the effective uid', () => {
+		fresh();
+		fs.mkdir(DIR, 0o700);
+		plant("uapi-error-ring", 0o700);
+		let uid = fs.lstat(DIR).uid;
+		t.assert_false(used_under(sprintf("Name:\tucode\nUid:\t%d\t%d\t%d\t%d\n", uid, uid + 1, uid, uid))["/var/run/uapi-error-ring"]);
+		t.assert_true(used_under(null)["/var/run/uapi-error-ring"]);
+	});
+});
+
+t.describe('state_dir.token_file', () => {
+	t.it('names the file of a token by the name up to 63 characters, and by its sha256 above', () => {
+		let sd = t.load_with({ digest: t.digest }, [ "state_dir" ]);
+		let n63 = sprintf("t%062d", 0), n64 = sprintf("t%063d", 0);
+		t.assert_equal(sd.token_file(n63), n63);
+		t.assert_equal(sd.token_file(n64), t.digest.sha256(n64));
+	});
+});
+
 t.describe('state_dir.replace', () => {
 	t.it('writes the file with mode 0600 over a temp file with mode 0644', () => {
 		fresh();

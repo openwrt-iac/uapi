@@ -107,10 +107,10 @@ function with_uapi_lock(fn) {
 	transaction.default_release_pkg(lock);
 }
 
-// The reap that the HTTP mint and revoke run after their commit, under the same locks. This
+// The reap that the HTTP mint and revoke run, under the same locks. This
 // command writes through its own uci cursor rather than token_store.create() and remove(), so
-// that it works with ubus down. A failed reap must not read as a failed revoke, and the next
-// mint or revoke reaps what it left.
+// that it works with ubus down. A failed reap must not fail the command, and the next mint or
+// revoke reaps what it left.
 function reap(cursor) {
 	let tokens = [];
 	cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
@@ -149,13 +149,13 @@ function cmd_create(opts) {
 	with_uapi_lock(function() {
 		ensure_package();
 		let cursor = uci_mod.cursor();
+		if (cursor.get_all(PACKAGE, opts.name) != null)
+			die(sprintf("uapi-token create: token name %J already exists in /etc/config/%s",
+			            opts.name, PACKAGE));
 
-		let exists_already = false;
-		cursor.foreach(PACKAGE, TOKEN_TYPE, function(s) {
-			if (s['.name'] == opts.name) { exists_already = true; return false; }
-		});
-		if (exists_already)
-			die(sprintf("uapi-token create: token %J already exists", opts.name));
+		// Before the commit, as the HTTP mint does, so that the bearer is printed right after the
+		// commit and a name created again starts without the state of the token it held before.
+		reap(cursor);
 
 		let bearer = random_hex(16);
 		let salt = random_hex(8);
@@ -178,15 +178,11 @@ function cmd_create(opts) {
 		if (!cursor.commit(PACKAGE))
 			die(sprintf("uapi-token create: cannot commit /etc/config/%s: %s, so token %J does not exist",
 			            PACKAGE, cursor.error() ?? "failed", opts.name));
-
-		// Out before the reap, so that an interrupt there cannot lose the bearer of a token
-		// that is committed.
 		printf("%s\n", bearer);
 		fs.stdout.flush();
 		fs.stderr.write(sprintf(
 			"Token %J created. The cleartext value above is shown only once; store it now.\n",
 			opts.name));
-		reap(cursor);
 	});
 }
 

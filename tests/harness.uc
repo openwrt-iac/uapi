@@ -85,15 +85,16 @@ function assert_match(str, pattern, msg) {
 		            msg ?? "assert_match", str, pattern));
 }
 
-// Loads the modules of src/lib named in `names`, in order, against `stub` in place of fs, and
-// returns the last one. Each is cached under its name while the next loads, so that one's
-// require() finds the copy that uses `stub`. The cache is put back afterwards, also when a load
-// throws, and a module that the call loaded for the first time leaves it: run_unit.uc runs every
-// test file in one process, so either would hand the stub to the files after this one.
-function load_with_fs(stub, names) {
+// Loads the modules of src/lib named in `names`, in order, against `stubs`, such as { fs: ... }, in
+// place of the modules that they name, and returns the last one. Each is cached under its name
+// while the next loads, so that one's require() finds the copy that uses the stubs. The cache is
+// put back afterwards, also when a load throws, and a module that the call loaded for the first
+// time leaves it: run_unit.uc runs every test file in one process, so either would hand a stub to
+// the files after this one.
+function load_with(stubs, names) {
 	let cache = global.modules;
 	let before = { ...cache };
-	cache.fs = stub;
+	for (let n, m in stubs) cache[n] = m;
 	let mod, caught = null;
 	try {
 		for (let n in names) mod = cache[n] = loadfile(`src/lib/${n}.uc`)();
@@ -106,6 +107,20 @@ function load_with_fs(stub, names) {
 	if (caught != null) die(caught);
 	return mod;
 }
+
+function load_with_fs(stub, names) {
+	return load_with({ fs: stub }, names);
+}
+
+// ucode-mod-digest, which the unit hosts lack. 64 hex characters, as sha256 gives, that differ for
+// the names that the tests hash.
+const digest = {
+	sha256: function(s) {
+		let h = 0;
+		for (let i = 0; i < length(s); i++) h = (h * 31 + ord(s, i)) % 4294967296;
+		return sprintf("%064x", h);
+	},
+};
 
 function summary() {
 	printf("\n%d passed, %d failed\n", passed, failed);
@@ -125,6 +140,8 @@ return {
 	assert_false,
 	assert_throws,
 	assert_match,
+	load_with,
 	load_with_fs,
+	digest,
 	summary,
 };

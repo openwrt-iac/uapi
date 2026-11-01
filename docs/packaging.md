@@ -50,6 +50,8 @@ Runtime files created on first use (tmpfs, reset on reboot):
 /var/lock/uapi.pkg.<package>.lock            per-package EX flock
 ```
 
+`<token>` is the token name, or its sha256 when the name is longer than 63 characters.
+
 The `/var/run/uapi-*` directories have mode 0700 and their files 0600, see `docs/architecture.md` § Where state lives.
 
 Dependencies (pulled in automatically):

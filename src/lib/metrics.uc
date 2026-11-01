@@ -6,7 +6,7 @@ let state_dir = require('state_dir');
 // read+1+atomic-rename to avoid losing increments under concurrent forks.
 // Loss under hot races is acceptable - these are operational metrics, not a
 // billing source.
-const DIR = "/var/run/uapi-metrics";
+const DIR = state_dir.DIRS.metrics;
 const HIST_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 // Same charset uci package names follow; keeps label values from breaking the
 // filename layout (label values become path components). HTTP method, status,
