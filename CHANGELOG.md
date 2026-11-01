@@ -52,7 +52,9 @@ All notable changes to this project will be documented in this file. Format foll
   it in its 207. A client treats the value as a write that landed and whose dnsmasq config uapi did
   not confirm. A router that takes longer than 10 s to parse its dnsmasq config, such as a slow one
   with large adblock lists, answers it on every dhcp write. The value is new in the
-  `X-Reload-Status` enum, which is an addition under `docs/versioning.md`. (#291)
+  `X-Reload-Status` enum, which is an addition under `docs/versioning.md`. It also answers a reload
+  that was still running when uapi stopped waiting for it, see the entry on the reloads under Fixed.
+  (#291)
 - **`413 payload_too_large`.** A POST, PUT or PATCH whose `Content-Length` is over 256 KiB (262144
   bytes), or whose body holds more than 2000 `{` and `[` characters, answers 413. uapi reads and
   parses the body before the bearer check, and `json()` takes about 1.6 KB for each object or
@@ -260,8 +262,7 @@ All notable changes to this project will be documented in this file. Format foll
   timeout. The client got no answer, and uci kept the new config without a restore. A killed check
   now judges nothing: the write keeps its commit and answers `X-Reload-Status: unverified`, see
   Added. The parse of a `conf-dir` with 500k adblock lines took 0.6 s on x86. `--test` now reads its
-  stdin from `/dev/null`, as procd gives dnsmasq. The reload of an init script still has no time
-  bound of its own. (#291)
+  stdin from `/dev/null`, as procd gives dnsmasq. (#291)
 - **A PUT that changes nothing in uci no longer commits, reloads the daemon or sets a WireGuard
   peer again in the kernel.** A PUT set every option that it sent, so a PUT of the read rewrote
   the package, which drops its comments, ran the init scripts of the resource, and on
@@ -292,9 +293,9 @@ All notable changes to this project will be documented in this file. Format foll
   is now taken right before the commit, for a single write and for each package of a
   `POST /batch`, so the restore keeps such a commit. A commit by another writer in the few
   microseconds between the snapshot and the load of the commit is still lost, as one between that
-  load and the write of libuci is lost by any commit. A commit by another writer after the commit
-  of the request, while the daemons reload, is still undone, and `docs/roadmap.md` records the
-  options. No request or response changes. (#292)
+  load and the write of libuci is lost by any commit. A later entry covers a commit by another
+  writer after the commit of the request, while the daemons reload. No request or response
+  changes. (#292)
 - **A request body that arrived in several parts was cut.** `uhttpd.recv()` returns at the first
   read that finds less than it asked for, and uapi called it once. So a body of more than a few KB
   could answer `400 bad_request` "Request body is not valid JSON" now and then, a large `/batch`
@@ -427,6 +428,60 @@ All notable changes to this project will be documented in this file. Format foll
   when the reload fails on that config too, where it answered 200. This uses the carve-out in
   `docs/versioning.md` for payloads that produced a state no caller can rely on, here odhcpd on its
   old config, and it fails loudly. (#300)
+- **A write no longer waits for an init script that does not end until uhttpd kills the request.**
+  uapi ran each `/etc/init.d/<svc> reload` through a pipe and read it to its end, so a script that
+  did not end, or a process that it started and left running with the pipe open, held the request
+  and its locks until uhttpd killed the request at its 60 s script timeout. The client got a 502
+  after 60 s, uci kept the new config with no restore, and only the exit of the killed request
+  released the locks. uapi now runs the reloads of a write in order, in one shell that it does not
+  wait for, and reads their exit codes from a file. It waits for them for 20 s in all, those of a
+  restore included, so a `system` write that reloads five services waits 20 s at most, and it does
+  not kill a reload that runs longer. Such a reload is no failure: the write keeps its commit, runs
+  no stay-up watch and no `dnsmasq --test` check, and answers 2xx with `X-Reload-Status:
+  unverified` after about 20 s, where it got a 502 after 60 s. A raw write answers `reloaded: true`
+  with a `reload_note` that names the reload still running and the reloads that follow it, and a
+  `POST /batch` answers the header in its 207. A `system/cron_jobs` write answers the header alone,
+  which it did not carry before, and logs the note to syslog. The result of that reload is unknown:
+  the reloads after it run when it ends, unless it fails, and uapi does not see how they end. A
+  write whose script exits but leaves a process holding its output now answers when the script
+  exits. A reload that exits with a code other than 0 within the 20 s fails the write and restores,
+  as before. So does a reload that cannot start, because the shell cannot fork or `/tmp` has no
+  room for the exit codes. The restore gets what is left of the 20 s, so a reload that fails after
+  more than about 10 s can leave too little time for the reloads of the restore, and the write then
+  answers `500 reload_failed_unrecovered`, since uapi cannot say that the daemon runs the restored
+  config. uapi does not kill a reload, because rc.common's `procd_lock` keeps the lock of the
+  service in the children of the script, such as fw4: the next reload of that service, the one of
+  the restore included, waits for them. A reload that takes longer than 20 s and then fails, which
+  answered `500 reload_failed_restored` once it ended within the 60 s, now answers 2xx `unverified`
+  and keeps the commit, and the failure shows only in the daemon. With the checks and a restore, a
+  write to one package waits 49 s at most for one dnsmasq instance, which fits the default
+  `script_timeout` of 60 s and not a lower one. A `POST /batch` restore adds up to 5 s for each
+  further package, and the `wg set` of a kernel apply has no time bound, see
+  `docs/operations.md`. No field or error code is added, and the header of a cron write is the only
+  header that an endpoint did not carry before. `unverified` is new in this release, so widening
+  what it covers changes no released meaning. No carve-out of `docs/versioning.md` is needed: no
+  payload that 3.2.0 accepted is refused. (#301)
+- **The restore after a failed reload no longer undoes what LuCI or a shell committed to the
+  package during the reload.** LuCI and a shell take no uapi lock, and such a commit goes into the
+  file that the request committed. The restore wrote back the snapshot from before both, so it
+  undid that commit with the write and answered `500 reload_failed_restored`. The restore now
+  compares the file with what the request committed, under the flock of libuci, and leaves a file
+  that differs as that writer left it. The package keeps both writes, uapi reloads nothing for it,
+  and the write answers `500 reload_failed_unrecovered`, whose `restore_error` names the package
+  and says that another writer committed to it after the commit of the request. The daemon keeps
+  what the failed reload gave it, so the operator checks the package and reloads it. In a
+  `POST /batch`, the other packages are restored as before, and the restore reloads and checks the
+  services of the packages that it wrote back, where it reloaded those of every package that the
+  batch committed. A daemon that also reads a package that the restore left is still reloaded
+  through the others, and reads that package as it is: in a batch of `system` and `dhcp` whose
+  `dhcp` it left, dnsmasq, odhcpd and unbound reload through `system`. A file that uapi cannot
+  read for the snapshot or after the commit stays as it is too, with a `restore_error` that says
+  so, where an unreadable snapshot was written over the package as an empty one. A commit that
+  lands between libuci's rename of the request's commit and the read that follows it, or between
+  the comparison and the rename of the restore, is still undone. No field, header or code changes.
+  Such a write answers `reload_failed_unrecovered` where it answered `reload_failed_restored`, and
+  no carve-out of `docs/versioning.md` is needed, because both answer 500 and no request that
+  3.2.0 accepted is refused. (#301)
 
 ## [3.2.0] - 2026-10-29
 

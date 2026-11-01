@@ -504,8 +504,9 @@ is unresolvable.
   answers nothing. The reload that the request started runs on, and since the lock fds
   close on exec the kill also releases the lock, so the next write can commit and reload
   beside it. `multi_transaction()` and the crontab apply in `crontab.uc` have the same
-  shape. The steps after the commit are not short: each reload, the stay-up watch, which
-  waits up to 2 s and again on a restore, and the kernel apply.
+  shape. The steps after the commit are not short: the reloads, which uapi waits for up to
+  20 s in all, the stay-up watch, which waits up to 2 s and again on a restore, and the kernel
+  apply.
   Nothing inside the request can close this, so it needs a design change. The shapes seen
   so far, none chosen:
   - A record of the write in flight, written before the commit and removed when the
@@ -520,20 +521,21 @@ is unresolvable.
     wait would bound how long a recipe may take.
   The details are under Open findings in `docs/lock-state-audit.md`.
 
-- **The restore after a failed reload undoes what another writer committed after the commit of
-  the request.** LuCI and a shell take no uapi lock, so they can commit to the package while its
-  daemons reload. Their commit goes into the file that the request committed, and the restore
-  writes back the file from before that commit, so it undoes both. A commit by them before the
-  commit of the request is kept, because the snapshot is taken right before that commit. Keeping a
-  later one needs a choice, none made yet:
+- **The restore after a failed reload leaves a package that another writer committed to during
+  the reload, and the operator repairs it.** LuCI and a shell take no uapi lock, so they can commit
+  to the package while its daemons reload, into the file that the request committed. The restore
+  wrote back the snapshot from before both, so it undid that commit too. It now compares the file
+  with what the request committed, under libuci's flock, leaves a file that differs as it is, and
+  answers `reload_failed_unrecovered` with the package named in `restore_error`. The package then
+  keeps the write that the daemon refused beside the other commit. A commit that libuci renames
+  between the comparison and the rename of the restore is still undone, and so is one between the
+  rename of the request's own commit and the read of the file that follows it. Two ways to recover
+  such a package without the operator were not chosen:
   - Undo only the writes of the request: load the file as it is, set back what the request wrote
     and commit through libuci. That needs a rule for an option that both wrote, puts a section that
     a DELETE removed back at the end of the package with a new name when it was anonymous, drops
     the comments of the file, and gives up the check of its own write that the restore makes,
     because libuci does not check its write.
-  - Report it: compare the file before the restore with what the request committed, and say in
-    the 500 that the restore undid another commit, which adds a field, or leave the file and answer
-    `reload_failed_unrecovered`, which leaves the config that the daemon refused.
   - Hold libuci's flock from the commit to the end of the restore: libuci's own load and commit in
     the request would wait on that lock, LuCI would wait for the whole reload, and libuci releases
     its flock before its rename anyway.

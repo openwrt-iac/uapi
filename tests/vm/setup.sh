@@ -61,7 +61,9 @@ sudo chown 0:0 "$MNT/etc/uci-defaults/99-uapi-vm-network"
 # can call `firewall reload` end-to-end without fw4 reapplying the stock
 # ruleset (which would block QEMU's port-forwarded SSH/HTTP). The reload-
 # failure rollback test (12_*) uses /tmp/fw-fail-once to inject a one-shot
-# failure into reload_service. nftables is never touched in CI; that's fine
+# failure into reload_service, and /tmp/fw-run-once to run a command in it
+# once, such as a sleep past the time bound of a reload or a commit by another
+# writer. nftables is never touched in CI; that's fine
 # because the tests are exercising uapi's transaction handling, not fw4 itself.
 sudo tee "$MNT/etc/init.d/firewall" >/dev/null <<'FWINIT'
 #!/bin/sh /etc/rc.common
@@ -71,6 +73,11 @@ USE_PROCD=1
 start_service() { :; }
 stop_service()  { :; }
 reload_service() {
+	if [ -f /tmp/fw-run-once ]; then
+		cmd=$(cat /tmp/fw-run-once)
+		rm /tmp/fw-run-once
+		eval "$cmd"
+	fi
 	if [ -f /tmp/fw-fail-once ]; then
 		rm /tmp/fw-fail-once
 		echo "firewall: simulated reload failure" >&2

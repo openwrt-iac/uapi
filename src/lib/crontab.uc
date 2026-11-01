@@ -187,19 +187,33 @@ function crond_running(conn) {
 }
 
 // Same recipe as a curated write: when the reload fails, put the old file back and
-// reload again, so the failed request leaves crond with the table it had.
+// reload again, so the failed request leaves crond with the table it had. A reload
+// still running when the budget ran out is no failure.
 function apply(before, after) {
 	if (!non_uci.replace_private_file(CRONTAB_PATH, after))
 		return { ok: false, kind: "io_error" };
-	let reload_error = transaction.default_reload(RELOAD);
+	let budget = {};
+	let reload_error = transaction.default_reload(RELOAD, budget);
+	if (type(reload_error) == "object")
+		return { ok: true, reload_status: "unverified", unverified: reload_error.unverified };
 	if (reload_error == null) return { ok: true };
 	let restored = (before == null) ? fs.unlink(CRONTAB_PATH)
 	                                : non_uci.replace_private_file(CRONTAB_PATH, before);
-	let restore_error = restored ? transaction.default_reload(RELOAD)
+	let restore_error = restored ? transaction.default_reload(RELOAD, budget)
 	                             : sprintf("could not restore %s", CRONTAB_PATH);
+	if (type(restore_error) == "object")
+		restore_error = "reload during restore did not finish: " + restore_error.unverified;
 	if (restore_error != null)
 		return { ok: false, kind: "reload_failed_unrecovered", reload_error, restore_error };
 	return { ok: false, kind: "reload_failed_restored", reload_error };
+}
+
+// The body of a cron job has no field for the note, so it goes to syslog.
+function with_reload_status(ctx, resp, r) {
+	if (r.reload_status == null) return resp;
+	resp.headers["X-Reload-Status"] = r.reload_status;
+	non_uci.audit_warning(ctx, "cron-reload-unverified", { note: r.unverified });
+	return resp;
 }
 
 function reload_failure(ctx, r) {
@@ -254,7 +268,7 @@ function add_entry(ctx, conn, body) {
 	let failed = reload_failure(ctx, lr.result);
 	if (failed) return failed;
 	non_uci.audit_notice(ctx, "cron-job-add", { id: entry.id });
-	return errors.ok(ctx, entry_view(entry, crond_running(conn)));
+	return with_reload_status(ctx, errors.ok(ctx, entry_view(entry, crond_running(conn))), lr.result);
 }
 
 function remove_entry(ctx, conn, id) {
@@ -276,7 +290,7 @@ function remove_entry(ctx, conn, id) {
 	if (lr.envelope) return lr.envelope;
 	let failed = reload_failure(ctx, lr.result);
 	if (failed) return failed;
-	return errors.ok(ctx, entry_view(removed, crond_running(conn)));
+	return with_reload_status(ctx, errors.ok(ctx, entry_view(removed, crond_running(conn))), lr.result);
 }
 
 return {

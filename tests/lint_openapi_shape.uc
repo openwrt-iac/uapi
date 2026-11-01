@@ -618,6 +618,10 @@ for (let p in paths) {
 				else if (length(present) != length(TX_HEADERS))
 					note(where, sprintf("declares only %J of the four transaction headers, which attach_reload_headers sets together", present));
 				else tx_responses++;
+			} else if (index(p, "/system/cron_jobs") == 0) {
+				// crontab.uc sets X-Reload-Status alone, for a reload of cron still running.
+				if (join(",", present) != "X-Reload-Status")
+					note(where, sprintf("declares %J, but a cron job write answers X-Reload-Status alone", present));
 			} else if (length(present) > 0) {
 				note(where, sprintf("declares %J, but this is not a curated-resource write and never reaches attach_reload_headers", present));
 			}

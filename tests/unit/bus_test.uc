@@ -118,15 +118,20 @@ t.describe('ubus.stub, uci mutations', () => {
 });
 
 t.describe('ubus.stub, snapshot round-trip', () => {
-	t.it('uci_export then uci_import restores the package state', () => {
+	t.it('uci_import restores the snapshot only while the package holds what was committed', () => {
 		let c = ubus.stub({
 			uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } }
 		});
 		let snap = c.uci_export('fw');
 		c.uci_set('fw', 'r1', 'target', 'DROP');
-		t.assert_equal(c._state.uci.fw.r1.target, 'DROP');
-		c.uci_import('fw', snap);
-		t.assert_equal(c._state.uci.fw.r1.target, 'ACCEPT');
+		c.uci_commit('fw');
+		let committed = c.uci_export('fw');
+		c._state.uci.fw.r2 = { '.type': 'rule', name: 'luci' };
+		t.assert_equal(c.uci_import('fw', snap, committed), false);
+		t.assert_deep_equal([ c._state.uci.fw.r1.target, c._state.uci.fw.r2.name ], [ 'DROP', 'luci' ]);
+		delete c._state.uci.fw.r2;
+		t.assert_equal(c.uci_import('fw', snap, committed), true);
+		t.assert_deep_equal(c._state.uci.fw, { r1: { '.type': 'rule', target: 'ACCEPT' } });
 	});
 });
 
@@ -542,8 +547,9 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		fs.writefile(dir + "/fw", BEFORE);
 		fs.chmod(dir + "/fw", 0o640);
 		let c = connect_to({ files: {}, staged: {} }, { config_dir: dir, fs: fs_mod ?? fs });
-		let err = caught(() => c.uci_import('fw', SNAPSHOT));
-		let out = { dir, err, content: fs.readfile(dir + "/fw"), mode: fs.stat(dir + "/fw").mode,
+		let replaced = null;
+		let err = caught(() => { replaced = c.uci_import('fw', SNAPSHOT, BEFORE); });
+		let out = { dir, err, replaced, content: fs.readfile(dir + "/fw"), mode: fs.stat(dir + "/fw").mode,
 		            files: fs.lsdir(dir) };
 		system([ "rm", "-rf", dir ]);
 		return out;
@@ -551,7 +557,7 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 
 	t.it('replaces the file, keeps its mode and leaves no temp file', () => {
 		let r = restore_with(null);
-		t.assert_equal(r.err, null);
+		t.assert_deep_equal([ r.err, r.replaced ], [ null, true ]);
 		t.assert_equal(r.content, SNAPSHOT);
 		t.assert_equal(r.mode, 0o640);
 		t.assert_deep_equal(r.files, [ "fw" ]);
@@ -575,7 +581,7 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		let holder = fs.open(dir + "/fw", "r");
 		holder.lock("x");
 		let c = connect_to({ files: {}, staged: {} }, { config_dir: dir, lock_wait_ms: 100 });
-		let err = caught(() => c.uci_import('fw', SNAPSHOT));
+		let err = caught(() => c.uci_import('fw', SNAPSHOT, BEFORE));
 		holder.lock("u");
 		holder.close();
 		let content = fs.readfile(dir + "/fw"), files = fs.lsdir(dir);
@@ -591,7 +597,7 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		fs.writefile(dir + "/real/fw", BEFORE);
 		fs.symlink(dir + "/real/fw", dir + "/fw");
 		let c = connect_to({ files: {}, staged: {} }, { config_dir: dir });
-		let err = caught(() => c.uci_import('fw', SNAPSHOT));
+		let err = caught(() => c.uci_import('fw', SNAPSHOT, BEFORE));
 		let link = fs.lstat(dir + "/fw").type, content = fs.readfile(dir + "/real/fw"), files = fs.lsdir(dir + "/real");
 		system([ "rm", "-rf", dir ]);
 		t.assert_equal(err, null);
@@ -628,9 +634,22 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		t.assert_deep_equal(r.files, [ "fw" ]);
 	});
 
+	t.it('fails naming the file when it cannot read it under the lock, and leaves it whole', () => {
+		let r = restore_with({ ...fs, readfile: (path) => (index(path, ".uapi-restore") < 0) ? null : fs.readfile(path) });
+		t.assert_match(r.err, regexp("^restore of " + r.dir + "/fw: cannot read it"));
+		t.assert_equal(r.content, BEFORE);
+		t.assert_deep_equal(r.files, [ "fw" ]);
+	});
+
+	// An empty string is also what an empty package exports, so it read as a commit by another writer.
+	t.it('exports null for a file that it cannot open', () => {
+		let c = connect_to({ files: {}, staged: {} }, { config_dir: "/nonexistent" });
+		t.assert_equal(c.uci_export('fw'), null);
+	});
+
 	t.it('fails naming the file when the package is gone', () => {
 		let c = connect_to({ files: {}, staged: {} }, { config_dir: "/nonexistent" });
-		t.assert_equal(caught(() => c.uci_import('fw', SNAPSHOT)), "restore of /nonexistent/fw: cannot open it");
+		t.assert_equal(caught(() => c.uci_import('fw', SNAPSHOT, BEFORE)), "restore of /nonexistent/fw: cannot open it");
 	});
 
 	t.it('discards the writes of the request, so the commit that follows has nothing to apply', () => {
@@ -639,11 +658,28 @@ t.describe('bus.connect, the restore of a snapshot', () => {
 		fs.writefile(dir + "/fw", BEFORE);
 		let c = connect_to(disk, { config_dir: dir });
 		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
-		c.uci_import('fw', SNAPSHOT);
+		c.uci_import('fw', SNAPSHOT, BEFORE);
 		let committed = c.uci_commit('fw');
 		system([ "rm", "-rf", dir ]);
 		t.assert_equal(committed, false);
 		t.assert_equal(disk.files.fw.d.forward, 'REJECT');
+	});
+
+	// LuCI or a shell committed to the package during the reload, into the file that the request
+	// committed, and the snapshot written back undid that commit too.
+	t.it('leaves a file that no longer holds what the request committed, and drops the writes', () => {
+		let disk = seeded();
+		let dir = temp_dir();
+		fs.writefile(dir + "/fw", BEFORE + "\toption input 'DROP'\n");
+		let c = connect_to(disk, { config_dir: dir });
+		c.uci_set('fw', 'd', 'forward', 'ACCEPT');
+		let replaced = c.uci_import('fw', SNAPSHOT, BEFORE);
+		let committed = c.uci_commit('fw'), content = fs.readfile(dir + "/fw"), files = fs.lsdir(dir);
+		system([ "rm", "-rf", dir ]);
+		t.assert_equal(replaced, false);
+		t.assert_equal(content, BEFORE + "\toption input 'DROP'\n");
+		t.assert_deep_equal(files, [ "fw" ]);
+		t.assert_equal(committed, false);
 	});
 });
 

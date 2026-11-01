@@ -107,7 +107,8 @@ All locks are non-blocking (`LOCK_NB`); contention surfaces as `423
 locked` so the client can decide whether to back off and retry. The HTTP
 worker never waits for a uapi lock, but libuci's own flocks on a package
 file block while LuCI or a shell holds them. It can sleep while it holds a
-uapi lock: the stay-up
+uapi lock: it waits up to 20 s
+in all for the reloads of a request, the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks,
 and the `dnsmasq --test` check of each instance runs for up to 10 s.
 The restore after a failed reload also waits, for up to 5 s, for libuci's flock
@@ -199,8 +200,13 @@ without uci state change.
    keeps it. Taken at the lock, it put back the file from before such a commit.
    A commit by another writer between the snapshot and the load of the commit,
    a few microseconds, is still lost on a restore, as one between that load and
-   libuci's write is lost by every commit. A request that staged only the check
-   of a section loads the file and runs the check, and writes nothing.
+   libuci's write is lost by every commit. After a commit that wrote, the
+   request reads the file again: that is what it committed, which step 8
+   compares with, since ucode-mod-uci cannot export what libuci wrote. A
+   commit by another writer between libuci's rename and that read, a few
+   microseconds, reads as the request's own and is lost on a restore. A
+   request that staged only the check of a section loads the file and runs
+   the check, and writes nothing.
    A replay that no longer applies, or a section that another writer deleted
    since the request read it, → `409 conflict`, and nothing is written. Without
    the check, a PUT or a PATCH that changed nothing answered 200 for a section
@@ -210,11 +216,37 @@ without uci state change.
    request reads the writes that the file does not hold. A request that wrote
    nothing commits nothing, and skips steps 6 and 7: `X-Reload-Status:
    no_reload`, `X-Kernel-Status: no_kernel`.
-6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, via
-   `fs.popen`, exit code checked. Done directly (NOT through ubus) because
+6. **Reload.** `/etc/init.d/<svc> reload` per `reload_services`, exit code
+   checked. Done directly (NOT through ubus) because
    ubus-mediated reload is fire-and-forget on OpenWrt; only `wait4` on a
-   real child gives back the actual exit bit. procd starts the daemon with
-   its new config on its own, so the init script exits 0 before the daemon
+   real child gives back the actual exit bit. One shell runs the scripts in
+   order, in the background, with stdin on `/dev/null` and the output of each
+   in an unlinked file from `fs.mkstemp`, which is the only one of these files
+   that the script holds. It stops at the first that fails, and writes the exit
+   code of each to another such file, which uapi reads every 20 ms. uapi
+   writes that file full of spaces first, so that the codes land in bytes that
+   the file already holds on a tmpfs that the output of a script has filled,
+   and a file that it cannot fill, or a shell that cannot start the scripts,
+   fails the write. uapi waits for the reloads of a request, those of the restore
+   included, for 20 s in all, and does not kill a reload that runs longer.
+   Such a reload is no failure: the write keeps its commit, runs no stay-up
+   watch and no `dnsmasq --test` check, since the reload may not have written
+   the config yet, runs the kernel apply, and answers 2xx with
+   `X-Reload-Status: unverified`. The reloads after it run when it ends,
+   unless it fails. A reload of the restore still running then answers
+   `reload_failed_unrecovered`, since uapi cannot say that the daemons run the
+   restored config. Through `fs.popen`, a script that did not end, or a
+   process that it left running with the pipe open, held the request and its
+   locks until uhttpd killed the request at its 60 s script timeout, with no
+   restore and no answer from uapi. Killing the script at a bound does not
+   help: `procd_lock` of rc.common keeps the lock of the service in the
+   children of the script, such as fw4, so the reload of the restore waited
+   for them and was killed too. `system()` with a timeout also blocks SIGCHLD
+   in its child, which a script that runs `x & wait` never sees, so uapi starts
+   the shell with a `system()` that waits only for the shell that puts the
+   scripts in the background. 20 s of reloads, the checks and the flock wait
+   of a restore fit in the 60 s, see `docs/operations.md`. procd starts
+   the daemon with its new config on its own, so the init script exits 0 before the daemon
    has read that config, and a daemon that refuses it stops later. For the
    reloads that `STAY_UP` in `src/lib/transaction.uc` lists, which are
    `unbound`, also when a `dhcp` or `system` write reloads it, and
@@ -269,10 +301,20 @@ without uci state change.
    waits for a load or a commit in progress, and gives up after 5 s. That orders
    nothing after it: libuci releases the flock before its own rename, so a LuCI
    commit that held the lock, or waited on it with the old file open, can rename
-   its file over the restored one, as one libuci commit can over another. A
-   commit by LuCI or a shell after step 5, while the daemons reload, is undone
-   too, because it went into the file that the request committed. Keeping it
-   needs a choice that this recipe does not make yet, see `docs/roadmap.md`.
+   its file over the restored one, as one libuci commit can over another.
+   Under that flock, the restore first compares the file with what the
+   request committed. A commit by LuCI or a shell after step 5, while the
+   daemons reload, goes into the file that the request committed, and the
+   snapshot would undo it with the write. So a file that differs stays as
+   that writer left it, with both writes, and the restore runs no reload and
+   no reconcile and answers `500 reload_failed_unrecovered`, whose
+   `restore_error` names the package and says that another writer committed
+   to it after the commit of the request. The daemons keep what the failed
+   reload left them. The check has the gap of the flock: a commit that
+   libuci renames between the check and the rename of the restore is still
+   undone, as is one in the window of step 5. A file that uapi could not read
+   for the snapshot or after the commit stays as it is too, with a
+   `restore_error` that says so.
    ucode has no `fsync`, so the rename holds against a kill but not against a power
    cut on a filesystem that writes data back later than the rename, such as
    ubifs.
@@ -451,7 +493,13 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    counts as a failed reload. Either way only the packages that the batch
    committed are restored: the snapshot of another one would undo what LuCI or
    a shell committed to it since, such as the delete that made the replay of the
-   batch fail. Each other package is reverted before that, so that the cursor
+   batch fail. Of those, a package that another writer committed to after the
+   batch did stays as in step 8, and the batch answers
+   `reload_failed_unrecovered` naming it. The restore reloads and checks the
+   daemons of the packages that it wrote back only, and reconciles the kernel
+   only when it wrote `network` back, so a package that it left is not
+   reloaded on the config that just failed. A restore that wrote no file back
+   runs no reload. Each other package is reverted before that, so that the cursor
    holds no write that uci did not store, and a reconcile reads `network` from
    the file. A commit that fails stops there, with no reload and no reconcile:
    both come after every commit, so neither ran, and the restore puts a package

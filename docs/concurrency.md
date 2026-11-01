@@ -43,6 +43,8 @@ Use `conn.call()` only. Async ubus does not buy you any concurrency you don't al
 
 The fork exits as soon as `handle_request` returns. There is no `setTimeout`, no thread, no detached task. If you need work to outlive the request, write to a file the next request will pick up, or rely on an external cron/timer.
 
+One exception exists. uapi runs the init scripts of a write in a detached shell and waits for them for 20 s, so a reload that runs longer outlives its request, which answers `X-Reload-Status: unverified`. It then runs without the uapi locks. A procd service stays serialized by the lock that `procd_lock` of rc.common takes for it. An init script without `procd_lock` is serialized with the next write to its package only during those 20 s.
+
 ### No in-process pubsub / event bus
 
 Same reason as the cache: state does not survive `fork().exit()`.
@@ -56,7 +58,7 @@ Two lock files, in three patterns:
 | `/var/lock/uapi.lock` (SH) | every uci transaction | lets multiple uci writes run in parallel ON DIFFERENT PACKAGES, while still serializing against the global EX |
 | `/var/lock/uapi.lock` (EX) | non-uci writes (apk, system passwords) | blocks all uci transactions for the duration of the non-uci op |
 | `/var/lock/uapi.pkg.<package>.lock` (EX) | a uci transaction on `<package>` | serializes writes to the same package; cross-package writes do not collide |
-| `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext`, and on `dhcp`, or on `system` but not through `system/timeservers`, while `/etc/init.d/unbound` exists, whether unbound runs or not | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another. The writes that reload unbound only while procd holds a trigger for it take the lock before they ask procd, so that the restart of a write to unbound cannot fall between the answer and the commit |
+| `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext`, and on `dhcp`, or on `system` but not through `system/timeservers`, while `/etc/init.d/unbound` exists, whether unbound runs or not | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another. The writes that reload unbound only while procd holds a trigger for it take the lock before they ask procd, so that the restart of a write to unbound cannot fall between the answer and the commit. A restart that outlives its request, see above, is no longer covered |
 
 This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead. `uapi-token` writes `/etc/config/uapi` outside a request, so it takes the same locks as a uci transaction on `uapi` through `transaction.acquire_pkg_waiting()`, which polls for a bounded time rather than answer 423.
 

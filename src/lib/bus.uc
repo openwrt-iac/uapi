@@ -28,8 +28,11 @@ function loadable(pkg) {
 // a commit that is reading, writing and syncing it, and orders nothing after that: a commit that
 // held the lock, or waited on it with the old file open, can rename its file over the restored
 // one. ucode has no fsync, so the rename holds against a kill but not against a power cut on a
-// filesystem that writes data back later than the rename, such as ubifs.
-function replace_config(fs_mod, file, content, wait_ms) {
+// filesystem that writes data back later than the rename, such as ubifs. A file that no longer
+// holds `committed`, what the request committed, stays as it is, and the result is false. The
+// check reads it under the flock, after a commit that held the flock, with the same gap before
+// libuci's rename.
+function replace_config(fs_mod, file, content, committed, wait_ms) {
 	let path = fs_mod.realpath(file);
 	let st = (path != null) ? fs_mod.stat(path) : null;
 	let lock = (st != null) ? fs_mod.open(path, "r") : null;
@@ -43,9 +46,13 @@ function replace_config(fs_mod, file, content, wait_ms) {
 		sleep(50);
 		locked = lock.lock("xn");
 	}
-	let err = null;
+	let err = null, left = false, now = locked ? fs_mod.readfile(path) : null;
 	if (!locked)
 		err = sprintf("another process held its lock for %d ms", wait_ms);
+	else if (now == null)
+		err = sprintf("cannot read it: %s", fs_mod.error());
+	else if (now != committed)
+		left = true;
 	else {
 		// A fixed name, so a restore killed before its rename leaves one file that the next
 		// restore of the package removes. uapi's lock of the package keeps two from sharing it.
@@ -71,6 +78,7 @@ function replace_config(fs_mod, file, content, wait_ms) {
 	lock.lock("u");
 	lock.close();
 	if (err != null) die(sprintf("restore of %s: %s", file, err));
+	return !left;
 }
 
 function connect(opts) {
@@ -215,16 +223,18 @@ function connect(opts) {
 		// only in the cursor's copy, so dropping the copy reverts them.
 		uci_revert: drop,
 		uci_unload: drop,
+		// Null when the file cannot be read, which an empty package cannot be told from otherwise.
 		uci_export: function(pkg) {
 			let f = fs_mod.open(config_dir + "/" + pkg, "r");
-			if (!f) return "";
+			if (!f) return null;
 			let content = f.read("all") ?? "";
 			f.close();
 			return content;
 		},
-		uci_import: function(pkg, snapshot) {
-			replace_config(fs_mod, config_dir + "/" + pkg, snapshot, lock_wait_ms);
-			return drop(pkg);
+		uci_import: function(pkg, snapshot, committed) {
+			let replaced = replace_config(fs_mod, config_dir + "/" + pkg, snapshot, committed, lock_wait_ms);
+			drop(pkg);
+			return replaced;
 		},
 		uci_foreach: function(pkg, sec_type, fn) {
 			if (!load(pkg)) return null;
@@ -253,6 +263,9 @@ function stub(initial) {
 	let file = {};
 	function writing(pkg) {
 		if (!exists(file, pkg)) file[pkg] = deepcopy(st.uci[pkg] ?? {});
+	}
+	function exported(pkg) {
+		return sprintf("%J", exists(file, pkg) ? file[pkg] : (st.uci[pkg] ?? {}));
 	}
 
 	function ensure_section(pkg, section) {
@@ -356,11 +369,10 @@ function stub(initial) {
 			return true;
 		},
 
-		uci_export: function(pkg) {
-			return sprintf("%J", exists(file, pkg) ? file[pkg] : (st.uci[pkg] ?? {}));
-		},
+		uci_export: exported,
 
-		uci_import: function(pkg, snapshot) {
+		uci_import: function(pkg, snapshot, committed) {
+			if (exported(pkg) != committed) return false;
 			delete file[pkg];
 			st.uci[pkg] = json(snapshot);
 			record("import", pkg);
