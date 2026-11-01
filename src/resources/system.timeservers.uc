@@ -42,6 +42,9 @@ return {
 	package: "system",
 	type: "timeserver",
 	reload: ["sysntpd"],
+	// dnsmasq.init reads enabled to decide whether DNSSEC skips its time checks until NTP sets the
+	// clock. odhcpd and unbound read no timeserver section.
+	reload_if_running: ["dnsmasq"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

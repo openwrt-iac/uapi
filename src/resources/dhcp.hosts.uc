@@ -133,9 +133,9 @@ return {
 	// address. Reservations with no `ip` are untouched: check_unique_field skips a value that
 	// is not a non-empty string.
 	unique_field: "ip",
-	reload: ["dnsmasq"],
-	// odhcpd serves the static leases of a host, by duid and hostid for DHCPv6.
-	reload_if_running: ["odhcpd"],
+	// odhcpd serves the static leases of a host, by duid and hostid for DHCPv6, and unbound makes
+	// records of its name and ip when add_extra_dns is set.
+	reload_if_running: ["dnsmasq", "odhcpd", "unbound"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

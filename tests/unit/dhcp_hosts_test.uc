@@ -6,8 +6,8 @@ t.describe('dhcp.hosts contract', () => {
 	t.it('declares package, type, and reload services', () => {
 		t.assert_equal(hosts.package, "dhcp");
 		t.assert_equal(hosts.type, "host");
-		t.assert_deep_equal(hosts.reload, ["dnsmasq"]);
-		t.assert_deep_equal(hosts.reload_if_running, ["odhcpd"]);
+		t.assert_equal(hosts.reload, null);
+		t.assert_deep_equal(hosts.reload_if_running, ["dnsmasq", "odhcpd", "unbound"]);
 	});
 });
 

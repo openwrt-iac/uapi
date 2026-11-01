@@ -12,7 +12,9 @@ call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 # The lan of the test VM is a DHCP client, and dnsmasq.init writes the options of a dhcp section
 # only for a static interface, so these cases run on tdhcp, on an empty bridge of its own.
 cleanup() {
-	$SSH 'uci -q delete dhcp.tdhcp; uci commit dhcp
+	$SSH 'rm -f /tmp/dnsmasq*.d/uapi_t57.conf /tmp/uapi_t57.fifo
+	      [ "$(uci -q get system.@system[0].notes)" = uapi-t57 ] && { uci delete system.@system[0].notes; uci commit system; }
+	      uci -q delete dhcp.tdhcp; uci commit dhcp
 	      uci -q delete network.tdhcp; uci -q delete network.br_tdhcp; uci commit network
 	      ubus call network reload; /etc/init.d/dnsmasq reload' >/dev/null 2>&1 || true
 }
@@ -99,5 +101,44 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" 
 assert_dnsmasq_emits 'dhcp-option=tdhcp,15,my 6,domain'
 dnsmasq_running || fail "dnsmasq is not running after a valid option"
 assert_dnsmasq_loads
+
+# A conf-file that dnsmasq cannot open, as on a mount that hangs, held the locks until uhttpd
+# killed the request at its 60 s script timeout, and the client got no answer. A FIFO without a
+# writer blocks the open in the same way. A killed --test judges nothing, so the write keeps its
+# commit and says that the check did not finish.
+echo "--- a --test that does not finish is killed after 10 s, and the write answers unverified ---"
+$SSH 'rm -f /tmp/uapi_t57.fifo; mkfifo /tmp/uapi_t57.fifo
+      for d in /tmp/dnsmasq*.d; do echo conf-file=/tmp/uapi_t57.fifo > "$d/uapi_t57.conf"; done'
+hdrs=$(mktemp)
+start=$(date +%s)
+r=$(curl -sS -m 55 -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
+	"$URL/dhcp/servers/tdhcp" -d '{"leasetime":"6h"}' || true)
+took=$(( $(date +%s) - start ))
+status=$(grep -i '^X-Reload-Status:' "$hdrs" | tr -d '\r' || true)
+rm -f "$hdrs"
+[ "$(echo "$r" | tail -1)" = "200" ] || fail "a --test that hangs expected 200 within 55 s, after $took s: $r"
+[ "$status" = "X-Reload-Status: unverified" ] || fail "expected X-Reload-Status: unverified, got: $status"
+[ "$took" -ge 10 ] || fail "the write answered after $took s, before the bound, so the --test did not hang"
+[ "$took" -lt 30 ] || fail "the write took $took s, so the bound did not hold"
+[ "$($SSH 'uci -q get dhcp.tdhcp.leasetime')" = "6h" ] || fail "uci does not keep the leasetime that the write committed"
+echo "the write answered after $took s"
+
+# A system write reloads dnsmasq for the hostname and NTP but runs no check, so the hang does not
+# delay or fail it.
+echo "--- a PATCH of system with the same hang answers ok, without the check ---"
+hdrs=$(mktemp)
+start=$(date +%s)
+r=$(curl -sS -m 55 -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
+	"$URL/system" -d '{"notes":"uapi-t57"}' || true)
+took=$(( $(date +%s) - start ))
+status=$(grep -i '^X-Reload-Status:' "$hdrs" | tr -d '\r' || true)
+services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
+rm -f "$hdrs"
+[ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH of system expected 200: $r"
+[ "$status" = "X-Reload-Status: ok" ] || fail "expected X-Reload-Status: ok on a system write, got: $status"
+echo "$services" | grep -q 'dnsmasq' || fail "expected the system write to reload dnsmasq: $services"
+[ "$took" -lt 8 ] || fail "the system write took $took s, so it waited for a check"
+$SSH 'rm -f /tmp/dnsmasq*.d/uapi_t57.conf /tmp/uapi_t57.fifo; /etc/init.d/dnsmasq restart'
+dnsmasq_running || fail "dnsmasq is not running once the FIFO is gone"
 
 echo "dhcp_option refusal and the dnsmasq --test check ok."

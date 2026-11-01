@@ -39,14 +39,16 @@ function default_check_services(services) {
 }
 
 // A daemon that reads the package but that an image can lack or that the operator stopped, as
-// odhcpd reads dhcp, is reloaded only while procd lists it, from its start to its stop. That is
-// when the procd trigger of a LuCI save reloads it. A reload of a stopped one can start it, as the
-// reload of dnsmasq.init does, and refusing the write would answer 503 on every router without it.
+// dnsmasq, odhcpd and unbound read dhcp, is reloaded only while procd lists it, from its start to
+// its stop, which removes the service and its triggers. That is when the procd trigger of a LuCI
+// save reloads it. The reload of dnsmasq.init and unbound.init starts a stopped daemon, and refusing
+// the write would answer 503 on every router without it. When the ubus call fails, whether it runs
+// is unknown, and skipping it would answer 2xx with a daemon on its old config.
 function running(conn, services, check_services) {
 	return filter(services ?? [], function(svc) {
 		if (check_services([ svc ]) != null) return false;
 		let r = null;
-		try { r = conn.call("service", "list", { name: svc }); } catch (e) {}
+		try { r = conn.call("service", "list", { name: svc }); } catch (e) { return true; }
 		return r?.[svc] != null;
 	});
 }
@@ -123,11 +125,27 @@ function default_watch(conn, services, total_ms, step_ms) {
 	};
 }
 
-function run_test(argv) {
-	let p = fs.popen(wg.command_line(argv) + " 2>&1", "r");
-	if (p == null) return { code: -1, output: "could not exec " + argv[0] };
-	let output = p.read("all") ?? "";
-	return { code: p.close(), output: output };
+// A popen has no time bound, so a conf-file on a mount that hangs held the locks until uhttpd
+// killed the request at its 60 s script timeout, before any restore. A write that fails runs the
+// check twice, and the parse of a conf-dir with 500k adblock lines took 0.6 s on x86. The exec
+// makes dnsmasq the child that system() kills, and procd starts dnsmasq with stdin on /dev/null.
+// system() raises when fork fails, after the commit, where a throw would skip the restore.
+const DNSMASQ_TEST_MS = 10000;
+
+function run_test(argv, timeout_ms) {
+	let out = fs.mkstemp("uapi-dnsmasq-test");
+	if (out == null) return { code: -1, output: "cannot create a file for its output" };
+	let code = null;
+	try {
+		code = system(sprintf("exec %s </dev/null >&%d 2>&1", wg.command_line(argv), out.fileno()), timeout_ms);
+	} catch (e) {
+		out.close();
+		return { code: -1, output: e.message };
+	}
+	out.seek(0);
+	let output = out.read("all") ?? "";
+	out.close();
+	return { code, output };
 }
 
 // dnsmasq.init writes the config of each instance before it returns, and procd then restarts the
@@ -138,36 +156,62 @@ function run_test(argv) {
 // as one whose port another daemon holds, passes. Every instance is checked, one that the race
 // left stopped included, since procd starts it on that config. An instance that `service list`
 // does not show after the reload, which another writer restarts or a failed ubus call hides, is
-// checked with its command from before. A raw write to a package whose classic ucitrack lists
-// `affects dhcp` also reloads dnsmasq, without the dhcp lock, so a dhcp write at the same moment
-// can change the config that this check reads. OpenWrt 25.12 ships no /etc/config/ucitrack.
+// checked with its command from before. A parse that was killed, by the time bound or by another
+// SIGKILL such as the OOM killer's, which uapi cannot tell apart, judges nothing: the check answers
+// { unverified } instead of a refusal, and the write keeps its commit.
 function dnsmasq_check(conn, services, run) {
 	if (index(services, "dnsmasq") < 0) return null;
 	let was = instances(conn, [ "dnsmasq" ]);
 	return function() {
+		let unverified = null;
 		for (let k, i in { ...was, ...instances(conn, [ "dnsmasq" ]) }) {
 			let cmd = i.command;
 			if (type(cmd) != "array" || !match(cmd[0], /\/dnsmasq$/)) continue;
+			let name = split(k, "/")[1];
 			let r = run([ cmd[0], "--test", ...slice(cmd, 1) ]);
-			if (r.code != 0)
-				return sprintf("dnsmasq refuses its config %s: %s", split(k, "/")[1],
+			if (r.code == -9)
+				unverified ??= { unverified: sprintf("dnsmasq --test did not finish on its config %s: it was killed, "
+				                                     + "by the time bound or another SIGKILL, so whether dnsmasq takes the "
+				                                     + "config is unknown", name) };
+			else if (r.code == -1)
+				return sprintf("dnsmasq --test could not run on its config %s: %s", name, r.output);
+			else if (r.code != 0)
+				return sprintf("dnsmasq refuses its config %s: %s", name,
 				               replace(split(trim(r.output), "\n")[0], /^dnsmasq: /, ""));
 		}
-		return null;
+		return unverified;
 	};
 }
 
-// The reload and the restore each run every check, and the first refusal fails them.
-function check_daemons(conn, services) {
-	let checks = filter([ dnsmasq_check(conn, services, run_test), default_watch(conn, services, 2000, 100) ],
+// The reload and the restore each run every check, and the first refusal fails them. A system
+// write reloads dnsmasq for the hostname and NTP, and an old refusal or a slow parse of its config
+// must not fail or undo that write, so only a dhcp write runs the dnsmasq check.
+function check_daemons(conn, services, packages, test_ms) {
+	let checks = filter([ (index(packages ?? [], "dhcp") >= 0)
+	                      ? dnsmasq_check(conn, services, (argv) => run_test(argv, test_ms ?? DNSMASQ_TEST_MS)) : null,
+	                      default_watch(conn, services, 2000, 100) ],
 	                    (c) => c != null);
 	return function() {
+		let unverified = null;
 		for (let c in checks) {
 			let err = c();
-			if (err != null) return err;
+			if (type(err) == "object") unverified ??= err;
+			else if (err != null) return err;
 		}
-		return null;
+		return unverified;
 	};
+}
+
+function run_check(watch) {
+	let r = (watch.check != null) ? watch.check() : null;
+	if (type(r) != "object") return r;
+	watch.unverified = r.unverified;
+	return null;
+}
+
+function with_unverified(result, watch) {
+	if (!result?.ok || watch.unverified == null) return result;
+	return { ...result, reload_status: "unverified", unverified: watch.unverified };
 }
 
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
@@ -302,7 +346,7 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 	// A package that the write left as it was gets no reload, which would read the same config
 	// again, and no restore, which would put the snapshot over what another writer committed since.
 	if (!committed)
-		return _finalize_after_reload(null, null, result.body, [], ops, applied);
+		return { ..._finalize_after_reload(null, null, result.body, [], ops, applied), unchanged: true };
 
 	return _finalize_after_reload(apply(), function() {
 		conn.uci_import(pkg, snapshot);
@@ -318,9 +362,9 @@ function run_inner(conn, pkg, services, fn, snapshot, apply, restore, ops, appli
 // already returned by the time this is called.
 function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 	return function() {
-		watch.check = watch.start(conn, services);
+		watch.check = watch.start(conn, services, watch.packages);
 		let err = reload(services);
-		if (err == null && watch.check != null) err = watch.check();
+		if (err == null) err = run_check(watch);
 		if (err != null) return err;
 		return wg_apply(conn, ops, applied);
 	};
@@ -333,7 +377,7 @@ function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 	return function() {
 		let err = reload(services);
-		if (err == null && watch.check != null) err = watch.check();
+		if (err == null) err = run_check(watch);
 		if (err != null) return err;
 		return wg_reconcile(conn, wg.interfaces_of(ops));
 	};
@@ -351,7 +395,7 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
-	let watch = { start: params.watch ?? check_daemons };
+	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ] };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
 	// snapshot, committing, or reloading. Used by /batch to compose many
@@ -400,7 +444,7 @@ function transaction(conn, params) {
 	}
 	release(lock);
 	if (caught != null) die(caught);
-	return result;
+	return with_unverified(result, watch);
 }
 
 function services_of(by_package, packages) {
@@ -540,6 +584,7 @@ function multi_transaction(conn, params) {
 			} else if (length(committed) == 0) {
 				result = _finalize_after_reload(null, null, inner.body, [], wg_ops, wg_applied);
 			} else {
+				watch.packages = committed;
 				let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
 				let restore_apply = _make_restore(conn, reload, ran,
 				                                  params.wg_reconcile ?? wg.reconcile, wg_ops, watch);
@@ -552,7 +597,7 @@ function multi_transaction(conn, params) {
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
 	if (caught != null) die(caught);
-	return result;
+	return with_unverified(result, watch);
 }
 
 function with_lock(params) {
@@ -578,4 +623,4 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
-         default_check_services, default_reload, default_watch, dnsmasq_check };
+         default_check_services, default_reload, default_watch, dnsmasq_check, run_test, check_daemons };

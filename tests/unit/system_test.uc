@@ -74,6 +74,7 @@ t.describe('system resource', () => {
 
 	t.it('declares system and log reload services', () => {
 		t.assert_deep_equal(system_resource.reload, ['system', 'log']);
+		t.assert_deep_equal(system_resource.reload_if_running, ['dnsmasq', 'odhcpd', 'unbound']);
 	});
 
 	t.it('validate accepts simple hostnames', () => {
@@ -126,5 +127,36 @@ t.describe('handler.make_singleton', () => {
 		let c = with_system();
 		let r = system_h.patch(c, ctx(), { hostname: 'not allowed' });
 		t.assert_equal(r.status, 422);
+	});
+});
+
+// dnsmasq.init reads the hostname and system.ntp.enabled, odhcpd the timezone, and the init of
+// unbound the hostname. A commit through libuci fires none of their procd triggers, so a system
+// write answered 200 while each kept the old value.
+t.describe('a system write reloads the dhcp daemons that read it while procd runs them', () => {
+	let timeservers = loadfile('src/resources/system.timeservers.uc')();
+	function write(name, stopped) {
+		let ran = [];
+		let tx = { acquire: () => ({}), release: () => null, check_services: () => null,
+		           reload: (s) => { push(ran, ...s); return null; } };
+		let c = bus.stub({ uci: { system: {
+			cfg01: { '.type': 'system', '.anonymous': true, hostname: 'OpenWrt', timezone: 'UTC' },
+			ntp: { '.type': 'timeserver', '.anonymous': false, enabled: '1', server: [ '0.openwrt.pool.ntp.org' ] },
+		} } });
+		c.set_ubus_response("service", "list", (a) => (index(stopped, a.name) >= 0) ? {} : { [a.name]: {} });
+		let r = (name == "system")
+			? handler.make_singleton(system_resource, { tx }).patch(c, ctx(), { hostname: 'gw' })
+			: handler.make(timeservers, { tx }).patch(c, ctx(), 'ntp', { enabled: false });
+		return [ r.status, r.headers["X-Reload-Services"], join(",", ran) ];
+	}
+
+	t.it('system reloads dnsmasq, odhcpd and unbound after system and log', () => {
+		t.assert_deep_equal(write("system", []), [ 200, "system,log,dnsmasq,odhcpd,unbound", "system,log,dnsmasq,odhcpd,unbound" ]);
+		t.assert_deep_equal(write("system", [ "dnsmasq", "unbound" ]), [ 200, "system,log,odhcpd", "system,log,odhcpd" ]);
+	});
+
+	t.it('system/timeservers reloads dnsmasq after sysntpd', () => {
+		t.assert_deep_equal(write("timeservers", []), [ 200, "sysntpd,dnsmasq", "sysntpd,dnsmasq" ]);
+		t.assert_deep_equal(write("timeservers", [ "dnsmasq" ]), [ 200, "sysntpd", "sysntpd" ]);
 	});
 });

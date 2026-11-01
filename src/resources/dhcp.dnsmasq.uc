@@ -65,7 +65,8 @@ function validate(json) {
 return {
 	package: "dhcp",
 	type: "dnsmasq",
-	reload: ["dnsmasq"],
+	// unbound reads domain and port when it forwards local names to dnsmasq.
+	reload_if_running: ["dnsmasq", "unbound"],
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

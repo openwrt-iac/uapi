@@ -74,7 +74,7 @@ Two flock files, used in three patterns:
 | Read (any)         | none  | none                                       |
 | Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
-| uci write that restarts unbound (`unbound_srv`, `unbound_ext`) | SH | EX on that pkg and on `unbound` |
+| uci write that restarts unbound (`unbound_srv`, `unbound_ext`, and `dhcp` or `system` while unbound runs) | SH | EX on that pkg and on `unbound` |
 | uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
 | Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
 
@@ -100,7 +100,8 @@ locked` so the client can decide whether to back off and retry. The HTTP
 worker never waits for a uapi lock, but libuci's own flocks on a package
 file block while LuCI or a shell holds them. It can sleep while it holds a
 uapi lock: the stay-up
-watch of an unbound reload polls for up to 2 s under the transaction's locks.
+watch of an unbound reload polls for up to 2 s under the transaction's locks,
+and the `dnsmasq --test` check of each instance runs for up to 10 s.
 The restore after a failed reload also waits, for up to 5 s, for libuci's flock
 on the package file. A load holds that flock while it parses the file, and a
 `uci commit` while it reads the file again, writes its temp file and syncs it.
@@ -121,11 +122,13 @@ without uci state change.
    `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
    no uci write attempted. A service in the resource's `reload_if_running`
    list, a daemon that reads the package but that an image can lack or that
-   the operator stopped, such as odhcpd for the dhcp writes, joins the reload
-   when its init script exists and `service list` names it, which procd does
-   from its start to its stop. That is when the procd trigger of a LuCI save
-   reloads it. Otherwise it is skipped, so it never answers 503, and a reload
-   does not start a daemon that the operator stopped. Then confirm
+   the operator stopped, such as dnsmasq, odhcpd and unbound for the dhcp
+   writes, joins the reload when its init script exists and `service list`
+   names it, which procd does from its start to its stop. That is when the
+   procd trigger of a LuCI save reloads it. Otherwise it is skipped, so it
+   never answers 503, and a reload does not start a daemon that the operator
+   stopped, as the reload of dnsmasq.init and unbound.init would. When the
+   `service list` call fails, uapi cannot tell, and reloads it. Then confirm
    `/etc/config/<package>` exists, because the uci cursor stores nothing in a
    missing file and reports that only through a null return. Miss →
    `503 config_missing` with the path. A DELETE checks the file first and
@@ -171,12 +174,14 @@ without uci state change.
    its new config on its own, so the init script exits 0 before the daemon
    has read that config, and a daemon that refuses it stops later. For the
    reloads that `STAY_UP` in `src/lib/transaction.uc` lists, which are
-   `unbound` and `unbound-uci-ext`, the write then watches the procd
+   `unbound`, also when a `dhcp` or `system` write reloads it, and
+   `unbound-uci-ext`, the write then watches the procd
    instances of the daemon that ran before it. It polls `service list`
    every 100 ms for 2 s, and an instance that procd reports as not running
    counts as a failed reload. An instance that `service list` does not show
    is being restarted, and does not count. The restore runs the same check.
-   A reload of `dnsmasq` is judged by its config instead, because the
+   A reload of `dnsmasq` by a write that commits `dhcp` is judged by its
+   config instead, because the
    `reload_service()` of dnsmasq.init sends SIGHUP right after procd restarts
    an instance, and on a slow machine that signal can stop the new process
    for 5 s with a config that dnsmasq takes. The init script writes the
@@ -185,7 +190,14 @@ without uci state change.
    command with `--test`, and a refusal counts as a failed reload. That
    includes an instance that is not running, which procd starts on that
    config, so a config that dnsmasq refused before the write fails the
-   restore too, as `reload_failed_unrecovered`. `--test` parses the config
+   restore too, as `reload_failed_unrecovered`. `fs.popen` has no time
+   bound, so the check runs through `system()` with a timeout of 10 s, its
+   output in a file from `fs.mkstemp`. A `--test` that cannot run, because
+   fork fails or no file can be made, counts as a refusal. One that `SIGKILL`
+   stopped, the timeout or another, judges nothing: the write keeps its
+   commit and answers `X-Reload-Status: unverified`. A `system` write reloads
+   dnsmasq too and runs no check, so that a config that dnsmasq refused
+   before, or a slow parse, cannot fail or undo it. `--test` parses the config
    and the files that it includes, and exits. A config that dnsmasq parses
    but cannot start with, such as two ports that conflict, a lease file in a
    missing directory or a port that another daemon holds, still answers 2xx.

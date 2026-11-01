@@ -398,9 +398,10 @@ t.describe('raw does not disclose token credential material', () => {
 	// hardware instead, in the PR that added it.
 });
 
-// odhcpd reads dhcp too, and its procd trigger does not fire for a commit through libuci. A raw
-// dhcp write reloaded only dnsmasq, as the ucitrack fallback named it.
-t.describe('raw dhcp writes reload odhcpd while procd runs it', () => {
+// odhcpd and unbound read dhcp too, and their procd triggers do not fire for a commit through
+// libuci. A raw dhcp write reloaded only dnsmasq, as the ucitrack fallback named it, and started a
+// dnsmasq that the operator stopped.
+t.describe('raw dhcp writes reload each dhcp daemon while procd runs it', () => {
 	let real = require('transaction');
 	let reloaded = [];
 	global.modules.transaction = { ...real, transaction: (conn, p) => real.transaction(conn, { ...p,
@@ -412,13 +413,15 @@ t.describe('raw dhcp writes reload odhcpd while procd runs it', () => {
 	function box(running) {
 		let conn = bus.stub({ uci: { dhcp: {
 			lan: { '.type': 'dhcp', '.anonymous': false, interface: 'lan', ra: 'disabled' },
+		}, system: {
+			cfg01: { '.type': 'system', '.anonymous': true, hostname: 'OpenWrt' },
 		} } });
 		conn.set_ubus_response("service", "list", (a) => (index(running, a.name) >= 0) ? { [a.name]: {} } : {});
 		reloaded = [];
 		return conn;
 	}
 
-	t.it('each verb reloads dnsmasq and odhcpd, and the body names both', () => {
+	t.it('each verb reloads dnsmasq, odhcpd and unbound, and the body names them', () => {
 		let writes = [
 			(c) => raw2.create(c, ctx(), [ "*:rw" ], "dhcp", { ".type": "dhcp", id: "guest", interface: "guest" }),
 			(c) => raw2.replace(c, ctx(), [ "*:rw" ], "dhcp", "lan", { interface: "lan", ra: "server" }),
@@ -426,16 +429,53 @@ t.describe('raw dhcp writes reload odhcpd while procd runs it', () => {
 			(c) => raw2.remove(c, ctx(), [ "*:rw" ], "dhcp", "lan"),
 		];
 		for (let w in writes) {
-			let r = w(box([ "dnsmasq", "odhcpd" ]));
+			let r = w(box([ "dnsmasq", "odhcpd", "unbound" ]));
 			t.assert_true(r.status == 200 || r.status == 204, r.body);
-			t.assert_deep_equal(reloaded, [ [ "dnsmasq", "odhcpd" ] ]);
-			if (r.status == 200) t.assert_deep_equal(r.body.reload_services, [ "dnsmasq", "odhcpd" ]);
+			t.assert_deep_equal(reloaded, [ [ "dnsmasq", "odhcpd", "unbound" ] ]);
+			if (r.status == 200) t.assert_deep_equal(r.body.reload_services, [ "dnsmasq", "odhcpd", "unbound" ]);
 		}
 	});
 
-	t.it('skips odhcpd when procd does not list it', () => {
+	t.it('skips one that procd does not list, a stopped dnsmasq included', () => {
 		let r = raw2.patch(box([ "dnsmasq" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
 		t.assert_equal(r.status, 200, r.body);
 		t.assert_deep_equal([ reloaded, r.body.reload_services ], [ [ [ "dnsmasq" ] ], [ "dnsmasq" ] ]);
+		r = raw2.patch(box([ "odhcpd" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal([ reloaded, r.body.reload_services ], [ [ [ "odhcpd" ] ], [ "odhcpd" ] ]);
+	});
+
+	t.it('says why it reloaded nothing', () => {
+		let r = raw2.patch(box([]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_deep_equal([ r.status, r.body.reloaded, r.body.reload_note ],
+		                    [ 200, false, "no daemon that reads this package runs, so none was reloaded" ]);
+		let unchanged = box([]);
+		unchanged.uci_commit = () => false;
+		r = raw2.patch(unchanged, ctx(), [ "*:rw" ], "dhcp", "lan", {});
+		t.assert_deep_equal([ r.status, r.body.reloaded, r.body.reload_note ],
+		                    [ 200, false, "the write changed nothing, so no daemon was reloaded" ]);
+	});
+
+	t.it('reloads them when the service list call fails, and names a check that did not finish', () => {
+		let failing = box([]);
+		failing.set_ubus_response("service", "list", { _error: "ubus call service.list: Request timed out" });
+		let r = raw2.patch(failing, ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_deep_equal([ r.status, reloaded, r.body.reload_note ], [ 200, [ [ "dnsmasq", "odhcpd", "unbound" ] ], null ]);
+		let real = require('transaction');
+		global.modules.transaction = { ...real, transaction: (conn, p) => real.transaction(conn, { ...p,
+			acquire: () => ({}), release: () => null, check_services: () => null, reload: () => null,
+			watch: () => () => ({ unverified: "dnsmasq --test did not finish on its config main" }) }) };
+		let raw3 = loadfile('src/raw.uc')();
+		global.modules.transaction = real;
+		r = raw3.patch(box([ "dnsmasq" ]), ctx(), [ "*:rw" ], "dhcp", "lan", { ra: "server" });
+		t.assert_deep_equal([ r.status, r.body.reloaded, r.body.reload_note ],
+		                    [ 200, true, "dnsmasq --test did not finish on its config main" ]);
+	});
+
+	t.it('a raw system write reloads them too, after system', () => {
+		let r = raw2.patch(box([ "dnsmasq", "unbound" ]), ctx(), [ "*:rw" ], "system", "cfg01", { hostname: "gw" });
+		t.assert_equal(r.status, 200, r.body);
+		t.assert_deep_equal([ reloaded, r.body.reload_services ],
+		                    [ [ [ "system", "dnsmasq", "unbound" ] ], [ "system", "dnsmasq", "unbound" ] ]);
 	});
 });

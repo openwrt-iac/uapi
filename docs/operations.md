@@ -16,35 +16,51 @@ Two signals worth wiring into your automation:
 
 - **`X-Reload-Status`** response header on curated-resource writes: `ok` means the init
   script ran and exited 0, and `no_reload` means that no init script ran. The header is
-  intentionally not a "converged" promise. All 42 writable resources declare at least
-  one reload service, so `no_reload` means that the write changed nothing in uci, such as
-  a PATCH that names no field or sends the values that uci holds. A write that commits
-  nothing reloads nothing, since 3.2.0.
+  intentionally not a "converged" promise. Each writable resource outside `dhcp` has
+  a reload service that it always runs, so there `no_reload` means that the write changed
+  nothing in uci, such as a PATCH that names no field or sends the values that uci holds.
+  A write that commits nothing reloads nothing, since 3.2.0. A `dhcp` write reloads
+  dnsmasq, odhcpd and unbound only while procd runs them, so it also answers `no_reload`
+  when none of them runs. `unverified` means that every init script exited 0, but that
+  the `dnsmasq --test` check after a dhcp write did not finish, see below.
 - **`X-Reload-Services`**: comma-separated list of init scripts that
   ran. Useful for audit/log correlation.
 
 unbound and dnsmasq are the exceptions. When unbound runs, a write that
 reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
-keep running. If one stops, the write answers `500 reload_failed_restored`,
-and its `reload_error` reads
-`unbound stopped after the reload, with exit code 1`. So a 2xx on these writes
-also means that procd did not report unbound as stopped in the 2 s after the
-reload. An instance that `service list` does not show, because something
-restarts it or the ubus call fails, does not count, and a daemon that stops
-later than 2 s still answers 2xx.
+keep running. A write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`,
+`dhcp/odhcpd`, `system` or the raw `dhcp` and `system` packages reloads
+`unbound` while procd runs it, so it waits the 2 s too. It also takes the lock
+of `unbound`, so a write to `unbound/server`, `unbound/srv` or `unbound/ext`, or
+another of these writes, at the same moment answers `423 locked`. If an
+instance stops, the write answers `500 reload_failed_restored`, and its
+`reload_error` reads `unbound stopped after the reload, with exit code 1`. So a
+2xx on these writes also means that procd did not report unbound as stopped in
+the 2 s after the reload. An instance that `service list` does not show,
+because something restarts it or the ubus call fails, does not count, and a
+daemon that stops later than 2 s still answers 2xx.
 
-dnsmasq is checked by its config. After a write that reloads `dnsmasq`, as a
-write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`, the raw `dhcp` package
-or a `/batch` that holds one does, and a write to `dhcp/odhcpd` while procd
-runs dnsmasq, uapi runs the command of each dnsmasq
-instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq
-refuses it, the write answers `500 reload_failed_restored`, and its
-`reload_error` reads, for example,
+dnsmasq is checked by its config. A write to `dhcp/servers`, `dhcp/hosts`,
+`dhcp/dnsmasq`, `dhcp/odhcpd`, the raw `dhcp` package, or a `/batch` that
+commits `dhcp`, reloads `dnsmasq` while procd runs it, and then uapi runs the
+command of each dnsmasq instance with `--test` on the config that dnsmasq.init
+just wrote. If dnsmasq refuses it, the write answers
+`500 reload_failed_restored`, and its `reload_error` reads, for example,
 `dnsmasq refuses its config cfg01411c: bad IP address at line 33 of /var/etc/dnsmasq.conf.cfg01411c`.
 The check covers every instance, one that is not running included, since
 procd starts it on that config. So on a router whose dnsmasq config was
 refused before the write, a write that does not fix it answers
-`500 reload_failed_unrecovered`. `--test` parses the config and the files of
+`500 reload_failed_unrecovered`. A `--test` that cannot run, because fork
+fails, fails the write in the same way. A `--test` that does not finish within
+10 s is killed, and judges nothing: the write keeps its commit and answers 2xx
+with `X-Reload-Status: unverified`, and a raw write a `reload_note`. uapi cannot
+tell the time bound from another `SIGKILL`, such as the OOM killer's, so both
+read the same. A `conf-file` on a mount that hangs therefore holds the locks
+for 10 s per instance, where it held them until uhttpd killed the request with
+no answer. A parse of a `conf-dir` with 500k `address=/x/` lines took 0.6 s on
+x86. A target that takes longer than 10 s to parse its config, such as a slow
+MIPS router with large adblock lists, answers `unverified` on every dhcp write,
+and dnsmasq itself is not affected. `--test` parses the config and the files of
 `conf-file` and `conf-dir`, and exits. It does not read the files of
 `addn-hosts` and `servers-file`, which dnsmasq reads after it starts. A config
 that dnsmasq parses but cannot start with, such as `min-port` above
@@ -52,6 +68,10 @@ that dnsmasq parses but cannot start with, such as `min-port` above
 daemon holds, still answers 2xx. No write waits for the daemon to start. Each
 write pays one parse of the whole config per instance, which grows with its
 size, such as a `conf-dir` of adblock lists, and pays it again on a restore.
+A write to `system`, `system/timeservers` or the raw `system` package reloads
+dnsmasq too, for the hostname and NTP, but runs no check: a config that dnsmasq
+refused before, or a slow parse, must not fail or undo a hostname or NTP
+change.
 OpenWrt's reload of dnsmasq can restart the daemon, which on a slow machine can
 leave it stopped for 5 s, and uapi does not report that restart.
 

@@ -64,7 +64,7 @@ The response is the section as uci stores it, as a `GET` reads it, plus:
 }
 ```
 
-`reloaded: false` plus a `reload_note` string when uapi does not know which service to reload for the package. The configuration is on disk, and you must reload the relevant daemon manually. Since 3.2.0 a `PATCH` that sends no option also answers `reloaded: false`, an empty `reload_services` and a `reload_note`, because it writes nothing and so reloads nothing. A `PUT` or `PATCH` that sends options sets each of them, also one that uci already holds, so it commits and reloads.
+`reloaded: false` plus a `reload_note` string when uapi does not know which service to reload for the package. The configuration is on disk, and you must reload the relevant daemon manually. Since 3.2.0 a `PATCH` that sends no option also answers `reloaded: false`, an empty `reload_services` and a `reload_note`, because it writes nothing and so reloads nothing. A write to `dhcp` when procd runs none of dnsmasq, odhcpd and unbound answers the same, with a `reload_note` that says so. A `dhcp` write whose `dnsmasq --test` check did not finish within 10 s answers `reloaded: true` and a `reload_note` that says so, and keeps its commit. A `PUT` or `PATCH` that sends options sets each of them, also one that uci already holds, so it commits and reloads.
 
 A package needs its file under `/etc/config/` before a write, as with `uci` itself. Without one, a `POST` answers `503 config_missing` and creates nothing, and a `PUT`, `PATCH` or `DELETE` answers `404`, because no section can exist. An empty file is enough, for example after `touch /etc/config/<package>`.
 
@@ -92,9 +92,10 @@ The reload service list is computed from `/etc/config/ucitrack` plus a small fal
 | network    | network         |
 | wireless   | network         |
 | firewall   | firewall        |
-| dhcp       | dnsmasq, then odhcpd while procd runs it |
+| dhcp       | dnsmasq, odhcpd and unbound, each while procd runs it |
+| system     | system, then dnsmasq, odhcpd and unbound, each while procd runs it |
 
-If `/etc/config/ucitrack` has an entry for the package, its `option init` (plus `list affects` chain) takes precedence over the fallback table. The fallback for `dhcp` follows LuCI's `/usr/share/ucitrack/luci-mod-network-dnsmasq.json`, in which `dhcp` affects odhcpd. odhcpd is reloaded when `/etc/init.d/odhcpd` exists and procd lists the service, which it does from its start to its stop. A router without odhcpd, or with odhcpd stopped, skips it, and the write does not answer `503 init_script_missing` for it.
+If `/etc/config/ucitrack` has an entry for the package, its `option init` (plus `list affects` chain) takes precedence over the fallback table. The fallback follows what a LuCI save reloads. dnsmasq, odhcpd and unbound have a procd trigger on `dhcp`, dnsmasq and odhcpd one on `system`, and LuCI's `/usr/share/ucitrack/luci-mod-system-system.json` has `system` affect `dhcp`. Each of them is reloaded when its init script exists and procd lists the service, which it does from its start to its stop, or when the `service list` call fails, since uapi then cannot tell. A router without the daemon, or with the daemon stopped, skips it: the write does not answer `503 init_script_missing` for it, and the reload does not start it, as the reload of dnsmasq.init and unbound.init would.
 
 ## Examples
 

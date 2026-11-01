@@ -244,6 +244,7 @@ t.describe('transaction, happy path', () => {
 		t.assert_deep_equal(r.body, { id: "r1", target: "ACCEPT" });
 		t.assert_equal(conn._state.uci.fw.r1.target, "ACCEPT");
 		t.assert_deep_equal(tracker.calls, [["firewall"]]);
+		t.assert_equal(r.unchanged, null);
 		t.assert_equal(locks.acquired, 1);
 		t.assert_equal(locks.released, 1);
 	});
@@ -326,6 +327,7 @@ t.describe('transaction, the restore writes back only what the request committed
 		}));
 		t.assert_true(r.ok);
 		t.assert_deep_equal([ r.reload_status, r.reload_services, r.kernel_status ], [ "no_reload", [], "no_kernel" ]);
+		t.assert_true(r.unchanged, "a raw write tells this from a write whose daemons do not run by it");
 		t.assert_deep_equal(tracker.calls, []);
 		t.assert_deep_equal(imports(conn), []);
 	});
@@ -812,7 +814,8 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 
 	t.it('a write to unbound_srv or unbound_ext also takes the lock of the unbound package', () => {
 		for (let c in [ [ "unbound_srv", [ "unbound-uci-ext" ], [ "unbound" ] ], [ "unbound", [ "unbound" ], [] ],
-		                [ "firewall", [ "firewall" ], [] ] ]) {
+		                [ "firewall", [ "firewall" ], [] ], [ "dhcp", [ "dnsmasq", "odhcpd", "unbound" ], [ "unbound" ] ],
+		                [ "system", [ "system", "dnsmasq", "unbound" ], [ "unbound" ] ] ]) {
 			let also = null;
 			tx.transaction(ubus.stub(), build_params({
 				package: c[0], reload_services: c[1],
@@ -850,6 +853,58 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 		t.assert_equal(r.kind, "reload_failed_restored");
 		t.assert_equal(conn._state.uci.unbound_srv.main.enabled, "0");
 		for (let f in [ global, prefix + "unbound.lock", prefix + "unbound_srv.lock" ]) fs.unlink(f);
+	});
+
+	// A dhcp or system write reloads unbound only while procd runs it, and takes its lock only then.
+	t.it('a dhcp or system write takes the lock of unbound while unbound runs', () => {
+		let also_of = (pkg, names) => {
+			let also = null;
+			let conn = ubus.stub();
+			conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0) ? { [a.name]: {} } : {});
+			tx.transaction(conn, build_params({
+				package: pkg, reload_services: [], reload_if_running: [ "dnsmasq", "odhcpd", "unbound" ],
+				acquire: function(p, a) { also = a; return {}; }, release: function() {},
+			}));
+			return also;
+		};
+		t.assert_deep_equal(also_of("dhcp", [ "dnsmasq", "unbound" ]), [ "unbound" ]);
+		t.assert_deep_equal(also_of("dhcp", [ "dnsmasq", "odhcpd" ]), []);
+		t.assert_deep_equal(also_of("system", [ "dnsmasq", "unbound" ]), [ "unbound" ]);
+		t.assert_deep_equal(also_of("system", [ "dnsmasq", "odhcpd" ]), []);
+	});
+
+	t.it('a batch takes it too', () => {
+		let prefix = "/tmp/uapi-test-shared-pkg.", global = "/tmp/uapi-test-shared-global.lock";
+		let held = fs.open(prefix + "unbound.lock", "w+");
+		held.lock("xn");
+		let conn = ubus.stub({ uci: { system: { cfg01: { '.type': 'system', hostname: 'OpenWrt' } } } });
+		let batch = (names) => {
+			conn.set_ubus_response("service", "list", (a) => (index(names, a.name) >= 0) ? { [a.name]: {} } : {});
+			return tx.multi_transaction(conn, {
+				packages: [ "system" ], reload_services: { system: [ "system" ] },
+				reload_if_running: { system: [ "dnsmasq", "odhcpd", "unbound" ] },
+				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check, reload: noop_reload,
+				fn: function(c) { c.uci_set("system", "cfg01", "hostname", "gw"); return { ok: true }; },
+			});
+		};
+		let locked = batch([ "unbound" ]), skipped = batch([ "dnsmasq", "odhcpd" ]);
+		held.lock("u"); held.close();
+		for (let f in [ global, ...fs.glob(prefix + "*") ]) fs.unlink(f);
+		t.assert_deep_equal([ locked.kind, locked.package ], [ "locked", "unbound" ]);
+		t.assert_deep_equal([ skipped.ok, skipped.reload_services ], [ true, [ "dnsmasq", "odhcpd", "system" ] ]);
+	});
+
+	t.it('a dhcp write that reloads unbound restores the previous config when unbound stops', () => {
+		let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', ignore: '0' } } } });
+		let r = tx.transaction(conn, build_params({
+			package: "dhcp", reload_services: [], reload_if_running: [ "unbound" ],
+			acquire: function() { return {}; }, release: function() {},
+			reload: daemon(conn, DOWN, UP2),
+			watch: (cn, s) => tx.default_watch(cn, s, 0, 0),
+			fn: function(c, pkg) { c.uci_set(pkg, "lan", "ignore", "1"); return { ok: true, body: {} }; },
+		}));
+		t.assert_deep_equal([ r.kind, r.reload_error ], [ "reload_failed_restored", "unbound stopped after the reload, with exit code 1" ]);
+		t.assert_equal(conn._state.uci.dhcp.lan.ignore, "0");
 	});
 });
 
@@ -912,6 +967,135 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		let tests = tester([ "main" ]);
 		t.assert_equal(tx.dnsmasq_check(fake([ { main: true }, {} ]), [ "dnsmasq" ], tests.run)(), REFUSED);
 		t.assert_equal(length(tests.ran), 1);
+	});
+
+	// A conf-file on a mount that hangs held the locks until uhttpd killed the request at its 60 s
+	// script timeout, so neither a restore nor an answer came. A parse that is only slow judges
+	// nothing either, so the write keeps its commit and says that the check did not finish.
+	t.it('kills a --test that does not finish in time, which refuses nothing', () => {
+		let dir = "/tmp/uapi-test-dnsmasq-hang";
+		system(sprintf("rm -rf %s; mkdir -p %s", dir, dir));
+		fs.writefile(dir + "/dnsmasq", "#!/bin/sh\necho 'dnsmasq: reading'; exec sleep 5\n");
+		fs.chmod(dir + "/dnsmasq", 0755);
+		let start = clock(true);
+		let r = tx.run_test([ dir + "/dnsmasq", "--test" ], 300);
+		let end = clock(true);
+		system("rm -rf " + dir);
+		let ms = (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000;
+		t.assert_deep_equal([ r.code, r.output ], [ -9, "dnsmasq: reading\n" ]);
+		t.assert_true(ms < 2000, sprintf("the --test ran for %d ms", ms));
+		t.assert_deep_equal(tx.dnsmasq_check(fake([ { main: true } ]), [ "dnsmasq" ], (argv) => ({ code: -9, output: "" }))(),
+		                    { unverified: "dnsmasq --test did not finish on its config main: it was killed, by the time bound "
+		                                  + "or another SIGKILL, so whether dnsmasq takes the config is unknown" });
+		let both = fake([ { main: true, guest: true } ]);
+		t.assert_equal(tx.dnsmasq_check(both, [ "dnsmasq" ], (argv) => (argv[3] == conf("main")) ? { code: -9, output: "" }
+		                                                       : { code: 1, output: "dnsmasq: bad option at line 2 of x" })(),
+		               "dnsmasq refuses its config guest: bad option at line 2 of x");
+	});
+
+	t.it('a write whose --test does not finish keeps its commit and answers unverified', () => {
+		let dir = "/tmp/uapi-test-dnsmasq-slow";
+		system(sprintf("rm -rf %s; mkdir -p %s", dir, dir));
+		fs.writefile(dir + "/dnsmasq", "#!/bin/sh\nexec sleep 5\n");
+		fs.chmod(dir + "/dnsmasq", 0755);
+		let write = (batch) => {
+			let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', leasetime: '12h' } } } });
+			conn.set_ubus_response("service", "list", (a) => ({ dnsmasq: { instances: { main: { running: true,
+				command: [ dir + "/dnsmasq", "-C", conf("main") ] } } } }));
+			let p = { check_services: noop_check, reload: noop_reload, watch: (cn, s, pkgs) => tx.check_daemons(cn, s, pkgs, 300) };
+			let start = clock(true);
+			let r = batch
+				? tx.multi_transaction(conn, { ...p, packages: [ "dhcp" ], reload_services: { dhcp: [ "dnsmasq" ] },
+				                               lock_path: "/tmp/uapi-test-slow-global.lock", pkg_lock_prefix: "/tmp/uapi-test-slow-pkg.",
+				                               fn: (c) => { c.uci_set("dhcp", "lan", "leasetime", "6h"); return { ok: true, body: {} }; } })
+				: tx.transaction(conn, build_params({ ...p, package: "dhcp", reload_services: [ "dnsmasq" ],
+				                                      acquire: function() { return {}; }, release: function() {},
+				                                      fn: function(c, pkg) { c.uci_set(pkg, "lan", "leasetime", "6h"); return { ok: true, body: {} }; } }));
+			let end = clock(true);
+			for (let f in [ "/tmp/uapi-test-slow-global.lock", ...fs.glob("/tmp/uapi-test-slow-pkg.*") ]) fs.unlink(f);
+			return [ r.ok, r.reload_status, match(r.unverified ?? "", /^dnsmasq --test did not finish on its config main/) != null,
+			         conn._state.uci.dhcp.lan.leasetime, (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000 < 2500 ];
+		};
+		let single = write(false), batch = write(true);
+		system("rm -rf " + dir);
+		t.assert_deep_equal(single, [ true, "unverified", true, "6h", true ]);
+		t.assert_deep_equal(batch, [ true, "unverified", true, "6h", true ]);
+	});
+
+	// A failed fork raised from system() after the commit, so the request answered 500 internal_error
+	// with uci and dnsmasq on the new config and no restore.
+	t.it('a --test that cannot run fails the reload and restores, without a throw', () => {
+		let real = { system: global.system, mkstemp: fs.mkstemp };
+		let write = (batch) => {
+			let conn = fake([ { main: true } ]);
+			let r = null;
+			try {
+				r = batch
+					? tx.multi_transaction(conn, { packages: [ "dhcp" ], reload_services: { dhcp: [ "dnsmasq" ] },
+					                               check_services: noop_check, reload: noop_reload,
+					                               lock_path: "/tmp/uapi-test-fork-global.lock", pkg_lock_prefix: "/tmp/uapi-test-fork-pkg.",
+					                               fn: (c) => { c.uci_set("dhcp", "lan", "leasetime", "6h"); return { ok: true, body: {} }; } })
+					: tx.transaction(conn, build_params({ package: "dhcp", reload_services: [ "dnsmasq" ],
+					                                      acquire: function() { return {}; }, release: function() {},
+					                                      fn: function(c, pkg) { c.uci_set(pkg, "lan", "leasetime", "6h"); return { ok: true, body: {} }; } }));
+			} catch (e) { r = { kind: "threw: " + e.message }; }
+			for (let f in [ "/tmp/uapi-test-fork-global.lock", ...fs.glob("/tmp/uapi-test-fork-pkg.*") ]) fs.unlink(f);
+			return [ r.kind, r.reload_error, conn._state.uci.dhcp.lan.leasetime ];
+		};
+		global.system = function() { die("fork(): Resource temporarily unavailable"); };
+		let forked = [ write(false), write(true) ];
+		global.system = real.system;
+		fs.mkstemp = () => null;
+		let no_file = write(false);
+		fs.mkstemp = real.mkstemp;
+		for (let r in forked)
+			t.assert_deep_equal(r, [ "reload_failed_unrecovered",
+			                         "dnsmasq --test could not run on its config main: fork(): Resource temporarily unavailable", "12h" ]);
+		t.assert_deep_equal(no_file, [ "reload_failed_unrecovered",
+		                               "dnsmasq --test could not run on its config main: cannot create a file for its output", "12h" ]);
+	});
+
+	// A system write reloads dnsmasq for the hostname and NTP, and a config of dnsmasq that was
+	// refused before, or that parses slowly, must not fail or undo it.
+	t.it('runs for a write that commits dhcp, and not for a system write', () => {
+		let checked = (pkg, batch_pkgs) => {
+			let conn = fake([ { main: true } ]);
+			let p = { check_services: noop_check, reload: noop_reload };
+			let ran = [];
+			let saved = global.system;
+			global.system = function() { push(ran, true); return 1; };
+			let r = batch_pkgs
+				? tx.multi_transaction(conn, { ...p, packages: batch_pkgs,
+				                               reload_services: { dhcp: [ "dnsmasq" ], system: [ "system", "dnsmasq" ] },
+				                               lock_path: "/tmp/uapi-test-d1-global.lock", pkg_lock_prefix: "/tmp/uapi-test-d1-pkg.",
+				                               fn: () => ({ ok: true, body: {} }) })
+				: tx.transaction(conn, build_params({ ...p, package: pkg, reload_services: [ "system", "dnsmasq" ],
+				                                      acquire: function() { return {}; }, release: function() {},
+				                                      fn: () => ({ ok: true, body: {} }) }));
+			global.system = saved;
+			for (let f in [ "/tmp/uapi-test-d1-global.lock", ...fs.glob("/tmp/uapi-test-d1-pkg.*") ]) fs.unlink(f);
+			return [ r.ok ? true : r.kind, length(ran) > 0 ];
+		};
+		t.assert_deep_equal(checked("system"), [ true, false ]);
+		t.assert_deep_equal(checked("dhcp"), [ "reload_failed_unrecovered", true ]);
+		t.assert_deep_equal(checked(null, [ "system" ]), [ true, false ]);
+		t.assert_deep_equal(checked(null, [ "dhcp", "system" ]), [ "reload_failed_unrecovered", true ]);
+	});
+
+	// procd starts dnsmasq with stdin on /dev/null, so a conf-file of - reads an empty config there.
+	t.it('runs --test with stdin on /dev/null', () => {
+		let dir = "/tmp/uapi-test-dnsmasq-stdin";
+		system(sprintf("rm -rf %s; mkdir -p %s", dir, dir));
+		fs.writefile(dir + "/dnsmasq", "#!/bin/sh\ncat >/dev/null\n");
+		fs.chmod(dir + "/dnsmasq", 0755);
+		fs.writefile(dir + "/run.uc", sprintf("require('fs').writefile(%J, '' + require('transaction').run_test([ %J ], 2000).code);\n",
+		                                      dir + "/code", dir + "/dnsmasq"));
+		let stdin = fs.popen("ucode -L src/lib " + dir + "/run.uc", "w");
+		for (let i = 0; i < 40 && !fs.readfile(dir + "/code"); i++) sleep(100);
+		let code = fs.readfile(dir + "/code");
+		stdin.close();
+		system("rm -rf " + dir);
+		t.assert_equal(code, "0");
 	});
 
 	t.it('skips an instance without a dnsmasq command, so the check cannot throw after the commit', () => {
@@ -1006,13 +1190,18 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		t.assert_true(w.r.ok);
 		t.assert_deep_equal(w.calls, [ [ "dnsmasq" ] ]);
 		t.assert_deep_equal(w.r.reload_services, [ "dnsmasq" ]);
+	});
+
+	// A ubus call that fails or times out tells nothing about the daemon, and skipping it answered
+	// 2xx with no_reload while the daemon kept its old config.
+	t.it('reloads one whose service list call fails', () => {
 		let failing = listed(ubus.stub({ uci: { dhcp: {} } }), []);
-		failing.set_ubus_response("service", "list", { _error: "ubus: Not found" });
+		failing.set_ubus_response("service", "list", { _error: "ubus: Request timed out" });
 		let r = tx.transaction(failing, build_params({
 			package: "dhcp", reload_services: [], reload_if_running: [ "odhcpd" ],
 			acquire: function() { return {}; }, release: function() {},
 		}));
-		t.assert_deep_equal([ r.ok, r.reload_services ], [ true, [] ]);
+		t.assert_deep_equal([ r.ok, r.reload_services ], [ true, [ "odhcpd" ] ]);
 	});
 
 	t.it('skips one whose init script is missing, and the write goes through', () => {
