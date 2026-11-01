@@ -53,6 +53,14 @@ All notable changes to this project will be documented in this file. Format foll
   not confirm. A router that takes longer than 10 s to parse its dnsmasq config, such as a slow one
   with large adblock lists, answers it on every dhcp write. The value is new in the
   `X-Reload-Status` enum, which is an addition under `docs/versioning.md`. (#291)
+- **`413 payload_too_large`.** A POST, PUT or PATCH whose `Content-Length` is over 256 KiB (262144
+  bytes), or whose body holds more than 2000 `{` and `[` characters, answers 413. uapi reads and
+  parses the body before the bearer check, and `json()` takes about 1.6 KB for each object or
+  array, so 1 MiB of `[{},{},...]` made a request without a token take 560 MB. The bounds keep that
+  parse under about 13 MB. This refuses bodies that 3.2.0 read whenever they arrived in one part,
+  under the security carve-out of `docs/versioning.md`: no curated request comes near them, since
+  `/batch` takes at most 50 operations, and only a raw section with a list of thousands of entries
+  could. uapi reads such a body and drops it, so the connection stays in step. (#293)
 
 ### Changed
 
@@ -259,6 +267,11 @@ All notable changes to this project will be documented in this file. Format foll
   load and the write of libuci is lost by any commit. A commit by another writer after the commit
   of the request, while the daemons reload, is still undone, and `docs/roadmap.md` records the
   options. No request or response changes. (#292)
+- **A request body that arrived in several parts was cut.** `uhttpd.recv()` returns at the first
+  read that finds less than it asked for, and uapi called it once. So a body of more than a few KB
+  could answer `400 bad_request` "Request body is not valid JSON" now and then, a large `/batch`
+  included. On an OpenWrt 25.12.5 VM, a 16 KB body failed 2 times in 8. uapi now reads until it
+  has `Content-Length` bytes, which it reads in base 0 as uhttpd does, so `0x10` is 16. (#293)
 
 ## [3.2.0] - 2026-10-29
 

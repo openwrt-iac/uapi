@@ -118,6 +118,7 @@ const REASON = {
 	"207": "Multi-Status",
 	"304": "Not Modified",
 	"412": "Precondition Failed",
+	"413": "Content Too Large",
 	"429": "Too Many Requests",
 	"400": "Bad Request",
 	"401": "Unauthorized",
@@ -170,10 +171,33 @@ function send(resp) {
 		uhttpd.send("" + resp.body);
 }
 
-function read_body(env) {
-	let n = int(env.CONTENT_LENGTH ?? "0");
-	if (n <= 0) return "";
-	return uhttpd.recv(n) ?? "";
+// The body is read and parsed before the bearer check. json() takes about 1.6 KB for each object or
+// array and about 80 bytes for any other value, so 1 MiB of `[{},{},...]` took 560 MB. The two
+// bounds keep the parse of any body under about 13 MB, measured with ucode 2026.01.16 on x86_64.
+const MAX_BODY_BYTES = 262144;
+const MAX_BODY_CONTAINERS = 2000;
+
+// uhttpd.recv() returns at the first read that finds less than it asked for, so a body that
+// arrives in several parts takes several calls.
+function read_body(n) {
+	let parts = [], got = 0;
+	while (got < n) {
+		let chunk = uhttpd.recv(n - got);
+		if (chunk == null) break;
+		push(parts, chunk);
+		got += length(chunk);
+	}
+	return join("", parts);
+}
+
+// uhttpd parses what the request process leaves unread as the next request on the connection, so a
+// body that is refused for its size is still read, and dropped.
+function drop_body(n) {
+	while (n > 0) {
+		let chunk = uhttpd.recv(n > 65536 ? 65536 : n);
+		if (chunk == null) break;
+		n -= length(chunk);
+	}
 }
 
 function parse_query(qs) {
@@ -812,7 +836,17 @@ function dispatch(env) {
 	let body = null;
 	let body_text = "";
 	if (method == "POST" || method == "PUT" || method == "PATCH") {
-		body_text = read_body(env);
+		// uhttpd reads Content-Length with strtoul() in base 0, so 0x10 and 010 are 16 and 8 there.
+		let n = int(env.CONTENT_LENGTH ?? "0", 0);
+		if (n > MAX_BODY_BYTES) {
+			drop_body(n);
+			return { ctx, resp: errors.error(ctx, "payload_too_large",
+				sprintf("Request body is larger than %d bytes", MAX_BODY_BYTES)) };
+		}
+		body_text = read_body(n);
+		if (length(replace(body_text, /[^{[]/g, "")) > MAX_BODY_CONTAINERS)
+			return { ctx, resp: errors.error(ctx, "payload_too_large",
+				sprintf("Request body holds more than %d { and [ characters", MAX_BODY_CONTAINERS)) };
 		if (body_text != "") {
 			try { body = json(body_text); }
 			catch (e) {
@@ -865,7 +899,7 @@ function dispatch(env) {
 	//
 	// Not the same thing as "nothing happens before auth": the TLS check, the request
 	// body parse and the ubus connect all run above this for every path, so an
-	// unauthenticated caller can also receive tls_required, bad_request or
+	// unauthenticated caller can also receive tls_required, bad_request, payload_too_large or
 	// service_unavailable. See docs/security.md § Public endpoints.
 	let tokens = token_store.list_for_auth(conn);
 	let now_epoch;
