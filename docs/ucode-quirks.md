@@ -190,8 +190,9 @@ uci's `blob.c` is also how netifd reads every INT32 and ARRAY option
 
 | Option type | What netifd takes | Example | uapi helper |
 |---|---|---|---|
-| INT32: interface `metric`, `ip6assign`, `ip6weight` and `mtu`, route `metric` and `mtu`, rule `priority` and `goto`, device `mtu`, bridge-vlan `vlan` | `strtol(v, &end, 0)` with nothing left over: hex after `0x`, octal after `0` | `0x10` is 16, `010` is 8, and `16 ` or `08` drop the option | `netifd_int` |
+| INT32: interface `metric`, `ip6assign`, `ip6weight` and `mtu`, route `metric` and `mtu`, rule `priority`, `goto`, `tos` and `suppress_prefixlength`, device `mtu`, bridge-vlan `vlan` | `strtol(v, &end, 0)` with nothing left over: hex after `0x`, octal after `0` | `0x10` is 16, `010` is 8, and `16 ` or `08` drop the option | `netifd_int` |
 | ARRAY: `ipaddr`, `ip6addr`, `ip6prefix`, `ip6class`, `dns`, device and bridge-vlan `ports` | a list as it is, and a scalar split on spaces and tabs | `option dns '192.0.2.1 192.0.2.2'` is two servers | `as_word_list_or_null` |
+| STRING: rule `uidrange`, `ipproto`, `sport` and `dport` | the text as uci holds it, and nothing for a list | `list sport '80'` sets no port | `netifd_string` |
 | Routing table: route `table`, rule `lookup` | `system_resolve_rt_table`: a number through `strtoul` base 0 above 0, then `default`, `main`, `local`, then a name in `/etc/iproute2/rt_tables`, whose id column it reads in base 10. netifd drops the route or rule when nothing resolves | `main` is 254, `0` drops the route | `rt_table_id`, which reads 0 for what does not resolve |
 
 The wireless options do not go through blob.c. netifd's ucode side reads them from uci

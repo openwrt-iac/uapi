@@ -251,6 +251,11 @@ function netifd_int(v) {
 	return (n < -2147483648 || n > 2147483647) ? null : n;
 }
 
+// blob.c hands netifd a STRING option as it is, and skips a list given to it.
+function netifd_string(v) {
+	return (type(v) == "string") ? v : null;
+}
+
 // wg resolves a port with getaddrinfo after its config parser strips every whitespace character,
 // and musl takes a decimal from 0 to 65535, or else a name that is any token of a /udp line in
 // /etc/services once `#` comments go. wireguard.sh treats an empty value as unset, so "" reads
@@ -783,7 +788,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
-	rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
+	netifd_string, rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,

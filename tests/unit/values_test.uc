@@ -274,6 +274,14 @@ t.describe('values.netifd_int', () => {
 	});
 });
 
+t.describe('values.netifd_string', () => {
+	t.it('reads a scalar as uci holds it, and a list as nothing, which blob.c skips for a STRING option', () => {
+		t.assert_equal(v.netifd_string('1000-2000 '), '1000-2000 ');
+		t.assert_equal(v.netifd_string([ '80' ]), null);
+		t.assert_equal(v.netifd_string(null), null);
+	});
+});
+
 t.describe('values.config_get', () => {
 	t.it('joins a list with spaces and leaves a scalar alone', () => {
 		t.assert_equal(v.config_get([ 'a', 'b c' ]), 'a b c');

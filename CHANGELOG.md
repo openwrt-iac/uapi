@@ -19,6 +19,31 @@ All notable changes to this project will be documented in this file. Format foll
   and the read creates and changes none of them. A directory reads `true` when uapi uses it,
   `false` when it does not, and `null` when it does not exist yet, as uapi creates it at its first
   write there. (#287)
+- **`network/rules.suppress_prefixlength`, `tos`, `uidrange`, `ipproto`, `sport` and `dport`** are
+  the match options that netifd reads on a `rule` and LuCI writes. A PUT removed them, as it removes
+  every option that the resource does not model, so a PUT of a rule that LuCI configured changed the
+  routing and answered 200. With `suppress_prefixlength: 0`, a rule that looks up `main` ahead of a
+  VPN table sends every destination but the default route through `main`. Each field reads null when
+  unset. `suppress_prefixlength` and `tos` read as netifd reads an integer, `ipproto` reads a decimal
+  as an integer, and the other spellings and the three ranges read as uci holds them. A write takes
+  an integer from 0 to 32 for `suppress_prefixlength` and from 1 to 255 for `ipproto`, as LuCI's
+  form does, a `tos` of 0, 4, 8, 12, 16, 20, 24 or 28, and ports from 1 to 65534 and uids from 0 to
+  4294967294 as plain decimals, alone or as a range that does not run backwards. The first two bounds
+  are LuCI's, and netifd drops a rule whose `ipproto` is 0 and cuts a larger one to its low byte. For
+  the others, netifd drops a rule whose `tos` is above 255, the kernel refuses the other `tos` values,
+  port 0, port 65535, uid 4294967295 and a backwards range, and netifd wraps a larger port or uid into
+  another number. A stored value in another form, such as a protocol name or a port with trailing
+  text, passes a write that sends it back unchanged. A write that enables a disabled rule refuses a
+  stored value only when netifd would drop the rule or the kernel would refuse it. Such a write
+  answered 200 with no rule installed, so that refusal uses the carve-out in `docs/versioning.md`
+  for payloads that produced broken state. (#288)
+
+### Changed
+
+- **`network/rules` takes a rule without a selector.** It required one of `in`, `out`, `src`, `dest`
+  or `mark`, but netifd, the kernel and LuCI's form need none, and the rule that keeps the main table
+  for every destination but the default route, `lookup main` with `suppress_prefixlength 0`, has
+  none. A PUT of the read of such a rule answered 422. (#288)
 
 ### Fixed
 
@@ -47,7 +72,6 @@ All notable changes to this project will be documented in this file. Format foll
   does, and `GET /tokens` and `/auth/whoami` show its `last_used_at`. The CLI takes the same names
   as before. A name longer than 238 characters still gets no series in `/metrics`, whose files are
   named by their labels. (#287)
-
 - **An upgrade no longer leaves `/etc/config/uapi.apk-new`.** The package shipped a template at
   `/etc/config/uapi`, and apk keeps a changed file of `/etc` at an upgrade and writes the shipped
   copy beside it. The token store always differs, so every upgrade wrote the file. The template
