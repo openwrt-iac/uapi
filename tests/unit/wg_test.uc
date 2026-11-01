@@ -5,6 +5,7 @@ let fs = require('fs');
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
 const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
+const LONG = replace(sprintf('%600s', ''), ' ', 'x');
 
 // `wg` and `ip` are scripts here that log each command with its arguments joined by `|`, and print
 // the file named after the command when a test wrote one, so a test reads what an apply runs
@@ -54,16 +55,42 @@ t.describe('wg.shellquote', () => {
 
 t.describe('wg.kernel_key', () => {
 	t.it('reads the key as wg reads the config of wireguard.sh', () => {
-		for (let v in [ PK, [ PK ], PK + ' ', ' ' + PK + '\t# peer B', PK + '\nAllowedIPs=10.0.0.3/32' ])
+		for (let v in [ PK, [ PK ], PK + ' ', ' ' + PK + '\t# peer B', PK + '\n# peer B\n', PK + ' #' + LONG ])
 			t.assert_equal(wg.kernel_key(v), PK, v);
 	});
 	t.it('is null when the kernel can hold no such peer', () => {
 		for (let v in [ 'not-a-key', [ PK, PK ], null, '#' + PK, substr(PK, 0, 42) + '5=' ])
 			t.assert_equal(wg.kernel_key(v), null, v);
 	});
-	// wireguard.sh expands an escape, so `\075` can stand for the `=` of a valid key.
-	t.it('is false for a value with a backslash, whose key is not known', () => {
-		t.assert_equal(wg.kernel_key(substr(PK, 0, 43) + '\\075'), false);
+	// wireguard.sh hands the config to wg through busybox's printf %b, so `\075` stands for the `=`
+	// of a valid key, and a NUL byte ends the line for wg. `\532` is `+` and `2`, because octal stops
+	// below 256, and `\x2bB` is `+` and `B`, because hex stops after two digits.
+	t.it('reads a key with an escape as printf %b expands it for wg', () => {
+		for (let v in [ substr(PK, 0, 43) + '\\075', substr(PK, 0, 43) + '\\0075', substr(PK, 0, 43) + '\\x3d',
+		                PK + '\\0junk', PK + '\\t\\r', PK + '\\n' ])
+			t.assert_equal(wg.kernel_key(v), PK, v);
+		t.assert_equal(wg.kernel_key(substr(PK, 0, 40) + '\\532' + substr(PK, 42)), substr(PK, 0, 40) + '+2' + substr(PK, 42));
+		t.assert_equal(wg.kernel_key(substr(PK, 0, 40) + '\\x2b' + substr(PK, 41)), substr(PK, 0, 40) + '+' + substr(PK, 41));
+		for (let v in [ substr(PK, 0, 43) + '\\=', substr(PK, 0, 43) + '\\x3g', substr(PK, 0, 20) + '\\c' + substr(PK, 20),
+		                substr(PK, 0, 43) + '\\0750' ])
+			t.assert_equal(wg.kernel_key(v), null, v);
+	});
+	// ifup gives wg every line of the value and nothing after `\c`, which `wg set` of one peer cannot
+	// do, and a value longer than the bound is not expanded.
+	t.it('is false for a value that gives wg more config than its key, or that is too long to expand', () => {
+		for (let v in [ PK + '\nAllowedIPs=10.0.0.3/32', PK + '\\nAllowedIPs=10.0.0.3/32', PK + '\\n[Peer]\\nPublicKey=' + PK2,
+		                PK + '\\c', PK + '\\c' + PK2, PK + ' #' + LONG + '\\t' ])
+			t.assert_equal(wg.kernel_key(v), false, v);
+	});
+	// The expansion runs under the lock of `network`, and a request can carry a long value.
+	t.it('reads a long value in bounded time', () => {
+		let long = replace(sprintf('%160000s', ''), ' ', 'A');
+		let t0 = clock();
+		t.assert_equal(wg.kernel_key(long + '\\075'), false);
+		t.assert_equal(wg.kernel_keys(long + '\\075'), false);
+		t.assert_equal(wg.kernel_key(long), null);
+		let t1 = clock();
+		t.assert_true((t1[0] - t0[0]) + (t1[1] - t0[1]) / 1e9 < 1, 'took longer than 1 s');
 	});
 });
 
@@ -74,8 +101,10 @@ t.describe('wg.kernel_keys', () => {
 		t.assert_deep_equal(wg.kernel_keys([ PK ]), [ PK ]);
 		t.assert_deep_equal(wg.kernel_keys(null), []);
 	});
-	t.it('is false for a value with a backslash', () => {
-		t.assert_equal(wg.kernel_keys(PK + '\nPublicKey=' + substr(PK2, 0, 43) + '\\075'), false);
+	t.it('expands the escapes before it splits the lines, and reads no line after `\\c`', () => {
+		t.assert_deep_equal(wg.kernel_keys(PK + '\nPublicKey=' + substr(PK2, 0, 43) + '\\075'), [ PK, PK2 ]);
+		t.assert_deep_equal(wg.kernel_keys(PK + '\\n[Peer]\\nPublicKey=' + PK2), [ PK, PK2 ]);
+		t.assert_deep_equal(wg.kernel_keys(PK + '\\c\nPublicKey=' + PK2), [ PK ]);
 	});
 });
 
@@ -188,14 +217,6 @@ t.describe('wg.apply', () => {
 		]), null);
 	});
 
-	// The test has no WireGuard interface, so a remove that runs fails, which shows that it ran.
-	t.it('refuses the remove of a key with a backslash, as before', () => {
-		let c = ubus.stub();
-		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
-		let err = wg.apply(c, [ { iface: "wg1", action: "remove", public_key: substr(PK, 0, 43) + '\\075' } ]);
-		t.assert_true(index(err ?? "", "backslash") >= 0, err);
-	});
-
 	t.it('removes the peer of a key that uci holds as a list', () => {
 		let c = ubus.stub();
 		c.set_ubus_response('network.interface.wg1', 'status', { up: true });
@@ -214,11 +235,37 @@ t.describe('wg.apply', () => {
 t.describe('wg.apply against logging wg and ip', () => {
 	let apply = (uci, ops, outputs) => run_wg(uci, sprintf("wg.apply(c, %J)", ops), outputs);
 
-	t.it('removes every key that a multi-line public_key gives the kernel', () => {
+	t.it('removes every key that a multi-line public_key gives the kernel, with a newline or its escape', () => {
+		for (let v in [ PK + '\n[Peer]\nPublicKey=' + PK2, PK + '\\n[Peer]\\nPublicKey=' + PK2 ]) {
+			let r = apply({ network: { wg1: WG1 } }, [ { iface: 'wg1', action: 'remove', public_key: v } ]);
+			t.assert_equal(r.result, 'ok', v);
+			t.assert_deep_equal(r.commands, [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ], v);
+		}
+	});
+
+	// The remove of a stored key with a backslash answered 500 on an up interface.
+	t.it('removes the key that wg read from a stored key with an escape', () => {
 		let r = apply({ network: { wg1: WG1 } },
-		              [ { iface: 'wg1', action: 'remove', public_key: PK + '\n[Peer]\nPublicKey=' + PK2 } ]);
+		              [ { iface: 'wg1', action: 'remove', public_key: substr(PK, 0, 43) + '\\075' } ]);
 		t.assert_equal(r.result, 'ok');
-		t.assert_deep_equal(r.commands, [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
+		t.assert_deep_equal(r.commands, [ 'wg|set|wg1|peer|' + PK + '|remove' ]);
+	});
+
+	// uapi does not say which key wg reads from such a value, so it refuses rather than leave a key
+	// that it did not remove.
+	t.it('refuses the remove of a value with a backslash that is too long to expand, and runs nothing', () => {
+		let r = apply({ network: { wg1: WG1 } }, [ { iface: 'wg1', action: 'remove', public_key: PK + ' #' + LONG + '\\t' } ]);
+		t.assert_true(index(r.result, 'refusing to remove') == 0, r.result);
+		t.assert_deep_equal(r.commands, []);
+	});
+
+	// `wg set` of one peer cannot give the kernel the other lines, or leave out what follows `\c`.
+	t.it('refuses to set a peer whose value gives wg more config than its key, and runs nothing', () => {
+		for (let v in [ PK + '\\nAllowedIPs=0.0.0.0/0', PK + '\nAllowedIPs=0.0.0.0/0', PK + '\\c' ]) {
+			let r = apply({ network: { wg1: WG1 } }, [ { iface: 'wg1', action: 'set', public_key: v, allowed_ips: [ '10.0.0.2/32' ] } ]);
+			t.assert_true(index(r.result, 'refusing to apply a peer with a malformed public key') == 0, r.result);
+			t.assert_deep_equal(r.commands, [], v);
+		}
 	});
 
 	// ifup sets the sections in uci order, so the last one with the key wins.
@@ -413,6 +460,80 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 		t.assert_equal(r.result, 'ok');
 		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0),
 		                    [ set_of(PK, ''), set_of(PK2, '10.0.0.3/32') ]);
+	});
+
+	// ifup sets the key that printf %b gives wg, and sets no peer under a key that wg cannot read.
+	// The restore removed the first and stopped at both.
+	t.it('keeps and sets a peer whose key holds an escape under the key that wg reads, skips a key that wg cannot read, and sets the peers after them', () => {
+		let r = reconcile({ network: { wg1: WG1,
+		                               a: peer({ public_key: substr(PK, 0, 43) + '\\075', allowed_ips: '10.0.0.2/32',
+		                                         endpoint_host: '192.0.2.1', endpoint_port: '51820' }),
+		                               b: peer({ public_key: substr(PK2, 0, 43) + '\\Q', allowed_ips: '10.0.0.4/32' }),
+		                               c: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } },
+		                  { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t192.0.2.1:51820\t10.0.0.2/32\t0\t0\t0\toff\n", PK) });
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|remove') >= 0 || index(l, '|allowed-ips|') >= 0),
+		                    [ set_of(PK, '10.0.0.2/32') + '|endpoint|192.0.2.1:51820', 'wg|set|wg1|peer|' + PK2 + '|remove',
+		                      set_of(PK2, '10.0.0.3/32') ]);
+	});
+
+	// The restore set the first key of such a value with the allowed IPs of the section and removed
+	// the others, where ifup gives them to the keys after it. It refuses, as it did before it read an
+	// escape, and changes nothing in the kernel.
+	t.it('refuses, before it changes the kernel, a stored value that gives wg more config than its key', () => {
+		for (let v in [ PK + '\\n[Peer]\\nPublicKey=' + PK2, PK + '\n[Peer]\nPublicKey=' + PK2, PK + '\\c' ]) {
+			let r = reconcile({ network: { wg1: WG1, a: peer({ public_key: v, allowed_ips: '10.0.0.2/32' }),
+			                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } },
+			                  { 'wg|show|wg1|dump': sprintf("priv\tpub\t51820\toff\n%s\t(none)\t(none)\t(none)\t0\t0\t0\toff\n", PK2) });
+			t.assert_equal(r.result, 'refusing to apply a peer with a malformed public key on wg1', v);
+			t.assert_deep_equal(r.commands, [], v);
+		}
+	});
+});
+
+// A peer write through the handler and its transaction. With fail_reload the reload of the write
+// fails and that of the restore passes, so the restore reconciles the interface.
+function peer_write(uci, call, fail_reload) {
+	return run_wg(uci, sprintf("(function() { let n = 0; let h = require('handler').make(loadfile('src/resources/network.wireguard_peers.uc')(), { tx: { acquire: () => ({}), release: () => null, check_services: () => null, reload: () => (%J && n++ == 0) ? 'refused' : null } }); let r = h.%s; return sprintf('%%d %%s', r.status, r.body?.code ?? ''); })()",
+	                           fail_reload, call));
+}
+
+t.describe('a peer write on an up interface, against logging wg and ip', () => {
+	const CTX = "{ request_id: '01hx0000000000000000000000' }";
+	let escaped = () => ({ network: { wg1: WG1,
+	                                  a: peer({ public_key: substr(PK, 0, 43) + '\\075', allowed_ips: [ '10.0.0.2/32' ] }),
+	                                  b: peer({ public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] }) } });
+
+	// The kernel holds the peer under the key that wireguard.sh gave wg. Both writes answered 500.
+	t.it('disables and deletes a peer whose stored key holds an escape, and removes the key that wg read', () => {
+		for (let w in [ [ "patch(c, " + CTX + ", 'a', { disabled: true })", '200' ], [ "remove(c, " + CTX + ", 'a')", '204' ] ]) {
+			let r = peer_write(escaped(), w[0], false);
+			t.assert_equal(r.result, w[1], w[0]);
+			t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), [ 'wg|set|wg1|peer|' + PK + '|remove' ], w[0]);
+		}
+	});
+
+	// The restore after a failed write of another peer stopped at the peer with the escape.
+	t.it('restores a failed write of another peer of the interface', () => {
+		let r = peer_write(escaped(), "patch(c, " + CTX + ", 'b', { description: 'x' })", true);
+		t.assert_equal(r.result, '500 reload_failed_restored');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+	});
+
+	t.it('sets a peer whose stored key holds an escape under the key that wg reads, in a PATCH of another field', () => {
+		let r = peer_write(escaped(), "patch(c, " + CTX + ", 'a', { description: 'x' })", false);
+		t.assert_equal(r.result, '200');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+	});
+
+	t.it('deletes a peer whose stored key gives wg two keys, and removes both', () => {
+		let uci = escaped();
+		uci.network.a.public_key = PK + '\\n[Peer]\\nPublicKey=' + PK2;
+		delete uci.network.b;
+		let r = peer_write(uci, "remove(c, " + CTX + ", 'a')", false);
+		t.assert_equal(r.result, '204');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'),
+		                    [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
 	});
 });
 

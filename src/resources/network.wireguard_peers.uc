@@ -9,6 +9,8 @@ let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 let as_int = values.as_int;
 
+const WG_KEY_RE = regexp("^" + values.WG_KEY_PATTERN + "$");
+
 function parent_from_type(t) {
 	if (type(t) != "string" || substr(t, 0, 10) != "wireguard_") return null;
 	return substr(t, 10);
@@ -91,11 +93,9 @@ function validate(json, conn, id, delta) {
 	// wg accepts an IPv4 or IPv6 prefix, or a bare address of either family which
 	// it widens to /32 or /128. Requiring IPv4 CIDR rejected every IPv6 peer, so
 	// a dual-stack tunnel could not be configured through the API at all, and
-	// refused the bare form that `wg show` itself prints back.
+	// refused the bare form that `wg show` itself prints back. No allowed IP at all
+	// is valid too: LuCI leaves the list optional, and wireguard.sh and wg take it.
 	let aips = as_list(json.allowed_ips);
-	if (length(aips) == 0)
-		push(errs, { field: "allowed_ips", code: "required",
-		             message: "must be a non-empty list of addresses or CIDRs" });
 	for (let i = 0; i < length(aips); i++) {
 		if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
@@ -148,11 +148,12 @@ function validate_new(json) {
 	let key = config_get(json.public_key);
 	let live = enabled && type(key) == "string" && key != "";
 
-	// wg reads a key without its whitespace and comment, as kernel_key does, and a newline adds a
-	// line to the config.
+	// wg reads a key without its whitespace and comment, and a newline adds a line to the config.
+	// wireguard.sh expands a backslash, which only the kernel apply follows, for a stored key. A key
+	// with one is refused here as it stands, so a request key costs no expansion under the lock.
 	for (let k in [ "public_key", "preshared_key" ]) {
 		let key = config_get(json[k]);
-		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || !wg.kernel_key(key)))
+		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0 || !match(values.wg_line(key), WG_KEY_RE)))
 			push(errs, { field: k, code: "invalid_format", live,
 			             message: "must be a WireGuard key as wg genkey prints it, on one line and without a backslash" });
 	}
@@ -269,7 +270,8 @@ return {
 	validate_new: validate_new,
 	openapi_singular: "wireguard peer",
 	merge_for_patch: merge_for_patch,
-	openapi_required: ["interface", "public_key", "allowed_ips"],
+	openapi_required: ["interface", "public_key"],
+	openapi_read_required: ["allowed_ips"],
 	schema_properties: {
 		interface:            { type: "string",
 		                        description: "Parent WireGuard interface (network/interfaces name with proto=wireguard)" },

@@ -555,7 +555,7 @@ return {
 		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer." },
 		addresses: { type: ["array", "null"], items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
-		               description: "WireGuard private key; accepted on write, masked on read" },
+		               description: "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it." },
 		has_private_key: { type: "boolean", readOnly: true },
 		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
 		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write of -1 answers 422. A PATCH that switches an enabled interface to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },

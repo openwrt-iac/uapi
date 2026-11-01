@@ -53,29 +53,85 @@ function to_peer(section) {
 	};
 }
 
-// A stored key as wg reads it from the config of wireguard.sh, which joins a list with spaces: the
-// first line, cut at `#` and without whitespace. null when that is not a WireGuard key, so the
-// kernel can hold no such peer. false when the value holds a backslash, which wireguard.sh expands
-// with printf %b, so the key that wg read is not known here.
-function kernel_key(v) {
+const ESCAPES = { a: 7, b: 8, e: 27, f: 12, n: 10, r: 13, t: 9, v: 11, "\\": 92 };
+
+// printf_b() walks a value byte by byte under the lock of `network`. A key line that escapes each of
+// its 44 characters as `\0ooo` is 220 bytes long. A value with a backslash that is longer than this
+// bound is not expanded, and uapi then does not say which key wg reads from it.
+const ESCAPED_MAX = 512;
+
+// wireguard.sh hands its config to wg through busybox's `printf %b`, which expands the escapes of
+// every value in it as coreutils/printf.c and libbb/process_escape_sequence.c do: `\c` ends the
+// output, a 0 right after the backslash is skipped when an octal digit follows it, up to three
+// octal digits up to 255 or `\x` and up to two hex digits give one byte, the letters of ESCAPES and
+// a second backslash give their character, and a backslash before anything else stays.
+function printf_b(s) {
+	let out = [];
+	for (let i = 0; i < length(s); ) {
+		let c = substr(s, i++, 1);
+		if (c != "\\") {
+			push(out, c);
+			continue;
+		}
+		let next = substr(s, i, 1);
+		if (next == "c") return { text: join("", out), stopped: true };
+		if (next == "0" && match(substr(s, i + 1, 1), /^[0-7]$/)) i++;
+		let oct = match(substr(s, i, 3), /^[0-7]+/)?.[0];
+		let hexd = (next == "x") ? match(substr(s, i + 1, 2), /^[0-9A-Fa-f]+/)?.[0] : null;
+		if (oct != null) {
+			if (int(oct, 8) > 255) oct = substr(oct, 0, 2);
+			push(out, chr(int(oct, 8)));
+			i += length(oct);
+		}
+		else if (hexd != null) {
+			push(out, chr(hex(hexd)));
+			i += 1 + length(hexd);
+		}
+		else if (ESCAPES[next] != null) {
+			push(out, chr(ESCAPES[next]));
+			i++;
+		}
+		else
+			push(out, "\\");
+	}
+	return { text: join("", out), stopped: false };
+}
+
+// The lines that wg reads for a stored value from the config of wireguard.sh, which joins a list
+// with spaces, each cut at `#` and without whitespace. wg_line() also ends a line at a NUL byte, as
+// wg's parser does, because ucode's regex functions stop there. `stopped` when `\c` ended the
+// config in the value. null for a value that is not expanded.
+function config_lines(v) {
 	let s = values.config_get(v);
-	if (type(s) != "string") return null;
-	if (index(s, "\\") >= 0) return false;
-	s = values.wg_line(split(s, "\n")[0]);
-	return match(s, WG_KEY_RE) ? s : null;
+	if (type(s) != "string") return { lines: [], stopped: false };
+	let x = (index(s, "\\") < 0) ? { text: s, stopped: false } : (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
+	if (x == null) return null;
+	return { lines: map(split(x.text, "\n"), (l) => values.wg_line(l)), stopped: x.stopped };
+}
+
+// A stored key as wg reads it: the first line. null when that is not a WireGuard key, so the
+// kernel can hold no such peer. false when the value gives wg more config than the key, in a later
+// line or by ending the config with `\c`, or is not expanded: `wg set` cannot give the kernel what
+// ifup gave it then.
+function kernel_key(v) {
+	let c = config_lines(v);
+	if (c == null) return false;
+	let first = c.lines[0];
+	if (first == null || !match(first, WG_KEY_RE)) return null;
+	return (c.stopped || length(filter(slice(c.lines, 1), (l) => l != "")) > 0) ? false : first;
 }
 
 // Each later line of a stored public_key is a line of the config, so one that reads `PublicKey=`
-// sets a key too, of this peer or of a peer that a `[Peer]` line before it adds.
+// sets a key too, of this peer or of a peer that a `[Peer]` line before it adds. false for a value
+// that is not expanded.
 function kernel_keys(v) {
-	let first = kernel_key(v);
-	if (first === false) return false;
-	let out = first ? [ first ] : [];
-	let lines = split(values.config_get(v) ?? "", "\n");
-	for (let i = 1; i < length(lines); i++) {
-		let l = values.wg_line(lines[i]);
-		if (lc(substr(l, 0, 10)) == "publickey=" && match(substr(l, 10), WG_KEY_RE))
-			push(out, substr(l, 10));
+	let c = config_lines(v);
+	if (c == null) return false;
+	let out = [];
+	for (let i = 0; i < length(c.lines); i++) {
+		let l = c.lines[i];
+		let key = (i == 0) ? l : (lc(substr(l, 0, 10)) == "publickey=") ? substr(l, 10) : null;
+		if (key != null && match(key, WG_KEY_RE)) push(out, key);
 	}
 	return out;
 }
@@ -364,6 +420,9 @@ function reconcile(conn, interfaces) {
 		let wanted = {};
 		for (let s in sections) {
 			let key = kernel_key(s.public_key);
+			// Refused before anything changes in the kernel, as apply_peer() refuses it.
+			if (key === false)
+				return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
 			if (key) wanted[key] = true;
 		}
 
@@ -376,9 +435,10 @@ function reconcile(conn, interfaces) {
 		for (let s in sections)
 			for (let r in peer_routes(s)) push(wanted_routes, r);
 
-		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it.
+		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it, and
+		// the kernel holds no peer under a key that wg cannot read.
 		for (let s in sections) {
-			if ((values.config_get(s.public_key) ?? "") == "") continue;
+			if (!kernel_key(s.public_key)) continue;
 			let err = apply_peer(iface, to_peer(s));
 			if (err != null) return err;
 		}
@@ -421,7 +481,7 @@ function apply(conn, ops, applied) {
 		if (op.action == "remove") {
 			let keys = kernel_keys(op.public_key);
 			if (keys === false)
-				return sprintf("refusing to remove a public key with a backslash on %s", iface);
+				return sprintf("refusing to remove a public key of more than %d characters with a backslash on %s", ESCAPED_MAX, iface);
 			// The kernel holds one peer per key, so another section that holds the key is set again,
 			// in uci order as ifup sets them, and the last wins. apply_peer() sets it over the peer
 			// that the kernel holds, so the key is not removed here: a remove here dropped the peer

@@ -333,9 +333,15 @@ only learn it from the section it is about to remove. A rotated public key emits
 a remove for the old key before the set, or the kernel would keep the previous
 peer and its access. A disabled peer is removed, matching what netifd omits when
 it builds the config. A remove takes every key that wg can read from the stored
-`public_key`, not only the key on its first line. The kernel holds one peer per
-key, so a remove then sets again each other enabled section of the interface
-that holds one of these keys, in uci order, as ifup does.
+`public_key`, not only the key on its first line, with the escapes that
+wireguard.sh expands when it hands the config to wg. A value with a backslash that
+is longer than 512 bytes is not expanded, and its remove is refused. The kernel
+holds one peer per key, so a remove then sets again each other enabled section of
+the interface that holds one of these keys, in uci order, as ifup does. A set, in
+a write or in the reconcile after a failed write, takes a stored value that wg
+reads as the key alone. It refuses any other value, and the reconcile refuses it
+before it changes the kernel of the interface. The reconcile skips a peer whose
+stored key wg cannot read, because the kernel holds no peer under it.
 
 An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also
@@ -415,8 +421,11 @@ differently per verb:
   `toUci`, including ones the resource does not model. PUT means "this body is
   the whole resource," so uapi owns the section.
 - **PATCH (partial update)** preserves unmodeled options. `diff_apply_patch`
-  computes the modeled footprint as `toUci(fromUci(existing))` and only deletes
-  within it (a modeled field the patch cleared). Raw uci options outside the
+  computes the modeled footprint as `toUci(fromUci(existing))`, with the
+  write-only secrets that the read masks put back, and only deletes within it
+  (a modeled field the patch cleared, or one that `toUci` drops, as
+  `network/interfaces` drops `private_key` on a switch away from wireguard, the
+  way a PUT does). Raw uci options outside the
   footprint (which `toUci` cannot emit) are never enumerated, so a PATCH that
   touches one field leaves a hand-set or stock option like firewall `icmp_type`
   / unbound `dns64_prefix` untouched. This matches RFC 7396 merge-patch and

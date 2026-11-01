@@ -27,6 +27,8 @@ return {
 
     // OpenAPI hints (consumed by build/gen_openapi.uc, not by the runtime):
     openapi_required:    ["field1", "field2"],    // emitted as `required: [...]` on the JSON Schema
+    openapi_read_required: ["field3"],            // required on the *Response schema only: every
+                                                  // read returns it, and a write may leave it out
     openapi_conditional: [                        // emitted as `allOf: [...]`; if/then/required
         { if:   { properties: { proto: { const: "wireguard" } }, required: ["proto"] },
           then: { required: ["addresses"] } },
@@ -332,7 +334,10 @@ value after the merge, so an unrelated PATCH (e.g. changing `verb` on an
 openvpn instance) doesn't wipe the credential when the field is absent
 from the request body. That is `carry_write_only` in `handler.uc`, not
 `merge_for_patch`: the merge only ever sees the masked read view, which
-is why the hook takes no uci section.
+is why the hook takes no uci section. The footprint that a PATCH deletes
+within holds the stored secret too, so a PATCH removes it when `toUci`
+drops it, as a PUT does: `network.interfaces` drops `private_key` on a
+switch away from wireguard.
 
 Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.

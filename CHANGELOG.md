@@ -37,6 +37,13 @@ All notable changes to this project will be documented in this file. Format foll
   stored value only when netifd would drop the rule or the kernel would refuse it. Such a write
   answered 200 with no rule installed, so that refusal uses the carve-out in `docs/versioning.md`
   for payloads that produced broken state. (#288)
+- **`network/wireguard_peers.allowed_ips` is optional.** LuCI leaves the list optional,
+  wireguard.sh writes no `AllowedIPs` line for a peer without one, and wg sets such a peer with
+  none. A stored peer without allowed IPs took no write at all, not even a PATCH that disabled it,
+  and a POST or PUT without the field answered 422. These now answer 200, and so does a PATCH that
+  sends `"allowed_ips": null`, which removes the list from uci and, on an up interface, from the
+  peer in the kernel. `allowed_ips` leaves the `required` list of the Request schema. It stays
+  required in the Response schema, because every read returns it, as null when unset. (#289)
 
 ### Changed
 
@@ -84,6 +91,36 @@ All notable changes to this project will be documented in this file. Format foll
   that upgrade, which loses every token. `uapi-token create` now creates a missing store with mode
   0600 too, where it followed the umask, and since libuci keeps that mode at each commit, the
   install hook sets mode 0600 on an existing store. (#286)
+- **A PATCH that switches a `network/interfaces` section away from `wireguard` removes
+  `private_key`, as a PUT does.** The read masks the key, so a PATCH did not count it among the
+  options of the old proto and kept it, while it removed `listen_port` and `addresses`. LuCI's
+  protocol switch removes it too. A PATCH that leaves the proto as it is still keeps a key that the
+  read of that proto hides. Only the description of `private_key` changes in the spec. One payload
+  sequence that 3.2.0 accepted now answers otherwise: a PATCH from `wireguard` to another proto,
+  then a PATCH back to `wireguard` without `private_key`. 3.2.0 kept the old key and answered 200.
+  The second PATCH now answers 422 `required` on `private_key`, and the old key is gone. A read
+  never shows a key, so a client that does not hold the old one sends a new one, which changes the
+  WireGuard identity of the interface. This is the tightening carve-out of `docs/versioning.md`:
+  the key that the first PATCH kept was in no read, and a PUT of the same switch removed it, so no
+  client could rely on it. The carve-out lets it ship in a patch, and it ships in this minor. It
+  fails loudly, with the 422. (#289)
+- **A WireGuard peer whose stored `public_key` holds a backslash can be written, disabled and
+  deleted on an up interface.** Such a key comes from another writer, such as `/raw` or a shell,
+  because a write of the resource refuses it. On an up interface, a DELETE of such a peer and a
+  PATCH of it answered 500, and the restore after any failed write of a peer of that interface
+  answered `500 reload_failed_unrecovered`, so the peer could not be removed through the API while
+  the interface was up. When wg reads the stored value as the key alone, uapi now sets the peer, in
+  a write or in the restore, and removes it, under the key that ifup gave wg for it. The restore
+  also skips a stored peer whose key wg cannot read, with or without a backslash, because the
+  kernel holds no peer under it, and goes on with the peers after it. A stored value that wg reads
+  as more than the key alone, with or without a backslash, is refused by a write that sets the peer
+  and by the restore, which then answers `reload_failed_unrecovered` before it changes the kernel
+  of that interface. Its DELETE and a PATCH that disables it work. A value with a backslash that is
+  longer than 512 bytes, which uapi does not read, is refused in the same way, and its DELETE
+  answers 500 too. A write that sets such a key, or enables such a peer, still answers 422. A JSON
+  Patch of such a peer still answers 422 on `public_key`, because its schema check reads the
+  patched document, which holds the stored key, and a merge-patch PATCH does not. No request or
+  response schema changes. (#289)
 
 ## [3.2.0] - 2026-10-29
 
