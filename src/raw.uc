@@ -186,6 +186,14 @@ function writable_options(body) {
 	return { opts, errors: errs };
 }
 
+// A write of what uci holds is no write, and the bus would commit for it, which rewrites the package
+// and reloads its daemons. The binding stores a boolean as 1 or 0 and a number as its text.
+function holds(section, k, v) {
+	if (type(v) == "array" && length(v) == 0) return !exists(section, k);
+	let as_uci = (x) => (type(x) == "bool") ? (x ? "1" : "0") : "" + x;
+	return sprintf("%J", section[k]) == sprintf("%J", (type(v) == "array") ? map(v, as_uci) : as_uci(v));
+}
+
 // The section is named by the path and typed by uci, so a body can only echo them. Before,
 // any value answered 200 and changed nothing.
 function identity_errors(body, id, sec_type) {
@@ -319,7 +327,9 @@ function replace(conn, ctx, scopes, pkg, id, body) {
 				if (secret[k] || k == "id") continue;
 				c.uci_delete(p, id, k);
 			}
-			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
+			for (let k, v in w.opts)
+				if (!holds(existing, k, v)) c.uci_set(p, id, k, v);
+			c.uci_require(p, id);
 			return { ok: true, body: normalize_section(load_section(c, p, id)) };
 		},
 	});
@@ -362,7 +372,9 @@ function patch(conn, ctx, scopes, pkg, id, body) {
 			// is uci's "no such option".
 			for (let k in DERIVED_FIELDS)
 				if (exists(existing, k)) c.uci_set(p, id, k, []);
-			for (let k in w.opts) c.uci_set(p, id, k, w.opts[k]);
+			for (let k, v in w.opts)
+				if (!holds(existing, k, v)) c.uci_set(p, id, k, v);
+			c.uci_require(p, id);
 			return { ok: true, body: normalize_section(load_section(c, p, id)) };
 		},
 	});

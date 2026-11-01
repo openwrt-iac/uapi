@@ -2,9 +2,11 @@
 
 ## "Success" means exit 0, not runtime convergence
 
-A 2xx response to a write means: snapshot OK, validate OK, uci commit
-OK, and the init script's reload action exited 0. It does NOT mean the
-daemon has finished re-converging.
+A 2xx response to a write means: validate OK, and, when the write changed
+uci, uci commit OK and the init script's reload action exited 0. A write
+that changed nothing commits and reloads nothing, and says so with
+`X-Reload-Status: no_reload`. It does NOT mean the daemon has finished
+re-converging.
 
 The most dangerous case is `network/interfaces`: a write that produces a
 config netifd later rejects (bad proto, missing dep, conflicting
@@ -18,8 +20,8 @@ Two signals worth wiring into your automation:
   script ran and exited 0, and `no_reload` means that no init script ran. The header is
   intentionally not a "converged" promise. Each writable resource outside `dhcp` has
   a reload service that it always runs, so there `no_reload` means that the write changed
-  nothing in uci, such as a PATCH that names no field or sends the values that uci holds.
-  A write that commits nothing reloads nothing, since 3.2.0. A `dhcp` write reloads
+  nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds.
+  A write that commits nothing reloads nothing, since 3.2.0 for a PATCH and since 3.3.0 for a PUT. A `dhcp` write reloads
   dnsmasq, odhcpd and unbound only while procd runs them, so it also answers `no_reload`
   when none of them runs. `unverified` means that every init script exited 0, but that
   the `dnsmasq --test` check after a dhcp write did not finish, see below.

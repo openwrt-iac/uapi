@@ -431,9 +431,10 @@ t.describe('handler error merge', () => {
 		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
 		let reads = 0;
 		let h = rules_with({ validate_new: () => [],
-		                     fromUci: (s, conn) => { reads++; return rules_mod.fromUci(s, conn); } });
+		                     fromUci: (s, conn) => { if (conn != null) reads++; return rules_mod.fromUci(s, conn); } });
 		t.assert_equal(h.replace(c, ctx(), 'r_existing', body).status, 200);
-		// The second read builds the response from what the write stored.
+		// The second read builds the response from what the write stored. The projection of the
+		// defaults reads with no connection, so it makes no ubus call.
 		t.assert_equal(reads, 2);
 	});
 });
@@ -2114,4 +2115,75 @@ t.describe('a write answers the section that it staged', () => {
 		t.assert_deep_equal(r.body, got.body);
 		t.assert_equal(r.headers.ETag, got.headers.ETag);
 	});
+});
+
+// new_errors() tells the errors that a write adds by their field, code and message, so a message
+// that quoted a value would change with it, and the error that the stored section already had would
+// read as new. Each probe puts a value into one field, over each fixture case, the case with each
+// field null in turn, and the case with each value of an enum or boolean field. A probe holds a
+// marker in shapes that the rules refuse, or is a number that a rule refuses and that can hold no
+// marker, such as a port of 0. A context then runs the probes again with a marker of its own in
+// every free-text field, so that a message that quotes a field other than the probed one holds a
+// marker too.
+t.describe('property: no validate_new() message holds a value of the section', () => {
+	let fx = require('resource_fixtures');
+	const MARK = "Qz7mark";
+	const SINK = "'\"#" + MARK + "\\\x01\n" + MARK + ",10.0.0.1 6," + MARK + ":/08";
+	let long = SINK, key = MARK;
+	while (length(long) <= 1024) long += MARK;
+	while (length(key) < 64) key += "x";
+	const PROBES = [ MARK, SINK, long, key, [ MARK ], [ SINK ], [ long ], 9876543, -9876543, 0, -1 ];
+	const QUOTED = regexp(MARK + "|9876543");
+	let typed = (spec, want) => (type(spec.type) == "array") ? (want in spec.type) : spec.type == want;
+
+	for (let c in fx.CASES) {
+		let mod = loadfile('src/resources/' + c.file)();
+		if (mod.validate_new == null) continue;
+		t.it(sprintf("%s/%s", c.file, c.id), () => {
+			let sp = mod.schema_properties;
+			let fields = filter(keys(sp), (k) => !sp[k].readOnly);
+			let text = filter(fields, (k) => sp[k].enum == null && sp[k].items?.enum == null
+			                                 && (typed(sp[k], "string") || (typed(sp[k], "array") && typed(sp[k].items ?? {}, "string"))));
+			let view = mod.fromUci({ '.name': c.id, '.anonymous': false, ...c.section }, null);
+			delete view.runtime;
+			for (let k in fields)
+				if (sp[k].writeOnly && c.section[k] != null) view[k] = c.section[k];
+			let marked = function(body) {
+				let out = { ...body };
+				for (let i = 0; i < length(text); i++)
+					out[text[i]] = typed(sp[text[i]], "string") ? MARK + i : [ MARK + i ];
+				return out;
+			};
+			let checked = 0, quoted = [], seen = {};
+			let probe = function(base) {
+				let fired = [];
+				for (let f in fields)
+					for (let p in PROBES)
+						for (let e in mod.validate_new({ ...base, [f]: p }, null)) {
+							checked++;
+							push(fired, [ f, e.field, e.code, e.live, e.message ]);
+							if (match(e.message, QUOTED)) push(quoted, [ f, e.field, e.message ]);
+						}
+				return sprintf("%J", fired);
+			};
+			// The markers run once for each set of errors that a context raises, because most values
+			// of a long enum, such as wireless encryption, raise the same ones. A rule that a null
+			// raises quotes a field that the probes reach anyway, so a null context runs without them.
+			let contexts = [ [ view, true ] ];
+			for (let k in fields) {
+				push(contexts, [ { ...view, [k]: null }, false ]);
+				for (let v in sp[k].enum ?? (typed(sp[k], "boolean") ? [ true, false ] : []))
+					push(contexts, [ { ...view, [k]: v }, true ]);
+			}
+			for (let ctx in contexts) {
+				let fired = probe(ctx[0]);
+				if (ctx[1] && !seen[fired]) {
+					seen[fired] = true;
+					probe(marked(ctx[0]));
+				}
+			}
+			t.assert_true(checked > 0, "no probe made validate_new() report an error");
+			t.assert_deep_equal(slice(quoted, 0, 1), []);
+		});
+	}
 });

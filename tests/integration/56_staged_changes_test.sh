@@ -33,7 +33,7 @@ cleanup() {
 	          cp -p /tmp/uapi-staged-network /etc/config/network && rm -f /tmp/uapi-staged-network
 	          /etc/init.d/network reload
 	      fi
-	      rm -f /tmp/uapi56-hold.uc /tmp/uapi56-held /tmp/uapi56-release' || true
+	      rm -f /tmp/uapi56-hold.uc /tmp/uapi56-held /tmp/uapi56-release /tmp/fw-fail-once' || true
 }
 trap cleanup EXIT INT TERM
 
@@ -179,6 +179,116 @@ jq -e '.code == "conflict" and (.message | test("another writer changed the pack
 	/tmp/uapi_staged_batch.json >/dev/null || { cat /tmp/uapi_staged_batch.json; fail "the 409 is not the conflict of the firewall package"; }
 [ -z "$($SSH "uci -q get firewall.$rid")" ] || fail "the restore brought back the rule that the shell deleted"
 [ "$($SSH "uci -q get dhcp.$hid.name")" = uapi56h ] || fail "the batch kept its write of the host"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$hid"
+
+# A PUT set every option that it sent, so a PUT of the read rewrote the package, which dropped its
+# comments, and reloaded, and so did a raw PUT of the raw read. It also wrote the `enabled '1'` that
+# the POST left out and the read fills in.
+echo "--- a PUT of the read, curated and raw, leaves /etc/config/firewall as it is and reloads nothing ---"
+rid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/rules" \
+	-d '{"name": "uapi56p", "target": "ACCEPT", "match": {"src_zone": "lan", "proto": ["tcp"], "dest_port": ["5657"]}}' | id_of)
+[ -n "$rid" ] || fail "could not create the rule of the PUT"
+put_read() {
+	read=$(curl -sS -H "$ADMIN" "$URL/$1" | jq -c 'del(.runtime)')
+	curl -sS -D /tmp/uapi_staged_put.h -o /tmp/uapi_staged_put.json -w '%{http_code}' -H "$ADMIN" \
+		-H 'Content-Type: application/json' -X PUT "$URL/$1" -d "$read"
+}
+$SSH '{ echo "# kept by a PUT of the read"; cat /etc/config/firewall; } > /tmp/uapi-staged-fw &&
+      cat /tmp/uapi-staged-fw > /etc/config/firewall && rm -f /tmp/uapi-staged-fw'
+[ "$(put_read "firewall/rules/$rid")" = 200 ] || { cat /tmp/uapi_staged_put.json; fail "a PUT of the read"; }
+hdrs=$(tr -d '\r' < /tmp/uapi_staged_put.h)
+echo "$hdrs" | grep -qix 'X-Reload-Status: no_reload' && echo "$hdrs" | grep -qix 'X-Kernel-Status: no_kernel' \
+	&& ! echo "$hdrs" | grep -qi '^X-Reload-Services:' || fail "a PUT of the read reported a reload: $hdrs"
+[ "$(put_read "raw/firewall/$rid")" = 200 ] || { cat /tmp/uapi_staged_put.json; fail "a raw PUT of the raw read"; }
+jq -e '.reloaded == false and .reload_services == []' /tmp/uapi_staged_put.json >/dev/null \
+	|| { cat /tmp/uapi_staged_put.json; fail "a raw PUT of the raw read reloaded"; }
+$SSH 'grep -q "^# kept by a PUT of the read" /etc/config/firewall' \
+	|| fail "a PUT of the read rewrote /etc/config/firewall"
+curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/rules/$rid"
+
+# The restore after a failed reload wrote back the snapshot that the request took at its lock, so it
+# undid what the shell committed while the request ran, which the replay of the commit had kept. Here
+# the batch waits on libuci's flock of /etc/config/dhcp again while the shell commits a change to
+# another rule, and the stub firewall init script of the VM then fails its next reload.
+echo "--- a batch whose reload fails restores its own writes and keeps what the shell committed during it ---"
+rid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/rules" \
+	-d '{"name": "uapi56r", "target": "ACCEPT", "match": {"src_zone": "lan", "proto": ["tcp"], "dest_port": ["5658"]}}' | id_of)
+kid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/rules" \
+	-d '{"name": "uapi56k", "target": "ACCEPT", "match": {"src_zone": "lan", "proto": ["tcp"], "dest_port": ["5659"]}}' | id_of)
+hid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/dhcp/hosts" \
+	-d '{"name": "uapi56h", "macs": ["02:00:00:00:56:57"], "ip": "192.168.1.57"}' | id_of)
+[ -n "$rid" ] && [ -n "$kid" ] && [ -n "$hid" ] || fail "could not create the rules and the host of the batch"
+$SSH 'rm -f /tmp/uapi56-held /tmp/uapi56-release
+      ucode /tmp/uapi56-hold.uc /etc/config/dhcp </dev/null >/dev/null 2>&1 &' &
+n=0
+until $SSH 'test -e /tmp/uapi56-held'; do
+	n=$((n + 1)); [ $n -lt 50 ] || fail "the holder never took the flock of /etc/config/dhcp"; sleep 0.2
+done
+$SSH 'touch /tmp/fw-fail-once'
+curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d "{\"operations\": [
+		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56r2\"}},
+		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56h2\"}}]}" \
+	> /tmp/uapi_staged_batch.status &
+req=$!
+n=0 seen=""
+while :; do
+	now=$(waiting)
+	[ -n "$now" ] && [ "$now" = "$seen" ] && break
+	seen=$now n=$((n + 1))
+	[ $n -lt 100 ] || { $SSH 'touch /tmp/uapi56-release'; fail "the batch never waited on /etc/config/dhcp"; }
+	sleep 0.3
+done
+$SSH "uci set firewall.$kid.name=uapi56k2; uci commit firewall"
+$SSH 'touch /tmp/uapi56-release'
+wait $req || true
+[ "$(cat /tmp/uapi_staged_batch.status)" = 500 ] || { cat /tmp/uapi_staged_batch.json; fail "the batch answered $(cat /tmp/uapi_staged_batch.status), expected 500"; }
+jq -e '.code == "reload_failed_restored"' /tmp/uapi_staged_batch.json >/dev/null \
+	|| { cat /tmp/uapi_staged_batch.json; fail "the 500 is not reload_failed_restored"; }
+[ "$($SSH "uci -q get firewall.$kid.name")" = uapi56k2 ] || fail "the restore undid what the shell committed during the batch"
+[ "$($SSH "uci -q get firewall.$rid.name")" = uapi56r ] || fail "the restore kept the write of the batch to the rule"
+[ "$($SSH "uci -q get dhcp.$hid.name")" = uapi56h ] || fail "the restore kept the write of the batch to the host"
+for p in "firewall/rules/$rid" "firewall/rules/$kid" "dhcp/hosts/$hid"; do
+	curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/$p"
+done
+
+# A PUT that changes nothing has nothing to replay, so it answered 200 with a section that the shell
+# had deleted during the request. The batch waits on the flock of /etc/config/dhcp again.
+echo "--- a batch of PUTs of the read answers 409 when the shell deletes one of its sections during it ---"
+rid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/rules" \
+	-d '{"name": "uapi56d", "target": "ACCEPT", "match": {"src_zone": "lan", "proto": ["tcp"], "dest_port": ["5660"]}}' | id_of)
+hid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/dhcp/hosts" \
+	-d '{"name": "uapi56d", "macs": ["02:00:00:00:56:58"], "ip": "192.168.1.58"}' | id_of)
+[ -n "$rid" ] && [ -n "$hid" ] || fail "could not create the rule and the host of the batch"
+rule=$(curl -sS -H "$ADMIN" "$URL/firewall/rules/$rid" | jq -c 'del(.runtime)')
+host=$(curl -sS -H "$ADMIN" "$URL/dhcp/hosts/$hid" | jq -c 'del(.runtime)')
+$SSH 'rm -f /tmp/uapi56-held /tmp/uapi56-release
+      ucode /tmp/uapi56-hold.uc /etc/config/dhcp </dev/null >/dev/null 2>&1 &' &
+n=0
+until $SSH 'test -e /tmp/uapi56-held'; do
+	n=$((n + 1)); [ $n -lt 50 ] || fail "the holder never took the flock of /etc/config/dhcp"; sleep 0.2
+done
+curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/batch" -d "{\"operations\": [
+		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PUT\", \"body\": $rule},
+		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PUT\", \"body\": $host}]}" \
+	> /tmp/uapi_staged_batch.status &
+req=$!
+n=0 seen=""
+while :; do
+	now=$(waiting)
+	[ -n "$now" ] && [ "$now" = "$seen" ] && break
+	seen=$now n=$((n + 1))
+	[ $n -lt 100 ] || { $SSH 'touch /tmp/uapi56-release'; fail "the batch never waited on /etc/config/dhcp"; }
+	sleep 0.3
+done
+$SSH "uci delete firewall.$rid; uci commit firewall"
+$SSH 'touch /tmp/uapi56-release'
+wait $req || true
+[ "$(cat /tmp/uapi_staged_batch.status)" = 409 ] || { cat /tmp/uapi_staged_batch.json; fail "the batch answered $(cat /tmp/uapi_staged_batch.status), expected 409"; }
+jq -e '.code == "conflict" and (.message | test("another writer changed the package firewall"))' \
+	/tmp/uapi_staged_batch.json >/dev/null || { cat /tmp/uapi_staged_batch.json; fail "the 409 is not the conflict of the firewall package"; }
+[ -z "$($SSH "uci -q get firewall.$rid")" ] || fail "the batch brought back the rule that the shell deleted"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/dhcp/hosts/$hid"
 
 echo "a change that a shell staged stays out of uapi's reads and writes until the shell commits it."

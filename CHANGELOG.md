@@ -226,6 +226,39 @@ All notable changes to this project will be documented in this file. Format foll
   Added. The parse of a `conf-dir` with 500k adblock lines took 0.6 s on x86. `--test` now reads its
   stdin from `/dev/null`, as procd gives dnsmasq. The reload of an init script still has no time
   bound of its own. (#291)
+- **A PUT that changes nothing in uci no longer commits, reloads the daemon or sets a WireGuard
+  peer again in the kernel.** A PUT set every option that it sent, so a PUT of the read rewrote
+  the package, which drops its comments, ran the init scripts of the resource, and on
+  `network/wireguard_peers` removed a peer without `endpoint_host` from the kernel and set it
+  again, which reset its session. 3.2.0 fixed this for a PATCH only. A PUT now skips what a PATCH
+  skips: a set of the value that uci holds, a delete of an option that uci does not hold, and a
+  default that the read filled in for an option that uci does not hold, such as the
+  `enabled '1'`, `disabled '0'` or `route_allowed_ips '0'` that a POST or a LuCI flag leaves out.
+  This holds for the PUT sub-requests of a `POST /batch`, and for a raw PUT or PATCH, which skips
+  an option that uci holds as sent, a boolean as `1` or `0` and a number as its text. A PUT of the
+  read still writes what it stores in another form than uci holds, such as a list that uci holds
+  as an option, a number in hex or a legacy option name, and the PUT of the read after it changes
+  nothing. Two things follow for a client. An option that a PUT skips is not replayed over a
+  commit that LuCI or a shell makes to the section during the request, so that commit keeps its
+  value there, as under a PATCH, where the values of the PUT won before. A PUT or a PATCH of a
+  section by its id, curated or raw, that changes nothing still answers `409 conflict` when
+  another writer deleted the section during the request, as a PUT did before, where such a PATCH
+  answered 200. This is a behavior fix with a header change, and the headers still report what ran: such a
+  PUT now answers `X-Reload-Status: no_reload` and `X-Kernel-Status: no_kernel`, with no
+  `X-Reload-Services` or `X-Kernel-Applied`, where it answered `ok`, and `ok` or `skipped` on a
+  peer. Such a raw write answers `reloaded: false`, an empty `reload_services` and a
+  `reload_note`, where it answered `reloaded: true`. No header, field, value or status is new.
+  (#292)
+- **The restore after a failed reload keeps what LuCI or a shell committed to the package during
+  the request, before the commit of the request.** The commit replays the writes of the request
+  over such a commit, so the commit keeps it, but the restore wrote back the snapshot that the
+  request took when it took its lock, which undid that commit as well as the write. The snapshot
+  is now taken right before the commit, for a single write and for each package of a
+  `POST /batch`, so the restore keeps such a commit. A commit by another writer in the few
+  microseconds between the snapshot and the load of the commit is still lost, as one between that
+  load and the write of libuci is lost by any commit. A commit by another writer after the commit
+  of the request, while the daemons reload, is still undone, and `docs/roadmap.md` records the
+  options. No request or response changes. (#292)
 
 ## [3.2.0] - 2026-10-29
 

@@ -97,23 +97,33 @@ $SSH "wg show $IFACE endpoints" | grep -q '198.51.100.9' \
 	|| fail "endpoint not updated in kernel: $($SSH "wg show $IFACE endpoints")"
 
 # A PATCH that changed nothing still reloaded network and set the peer again in the kernel, which
-# for a peer without an endpoint is a remove and a set, and resets its session. The keepalive that
-# wg sets here by hand is drift from uci, which only a write that sets the peer gives back to uci.
-echo "--- a PATCH that changes nothing reloads nothing and leaves the kernel peer as it is ---"
+# for a peer without an endpoint is a remove and a set, and resets its session. A PUT of the read
+# did the same, alone and in a batch, because a PUT set every option that it sent. The keepalive
+# that wg sets here by hand is drift from uci, which only a write that sets the peer gives back to
+# uci. The POST stored no `route_allowed_ips` or `disabled`, and a PUT of the read wrote the
+# defaults that the read fills in for them, so even the first PUT of the read has to change nothing.
+echo "--- a PATCH that changes nothing, and a PUT of the read alone and in a batch, reload nothing and leave the kernel peer as it is ---"
 keepalive() { $SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER1" '$1 == k { print $2 }'; }
-patch_headers() {
+write_headers() {
 	curl -sS -D - -o /tmp/uapi45_patch.json -H "$ADMIN" -H 'Content-Type: application/json' \
-		-X PATCH "$URL/network/wireguard_peers/$pid" -d "$1" | tr -d '\r'
+		-X "$1" "$URL$2" -d "$3" | tr -d '\r'
+}
+patch_headers() { write_headers PATCH "/network/wireguard_peers/$pid" "$1"; }
+assert_noop() {
+	echo "$2" | head -1 | grep -q " $3 " || fail "$1: $2 $(cat /tmp/uapi45_patch.json)"
+	echo "$2" | grep -qix 'X-Reload-Status: no_reload' && echo "$2" | grep -qix 'X-Kernel-Status: no_kernel' \
+		&& ! echo "$2" | grep -qi '^X-Reload-Services:' && ! echo "$2" | grep -qi '^X-Kernel-Applied:' \
+		|| fail "$1 changed nothing and reported a reload or a kernel apply: $2"
+	[ "$(keepalive)" = 77 ] || fail "$1 changed nothing and set the peer again: keepalive $(keepalive)"
 }
 $SSH "wg set $IFACE peer $PEER1 persistent-keepalive 77"
 for body in '{}' '{"endpoint_host": "198.51.100.9", "endpoint_port": 51820}'; do
-	h=$(patch_headers "$body")
-	echo "$h" | head -1 | grep -q ' 200 ' || fail "PATCH $body: $h $(cat /tmp/uapi45_patch.json)"
-	echo "$h" | grep -qix 'X-Reload-Status: no_reload' && echo "$h" | grep -qix 'X-Kernel-Status: no_kernel' \
-		&& ! echo "$h" | grep -qi '^X-Reload-Services:' && ! echo "$h" | grep -qi '^X-Kernel-Applied:' \
-		|| fail "PATCH $body changed nothing and reported a reload or a kernel apply: $h"
-	[ "$(keepalive)" = 77 ] || fail "PATCH $body changed nothing and set the peer again: keepalive $(keepalive)"
+	assert_noop "PATCH $body" "$(patch_headers "$body")" 200
 done
+read_body=$(curl -sS -H "$ADMIN" "$URL/network/wireguard_peers/$pid" | jq -c 'del(.runtime)')
+assert_noop "a PUT of the read" "$(write_headers PUT "/network/wireguard_peers/$pid" "$read_body")" 200
+assert_noop "a batch PUT of the read" "$(write_headers POST /batch \
+	"{\"operations\": [{\"path\": \"/network/wireguard_peers/$pid\", \"method\": \"PUT\", \"body\": $read_body}]}")" 207
 
 echo "--- a PATCH that changes only the preshared key reaches the kernel ---"
 PSK=$($SSH 'wg genpsk')

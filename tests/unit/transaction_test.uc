@@ -387,6 +387,45 @@ t.describe('transaction, the restore writes back only what the request committed
 	});
 });
 
+// The commit replays the writes of the request over what LuCI or a shell committed while the
+// request ran, and the restore wrote back the snapshot taken at the lock, which undid that commit.
+// Here the package is a string, another writer appends to it during fn and the commit appends the
+// request's write, so the restore has to leave what the other writer appended.
+t.describe('transaction, the restore keeps what another writer committed during the request', () => {
+	function on(file) {
+		let conn = ubus.stub();
+		conn.uci_export = (pkg) => file[pkg];
+		conn.uci_commit = function(pkg) { file[pkg] += "+request"; return true; };
+		conn.uci_import = function(pkg, snapshot) { file[pkg] = snapshot; return true; };
+		return conn;
+	}
+
+	t.it('a write', () => {
+		let file = { fw: "seed" };
+		let r = tx.transaction(on(file), build_params({
+			acquire: function() { return {}; }, release: function() {},
+			reload: reload_flaky(1),
+			fn: function(c, pkg) { file.fw += "+luci"; return { ok: true, body: {} }; },
+		}));
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_equal(file.fw, "seed+luci");
+	});
+
+	t.it('a batch, in each package that it committed', () => {
+		let file = { aa: "seed", bb: "seed" };
+		let r = tx.multi_transaction(on(file), {
+			packages: [ "aa", "bb" ],
+			lock_path: "/tmp/uapi-test-kept-global.lock", pkg_lock_prefix: "/tmp/uapi-test-kept-pkg.",
+			fn: function(c) { file.aa += "+luci"; file.bb += "+shell"; return { ok: true, body: {} }; },
+			reload: reload_flaky(1), check_services: noop_check,
+		});
+		for (let f in [ "global.lock", "pkg.aa.lock", "pkg.bb.lock" ])
+			require('fs').unlink("/tmp/uapi-test-kept-" + f);
+		t.assert_equal(r.kind, "reload_failed_restored");
+		t.assert_deep_equal(file, { aa: "seed+luci", bb: "seed+shell" });
+	});
+});
+
 t.describe('multi_transaction, the reload of a batch', () => {
 	function batch(conn, reload) {
 		let r = tx.multi_transaction(conn, {
