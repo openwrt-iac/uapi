@@ -482,6 +482,22 @@ All notable changes to this project will be documented in this file. Format foll
   Such a write answers `reload_failed_unrecovered` where it answered `reload_failed_restored`, and
   no carve-out of `docs/versioning.md` is needed, because both answer 500 and no request that
   3.2.0 accepted is refused. (#301)
+- **The kernel apply and the restore refuse a peer whose stored `allowed_ips` holds an entry that
+  starts with `+` or `-`.** wg reads a `+` or `-` before any prefix of a list as the marker of an
+  incremental update, and takes the whole list as one: it adds the prefixes to what the peer
+  already holds instead of replacing them, and refuses a command or a config that holds one marked
+  `-`, in `wg set` as in the `wg syncconf` of an ifup, measured on wireguard-tools 1.0.20250521. A
+  write already refused such an entry wherever it leaves the peer enabled, because it is not a
+  CIDR, so only another writer stores one. The restore re-applied the stored list as it is, so a
+  write that failed after its commit and was restored answered `reload_failed_restored` while the
+  kernel held the peer under IPs that no entry names, and a DELETE of a key that such a peer also
+  stores set it again as a merge and answered 200. Both paths now refuse the peer before anything
+  changes in the kernel, so the write answers `500 reload_failed_unrecovered`, whose `reload_error`
+  and `restore_error` name the peer. A `-` entry reached the same paths as a failure of `wg set`
+  itself, whose raw error named nothing and, on a key that the kernel did not hold, left an empty
+  peer behind. The refusal uses the carve-out of `docs/versioning.md` for payloads that produced
+  broken state no caller can rely on: the 200 and the `restored` answered for a kernel that uci did
+  not describe. (#302)
 
 ## [3.2.0] - 2026-10-29
 

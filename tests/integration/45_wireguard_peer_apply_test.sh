@@ -702,6 +702,38 @@ until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"
 done
 call -X DELETE "$URL/network/wireguard_peers/uapi45hash" >/dev/null
 
+# wg reads a + or - before any prefix of a list as the marker of an incremental update, and takes
+# the whole list as one, so no apply can bring the kernel of such a peer to what uci holds. A write
+# refuses the entry, because it is not a CIDR, so only another writer stores one. The restore
+# merged the stored list into the kernel and answered reload_failed_restored, and a DELETE of a key
+# that such a peer also stores set it again as a merge and answered 200.
+echo "--- the apply and the restore refuse a peer whose stored allowed_ips holds a + or - entry ---"
+MARK=$($SSH 'wg genkey | wg pubkey')
+$SSH "uci set network.uapi45mark=wireguard_$IFACE2; uci set network.uapi45mark.public_key='$MARK'
+	uci set network.uapi45mark.allowed_ips='+10.98.94.2/32'; uci set network.uapi45mark.disabled=1; uci commit network"
+view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45mark")")
+[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["+10.98.94.2/32"]' ] || fail "the marker entry read wrong: $view"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45mark" -d '{"description":"x"}')
+[ "$(status_of "$r")" = "200" ] || fail "a write that leaves the peer disabled expected 200, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45mark" -d '{"disabled":false}')
+[ "$(status_of "$r")" = "422" ] || fail "a write that enables the peer expected 422, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -qF '"field": "allowed_ips[0]"' || fail "the 422 is not on allowed_ips[0]: $(body_of "$r")"
+[ "$($SSH "uci -q get network.uapi45mark.allowed_ips")" = "+10.98.94.2/32" ] \
+	|| fail "the refused write changed the stored entry"
+# The kernel holds an extra IP for the peer that no entry names, as a failed apply leaves it: the
+# restore would add the marker entry to it and answer restored.
+$SSH "uci set network.uapi45mark.disabled=0; uci commit network
+	wg set $IFACE2 peer '$MARK' allowed-ips 10.98.94.2/32,10.98.94.99/32"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+	-d "{\"interface\":\"$IFACE2\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.94.30/32\"],
+	    \"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+[ "$(status_of "$r")" = "500" ] || fail "the write with the bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' || fail "the restore claimed to recover: $(body_of "$r")"
+body_of "$r" | grep -q 'marked + or -' || fail "the error names no marker entry: $(body_of "$r")"
+ips=$($SSH "wg show $IFACE2 allowed-ips" | grep -F "$MARK" | cut -f2)
+[ "$ips" = "10.98.94.2/32 10.98.94.99/32" ] || fail "the refused restore changed the kernel of the peer: '$ips'"
+$SSH "uci delete network.uapi45mark; uci commit network; wg set $IFACE2 peer '$MARK' remove"
+
 # The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
 # gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. Either way out
 # that the message gives works: a null in the switch removes the option, and so does a JSON Patch

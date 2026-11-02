@@ -359,6 +359,27 @@ t.describe('wg.apply against logging wg and ip', () => {
 		t.assert_deep_equal(r.commands, []);
 	});
 
+	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
+	// what the peer already holds, or refuses the command.
+	t.it('refuses a peer with an allowed_ips entry marked + or -, and runs nothing', () => {
+		for (let ips in [ [ '+10.0.0.0/8' ], [ '-fd00::/64' ], [ '10.0.0.5/32', '-10.0.0.6/32' ] ]) {
+			let r = apply({ network: { wg1: WG1 } },
+			              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: ips } ]);
+			t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1', ips);
+			t.assert_deep_equal(r.commands, [], ips);
+		}
+	});
+
+	// A stored value whose printf %b expansion wg reads as a marker reaches the apply through the
+	// sections that a remove sets again, with no validate() in front of it.
+	t.it('a remove that sets a stored marker entry again refuses the peer, and runs nothing', () => {
+		let r = apply({ network: { wg1: WG1,
+		                           a: peer({ public_key: PK, allowed_ips: '\\05310.0.0.0/8' }) } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK } ]);
+		t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1');
+		t.assert_deep_equal(r.commands, []);
+	});
+
 	// A write that leaves such a port as uci holds it gives it here, and so does the restore, which
 	// must still set the peers after it.
 	t.it('sets a peer with a host and a port that reads 0 without its endpoint, and does not remove it', () => {
@@ -574,6 +595,18 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 		t.assert_equal(r.result, 'not restoring a peer with a malformed preshared key on wg1');
 		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|peer|' + PK + '|') >= 0), []);
 		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+	});
+
+	// The restore refuses such a peer before anything changes in the kernel: wg would add the
+	// prefixes to what the peer already holds instead of replacing them, or refuse the command.
+	t.it('refuses a peer with an allowed_ips entry marked + or -, and runs nothing', () => {
+		for (let v in [ '+10.0.0.0/8', '-fd00::/64', '\\05310.0.0.0/8' ]) {
+			let r = reconcile({ network: { wg1: WG1,
+			                               a: peer({ public_key: PK, allowed_ips: v }),
+			                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } });
+			t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1', v);
+			t.assert_deep_equal(r.commands, [], v);
+		}
 	});
 
 	// The kernel then holds what the request gave it, under a key that the restore cannot set. In a
