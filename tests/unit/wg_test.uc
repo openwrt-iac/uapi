@@ -222,6 +222,52 @@ t.describe('wg.to_peer', () => {
 // These assert the paths that decide NOT to run wg, which is what makes them
 // testable off-device: reaching the command would fail on a box without wg and
 // surface as an error string rather than null.
+t.describe('wg.unclaimed against logging wg and ip', () => {
+	let unclaimed = (uci, outputs) => run_wg(uci, 'sprintf("%J", wg.unclaimed(c))', outputs);
+	let dump_of = (entries) => ({ 'wg|show|wg1|dump': "priv\tpub\t51820\toff\n" + join("", entries) });
+	let line = (key, endpoint, ips, keepalive) =>
+		sprintf("%s\t(none)\t%s\t%s\t0\t0\t0\t%s\n", key, endpoint, ips, keepalive);
+
+	// runtime() reports the kernel beside each section, so the kernel peers that no section of
+	// their interface claims are the ones that no read showed. A section of another interface
+	// claims nothing, and a disabled section claims, because its runtime already reports the peer.
+	t.it('lists each kernel peer that no section of its interface claims', () => {
+		let r = unclaimed({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32' }),
+		                               b: { '.type': 'wireguard_wg2', '.anonymous': false, public_key: PK2 } } },
+		                  dump_of([ line(PK, '(none)', '10.0.0.2/32', 'off'),
+		                            line(PK2, '198.51.100.7:51820', '10.0.0.3/32,fd00::/64', '25') ]));
+		t.assert_equal(r.result, sprintf('[ { "interface": "wg1", "public_key": "%s", "endpoint": "198.51.100.7:51820", "allowed_ips": [ "10.0.0.3/32", "fd00::/64" ], "persistent_keepalive": 25, "latest_handshake": 0, "rx_bytes": 0, "tx_bytes": 0 } ]', PK2));
+	});
+	t.it('lists no peer that a disabled section claims', () => {
+		let r = unclaimed({ network: { wg1: WG1,
+		                               a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', disabled: '1' }) } },
+		                  dump_of([ line(PK, '(none)', '10.0.0.2/32', 'off') ]));
+		t.assert_equal(r.result, '[ ]');
+	});
+	t.it('lists no peer that a stored key with an escape claims, keyed as wg reads it', () => {
+		let r = unclaimed({ network: { wg1: WG1,
+		                               a: peer({ public_key: substr(PK, 0, 43) + '\\075', allowed_ips: '10.0.0.2/32' }) } },
+		                  dump_of([ line(PK, '(none)', '10.0.0.2/32', 'off') ]));
+		t.assert_equal(r.result, '[ ]');
+	});
+	t.it('lists no peer that a later PublicKey line of a stored key claims', () => {
+		let r = unclaimed({ network: { wg1: WG1,
+		                               a: peer({ public_key: 'x\nPublicKey=' + PK, allowed_ips: '10.0.0.2/32' }) } },
+		                  dump_of([ line(PK, '(none)', '10.0.0.2/32', 'off') ]));
+		t.assert_equal(r.result, '[ ]');
+	});
+	// A failed read never looks like an empty kernel: an interface netifd does not report up is
+	// not dumped at all, and a dump in another shape reads as none.
+	t.it('dumps no interface that is down, and reads a dump in another shape as none', () => {
+		let r = unclaimed({ network: { wg2: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' } } });
+		t.assert_equal(r.result, '[ ]');
+		t.assert_deep_equal(r.commands, []);
+		r = unclaimed({ network: { wg1: WG1 } }, { 'wg|show|wg1|dump': "priv\tpub\t51820\toff\textra\n" });
+		t.assert_equal(r.result, '[ ]');
+	});
+});
+
 t.describe('wg.apply', () => {
 	function down_conn() {
 		let c = ubus.stub();

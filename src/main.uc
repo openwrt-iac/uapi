@@ -49,6 +49,7 @@ const RESOURCES = {
 	"network:rules":         handler.make(load_resource("network:rules")),
 	"network:bridge_vlans":  handler.make(load_resource("network:bridge_vlans")),
 	"network:wireguard_peers": handler.make(load_resource("network:wireguard_peers")),
+	"network:wireguard_kernel_peers": handler.make_collection(load_resource("network:wireguard_kernel_peers")),
 	"system:timeservers":  handler.make(load_resource("system:timeservers")),
 	"dropbear:instances":  handler.make(load_resource("dropbear:instances")),
 	"uhttpd:instances":    handler.make(load_resource("uhttpd:instances")),

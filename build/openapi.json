@@ -73,6 +73,10 @@
 			"description": "WireGuard peers (dynamic uci type `wireguard_<iface>`); preshared_key write-only. `runtime` carries what the kernel holds for the peer, from `wg show`."
 		},
 		{
+			"name": "Network / Wireguard Kernel Peers",
+			"description": "Read-only collection of the WireGuard peers the kernel holds that no uci section claims, from `wg show`: drift that no other read reports."
+		},
+		{
 			"name": "Wireless / Devices",
 			"description": "Wifi radios (`config wifi-device`): band, channel, htmode, country, txpower."
 		},
@@ -277,7 +281,8 @@
 				"Network / Routes",
 				"Network / Rules",
 				"Network / Bridge Vlans",
-				"Network / Wireguard Peers"
+				"Network / Wireguard Peers",
+				"Network / Wireguard Kernel Peers"
 			]
 		},
 		{
@@ -7728,6 +7733,111 @@
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
 					}
+				]
+			}
+		},
+		"/network/wireguard_kernel_peers": {
+			"get": {
+				"summary": "List wireguard_kernel_peers (read-only)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/NetworkWireguardKernelPeersResponse"
+									}
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Network / Wireguard Kernel Peers"
+				]
+			}
+		},
+		"/network/wireguard_kernel_peers/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"summary": "Get one wireguard_kernel_peers by id",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkWireguardKernelPeersResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Network / Wireguard Kernel Peers"
 				]
 			}
 		},
@@ -30295,6 +30405,59 @@
 						"type": "string",
 						"writeOnly": true,
 						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+					}
+				}
+			},
+			"NetworkWireguardKernelPeersResponse": {
+				"type": "object",
+				"description": "uapi resource backed by uci network.wireguard_kernel_peer",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Stable id of the peer on its interface: the first 12 hex characters of the sha256 of the interface name and the public key, so a client tells one entry from another across reads"
+					},
+					"interface": {
+						"type": "string",
+						"description": "The interface that holds the peer, up and with proto=wireguard"
+					},
+					"public_key": {
+						"type": "string",
+						"description": "The public key that the kernel holds the peer under, as wg prints it"
+					},
+					"endpoint": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The endpoint of the peer in the kernel, as an address and a port, such as `192.0.2.1:51820` or `[2001:db8::1]:51820`. null when the kernel holds no endpoint for the peer."
+					},
+					"allowed_ips": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The allowed IPs of the peer in the kernel, in the form that the kernel prints, with the host bits cleared and an IPv6 address in its short lower-case form. Empty when the kernel holds none for the peer."
+					},
+					"persistent_keepalive": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "The keepalive interval of the peer in the kernel, in seconds, 0 when it is off."
+					},
+					"latest_handshake": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "The time of the latest handshake with the peer, in seconds since the epoch, 0 when there was none."
+					},
+					"rx_bytes": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "Bytes that the kernel received from the peer since it added the peer."
+					},
+					"tx_bytes": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "Bytes that the kernel sent to the peer since it added the peer."
 					}
 				}
 			},

@@ -600,8 +600,12 @@ t.describe('a network write reloads odhcpd while procd runs it, and a wireless w
 	}
 
 	t.it('every network resource declares odhcpd alone, and no wireless resource declares one', () => {
-		for (let f in fs.glob("src/resources/network.*.uc"))
-			t.assert_deep_equal(loadfile(f)().reload_if_running, [ "odhcpd" ], f);
+		for (let f in fs.glob("src/resources/network.*.uc")) {
+			let r = loadfile(f)();
+			// A read-only collection has no toUci, so it writes and reloads nothing.
+			if (r.toUci == null) continue;
+			t.assert_deep_equal(r.reload_if_running, [ "odhcpd" ], f);
+		}
 		for (let f in fs.glob("src/resources/wireless.*.uc"))
 			t.assert_deep_equal(loadfile(f)().reload_if_running, null, f);
 	});
