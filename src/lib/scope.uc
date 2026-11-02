@@ -7,6 +7,7 @@ const KNOWN_PATHS = {
 	"network:rules": true,
 	"network:bridge_vlans": true,
 	"network:wireguard_peers": true,
+	"network:wireguard_kernel_peers": true,
 	"wireless": true,
 	"wireless:devices": true,
 	"wireless:interfaces": true,

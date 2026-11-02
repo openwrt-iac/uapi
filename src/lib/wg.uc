@@ -481,21 +481,55 @@ function is_up(conn, iface) {
 const NOT_HELD = { endpoint: null, allowed_ips: null, persistent_keepalive: null, latest_handshake: null,
                    rx_bytes: null, tx_bytes: null };
 
-// What the kernel holds under the key that wg reads from a stored public_key. Empty when uapi did not
-// read the kernel, so that a failed read never looks like a missing peer: the interface is not up,
-// wg fails, or the value gives wg more than a key or is too long to expand, so that uapi cannot tell
-// which peer wg set for it. A collection GET reads every peer, so each interface is read once and
-// kept on the connection, which lasts one request.
-function runtime(conn, iface, public_key) {
-	let key = kernel_key(public_key);
-	if (conn == null || key === false) return {};
+// The kernel peers of an interface, cached on the connection for the request: a collection GET
+// reads every peer, so each interface is dumped once. null when uapi did not read the kernel,
+// because netifd does not report the interface up or wg failed or printed a dump in a shape that
+// uapi does not read, so that a failed read never looks like an empty set of peers.
+function kernel_dump(conn, iface) {
 	conn.wg_peers ??= {};
 	if (!exists(conn.wg_peers, iface))
 		conn.wg_peers[iface] = is_up(conn, iface) ? kernel_peers(iface) : null;
-	let peers = conn.wg_peers[iface];
+	return conn.wg_peers[iface];
+}
+
+// What the kernel holds under the key that wg reads from a stored public_key. Empty when uapi did not
+// read the kernel, so that a failed read never looks like a missing peer: the interface is not up,
+// wg fails, or the value gives wg more than a key or is too long to expand, so that uapi cannot tell
+// which peer wg set for it.
+function runtime(conn, iface, public_key) {
+	let key = kernel_key(public_key);
+	if (conn == null || key === false) return {};
+	let peers = kernel_dump(conn, iface);
 	if (peers == null) return {};
 	let held = key ? peers[key] : null;
 	return { in_kernel: held != null, ...(held ?? NOT_HELD) };
+}
+
+// One entry per peer that the kernel holds on an up interface with proto=wireguard and that no
+// section of that interface claims, keyed as wg reads the stored key, its later PublicKey lines
+// included. runtime() reports the kernel beside each section, so a peer with no section was the
+// only wireguard state that no read showed. A failed dump reads as none, as in runtime(), so a
+// down interface or a failing wg lists nothing rather than drift. The sections are walked as they
+// are, disabled ones included, because the runtime of a disabled section already reports a peer
+// that the kernel holds under its key.
+function unclaimed(conn) {
+	if (conn == null) return [];
+	let out = [];
+	conn.uci_foreach('network', null, function(s) {
+		if (s['.type'] != "interface" || s.proto != "wireguard") return;
+		let iface = s['.name'];
+		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) return;
+		let held = kernel_dump(conn, iface);
+		if (held == null) return;
+		let claimed = {};
+		conn.uci_foreach('network', null, function(p) {
+			if (p['.type'] != "wireguard_" + iface) return;
+			for (let k in kernel_keys(p.public_key) || []) claimed[k] = true;
+		});
+		for (let key, v in held)
+			if (!claimed[key]) push(out, { interface: iface, public_key: key, ...v });
+	});
+	return out;
 }
 
 // Bring the kernel in line with what uci now holds for these interfaces: drop
@@ -634,4 +668,4 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line };
+         route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

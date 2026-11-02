@@ -81,6 +81,19 @@ All notable changes to this project will be documented in this file. Format foll
   a failed read never reads as a missing peer. The dump holds the private key of the interface and
   the preshared keys, and uapi drops them as it parses it. The Response schema documents the
   fields, which are new response fields under `docs/versioning.md`. (#298)
+- **`GET /network/wireguard_kernel_peers` lists the WireGuard peers that the kernel holds and no
+  uci section claims.** The `runtime` of `network/wireguard_peers` annotates each section, so a
+  peer that a hand `wg set` added, or that a failed apply left behind, matched no section and no
+  read reported it. The collection reads one `wg show <interface> dump` per up interface with
+  proto=wireguard, the same dump that `runtime` reads, and lists each kernel peer that no section
+  of `wireguard_<interface>` claims, keyed as wg reads the stored `public_key`, its later
+  `PublicKey=` lines included. Disabled sections count as claiming, because the `runtime` of a
+  disabled section already reports a peer that the kernel holds under its key, and a down interface
+  or a failing `wg` lists nothing, as `runtime` answers `{}`. Each entry carries the interface, the
+  public key, the endpoint, allowed IPs, keepalive, handshake time and byte counters of the
+  kernel, and a stable `id`, the first 12 hex characters of the sha256 of the interface name and
+  the key. Read-only: every write method answers `405 method_not_allowed`, a read takes no lock,
+  and the scope is `network:wireguard_kernel_peers` under the `network` tree. (#303)
 
 ### Changed
 

@@ -400,7 +400,7 @@ let errs = mod.validate({ ... }, c);
 "<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>")),
 ```
 
-So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 44 resources already do; the filename simply is not written a second time.
+So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 45 resources already do; the filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
 for read-only runtime lists. Writable resources also automatically

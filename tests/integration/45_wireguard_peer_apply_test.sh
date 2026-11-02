@@ -178,6 +178,34 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
 [ "$(body_of "$r" | jq -c '.results[0].body.runtime.in_kernel')" = true ] || fail "a batch of reads did not read the kernel: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel torn down by the batch"
 
+# runtime reports the kernel beside each section, so a peer with no section was the only
+# wireguard state that no read showed. The collection lists the kernel peers that no section
+# of their interface claims, and refuses every write.
+echo "--- the kernel peers that no section claims are listed, read-only ---"
+STRAY=$($SSH 'wg genkey | wg pubkey')
+$SSH "wg set $IFACE peer '$STRAY' allowed-ips 10.98.99.90/32"
+r=$(call "$URL/network/wireguard_kernel_peers")
+[ "$(status_of "$r")" = "200" ] || fail "the kernel peers read expected 200, got $(status_of "$r"): $(body_of "$r")"
+want_id=$($SSH "printf '%s' '$IFACE $STRAY' | sha256sum" | cut -c1-12)
+got=$(body_of "$r" | jq -c --arg k "$STRAY" \
+	'map(select(.public_key == $k)) | map({id, interface, public_key, endpoint, allowed_ips}) | .[0]')
+[ "$got" = "{\"id\":\"$want_id\",\"interface\":\"$IFACE\",\"public_key\":\"$STRAY\",\"endpoint\":null,\"allowed_ips\":[\"10.98.99.90/32\"]}" ] \
+	|| fail "the kernel peers read lists $got, want the stray peer with id $want_id: $(body_of "$r")"
+listed=$(body_of "$(call "$URL/network/wireguard_kernel_peers")" | jq -r '[.[].public_key] | sort | join(",")')
+[ "$listed" = "$STRAY" ] || fail "the kernel peers read lists '$listed', which is not only the stray peer"
+r=$(call "$URL/network/wireguard_kernel_peers/$want_id")
+[ "$(status_of "$r")" = "200" ] || fail "one kernel peer read expected 200, got $(status_of "$r"): $(body_of "$r")"
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_kernel_peers" -d '{}')
+[ "$(status_of "$r")" = "405" ] || fail "a POST expected 405, got $(status_of "$r"): $(body_of "$r")"
+body_of "$r" | grep -q '"code": "method_not_allowed"' || fail "the POST refusal is not method_not_allowed: $(body_of "$r")"
+r=$(call -X DELETE "$URL/network/wireguard_kernel_peers/$want_id")
+[ "$(status_of "$r")" = "405" ] || fail "a DELETE expected 405, got $(status_of "$r"): $(body_of "$r")"
+r=$(curl -sS -H "Authorization: Bearer $FW_RO_TOKEN" -w "\n%{http_code}" "$URL/network/wireguard_kernel_peers")
+[ "$(status_of "$r")" = "403" ] || fail "a firewall-only token expected 403, got $(status_of "$r"): $(body_of "$r")"
+$SSH "wg set $IFACE peer '$STRAY' remove"
+[ "$(body_of "$(call "$URL/network/wireguard_kernel_peers")" | jq -c '.')" = '[]' ] \
+	|| fail "the kernel peers read after the remove is not empty"
+
 # The whole reason the apply is per-peer rather than a netifd interface renew. A
 # renew is asynchronous and takes the interface down when the config it reads is
 # bad, so this request used to answer 200 while dropping a working tunnel and its

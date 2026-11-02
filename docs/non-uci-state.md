@@ -15,6 +15,7 @@ The bar for adding to category 1 is high. New non-uci resources should justify t
 | `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` on global | none | url-validated, name-validated |
 | `dhcp/leases` | `/tmp/dhcp.leases` (parse) | none (read-only) | n/a | dnsmasq IPv4 leases |
 | `dhcp/leases6` | `/tmp/hosts/odhcpd` (parse), fallback `/tmp/odhcpd.leases` | none (read-only) | n/a | odhcpd IPv6 leases |
+| `network/wireguard_kernel_peers` | `wg show <iface> dump` (parse) | none (read-only) | n/a | kernel wg peers that no uci section claims |
 | `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` on global | none | write-only; audit logs token+user, never the password |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` on global for writes; reads lock-free | none | dropbear re-reads the file per connection |
 | `system/cron_jobs` | `/etc/crontabs/root` (mode 0600) | `with_lock` on global for writes; reads lock-free | `cron` | one entry per line; other lines stay byte for byte |
@@ -54,6 +55,13 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 - **Lock.** None; reads only.
 - **Format.** Best-effort parser, one entry per assigned address: `<duid> <iaid> <hostname> <expires_at> <interface> <IA_NA|IA_PD> <ip>[/<prefixlen>] [<ip2> ...]`. Lines that don't match this shape are silently skipped. odhcpd's statefile format varies across versions; parser failure on a single line never breaks the read path for the rest.
 - **Why not uci.** Same as `dhcp/leases`; runtime state.
+
+### `network/wireguard_kernel_peers` (read-only)
+
+- **Source of truth.** The kernel, read with one `wg show <interface> dump` per up interface whose uci section has proto=wireguard. The dump is cached on the connection for the request, so a read of `network/wireguard_peers` and a read of this collection in one request share it. A dump in a shape that uapi does not read, and an interface that netifd does not report up, list nothing, as the `runtime` of a peer answers `{}` for both: a failed read never looks like an empty kernel.
+- **Lock.** None; reads only. The `wg show` runs outside every transaction, as the `runtime` read does.
+- **Claim check.** A peer is listed when no section of `wireguard_<interface>` claims its key. The key is read as wg reads the stored `public_key`, the later `PublicKey=` lines of one value included. A disabled section claims too: the `runtime` of a disabled section already reports a peer that the kernel holds under its key, so listing it would report the drift twice.
+- **Why not uci.** A peer that only the kernel holds is runtime state: a hand `wg set` added it, or a failed apply left it behind. Before this collection it was the only wireguard state that no read showed, because the `runtime` of `network/wireguard_peers` annotates each section and lists nothing on its own.
 
 ### `system/password` (write-only)
 
