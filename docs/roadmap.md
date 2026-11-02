@@ -403,6 +403,25 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   `openwrt-25.12` still pins 2026-02-26, and so does 25.12.6. The unit test that pins the
   per-type difference is what will say when the widening is right.
 
+- **Upstream: uhttpd serves its request queue last-in first-out.** When every
+  `max_requests` handler slot is taken, uhttpd queues a new request and serves the
+  newest queued one first, so a client that keeps the slots busy keeps the earliest
+  queued request waiting the longest, and it needs no token to do so. uapi's 10 s body
+  deadline frees its own slots, but the order of the queue is uhttpd's and no ucode
+  handler can change it. Found while measuring the body reads of
+  [#296](https://github.com/openwrt-iac/uapi/pull/296) and
+  [#299](https://github.com/openwrt-iac/uapi/pull/299) on uhttpd 2025.10.03. A fix
+  belongs to uhttpd, and this is recorded so the question is not re-opened as uapi work.
+
+- **Upstream: luci-base reads a request body with no deadline.** LuCI's ucode runtime
+  reads a POST body with `uhttpd.recv` on the same blocking pipe as uapi and sets no
+  deadline (`modules/luci-base/ucode/uhttpd.uc`, `luci.http`), so a body that stalls
+  holds one of the shared `max_requests` slots until the script timeout of uhttpd, the
+  login included. uapi bounds its own bodies
+  ([#299](https://github.com/openwrt-iac/uapi/pull/299)). LuCI's requests share the same
+  slots and keep their behavior. A fix belongs to luci-base, and this is recorded so the
+  question is not re-opened as uapi work.
+
 - **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
   `?confirm` never shipped (built in 2.3.0-rc1, removed before stable) and
   should not: a DAG apply is N isolated provider RPCs with no apply-level
@@ -545,6 +564,13 @@ is unresolvable.
   `terraform-provider-uapi` consumes none of them. That is the provider's call, not a gap
   in this repo, and it is recorded here only so the question is not re-opened as uapi
   work.
+
+- **The idempotent retry of a POST that lost its answer is the provider's.** uhttpd can
+  kill a request after its commit, which leaves the write applied and no answer sent, and
+  the idempotency store replays a 2xx answer to the same key and body for 24 h, so the
+  retry is client work
+  ([terraform-provider-uapi#45](https://github.com/openwrt-iac/terraform-provider-uapi/issues/45)).
+  Recorded here only so the question is not re-opened as uapi work.
 
 Everything else this section used to list has shipped, and the section had gone
 stale enough to be misleading:
