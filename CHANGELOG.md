@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-11-03
+
 ### Added
 
 - **`dhcp/servers.dhcpv4`, `ra_flags` and `ra_slaac`** are the options that odhcpd.defaults writes
