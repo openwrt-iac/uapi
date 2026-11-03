@@ -365,6 +365,43 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   nothing no longer sets the peer again, nothing reported the drift. A read now reports it, and
   uapi corrects nothing ([#281](https://github.com/openwrt-iac/uapi/issues/281)).
 
+- **`GET /network/wireguard_kernel_peers` lists the peer that no section claims.** The `runtime`
+  annotates each section that uci holds, so a peer that only the kernel holds, one that a hand
+  `wg set` added or a failed apply left behind, was in no read at all. The collection is the
+  second half: one dump per up interface, the claim check keyed as wg reads the stored key,
+  read-only and lock-free, with the stable content id of a crontab entry. The kernel apply and
+  the restore also refuse a stored `allowed_ips` entry marked `+` or `-`, which wg takes as the
+  marker of an incremental update, so a restore no longer adds to what a failed apply left in the
+  kernel and no longer answers `restored` for a peer it could not put back
+  ([#281](https://github.com/openwrt-iac/uapi/issues/281)).
+
+- **The request body is read whole, bounded and on a deadline.** A chunked body reached no
+  handler, a body that arrived in parts was cut, and a client that declared a body and never
+  finished it held its request process until the script timeout of uhttpd, in one of the three
+  slots it shares with LuCI, with no token. A body is now read to its end however it arrives, a
+  `Content-Length` that uapi does not read as a whole number from 0 to 256 KiB answers 413 before
+  any read, a body that has not arrived in full 10 s after the request answers 400 on a
+  non-blocking stdin that the optional `ucode-mod-io` provides, and every path drains what is left
+  of a body before it answers, so the next request on the connection works.
+
+- **The reloads of a write follow procd, and the answer says what ran.** A `dhcp` or `system`
+  write reloads dnsmasq, odhcpd and unbound only while procd holds a config trigger for each, as a
+  LuCI save does, so a daemon that the operator stopped stays stopped and unbound is left alone
+  at boot until its interface trigger starts it. uapi waits for the reloads of a request for 20 s
+  in all and answers `X-Reload-Status: unverified` for one still running instead of a 502 at
+  60 s. The restore after a failed reload keeps what LuCI or a shell committed to the package
+  during the request and answers `reload_failed_unrecovered` with the package named, and a PUT
+  that changes nothing commits, reloads and sets no peer again.
+
+- **`network/rules` models the match options that netifd reads**, `suppress_prefixlength`, `tos`,
+  `uidrange`, `ipproto`, `sport` and `dport`, which a PUT removed with every option it did not
+  model, and takes a rule without a selector, so the rule that keeps the main table for every
+  destination but the default route can be written through the API.
+
+- **A pull request that changes what goes into the APK builds it and runs its smoke test with the
+  upgrades from 3.2.0**, which only a release tag ran, and the ruleset of `main` requires the
+  `package` check with the other four.
+
 ## Features (additive, future minor bumps in v3.x)
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
