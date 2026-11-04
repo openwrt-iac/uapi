@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Deprecated
+
+- **The v4 program is announced in the published spec and `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json` and the "Announced response-shape changes" section of `docs/deprecations.md` now list every breaking change queued for v4: table names on write for `network/routes.table` and `network/rules.lookup`, the default refusal of newlines and carriage returns in curated strings, the `mwan3/interfaces.family` rule, the null read for a `wireless/interfaces` section without `mode`, the LuCI-style refusal of writes over a stored error, the boolean reads that will follow the platform's converters, and the mount move to `/api/v4`. The deprecation window runs from this release, not from v4. (#316)
+
 ## [3.3.0] - 2026-11-03
 
 ### Added
