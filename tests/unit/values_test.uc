@@ -48,6 +48,25 @@ t.describe('values.platform_bool', () => {
 	});
 });
 
+// The libvalidate `:bool:` set, read in ubox 6f78fa4 (2025-10-30, the 25.12.5 SDK):
+// dt_type_bool() in validate/validate.c takes ten spellings, case-insensitively,
+// and a value it rejects drops the whole section. shell_bool accepts exactly those
+// ten in their canonical case, so it is the helper for fields a validate_data schema
+// checks. The ucode helpers stay case-sensitive, unlike libvalidate itself.
+t.describe('values.shell_bool vs the verified libvalidate :bool: set', () => {
+	t.it('accepts exactly the ten spellings libvalidate takes, on the documented side', () => {
+		for (let s in [true, "1", "on", "true", "yes", "enabled"])
+			t.assert_equal(v.shell_bool(s, false), true, s);
+		for (let s in [false, "0", "off", "false", "no", "disabled"])
+			t.assert_equal(v.shell_bool(s, true), false, s);
+	});
+	t.it('is case-sensitive where libvalidate is not, and defaults on junk', () => {
+		t.assert_equal(v.shell_bool("ON", "d"), "d");
+		t.assert_equal(v.shell_bool("True", "d"), "d");
+		t.assert_equal(v.shell_bool("maybe", "d"), "d");
+	});
+});
+
 t.describe('values.as_list', () => {
 	t.it('returns the array as-is when already an array', () => {
 		t.assert_deep_equal(v.as_list(["a", "b"]), ["a", "b"]);
