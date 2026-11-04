@@ -43,7 +43,6 @@ These land in v4, not before. The list is mirrored in the published spec's own "
 - **A `wireless/interfaces` section with no `mode` will read as null in v4 instead of `ap`.** wifi-scripts sets up nothing for such a section, so the current read reports an access point that does not exist. (#307)
 - **A write will be refused for any stored error the section holds in v4, as LuCI does.** Today a write refuses only the errors it adds. (#308)
 - **Boolean fields will read what the platform's converters take in v4.** The uci blob converter accepts only `1`/`true` and `0`/`false` and drops the option otherwise (libuci `66127cd`), and libvalidate's `:bool:` takes ten spellings case-insensitively (ubox `6f78fa4`); `normalize_bool` and the wider helpers are retired. (#310, evidence #312)
-- **The API mount will move to `/api/v4` in v4**, and the install hook will strip every older prefix, as each major moved it before.
 
 ## Removed in past releases
 
