@@ -355,6 +355,10 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
   rate-limit buckets, the error ring and the last-used markers of the tokens keep their files
   under `/var/run`, in directories of mode 0700 with files of mode 0600 (#266, #270).
 
+## Shipped in 3.4.0
+
+- The [3.4.0 changelog section](https://github.com/openwrt-iac/uapi/blob/main/CHANGELOG.md) carries the release: the v4 program announced in the published spec and the deprecations log, and the boolean sets verified against the pinned uci and ubox sources.
+
 ## Shipped in 3.3.0
 
 - **A read of `network/wireguard_peers` reports the peer in the kernel.** Its `runtime` comes
