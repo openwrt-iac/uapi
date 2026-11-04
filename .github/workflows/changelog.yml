@@ -8,17 +8,31 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   entry:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'changelog-not-needed') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The label is read from the API, not from the event payload. A PR created with the label
+      # still fires `opened` with a payload from before the label landed, and a job-level `if:`
+      # skips without a completed check run, so the failed run from the stale payload stayed the
+      # latest `entry` check and every labeled PR paid an amend-and-force-push to clear it.
+      # Reading the live state makes whichever run lands last correct, and the job always
+      # completes, so the check run always supersedes.
       - name: CHANGELOG.md names this PR under [Unreleased]
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: scripts/changelog-has-entry.sh "$PR_NUMBER"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+              | jq -e 'any(.labels[].name; . == "changelog-not-needed")' > /dev/null; then
+            echo "changelog-not-needed label present, no entry required."
+            exit 0
+          fi
+          scripts/changelog-has-entry.sh "$PR_NUMBER"
