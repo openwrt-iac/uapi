@@ -646,53 +646,19 @@ stale enough to be misleading:
 
 ## Objectives for the next major
 
-- **Routes `table` and rules `lookup` accept table names on write.** netifd resolves both
-  through `/etc/iproute2/rt_tables`, and LuCI writes the name. Since 3.2.0 a read resolves a
-  stored name to its id, so the integer type stays and a PUT of the read writes the id. Taking
-  a name on write needs the type to become a string or a union, which is breaking under
-  `docs/versioning.md` ([#240](https://github.com/openwrt-iac/uapi/issues/240)).
+The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-iac/uapi/milestone/1). At v4 planning, read it top to bottom: every line must resolve to an open issue in the milestone, or be explicitly descoped in the release PR with the reason. The mechanisms, the evidence and the open questions live in the issues.
 
-- **`network/interfaces.ip6prefix` stops taking a string on write.** Since 3.2.0 a read is
-  always an array, and a write still takes the space-separated string that the 3.1 spec
-  declared ([#241](https://github.com/openwrt-iac/uapi/issues/241)). The removal deletes, in one
-  go: `"string"` in the type, the `x-uapi-write-string` marker and its branch in
-  `build/gen_openapi.uc` (the check in `tests/lint_openapi_shape.uc` that no source marker
-  reaches the spec stays), the string path in `toUci` and `validate()`, the sentence in the
-  field description, the row in `docs/deprecations.md` and the `ip6prefix` example in
-  `docs/versioning.md`, and it adds a row to the v3-to-v4 migration document.
-
-- **One rule for newlines in curated strings.** 3.2.0 refuses a newline field by field, after an
-  audit of the daemon that reads each field, and each new field that a daemon reads as one line
-  needs the same audit. About a third of the writable string fields still take a newline or a
-  carriage return, and only `system.notes` holds several lines on purpose. A default refusal of
-  both in `check_schema_types`, with an opt-out annotation for `system.notes`, ends the audits.
-  It is breaking for the free-text fields, such as descriptions, where no daemon gives the
-  evidence that the tightening carve-out needs
-  ([#276](https://github.com/openwrt-iac/uapi/issues/276)).
-
-- **`mwan3/interfaces.family` is required, or an unset one reads as `ipv4`.** mwan3 reads an
-  unset family as ipv4 (`mwan3.sh` and `mwan3track` both default it), and a read gives null. The
-  spec requires the key and takes null, and `validate()` does not require a value. So on the
-  stock `wan6`, which sets `family 'ipv6'`, `PATCH {"family": null}` answers 200, and mwan3 then
-  handles wan6 as IPv4 while the read says null. Since 3.2.0 the field description says that a
-  null removes the option and that mwan3 then uses ipv4. Refusing the null tightens what a write
-  takes, and reading `ipv4` changes what a read of an unset family gives, so either waits for
-  the major.
-
-- **A `wireless/interfaces` section with no `mode` reads as null instead of `ap`.** wifi-scripts
-  sets up nothing for such a section, because its switch on the mode skips an absent mode as it
-  skips any mode that it does not know (`mac80211.sh:260`). uapi reads the section as `ap`, so a
-  read reports an access point that does not exist. The read change is breaking, because the
-  Response then takes null and every such section reads differently.
-
-- **Whether to check every field at each save, as LuCI does.** LuCI validates each visible field
-  of a form when it saves, so a stored value that breaks a rule blocks every save of the section
-  until it is fixed. For the rules in `validate_new()`, uapi refuses a write only for an error
-  that the write adds (`new_errors()` in `src/lib/handler.uc`): one in a field that it changes,
-  one that the section did not have, or a dormant one that it makes live. So a write that leaves
-  a stored value alone passes, even one that only disables the section, and
-  `GET /api/v3/diagnostics?validate=1` lists the value. LuCI's model refuses writes that 3.1.0
-  accepts, so adopting it is breaking.
+- [Routes `table` and rules `lookup` accept table names on write](https://github.com/openwrt-iac/uapi/issues/240): the type becomes a string or a union, breaking.
+- [`network/interfaces.ip6prefix` stops taking a string on write](https://github.com/openwrt-iac/uapi/issues/241): announced since 3.2.0, the only open deprecation window.
+- [One rule for newlines in curated strings](https://github.com/openwrt-iac/uapi/issues/276): a default refusal in `check_schema_types`, with an opt-out for `system.notes`.
+- [`mwan3/interfaces.family` is required, or an unset one reads `ipv4`](https://github.com/openwrt-iac/uapi/issues/306): either way breaking.
+- [A `wireless/interfaces` section with no `mode` reads null instead of `ap`](https://github.com/openwrt-iac/uapi/issues/307): a read today reports an access point that does not exist.
+- [Refuse a write for any stored error the section holds, as LuCI does](https://github.com/openwrt-iac/uapi/issues/308): the `new_errors()` model changes.
+- [Record and report interrupted writes](https://github.com/openwrt-iac/uapi/issues/309): the write journal, the report half only. The only open finding of the lock-state audit, and the only hole left in the transaction contract.
+- [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), in a 3.x.
+- [Widen `network/interfaces.disabled` to the platform boolean](https://github.com/openwrt-iac/uapi/issues/311): conditional on the OpenWrt branch carrying netifd `e97e36f` at v4 time. The unit test that pins the per-type difference says when.
+- [Announce the v4 program in a final 3.x minor](https://github.com/openwrt-iac/uapi/issues/313): the deprecations log and the spec's "Upcoming in v4" block. The window runs from that release, not from v4.
+- The mount moves to `/api/v4` and the install hook strips every older prefix, as each major moved it before. The v3-to-v4 migration document rides the release.
 
 ## Out of scope by design
 
