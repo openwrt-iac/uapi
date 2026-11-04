@@ -658,6 +658,18 @@ The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-
 - [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), in a 3.x.
 - [Widen `network/interfaces.disabled` to the platform boolean](https://github.com/openwrt-iac/uapi/issues/311): conditional on the OpenWrt branch carrying netifd `e97e36f` at v4 time. The unit test that pins the per-type difference says when.
 - [Announce the v4 program in a final 3.x minor](https://github.com/openwrt-iac/uapi/issues/313): the deprecations log and the spec's "Upcoming in v4" block. The window runs from that release, not from v4.
+- [Group the special endpoints under `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and the scopes disagree today, breaking.
+- [Merge `dhcp/leases6` into `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint less, breaking.
+- [Drop `managed` and the adopt flow](https://github.com/openwrt-iac/uapi/issues/321): the envelope loses a field and a route, breaking.
+- [One documented runtime envelope on every resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources document their runtime today, breaking.
+- [Prune dead error codes from the enum](https://github.com/openwrt-iac/uapi/issues/323): `unsupported_media_type` is the documented-dead one, breaking for generated clients.
+- [Ship the standalone confirm arm `POST /confirm`](https://github.com/openwrt-iac/uapi/issues/324): the authz model is decided, additive.
+- [Per-operation headers in the batch 207 results](https://github.com/openwrt-iac/uapi/issues/325): the batch stops throwing away what a single request says, additive.
+- [Configurable limits from `/etc/config/uapi`](https://github.com/openwrt-iac/uapi/issues/326): the compile-time bounds become options, additive.
+- [Generalize read-only runtime collections](https://github.com/openwrt-iac/uapi/issues/327): the recipe behind leases and kernel peers, applied to more state, additive.
+- [Route table in dispatch, unify the special non-uci resources](https://github.com/openwrt-iac/uapi/issues/328): ~400 lines of hand-coded verb ladders, internal.
+- [Consolidate the `x-uapi-*` marker namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor markers, one of which dies with #241, internal.
+- [Generalize or document the wireguard dynamic-type and kernel-ops machinery](https://github.com/openwrt-iac/uapi/issues/330): six hooks exercised by one resource, internal.
 - The mount moves to `/api/v4` and the install hook strips every older prefix, as each major moved it before. The v3-to-v4 migration document rides the release.
 
 ## Out of scope by design
