@@ -151,13 +151,13 @@ netifd's is the strict one:
 
 | Reader | true | false | anything else | uapi helper |
 |---|---|---|---|---|
-| netifd C and odhcpd, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies | `platform_bool` |
+| netifd C and odhcpd, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies | `platform_bool` | verified: libuci `66127cd` (2025-12-02, the 25.12.5 SDK), `uci_attr_to_blob()` in `blob.c`, case-sensitive `strcmp`, anything else returns false and the attr is never added |
 | netifd ucode, `parse_bool` in `/lib/netifd/utils.uc` | `1`, `true` | `0`, `false` | undefined, caller default | `platform_bool` |
 | fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default | `normalize_bool` |
 | shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default | `shell_bool` |
 | raw compare, `[ "$x" != "1" ]` | `1` | everything else | there is no else | `strict_bool` |
 | numeric test, `[ "$x" -gt 0 ]` | a number above 0, whitespace around it included | `0`, a number below it, and any word, `true` included | there is no else | see below |
-| libvalidate `:bool:` via `uci_validate_section` | unverified | unverified | section **dropped**, see below | `normalize_bool` |
+| libvalidate `:bool:` via `uci_validate_section` | `1`, `on`, `true`, `yes`, `enabled` | `0`, `off`, `false`, `no`, `disabled` | section **dropped**, see below | `normalize_bool` | verified: ubox `6f78fa4` (2025-10-30, the 25.12.5 SDK), `dt_type_bool()` in `validate/validate.c`, `strcasecmp` against those ten spellings, case-insensitive |
 
 So `option auto 'no'` on an interface does not disable autostart: netifd drops
 the value and uses its own `true`.
@@ -180,12 +180,15 @@ wireguard peer: `wireguard.sh` reads it with `config_get_bool`, so
 the next write pushed `disabled='0'` to uci and the peer into the kernel. Find the
 reader before choosing, and cite it in a comment when it is not obvious.
 
-The libvalidate row is honestly unknown: ubox is not in the SDK feeds, so the
-accepted set could not be read. It matters more than the others, because a value
-`validate_data` rejects makes the init script drop the **whole section** rather
-than fall back to a default (`dropbear.init` and `sysntpd` both do this). Until
-someone reads ubox, `normalize_bool` is the conservative guess for those fields:
-`system.log_remote`, `system/timeservers`, and dropbear's auth flags.
+The libvalidate row is now read, not guessed: ubox `6f78fa4` (2025-10-30, the
+25.12.5 SDK) accepts ten spellings for `:bool:`, case-insensitively, and drops the
+whole section for anything else, because `validate_data` rejecting a value makes the
+init script drop the section (`dropbear.init` and `sysntpd` both do this). The uci
+blob converter is narrower and case-sensitive: `true`/`1` and `false`/`0` only, from
+libuci `66127cd` (2025-12-02, the 25.12.5 SDK), and anything else drops the option
+rather than the section. So `system.log_remote`, `system/timeservers` and dropbear's
+auth flags read with `normalize_bool` until v4 retires it, and the v4 announcement
+(#310 in the v4 milestone) may cite these two pins as the evidence.
 
 Writes still emit `"1"` / `"0"`, which every reader above accepts.
 
