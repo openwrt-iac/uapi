@@ -10,10 +10,30 @@ One installation serves exactly one API major. The package upgrade flips the pre
 `/api/v3` to `/api/v4` and strips every older prefix, and a generated client takes the new base
 URL from the v4 spec's `servers` block.
 
-<<<<<<< HEAD
 ## `mwan3/interfaces.family` reads `ipv4` when unset
 
 
+
+<<<<<<< HEAD
+## `unsupported_media_type` leaves the error enum
+
+
+
+The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
+and never emitted (announced in 3.4.1, #323). Clients branching on it must drop that branch; uapi
+never rejects a body on `Content-Type`.
+
+## Boolean reads follow the platform's reader
+
+
+
+The remaining readers that used `normalize_bool` now use `platform_bool` (announced in 3.4.0,
+#310): `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the
+`usteer/config` booleans. The uci blob converter takes only `1`/`true` and `0`/`false`, so the
+word spellings `on`/`yes`/`enabled` now read `false` there instead of `true`. Fields whose daemon
+really takes the wider set keep it: fw4's `parse_bool` and libvalidate's `:bool:` (dropbear's auth
+flags) still accept the ten spellings, and those reads are unchanged. Evidence: libuci `66127cd`
+and ubox `6f78fa4`, pinned in `docs/ucode-quirks.md` (#312).
 
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
