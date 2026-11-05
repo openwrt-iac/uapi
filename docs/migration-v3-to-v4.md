@@ -12,27 +12,20 @@ URL from the v4 spec's `servers` block.
 
 ## `mwan3/interfaces.family` reads `ipv4` when unset
 
+`mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the read now answers
+`"ipv4"` instead of `null` for a section that stores none (announced in 3.4.0, #306). `family` is
+no longer in the request schema's `required`: a write may omit it, and a `null` removes the option,
+after which the read answers `ipv4` again.
 
+## `unsupported_media_type` and `unmanaged_resource` leave the error enum
 
-<<<<<<< HEAD
-## `unsupported_media_type` leaves the error enum
-
-
-
-The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
-and never emitted (announced in 3.4.1, #323). Clients branching on it must drop that branch; uapi
-never rejects a body on `Content-Type`.
+The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415) or
+`unmanaged_resource` (409), both dead (announced in 3.4.1, #323 and #321). The first was reserved
+and never emitted (uapi never rejects a body on `Content-Type`); the second left with the
+`managed` field and the adopt flow. Clients branching on either code must drop that branch.
 
 ## Boolean reads follow the platform's reader
 
-
-
-## `managed` and the adopt flow are removed
-Every curated response envelope was `{id, managed, runtime, fields}`; it is now `{id, runtime,
-fields}` (announced in 3.4.1, #321). `POST /<resource>/<id>/adopt` is gone (it answers 404), the
-`?managed=` query filter is gone, and the `unmanaged_resource` (409) error code left the enum with
-## `unsupported_media_type` and `unmanaged_resource` leave the error enum
-`unmanaged_resource` (409), both dead (announced in 3.4.1, #323 and #321). Clients branching on them
 The remaining readers that used `normalize_bool` now use `platform_bool` (announced in 3.4.0,
 #310): `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the
 `usteer/config` booleans. The uci blob converter takes only `1`/`true` and `0`/`false`, so the
@@ -43,20 +36,19 @@ and ubox `6f78fa4`, pinned in `docs/ucode-quirks.md` (#312).
 
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
-
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips an absent mode as
 it skips an unknown one), so the read now answers `null` instead of `"ap"` (announced in 3.4.0,
 #307). The write side changes the same way: a `null` mode is accepted and removes the option,
 leaving a section that sets up nothing. A create or PUT that sends no mode stores none.
 
-`mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the read now answers
-`"ipv4"` instead of `null` for a section that stores none (announced in 3.4.0, #306). `family` is
-no longer in the request schema's `required`: a write may omit it, and a `null` removes the option,
-after which the read answers `ipv4` again.
+## `managed` and the adopt flow are removed
+
+Every curated response envelope was `{id, managed, runtime, fields}`; it is now `{id, runtime,
+fields}` (announced in 3.4.1, #321). `POST /<resource>/<id>/adopt` is gone (it answers 404), the
+`?managed=` query filter is gone, and the `unmanaged_resource` (409) error code left the enum with
+them.
 
 ## Curated string fields refuse newlines and carriage returns
-
-
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on write (announced
 in 3.4.0, #276), replacing the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about
@@ -65,31 +57,12 @@ purpose. Free-text fields such as descriptions that no daemon reads as one line 
 that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
 
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
-
-
-## Curated string fields refuse newlines and carriage returns
-
-
-
-
-One check in the type gate now refuses `\n` and `\r` in every curated string on write (announced
-in 3.4.0, #276), replacing the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about
-`\r`. The only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several lines on
-purpose. Free-text fields such as descriptions that no daemon reads as one line are refused too;
-that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
-
-## `network/routes.table` and `network/rules.lookup` accept a table name on write
-
-
-
 
 The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
 A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
 `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422, as does
 an id of 0. The read still answers the id, so a plan stays stable when `rt_tables` changes, and a
 name stored by hand or by LuCI still reads as its id.
-
->>>>>>> 2ca0856 (v4: routes.table and rules.lookup accept a table name on write (#240))
 ## `network/interfaces.ip6prefix` is array-only on write
 
 A space-separated string on write is refused with 422 `invalid_type` (announced since 3.2.0,
