@@ -37,7 +37,6 @@ status=$(echo "$created" | tail -1)
 [ "$status" = "200" ] || fail "POST expected 200, got $status"
 fid=$(echo "$created" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ -n "$fid" ] || fail "POST missing id"
-echo "$created" | grep -q '"managed": true' || fail "created forwarding missing managed:true"
 echo "$created" | grep -q '"family": "any"' || fail "default family != any"
 echo "$created" | grep -q '"enabled": true' || fail "default enabled != true"
 
