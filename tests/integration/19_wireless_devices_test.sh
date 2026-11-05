@@ -111,12 +111,12 @@ echo "--- a batch for wireless with a firewall-only token answers 403, and an ad
 fwbearer=$($SSH "uapi-token create --name uapi19_fw --scope 'firewall:rw' 2>/dev/null" | head -1)
 [ -n "$fwbearer" ] || fail "could not mint a firewall-only token"
 r=$(curl -sS -H "Authorization: Bearer $fwbearer" -H 'Content-Type: application/json' -w "\n%{http_code}" \
-	-X POST "$URL/batch" -d '{"operations": [{"path": "/wireless/devices/radio0", "method": "PATCH", "body": {"type": "mac80211"}}]}')
+	-X POST "$URL/uapi/batch" -d '{"operations": [{"path": "/wireless/devices/radio0", "method": "PATCH", "body": {"type": "mac80211"}}]}')
 $SSH 'uapi-token revoke uapi19_fw' >/dev/null 2>&1 || true
 echo "$r" | tail -1 | grep -q '^403$' \
 	&& echo "$r" | sed '$d' | jq -e '.code == "batch_partial_failure" and .error.code == "insufficient_scope"' >/dev/null \
 	|| fail "a wireless batch with a firewall-only token: $r"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" \
 	-d '{"operations": [{"path": "/wireless/devices/radio0", "method": "DELETE"}]}')
 echo "$r" | tail -1 | grep -q '^503$' && echo "$r" | grep -q '"code": "config_missing"' \
 	|| fail "a batch DELETE without the config: $r"

@@ -33,7 +33,7 @@ grep -q '"max_body_bytes": 262144' /tmp/uapi_diag2.json || fail "out-of-bounds v
 
 echo "--- a value above the default is ignored, because the body is parsed before the bearer check ---"
 $SSH 'uci -q set uapi.@limits[-1].max_body_bytes=1048576 && uci -q set uapi.@limits[-1].reload_budget_s=60 && uci -q commit uapi'
-curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag4.json
+curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" -o /tmp/uapi_diag4.json
 grep -q '"max_body_bytes": 262144' /tmp/uapi_diag4.json || fail "a raised max_body_bytes was taken: $(cat /tmp/uapi_diag4.json)"
 grep -q '"reload_budget_s": 20' /tmp/uapi_diag4.json || fail "a raised reload_budget_s was taken: $(cat /tmp/uapi_diag4.json)"
 
