@@ -48,7 +48,7 @@ write answers `503 config_missing` with the missing path, before any uci
 write. That includes a PUT or PATCH of an id that a GET answers 404 for,
 as with `init_script_missing`. A DELETE answers 404, because no section
 can exist there, and a client reads that as already gone. A DELETE in a
-`POST /batch` answers the 503, because the batch commits as one write. A
+`POST /uapi/batch` answers the 503, because the batch commits as one write. A
 read answers an empty list. The same applies to any package whose file
 was removed. An empty file is enough.
 
@@ -199,8 +199,8 @@ composition rules, and stability caveat.
 | `GET /healthz` | none | `{status, version, checks: {ubus, uci, lock_dir, time_sync}}`. 503 when any subsystem is degraded. |
 | `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
 | `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
-| `GET /auth/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
-| `GET /tokens`, `POST /tokens`, `DELETE /tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the caller's scopes to cover the requested scopes, equal or narrower. |
-| `GET /metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
-| `GET /diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
-| `POST /batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |
+| `GET /uapi/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
+| `GET /uapi/tokens`, `POST /tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the caller's scopes to cover the requested scopes, equal or narrower. |
+| `GET /uapi/metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
+| `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
+| `POST /uapi/batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |

@@ -119,7 +119,7 @@ A write to one package that fails and restores takes at most 20 s of reloads,
 2 s of the unbound watch and 10 s of `dnsmasq --test` per dnsmasq instance
 after the reloads of the write and again after those of the restore, and up to
 5 s of the restore waiting for libuci's flock: 49 s with one dnsmasq instance,
-inside uhttpd's default `script_timeout` of 60 s. A `POST /batch` restore adds
+inside uhttpd's default `script_timeout` of 60 s. A `POST /uapi/batch` restore adds
 up to 5 s of flock wait for each further package that it writes back, and the
 `wg set` of a kernel apply or reconcile has no time bound. uapi does not read
 `script_timeout`. Set it lower, through `uhttpd/instances` or otherwise, and
@@ -133,7 +133,7 @@ the file holds both writes, and the restore would undo the other one too. uapi
 leaves the package as that writer left it, reloads nothing for it, and answers
 `500 reload_failed_unrecovered`, whose `restore_error` names the package. The
 daemon keeps what the failed reload gave it, so check the package and reload
-it by hand. In a `POST /batch`, the other packages are restored, and the
+it by hand. In a `POST /uapi/batch`, the other packages are restored, and the
 services of the packages that the restore wrote back are reloaded. A daemon
 that also reads the package that it left is reloaded through them and reads
 that package as it is: in a batch of `system` and `dhcp` whose `dhcp` it left,
@@ -453,7 +453,7 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 
 ### Finding sections a write would reject (`?validate=1`)
 
-`GET /api/v3/diagnostics?validate=1` adds a validation sweep: every section of
+`GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section of
 every resource the token may read is run through the same path a write takes, and
 the ones that would be rejected are reported with the reason, together with the
 ones that hold a value that a write cannot add.
@@ -569,7 +569,7 @@ things to do, and because LuCI warns rather than blocking on the same condition.
 
 Two places report it, and they answer different questions.
 
-`GET /diagnostics` carries `management_path`, which names the interface this request
+`GET /uapi/diagnostics` carries `management_path`, which names the interface this request
 arrived through:
 
 ```json

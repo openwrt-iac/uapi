@@ -2,8 +2,17 @@
 	"openapi": "3.1.0",
 	"info": {
 		"title": "uapi",
+<<<<<<< HEAD
 		"version": "3.4.1",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+<<<<<<< HEAD
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n- **Boolean fields will read what the platform's converters take in v4**: `1`/`true` and `0`/`false` for the uci blob converter, the ten `:bool:` spellings for libvalidate. (#310)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+=======
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n- **Boolean fields will read what the platform's converters take in v4**: `1`/`true` and `0`/`false` for the uci blob converter, the ten `:bool:` spellings for libvalidate. (#310)\n- **The special endpoints move under `/uapi/...` in v4**: `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch`, `/uapi/whoami`; `/healthz`, `/openapi.json` and `/schema/*` stay public at the top level. (#319)\n- **`dhcp/leases6` merges into `dhcp/leases?family=v6` in v4** and the old endpoint is removed. (#320)\n- **`managed` and `POST /<resource>/<id>/adopt` are removed in v4**; the envelope becomes `{id, runtime, fields}`. (#321)\n- **`runtime` is always present and documented on every resource in v4.** (#322)\n- **Dead error codes leave the ErrorEnvelope enum in v4** (`unsupported_media_type` among them). (#323)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+=======
+		"version": "3.4.0",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (stable across uci rewrites) and `managed: bool` at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/uapi/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /uapi/batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n- **Boolean fields will read what the platform's converters take in v4**: `1`/`true` and `0`/`false` for the uci blob converter, the ten `:bool:` spellings for libvalidate. (#310)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+>>>>>>> 78d3274 (v4: special endpoints move under /uapi/... (#319))
+>>>>>>> 09622d5 (v4: special endpoints move under /uapi/... (#319))
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/openwrt-iac/uapi"
@@ -20146,7 +20155,7 @@
 				]
 			}
 		},
-		"/auth/whoami": {
+		"/uapi/whoami": {
 			"get": {
 				"summary": "Introspection: the calling token's own metadata",
 				"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
@@ -20193,7 +20202,7 @@
 				]
 			}
 		},
-		"/tokens": {
+		"/uapi/tokens": {
 			"get": {
 				"summary": "List all tokens (no secrets surfaced)",
 				"description": "Scope: uapi:tokens:ro (or *:ro). Each entry omits salt and hash.",
@@ -20332,7 +20341,7 @@
 				]
 			}
 		},
-		"/tokens/{id}": {
+		"/uapi/tokens/{id}": {
 			"parameters": [
 				{
 					"name": "id",
@@ -20437,7 +20446,7 @@
 				]
 			}
 		},
-		"/metrics": {
+		"/uapi/metrics": {
 			"get": {
 				"summary": "Prometheus 0.0.4 text exposition",
 				"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
@@ -20485,7 +20494,7 @@
 				]
 			}
 		},
-		"/diagnostics": {
+		"/uapi/diagnostics": {
 			"get": {
 				"summary": "Operational snapshot (lock state, uptime, loaded resources)",
 				"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
@@ -20546,7 +20555,7 @@
 				]
 			}
 		},
-		"/batch": {
+		"/uapi/batch": {
 			"post": {
 				"summary": "Multi-package atomic transaction",
 				"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
@@ -21346,7 +21355,7 @@
 					},
 					"name": {
 						"type": "string",
-						"description": "Stable token id (also the uci section name). Use as the path segment in `GET /tokens/{name}`, `DELETE /tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)."
+						"description": "Stable token id (also the uci section name). Use as the path segment in `GET /uapi/tokens/{name}`, `DELETE /uapi/tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)."
 					}
 				}
 			},
@@ -21883,13 +21892,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"target"
 				],
 				"allOf": [
@@ -22415,13 +22421,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"name"
 				]
 			},
@@ -22736,13 +22739,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"match"
 				],
 				"allOf": [
@@ -23262,14 +23262,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
-				"required": [
-					"id",
-					"runtime"
-				],
 				"allOf": [
 					{
 						"if": {
@@ -23616,13 +23611,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"src",
 					"dest"
 				]
@@ -23799,14 +23791,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"FirewallDefaultsRequest": {
 				"type": "object",
@@ -24337,8 +24324,6 @@
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"proto"
 				],
 				"allOf": [
@@ -25567,13 +25552,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"name"
 				],
 				"allOf": [
@@ -25864,13 +25846,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"target"
 				]
 			},
@@ -26197,14 +26176,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
-				"required": [
-					"id",
-					"runtime"
-				],
 				"allOf": [
 					{
 						"if": {
@@ -26621,13 +26595,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"device",
 					"vlan"
 				]
@@ -26850,8 +26821,6 @@
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"interface",
 					"public_key",
 					"allowed_ips"
@@ -27175,13 +27144,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"type"
 				]
 			},
@@ -27717,8 +27683,6 @@
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"device"
 				]
 			},
@@ -28580,14 +28544,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
-				"required": [
-					"id",
-					"runtime"
-				],
 				"allOf": [
 					{
 						"anyOf": [
@@ -28986,8 +28945,6 @@
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"interface"
 				]
 			},
@@ -29386,14 +29343,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"DhcpDnsmasqRequest": {
 				"type": "object",
@@ -29680,14 +29632,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"DhcpOdhcpdRequest": {
 				"type": "object",
@@ -29846,14 +29793,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"SystemRequest": {
 				"type": "object",
@@ -30050,14 +29992,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
-				"required": [
-					"id",
-					"runtime"
-				],
 				"allOf": [
 					{
 						"if": {
@@ -30234,14 +30171,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"DropbearInstancesRequest": {
 				"type": "object",
@@ -30503,14 +30435,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"UhttpdInstancesRequest": {
 				"type": "object",
@@ -30871,13 +30798,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"commonname"
 				]
 			},
@@ -31193,14 +31117,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"UnboundServerRequest": {
 				"type": "object",
@@ -31631,14 +31550,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"UnboundSrvRequest": {
 				"type": "object",
@@ -31776,14 +31690,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"UnboundExtRequest": {
 				"type": "object",
@@ -31921,13 +31830,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"interface"
 				]
 			},
@@ -32115,14 +32021,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"SnmpdAgentsRequest": {
 				"type": "object",
@@ -32196,13 +32097,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"secname",
 					"source",
 					"community"
@@ -32315,13 +32213,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"group"
 				]
 			},
@@ -32484,13 +32379,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"group"
 				]
 			},
@@ -32721,14 +32613,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"SnmpdSystemRequest": {
 				"type": "object",
@@ -32914,14 +32801,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"LldpdConfigRequest": {
 				"type": "object",
@@ -33096,14 +32978,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"PrometheusNodeExporterLuaConfigRequest": {
 				"type": "object",
@@ -33181,14 +33058,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"VnstatConfigRequest": {
 				"type": "object",
@@ -33275,14 +33147,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"Mwan3GlobalsRequest": {
 				"type": "object",
@@ -33558,14 +33425,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"Mwan3InterfacesRequest": {
 				"type": "object",
@@ -33977,13 +33839,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"interface"
 				]
 			},
@@ -34091,13 +33950,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"use_members"
 				]
 			},
@@ -34262,13 +34118,10 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
-					"id",
-					"runtime",
 					"use_policy"
 				]
 			},
@@ -34690,14 +34543,9 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"UsteerConfigRequest": {
 				"type": "object",
@@ -35529,7 +35377,6 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					},
 					"key": {
@@ -35547,11 +35394,7 @@
 						"writeOnly": true,
 						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12."
 					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
+				}
 			},
 			"OpenvpnInstancesRequest": {
 				"type": "object",
@@ -36378,7 +36221,7 @@
 				}
 			},
 			"XReloadStatus": {
-				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
+				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /uapi/batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
 				"schema": {
 					"type": "string",
 					"enum": [
@@ -36389,7 +36232,7 @@
 				}
 			},
 			"XReloadServices": {
-				"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
+				"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /uapi/batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
 				"schema": {
 					"type": "string",
 					"example": "firewall,dnsmasq"

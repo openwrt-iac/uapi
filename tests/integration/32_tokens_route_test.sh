@@ -35,12 +35,12 @@ requests() {
 # A reap keeps the state of a token that still authenticates.
 live_kept() {
 	$SSH "test -e /var/run/uapi-token-update/$1" || fail "$2 removed the last-used marker of the live token $1"
-	curl -sS -H "$ADMIN" "$URL/metrics" | grep -q "token_id=\"$1\"" \
+	curl -sS -H "$ADMIN" "$URL/uapi/metrics" | grep -q "token_id=\"$1\"" \
 		|| fail "$2 removed the series of the live token $1"
 }
 
 echo "--- GET /tokens (admin lists tokens) ---"
-status=$(curl -sS -o /tmp/uapi_tokens_list.json -w '%{http_code}' -H "$ADMIN" "$URL/tokens")
+status=$(curl -sS -o /tmp/uapi_tokens_list.json -w '%{http_code}' -H "$ADMIN" "$URL/uapi/tokens")
 [ "$status" = "200" ] || fail "GET /tokens expected 200, got $status"
 grep -q '"test_admin"' /tmp/uapi_tokens_list.json || fail "list missing test_admin"
 grep -q '"hash"' /tmp/uapi_tokens_list.json && fail "list must not expose hash"
@@ -48,12 +48,12 @@ grep -q '"salt"' /tmp/uapi_tokens_list.json && fail "list must not expose salt"
 
 echo "--- GET /tokens denied for ro caller (writes scope check excludes ro for create, but list needs *:ro - covered by *:rw) ---"
 # ro token has *:ro which subsumes uapi:tokens:ro -> list is allowed.
-status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$RO" "$URL/tokens")
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$RO" "$URL/uapi/tokens")
 [ "$status" = "200" ] || fail "RO list expected 200, got $status"
 
 echo "--- POST /tokens (admin mints a new token) ---"
 resp=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{
+	-X POST "$URL/uapi/tokens" -d '{
 		"name": "api_minted",
 		"scopes": ["firewall:rules:ro"]
 	}')
@@ -67,7 +67,7 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 [ "$status" = "200" ] || fail "minted token cannot list firewall/rules: $status"
 # But cannot mint another token (no uapi:tokens scope)
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
-	-H "Authorization: Bearer $bearer" -X POST "$URL/tokens" -d '{
+	-H "Authorization: Bearer $bearer" -X POST "$URL/uapi/tokens" -d '{
 		"name": "would-be", "scopes": ["*:ro"]
 	}' -H 'Content-Type: application/json')
 [ "$status" = "403" ] || fail "minted ro token must not POST /tokens, got $status"
@@ -75,17 +75,17 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 echo "--- POST /tokens scope escalation blocked (caller has firewall:ro asks for *:rw) ---"
 # Mint a constrained token first
 fw_ro_bearer=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{"name": "api_shortlived", "scopes": ["firewall:ro"]}' \
+	-X POST "$URL/uapi/tokens" -d '{"name": "api_shortlived", "scopes": ["firewall:ro"]}' \
 	| sed -n 's/.*"bearer": *"\([^"]*\)".*/\1/p')
 [ -n "$fw_ro_bearer" ] || fail "could not mint constrained token"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-H "Authorization: Bearer $fw_ro_bearer" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{"name": "evil", "scopes": ["*:rw"]}')
+	-X POST "$URL/uapi/tokens" -d '{"name": "evil", "scopes": ["*:rw"]}')
 [ "$status" = "403" ] || fail "scope escalation expected 403, got $status"
 
 echo "--- a token read and revoked by position is named, and its bucket, marker and series go with it ---"
 # api_shortlived is the last token in the file, and its request above created its state.
-[ "$(curl -sS -g -H "$ADMIN" "$URL/tokens/@token[-1]" | jq -r .name)" = "api_shortlived" ] \
+[ "$(curl -sS -g -H "$ADMIN" "$URL/uapi/tokens/@token[-1]" | jq -r .name)" = "api_shortlived" ] \
 	|| fail "GET /tokens/@token[-1] did not name api_shortlived"
 $SSH "test -e /var/run/uapi-ratelimit/api_shortlived.txt" || fail "api_shortlived has no bucket to reap"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" || fail "api_shortlived has no marker to reap"
@@ -94,14 +94,14 @@ $SSH "test -e /var/run/uapi-token-update/api_shortlived" || fail "api_shortlived
 	|| fail "the last-used marker of api_shortlived is not 0600"
 # The mint of api_shortlived reaped every other token that no longer authenticates, so its
 # series are the only ones that this revoke folds.
-before=$(curl -sS -H "$ADMIN" "$URL/metrics")
+before=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 [ "$(requests "$before" api_shortlived)" -gt 0 ] || fail "api_shortlived has no series to fold"
 want=$(( $(requests "$before" api_shortlived) + $(requests "$before" -retired) ))
-status=$(curl -sS -g -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/tokens/@token[-1]")
+status=$(curl -sS -g -o /dev/null -w '%{http_code}' -H "$ADMIN" -X DELETE "$URL/uapi/tokens/@token[-1]")
 [ "$status" = "204" ] || fail "DELETE /tokens/@token[-1] expected 204, got $status"
 $SSH "test -e /var/run/uapi-ratelimit/api_shortlived.txt" && fail "the revoke by position left the bucket"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived" && fail "the revoke left the last-used marker"
-after=$(curl -sS -H "$ADMIN" "$URL/metrics")
+after=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 echo "$after" | grep -q 'token_id="api_shortlived"' && fail "the revoke left the series of the token"
 [ "$(requests "$after" -retired)" = "$want" ] \
 	|| fail "token_id=\"-retired\" holds $(requests "$after" -retired) requests, expected $want"
@@ -109,7 +109,7 @@ live_kept api_minted "the revoke of api_shortlived"
 
 echo "--- DELETE /tokens/<id> returns 204 ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
-	-X DELETE "$URL/tokens/api_minted")
+	-X DELETE "$URL/uapi/tokens/api_minted")
 [ "$status" = "204" ] || fail "DELETE expected 204, got $status"
 # Subsequent auth attempts with that bearer fail
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
@@ -118,7 +118,7 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 
 echo "--- POST /tokens with expires_in_seconds creates an expiring token ---"
 short=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{
+	-X POST "$URL/uapi/tokens" -d '{
 		"name": "api_shortlived_b", "scopes": ["firewall:rules:ro"],
 		"expires_in_seconds": 3
 	}')
@@ -136,7 +136,7 @@ $SSH "test -e /var/run/uapi-ratelimit/api_shortlived_b.txt" || fail "api_shortli
 
 echo "--- POST /tokens with allowed_cidrs that excludes local addr returns 401 on use ---"
 ip_scoped=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{
+	-X POST "$URL/uapi/tokens" -d '{
 		"name": "api_lan_only", "scopes": ["firewall:rules:ro"],
 		"allowed_cidrs": ["10.99.0.0/16"]
 	}')
@@ -146,7 +146,7 @@ ip_bearer=$(echo "$ip_scoped" | sed -n 's/.*"bearer": *"\([^"]*\)".*/\1/p')
 echo "--- that mint reaped the bucket, the marker and the series of the expired token ---"
 $SSH "test -e /var/run/uapi-ratelimit/api_shortlived_b.txt" && fail "the mint left the bucket of an expired token"
 $SSH "test -e /var/run/uapi-token-update/api_shortlived_b" && fail "the mint left the marker of an expired token"
-curl -sS -H "$ADMIN" "$URL/metrics" | grep -q 'token_id="api_shortlived_b"' \
+curl -sS -H "$ADMIN" "$URL/uapi/metrics" | grep -q 'token_id="api_shortlived_b"' \
 	&& fail "the mint left the series of an expired token"
 live_kept test_admin "the mint of api_lan_only"
 $SSH 'uapi-token revoke api_shortlived_b 2>/dev/null || true'
@@ -155,21 +155,21 @@ status=$(curl -sS -o /tmp/uapi_ip_body.json -w '%{http_code}' \
 [ "$status" = "401" ] || fail "IP-scoped token from disallowed addr expected 401, got $status"
 grep -q 'Source IP not permitted' /tmp/uapi_ip_body.json || fail "expected ip-not-permitted message"
 
-echo "--- /auth/whoami surfaces expires_at/allowed_cidrs metadata ---"
+echo "--- /uapi/whoami surfaces expires_at/allowed_cidrs metadata ---"
 # Use admin which has neither - those fields should be null/empty
-who=$(curl -sS -H "$ADMIN" "$URL/auth/whoami")
+who=$(curl -sS -H "$ADMIN" "$URL/uapi/whoami")
 echo "$who" | grep -q '"expires_at": null' || fail "whoami: admin expires_at must be null"
 echo "$who" | grep -q '"allowed_cidrs": \[ \]' || fail "whoami: admin allowed_cidrs must be empty"
 
 echo "--- validation errors on bad POST body ---"
 bad=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{"name": "bad name with spaces", "scopes": ["*:rw"]}')
+	-X POST "$URL/uapi/tokens" -d '{"name": "bad name with spaces", "scopes": ["*:rw"]}')
 echo "$bad" | grep -q '"code": "validation_failed"' || fail "expected validation_failed"
 echo "$bad" | grep -q '"field": "name"' || fail "expected name field error"
 
 echo "--- POST /tokens with rate + burst persists per-token overrides ---"
 rate_scoped=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{
+	-X POST "$URL/uapi/tokens" -d '{
 		"name": "api_rate_limited", "scopes": ["firewall:rules:ro"],
 		"rate": 7, "burst": 11
 	}')
@@ -180,7 +180,7 @@ got_burst=$($SSH "uci get uapi.api_rate_limited.burst")
 [ "$got_burst" = "11" ] || fail "burst not persisted: got '$got_burst'"
 
 echo "--- GET /tokens/<name> surfaces rate/burst on the read path ---"
-read_back=$(curl -sS -H "$ADMIN" "$URL/tokens/api_rate_limited")
+read_back=$(curl -sS -H "$ADMIN" "$URL/uapi/tokens/api_rate_limited")
 echo "$read_back" | grep -q '"rate": 7' \
 	|| fail "GET response missing rate=7: $read_back"
 echo "$read_back" | grep -q '"burst": 11' \
@@ -189,7 +189,7 @@ $SSH 'uapi-token revoke api_rate_limited 2>/dev/null || true'
 
 echo "--- POST /tokens rejects rate <= 0 with validation_failed ---"
 bad_rate=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{"name": "bad_rate", "scopes": ["*:ro"], "rate": 0}')
+	-X POST "$URL/uapi/tokens" -d '{"name": "bad_rate", "scopes": ["*:ro"], "rate": 0}')
 echo "$bad_rate" | grep -q '"code": "validation_failed"' || fail "rate=0 should 422"
 echo "$bad_rate" | grep -q '"field": "rate"' || fail "rate=0 missing field=rate"
 
@@ -197,7 +197,7 @@ echo "--- per-token rate/burst override is actually enforced (burst then 429) --
 # burst=2 -> first 2 requests succeed; rate=1/s -> a 3rd or 4th request fired
 # within the same second should 429 because the bucket has not yet refilled.
 strict_bearer=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{
+	-X POST "$URL/uapi/tokens" -d '{
 		"name": "api_strict_rl", "scopes": ["firewall:rules:ro"],
 		"rate": 1, "burst": 2
 	}' | sed -n 's/.*"bearer": *"\([^"]*\)".*/\1/p')
@@ -226,13 +226,13 @@ drops() {
 	echo "$1" | awk -v s="uapi_rate_limit_drops_total{token_id=\"$2\"}" \
 		'$1 == s { print $2; found = 1 } END { if (!found) print 0 }'
 }
-before=$(curl -sS -H "$ADMIN" "$URL/metrics")
+before=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 [ "$(drops "$before" api_strict_rl)" -gt 0 ] || fail "api_strict_rl has no drops to fold"
 want=$(( $(drops "$before" api_strict_rl) + $(drops "$before" -retired) ))
 $SSH "test -e /var/run/uapi-ratelimit/api_strict_rl.txt" || fail "api_strict_rl has no bucket to reap"
 $SSH 'uapi-token revoke api_strict_rl' >/dev/null 2>&1 || fail "uapi-token revoke api_strict_rl failed"
 $SSH "test -e /var/run/uapi-ratelimit/api_strict_rl.txt" && fail "uapi-token revoke left the bucket"
-after=$(curl -sS -H "$ADMIN" "$URL/metrics")
+after=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 echo "$after" | grep -q 'token_id="api_strict_rl"' && fail "uapi-token revoke left the series of the token"
 [ "$(drops "$after" -retired)" = "$want" ] \
 	|| fail "token_id=\"-retired\" holds $(drops "$after" -retired) drops, expected $want"
@@ -263,7 +263,7 @@ $SSH "test -e /var/run/uapi-token-update/$file" && fail "the revoke left the las
 echo "--- POST /tokens and uapi-token create refuse a name that another section of the token store holds ---"
 $SSH 'uci set uapi.api_taken=other && uci set uapi.api_taken.x=1 && uci commit uapi'
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/tokens" -d '{"name": "api_taken", "scopes": ["firewall:rules:ro"]}')
+	-X POST "$URL/uapi/tokens" -d '{"name": "api_taken", "scopes": ["firewall:rules:ro"]}')
 [ "$status" = "409" ] || fail "POST /tokens of the name api_taken expected 409, got $status"
 $SSH "uapi-token create --name api_taken --scope 'firewall:rules:ro'" >/dev/null 2>&1 \
 	&& fail "uapi-token create took the name api_taken"
