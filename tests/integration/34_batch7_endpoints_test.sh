@@ -69,6 +69,8 @@ status=$(curl -sS -o /tmp/uapi_batch_ok.json -w '%{http_code}' \
 	}')
 [ "$status" = "207" ] || fail "batch happy path expected 207, got $status"
 grep -q '"results"' /tmp/uapi_batch_ok.json || fail "batch missing results array"
+grep -q '"headers"' /tmp/uapi_batch_ok.json || fail "batch results lack per-operation headers"
+grep -q '"X-Request-Id"' /tmp/uapi_batch_ok.json || fail "batch result headers lack the sub-request X-Request-Id"
 
 # A pure-read batch takes no lock and runs no transaction, so there is no reload outcome to
 # report and no header, which is what a read on any other endpoint does.
@@ -79,17 +81,18 @@ tr -d '\r' < /tmp/uapi_batch_ro_h | grep -qi '^X-Reload-Status:' \
 	&& fail "a read-only batch reported a reload it never ran"
 
 # A write batch commits and reloads once for the whole set, and the 207 is the only place
-# that outcome can be reported: the results array carries {status, body} and drops
-# sub-response headers.
+# the aggregate outcome can be reported. Each result also carries the headers of its own
+# sub-response, so a per-operation outcome such as the ETag survives inside a batch.
 echo "--- /batch write: the 207 carries the transaction headers ---"
 zid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/zones" \
 	-d '{"name":"bhdr","input":"ACCEPT","output_policy":"ACCEPT","forward":"REJECT"}' \
 	| grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
-curl -sS -o /dev/null -D /tmp/uapi_batch_w_h -H "$ADMIN" -H 'Content-Type: application/json' \
+curl -sS -o /tmp/uapi_batch_w.json -D /tmp/uapi_batch_w_h -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/batch" -d "{\"operations\":[{\"path\":\"/firewall/zones/$zid\",\"method\":\"PATCH\",\"body\":{\"forward\":\"ACCEPT\"}}]}"
 hdrs=$(tr -d '\r' < /tmp/uapi_batch_w_h)
 echo "$hdrs" | grep -qi '^X-Reload-Status:' || fail "batch write 207 carries no X-Reload-Status: $hdrs"
 echo "$hdrs" | grep -qi '^X-Reload-Services:.*firewall' || fail "batch write 207 does not name the reloaded service"
+grep -q '"ETag"' /tmp/uapi_batch_w.json || fail "batch write result lacks the sub-response ETag: $(cat /tmp/uapi_batch_w.json)"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/zones/$zid"
 
 echo "--- /batch abort: failing sub-request reverts all writes ---"

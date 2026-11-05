@@ -11,12 +11,13 @@ All notable changes to this project will be documented in this file. Format foll
 ### Added
 
 - **Request bounds are configurable from `config limits` in `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers` (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time constants; they are now read per request, with the compiled values as defaults and accepted ranges that ignore out-of-bounds values. `GET /diagnostics` reports the effective values under `limits`. Additive. (#339)
+- **`POST /batch` results carry per-operation headers.** Each entry of the 207 `results` array now has a `headers` object holding the headers the sub-request's own response carried (ETag, X-Reload-Status, X-Kernel-Status, X-Mgmt-Path-Warning, the sub-request's own `X-Request-Id`), so a client composing a batch reads the same per-operation outcome it would get from N separate requests. Additive. (#338)
+
 ## [3.4.1] - 2026-11-05
 
 ### Deprecated
 
 - **The rest of the v4 program is announced in the published spec and `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json` and the "Announced response-shape changes" section now also list the move of the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the always-present documented `runtime` envelope on every resource, and the pruning of dead error codes from the enum. The deprecation window runs from this release, not from v4. (#345)
-- **`/diagnostics` reports interrupted writes.** A write now records itself in `/var/run/uapi-interrupted-writes/` before the commit, under the package lock so the record and the commit are ordered together, and removes the record when the recipe ends on any path the request can still reach. When uhttpd kills the request process after the commit (client disconnect or `script_timeout`), the record survives: `GET /diagnostics` lists it under `interrupted_writes` with the packages, the request id, the staged sections and whether the reload had started. Report only; uapi still never finishes or restores another request's write. Additive. (#341)
 
 ## [3.4.0] - 2026-11-04
 

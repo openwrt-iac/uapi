@@ -624,7 +624,7 @@ function batch_dispatch(conn, ctx, token, method, body) {
 		for (let i = 0; i < length(ops); i++) {
 			let sub_ctx = { request_id: ctx.request_id + "." + i, kernel_sink: kernel_ops, batch_writes: length(pkgs) > 0 };
 			let resp = batch_run_one(c, sub_ctx, ops[i]);
-			push(results, { status: resp.status, body: resp.body });
+			push(results, { status: resp.status, headers: resp.headers ?? {}, body: resp.body });
 			if (resp.status >= 400) {
 				aborted = { index: i, envelope: resp };
 				return { ok: false, kind: "batch_aborted" };
