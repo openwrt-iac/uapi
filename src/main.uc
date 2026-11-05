@@ -13,6 +13,7 @@ let handler = require("handler");
 let transaction = require("transaction");
 let bus = require("bus");
 let nonuci = require("nonuci");
+let limits = require("limits");
 let token_store = require("token_store");
 let ratelimit = require("ratelimit");
 let metrics = require("metrics");
@@ -177,15 +178,17 @@ function send(resp) {
 }
 
 // The body is read and parsed before the bearer check. json() takes about 1.6 KB for each object or
-// array and about 80 bytes for any other value, so 1 MiB of `[{},{},...]` took 560 MB. The two
-// bounds keep the parse of any body under about 13 MB, measured with ucode 2026.01.16 on x86_64.
-const MAX_BODY_BYTES = 262144;
-const MAX_BODY_CONTAINERS = 2000;
+// array and about 80 bytes for any other value, so 1 MiB of `[{},{},...]` took 560 MB. The
+// max_body_bytes and max_body_containers bounds keep the parse of any body under about 13 MB,
+// measured with ucode 2026.01.16 on x86_64. Both are options of `config limits` in
+// /etc/config/uapi (src/lib/limits.uc), read per request; the values in limits.DEFAULTS are
+// the fallbacks.
 
 // A client that declared a body and stopped sending held its request process, and one of the
 // requests that uhttpd runs at a time with LuCI, 3 by default, until the script timeout of uhttpd,
 // 60 s. A body at the bound arrives within 10 s at about 210 kbit/s, and the read leaves most of
-// that timeout to the write.
+// that timeout to the write. body_read_s is an option of `config limits` too; this is the
+// fallback when the limits were not loaded (public routes answer before ubus connects).
 const BODY_READ_S = 10;
 
 // A require that fails stops uhttpd at its start, LuCI with it, and a package built without the
@@ -216,13 +219,13 @@ function elapsed_ms(start) {
 // longer still reads a body that has arrived, and does not count it as late. A body that keeps
 // arriving faster than it is read is bounded by its Content-Length or its last chunk and by the
 // script timeout, not by the deadline. The read stops at the bound of the body anyway.
-function body_part(n, start) {
+function body_part(n, start, deadline_s) {
 	if (STDIN == null)
 		return uhttpd.recv(n) ?? "";
 	while (true) {
 		let part = STDIN.read(n);
 		if (part != null) return part;
-		if (elapsed_ms(start) >= BODY_READ_S * 1000) return null;
+		if (elapsed_ms(start) >= (deadline_s ?? BODY_READ_S) * 1000) return null;
 		part = uhttpd.recv(1);
 		if (part != null) return part;
 	}
@@ -230,10 +233,10 @@ function body_part(n, start) {
 
 // A body that arrives a byte at a time comes as one part for each byte: 150 KB sent so took 9 MB
 // until every 64 parts were joined into one block.
-function read_body(n, start) {
+function read_body(n, start, deadline_s) {
 	let blocks = [], parts = [], got = 0;
 	while (got < n) {
-		let chunk = body_part(n - got, start);
+		let chunk = body_part(n - got, start, deadline_s);
 		if (chunk == null) return null;
 		if (chunk == "") break;
 		push(parts, chunk);
@@ -779,6 +782,7 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 		resources_loaded,
 		lock_state: { global_held, per_package: pkg_held },
 		state_dirs: state_dir.used(),
+		limits: limits.load(conn),
 		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
 	};
@@ -1008,6 +1012,16 @@ function dispatch(env, start) {
 		return { ctx, resp: r.fn(ctx, parts) };
 	}
 
+	// The ubus connection comes before the body read, because the body bounds are options of
+	// /etc/config/uapi read over uci.
+	let conn;
+	try { conn = bus.connect({ debug: LOGGING.debug }); }
+	catch (e) {
+		return { ctx, resp: errors.error(ctx, "service_unavailable", "ubus unreachable") };
+	}
+	let lim = limits.load(conn);
+	ctx.limits = lim;
+
 	let body = null;
 	let body_text = "";
 	if (method == "POST" || method == "PUT" || method == "PATCH") {
@@ -1017,20 +1031,20 @@ function dispatch(env, start) {
 		// the body. A chunked body comes de-chunked and without Content-Length, and ends where
 		// uhttpd closes the pipe after the last chunk.
 		let n = env.headers["transfer-encoding"] == "chunked"
-			? MAX_BODY_BYTES + 1 : int(env.CONTENT_LENGTH || "0", 0);
-		let in_bound = type(n) == "int" && n >= 0 && n <= MAX_BODY_BYTES + 1;
-		body_text = in_bound ? read_body(n, start) : "";
+			? lim.max_body_bytes + 1 : int(env.CONTENT_LENGTH || "0", 0);
+		let in_bound = type(n) == "int" && n >= 0 && n <= lim.max_body_bytes + 1;
+		body_text = in_bound ? read_body(n, start, lim.body_read_s) : "";
 		if (body_text == null) {
 			ctx.body_late = true;
 			return { ctx, resp: errors.error(ctx, "bad_request",
-				sprintf("Request body did not arrive in full within %d s", BODY_READ_S)) };
+				sprintf("Request body did not arrive in full within %d s", lim.body_read_s)) };
 		}
-		if (!in_bound || length(body_text) > MAX_BODY_BYTES)
+		if (!in_bound || length(body_text) > lim.max_body_bytes)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
-				sprintf("Request body is larger than %d bytes", MAX_BODY_BYTES)) };
-		if (length(replace(body_text, /[^{[]/g, "")) > MAX_BODY_CONTAINERS)
+				sprintf("Request body is larger than %d bytes", lim.max_body_bytes)) };
+		if (length(replace(body_text, /[^{[]/g, "")) > lim.max_body_containers)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
-				sprintf("Request body holds more than %d { and [ characters", MAX_BODY_CONTAINERS)) };
+				sprintf("Request body holds more than %d { and [ characters", lim.max_body_containers)) };
 		if (body_text != "") {
 			try { body = json(body_text); }
 			catch (e) {
@@ -1066,13 +1080,6 @@ function dispatch(env, start) {
 	                  && index(ctype, "application/json-patch+json") >= 0);
 
 	let query = parse_query(env.QUERY_STRING);
-
-	let conn;
-	try { conn = bus.connect({ debug: LOGGING.debug }); }
-	catch (e) {
-		return { ctx, resp: errors.error(ctx, "service_unavailable",
-		                                 "ubus unreachable") };
-	}
 
 	// Authentication boundary. Everything in PUBLIC_ROUTES above is reachable without a
 	// bearer token, and today that is exactly three endpoints: `/openapi.json`,
@@ -1287,9 +1294,10 @@ global.handle_request = function(env) {
 	// one that it queued. No answer of the handler makes uhttpd close the connection, so what
 	// follows a body that missed the deadline is parsed as a request, and the miss is logged.
 	if (env.headers["transfer-encoding"] == "chunked" || int(env.CONTENT_LENGTH || "0", 0) != 0) {
-		let part = body_part(65536, start);
+		let deadline = (ctx != null) ? ctx.limits?.body_read_s : null;
+		let part = body_part(65536, start, deadline);
 		while (part != null && part != "")
-			part = body_part(65536, start);
+			part = body_part(65536, start, deadline);
 		if (part == null) ctx.body_late = true;
 	}
 	if (ctx.body_late)

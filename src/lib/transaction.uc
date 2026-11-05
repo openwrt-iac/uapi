@@ -1,5 +1,6 @@
 let fs = require('fs');
 let wg = require('wg');
+let limits = require('limits');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -502,7 +503,8 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
 	let check_services = params.check_services ?? default_check_services;
-	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ], budget: {} };
+	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ],
+	              budget: { ms: limits.reload_budget_ms(conn) } };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
 	// snapshot, committing, or reloading. Used by /batch to compose many
@@ -580,7 +582,8 @@ function multi_transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_applied = [];
-	let watch = { start: params.watch ?? check_daemons, budget: {} };
+	let watch = { start: params.watch ?? check_daemons,
+	              budget: { ms: limits.reload_budget_ms(conn) } };
 
 	let svc_err = check_services(services_of(required, packages));
 	if (svc_err != null)

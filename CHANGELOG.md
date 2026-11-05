@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Added
+
+- **Request bounds are configurable from `config limits` in `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers` (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time constants; they are now read per request, with the compiled values as defaults and accepted ranges that ignore out-of-bounds values. `GET /diagnostics` reports the effective values under `limits`. Additive. (#339)
+
 ## [3.4.0] - 2026-11-04
 
 ### Deprecated
