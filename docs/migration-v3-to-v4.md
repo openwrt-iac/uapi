@@ -11,8 +11,23 @@ One installation serves exactly one API major. The package upgrade flips the pre
 URL from the v4 spec's `servers` block.
 
 <<<<<<< HEAD
-=======
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
+
+
+=======
+## Curated string fields refuse newlines and carriage returns
+
+
+
+One check in the type gate now refuses `\n` and `\r` in every curated string on write (announced
+in 3.4.0, #276), replacing the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about
+`\r`. The only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several lines on
+purpose. Free-text fields such as descriptions that no daemon reads as one line are refused too;
+that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
+
+## `network/routes.table` and `network/rules.lookup` accept a table name on write
+
+
 
 The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
 A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
