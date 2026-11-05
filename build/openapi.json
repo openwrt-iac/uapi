@@ -22701,10 +22701,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"target"
 				],
 				"allOf": [
@@ -23230,10 +23233,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"name"
 				]
 			},
@@ -23548,10 +23554,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"match"
 				],
 				"allOf": [
@@ -24071,9 +24080,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
+				"required": [
+					"id",
+					"runtime"
+				],
 				"allOf": [
 					{
 						"if": {
@@ -24420,10 +24434,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"src",
 					"dest"
 				]
@@ -24600,9 +24617,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"FirewallDefaultsRequest": {
 				"type": "object",
@@ -25133,6 +25155,8 @@
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"proto"
 				],
 				"allOf": [
@@ -26361,10 +26385,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"name"
 				],
 				"allOf": [
@@ -26655,10 +26682,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"target"
 				]
 			},
@@ -26985,9 +27015,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
+				"required": [
+					"id",
+					"runtime"
+				],
 				"allOf": [
 					{
 						"if": {
@@ -27404,10 +27439,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"device",
 					"vlan"
 				]
@@ -27630,6 +27668,8 @@
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"interface",
 					"public_key",
 					"allowed_ips"
@@ -27953,10 +27993,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"type"
 				]
 			},
@@ -28492,6 +28535,8 @@
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"device"
 				]
 			},
@@ -29353,9 +29398,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
+				"required": [
+					"id",
+					"runtime"
+				],
 				"allOf": [
 					{
 						"anyOf": [
@@ -29804,6 +29854,8 @@
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"interface"
 				]
 			},
@@ -30202,9 +30254,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"DhcpDnsmasqRequest": {
 				"type": "object",
@@ -30491,9 +30548,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"DhcpOdhcpdRequest": {
 				"type": "object",
@@ -30652,9 +30714,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"SystemRequest": {
 				"type": "object",
@@ -30851,9 +30918,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
+				"required": [
+					"id",
+					"runtime"
+				],
 				"allOf": [
 					{
 						"if": {
@@ -31030,9 +31102,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"DropbearInstancesRequest": {
 				"type": "object",
@@ -31294,9 +31371,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"UhttpdInstancesRequest": {
 				"type": "object",
@@ -31657,10 +31739,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"commonname"
 				]
 			},
@@ -31976,9 +32061,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"UnboundServerRequest": {
 				"type": "object",
@@ -32409,9 +32499,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"UnboundSrvRequest": {
 				"type": "object",
@@ -32549,9 +32644,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"UnboundExtRequest": {
 				"type": "object",
@@ -32689,10 +32789,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"interface"
 				]
 			},
@@ -32880,9 +32983,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"SnmpdAgentsRequest": {
 				"type": "object",
@@ -32956,10 +33064,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"secname",
 					"source",
 					"community"
@@ -33072,10 +33183,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"group"
 				]
 			},
@@ -33238,10 +33352,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"group"
 				]
 			},
@@ -33472,9 +33589,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"SnmpdSystemRequest": {
 				"type": "object",
@@ -33660,9 +33782,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"LldpdConfigRequest": {
 				"type": "object",
@@ -33837,9 +33964,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"PrometheusNodeExporterLuaConfigRequest": {
 				"type": "object",
@@ -33917,9 +34049,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"VnstatConfigRequest": {
 				"type": "object",
@@ -34006,9 +34143,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"Mwan3GlobalsRequest": {
 				"type": "object",
@@ -34284,9 +34426,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"Mwan3InterfacesRequest": {
 				"type": "object",
@@ -34698,10 +34845,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"interface"
 				]
 			},
@@ -34809,10 +34959,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"use_members"
 				]
 			},
@@ -34977,10 +35130,13 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
 				"required": [
+					"id",
+					"runtime",
 					"use_policy"
 				]
 			},
@@ -35402,9 +35558,14 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"UsteerConfigRequest": {
 				"type": "object",
@@ -36236,6 +36397,7 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					},
 					"key": {
@@ -36253,7 +36415,11 @@
 						"writeOnly": true,
 						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12."
 					}
-				}
+				},
+				"required": [
+					"id",
+					"runtime"
+				]
 			},
 			"OpenvpnInstancesRequest": {
 				"type": "object",
