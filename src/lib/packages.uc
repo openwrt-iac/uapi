@@ -60,7 +60,7 @@ function info_one(name) {
 	let exists = apk_exec(sprintf("info -e -- %s", name));
 	if (!exists.ok || exists.output == "") return null;
 	let query = apk_exec(sprintf("query --from installed --fields name,version --format json -- %s", name));
-	return { id: name, managed: true, name: name, installed: true,
+	return { id: name, name: name, installed: true,
 	         version: query.ok ? version_of(name, query.output) : null, runtime: {} };
 }
 
@@ -68,7 +68,7 @@ function list_handler(ctx) {
 	let names = list_installed();
 	let out = [];
 	for (let n in names)
-		push(out, { id: n, managed: true, name: n, installed: true,
+		push(out, { id: n, name: n, installed: true,
 		            version: null, runtime: {} });
 	return errors.ok(ctx, out);
 }
@@ -163,7 +163,7 @@ function list_feeds_handler(ctx) {
 		let url = fp ? trim(fp.read("line") ?? "") : "";
 		if (fp) fp.close();
 		push(out, {
-			id: id, managed: true, name: id, filename: f,
+			id: id, name: id, filename: f,
 			url: url, enabled: true, runtime: {},
 		});
 	}
@@ -180,7 +180,7 @@ function get_feed_handler(ctx, id) {
 	let url = trim(fp.read("line") ?? "");
 	fp.close();
 	return errors.ok(ctx, {
-		id: id, managed: true, name: id, filename: id + ".list",
+		id: id, name: id, filename: id + ".list",
 		url: url, enabled: true, runtime: {},
 	});
 }
@@ -246,7 +246,7 @@ function create_feed_handler(ctx, body) {
 		update_status = sprintf("apk update failed (exit %d); see syslog %s",
 			r.update_exit, ctx.request_id);
 	}
-	return errors.ok(ctx, { id: name, managed: true, name: name,
+	return errors.ok(ctx, { id: name, name: name,
 	                        filename: name + ".list", url: url, enabled: true,
 	                        update_status: update_status, runtime: {} });
 }

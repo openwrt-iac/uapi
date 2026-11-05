@@ -27,6 +27,12 @@ never rejects a body on `Content-Type`.
 
 
 
+## `managed` and the adopt flow are removed
+Every curated response envelope was `{id, managed, runtime, fields}`; it is now `{id, runtime,
+fields}` (announced in 3.4.1, #321). `POST /<resource>/<id>/adopt` is gone (it answers 404), the
+`?managed=` query filter is gone, and the `unmanaged_resource` (409) error code left the enum with
+## `unsupported_media_type` and `unmanaged_resource` leave the error enum
+`unmanaged_resource` (409), both dead (announced in 3.4.1, #323 and #321). Clients branching on them
 The remaining readers that used `normalize_bool` now use `platform_bool` (announced in 3.4.0,
 #310): `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the
 `usteer/config` booleans. The uci blob converter takes only `1`/`true` and `0`/`false`, so the
@@ -77,7 +83,6 @@ that is the announced breaking part. Per-field `pattern`s keep their word, quote
 
 
 
-=======
 The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
 A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
 `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422, as does
