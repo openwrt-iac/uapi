@@ -12,6 +12,49 @@ URL from the v4 spec's `servers` block.
 
 ## `mwan3/interfaces.family` reads `ipv4` when unset
 
+## A `wireless/interfaces` section with no `mode` reads `null`
+
+
+
+## `dhcp/leases6` merges into `dhcp/leases`
+
+
+
+The `/dhcp/leases6` endpoint is removed (announced in 3.4.1, #320). `GET /dhcp/leases` still
+returns the IPv4 leases, and `GET /dhcp/leases?family=v6` returns the IPv6 ones from odhcpd's
+statefile. The entry id is the MAC for v4 entries and the IP for v6 ones, so
+`GET /dhcp/leases/<ip>?family=v6` looks a v6 entry up. The `dhcp:leases6` scope is gone with the
+endpoint.
+
+## `unsupported_media_type` leaves the error enum
+
+
+
+The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
+and never emitted (announced in 3.4.1, #323). Clients branching on it must drop that branch; uapi
+never rejects a body on `Content-Type`.
+
+## Boolean reads follow the platform's reader
+
+
+
+The remaining readers that used `normalize_bool` now use `platform_bool` (announced in 3.4.0,
+#310): `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the
+`usteer/config` booleans. The uci blob converter takes only `1`/`true` and `0`/`false`, so the
+word spellings `on`/`yes`/`enabled` now read `false` there instead of `true`. Fields whose daemon
+really takes the wider set keep it: fw4's `parse_bool` and libvalidate's `:bool:` (dropbear's auth
+flags) still accept the ten spellings, and those reads are unchanged. Evidence: libuci `66127cd`
+and ubox `6f78fa4`, pinned in `docs/ucode-quirks.md` (#312).
+
+wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips an absent mode as
+it skips an unknown one), so the read now answers `null` instead of `"ap"` (announced in 3.4.0,
+#307). The write side changes the same way: a `null` mode is accepted and removes the option,
+leaving a section that sets up nothing. A create or PUT that sends no mode stores none.
+
+## `mwan3/interfaces.family` reads `ipv4` when unset
+
+
+
 `mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the read now answers
 `"ipv4"` instead of `null` for a section that stores none (announced in 3.4.0, #306). `family` is
 no longer in the request schema's `required`: a write may omit it, and a `null` removes the option,
@@ -88,6 +131,24 @@ purpose. Free-text fields such as descriptions that no daemon reads as one line 
 that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
 
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
+
+## Curated string fields refuse newlines and carriage returns
+
+
+
+
+
+One check in the type gate now refuses `\n` and `\r` in every curated string on write (announced
+in 3.4.0, #276), replacing the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about
+`\r`. The only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several lines on
+purpose. Free-text fields such as descriptions that no daemon reads as one line are refused too;
+that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
+
+## `network/routes.table` and `network/rules.lookup` accept a table name on write
+
+
+
+
 
 The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
 A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
