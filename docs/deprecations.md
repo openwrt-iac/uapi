@@ -38,7 +38,6 @@ These land in v4, not before. The list is mirrored in the published spec's own "
 
 - **A `wireless/interfaces` section with no `mode` will read as null in v4 instead of `ap`.** wifi-scripts sets up nothing for such a section, so the current read reports an access point that does not exist. (#307)
 - **A write will be refused for any stored error the section holds in v4, as LuCI does.** Today a write refuses only the errors it adds. (#308)
-- **Boolean fields will read what the platform's converters take in v4.** The uci blob converter accepts only `1`/`true` and `0`/`false` and drops the option otherwise (libuci `66127cd`), and libvalidate's `:bool:` takes ten spellings case-insensitively (ubox `6f78fa4`); `normalize_bool` and the wider helpers are retired. (#310, evidence #312)
 - **The special endpoints move under `/uapi/...` in v4.** `/tokens`, `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami` become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and `/uapi/whoami`, matching the scopes that already exist (`uapi:tokens`, `uapi:metrics`, `uapi:diagnostics`). The unauthenticated trio stays at the top level: `/healthz`, `/openapi.json`, `/schema/*`. (#319)
 - **`dhcp/leases6` merges into `dhcp/leases` in v4.** `GET /dhcp/leases?family=v6` returns the v6 entries, and the `/dhcp/leases6` endpoint is removed. (#320)
 - **`runtime` is always present and documented on every resource in v4.** Today 4 of 45 resources document their runtime block and the rest publish an opaque object. (#322)
