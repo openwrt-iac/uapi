@@ -262,8 +262,8 @@ const NULL_SEEDS = {
 };
 
 // A field that the Request requires and that a null removes, which the spec cannot say, because
-// the Patch keeps the Request type of a required field. validate() does not require `family`.
-const REQUIRED_NULL_REMOVES = { "mwan3.interfaces.uc/mwan": [ "family" ] };
+// v4 (#306): no field is required-and-null-removable anymore; mwan3's family reads ipv4 when unset.
+const REQUIRED_NULL_REMOVES = {};
 
 function cleared(v) { return v == null || (type(v) == "array" && length(v) == 0); }
 
