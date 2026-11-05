@@ -61,7 +61,7 @@ state=$(curl -sS -H "$ADMIN" "$URL/firewall/rules/$id" \
 echo "--- /batch happy path: 2 sub-requests return 207 Multi-Status ---"
 status=$(curl -sS -o /tmp/uapi_batch_ok.json -w '%{http_code}' \
 	-H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{
+	-X POST "$URL/uapi/batch" -d '{
 		"operations": [
 			{"path": "/firewall/zones", "method": "GET"},
 			{"path": "/system", "method": "GET"}
@@ -76,7 +76,7 @@ grep -q '"X-Request-Id"' /tmp/uapi_batch_ok.json || fail "batch result headers l
 # report and no header, which is what a read on any other endpoint does.
 echo "--- /batch read-only: no transaction headers ---"
 curl -sS -o /dev/null -D /tmp/uapi_batch_ro_h -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{"operations":[{"path":"/system","method":"GET"}]}'
+	-X POST "$URL/uapi/batch" -d '{"operations":[{"path":"/system","method":"GET"}]}'
 tr -d '\r' < /tmp/uapi_batch_ro_h | grep -qi '^X-Reload-Status:' \
 	&& fail "a read-only batch reported a reload it never ran"
 
@@ -88,7 +88,7 @@ zid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/fir
 	-d '{"name":"bhdr","input":"ACCEPT","output_policy":"ACCEPT","forward":"REJECT"}' \
 	| grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 curl -sS -o /tmp/uapi_batch_w.json -D /tmp/uapi_batch_w_h -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d "{\"operations\":[{\"path\":\"/firewall/zones/$zid\",\"method\":\"PATCH\",\"body\":{\"forward\":\"ACCEPT\"}}]}"
+	-X POST "$URL/uapi/batch" -d "{\"operations\":[{\"path\":\"/firewall/zones/$zid\",\"method\":\"PATCH\",\"body\":{\"forward\":\"ACCEPT\"}}]}"
 hdrs=$(tr -d '\r' < /tmp/uapi_batch_w_h)
 echo "$hdrs" | grep -qi '^X-Reload-Status:' || fail "batch write 207 carries no X-Reload-Status: $hdrs"
 echo "$hdrs" | grep -qi '^X-Reload-Services:.*firewall' || fail "batch write 207 does not name the reloaded service"
@@ -100,7 +100,7 @@ echo "--- /batch abort: failing sub-request reverts all writes ---"
 # Expect the rule to NOT exist after the batch.
 status=$(curl -sS -o /tmp/uapi_batch_abort.json -w '%{http_code}' \
 	-H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{
+	-X POST "$URL/uapi/batch" -d '{
 		"operations": [
 			{
 				"path": "/firewall/rules",
@@ -129,7 +129,7 @@ echo "$list" | grep -q '"name": "batch-rule-1"' \
 echo "--- /batch rejects oversized operations array ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{"operations": []}')
+	-X POST "$URL/uapi/batch" -d '{"operations": []}')
 [ "$status" = "400" ] || fail "empty ops expected 400, got $status"
 
 echo "--- Per-resource ETag: firewall/rules ETag is stable across unrelated firewall/zones writes ---"
