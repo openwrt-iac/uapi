@@ -1066,51 +1066,6 @@ function make(resource, opts) {
 		return translate_tx(ctx, result);
 	}
 
-	function adopt(conn, ctx, id) {
-		// Named sections (the box's default `lan` / `wan` zones, anything
-		// uci-set out-of-band) are addressable as-is; adopt is an idempotent
-		// acknowledgement that doesn't change uci state. Short-circuit
-		// before the transaction so we don't acquire a per-package lock or
-		// fire a service reload for a no-op. The previous transactional
-		// path called reload(services) unconditionally on the success path,
-		// which meant N adopts during a Terraform import triggered N
-		// firewall/network reloads with brief visible glitches each.
-		let preview = load_section(conn, pkg, id);
-		if (!preview || !type_predicate(preview['.type']))
-			return errors.error(ctx, "not_found",
-			                    sprintf("No %s with id %J", sec_type, id));
-		id = preview['.name'];
-		if (!preview['.anonymous']) {
-			let view = resource.fromUci(preview, conn);
-			return set_etag_header(errors.ok(ctx, view), view);
-		}
-		// Anonymous (cfgXXXXXX) section: needs a uci_rename to a stable
-		// name, so we go through the full transaction (snapshot + commit +
-		// reload + restore-on-failure).
-		let result = transaction.transaction(conn, tx_params(ctx, {
-			fn: function(c, p) {
-				let existing = load_section(c, p, id);
-				if (!existing || !type_predicate(existing['.type']))
-					return { ok: false, kind: "not_found",
-					         message: sprintf("No %s with id %J", sec_type, id) };
-				if (!existing['.anonymous']) {
-					// Section was renamed between the preview load and the
-					// transaction; treat as the named-ack path.
-					return { ok: true, body: resource.fromUci(existing, conn) };
-				}
-				let new_id = id_for_create(resource.fromUci(existing, conn))
-				             ?? ids.new_id(id_prefix);
-				c.uci_rename(p, id, new_id);
-				let view = { ...existing };
-				view['.name'] = new_id;
-				view['.anonymous'] = false;
-				return { ok: true, body: resource.fromUci(view, conn) };
-			},
-		}));
-
-		return translate_tx(ctx, result);
-	}
-
 	// The same pre-validate path a write takes, run over what is already in uci.
 	// Both steps matter and neither is obvious: carry_write_only, or every section
 	// holding a masked secret reports its own secret as missing, which on a
