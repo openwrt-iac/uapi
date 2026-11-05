@@ -10,7 +10,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
 
 # Wipe per-test state so a previous run doesn't poison this one.
-$SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update' >/dev/null 2>&1 || true
+$SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update /var/run/uapi-interrupted-writes' >/dev/null 2>&1 || true
 
 echo "--- /metrics returns Prometheus text under *:ro ---"
 # Generate a couple of requests so there's data to scrape.
@@ -123,14 +123,14 @@ curl -sS -o /dev/null -D /tmp/uapi_idem_batch.h -H "$ADMIN" -H 'Content-Type: ap
 grep -i '^idempotent-replayed:' /tmp/uapi_idem_batch.h >/dev/null || fail "the replay of a batch that writes is not marked replayed"
 
 echo "--- every state directory is 0700 and every file in it 0600 ---"
-dirs="/var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update"
+dirs="/var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update /var/run/uapi-interrupted-writes"
 for d in $dirs; do $SSH "test -d $d" || fail "$d is missing"; done
 wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)")
 [ -z "$wrong" ] || fail "these are not 0700 or 0600: $wrong"
 
 echo "--- /diagnostics reports that uapi uses each state directory ---"
 used=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq -cS .state_dirs)
-[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
+[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-interrupted-writes":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
 	|| fail "state_dirs reads $used"
 
 echo "--- /diagnostics reports a state directory as it finds it, and creates or narrows none ---"

@@ -107,6 +107,7 @@ t.describe('state_dir.used', () => {
 		t.assert_deep_equal(used_under(null), {
 			"/var/run/uapi-error-ring": true,
 			"/var/run/uapi-idempotency": false,
+			"/var/run/uapi-interrupted-writes": null,
 			"/var/run/uapi-metrics": false,
 			"/var/run/uapi-ratelimit": false,
 			"/var/run/uapi-token-update": null,
