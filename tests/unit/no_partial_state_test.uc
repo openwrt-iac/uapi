@@ -67,15 +67,21 @@ t.describe('property: a failed write leaves uci untouched', () => {
 			let w = c.singleton ? h.patch(conn, ctx(), body)
 			                   : h.replace(conn, ctx(), c.id, body);
 
-			// The write has to actually fail, or this proves nothing: a 200 here means the
-			// injected reload error never reached the transaction and the comparison below
-			// would pass for the wrong reason.
-			if (w.status != 500) {
-				t.assert_equal(sprintf("expected the injected reload failure to surface, got %d %J",
-				                       w.status, w.body), "500");
-				return;
+			// v4 (#308): a seed that stores a value validate_new() refuses answers 422 at
+			// validation, before the injected reload failure, and leaves uci untouched too.
+			if (w.status == 422)
+				t.assert_equal(w.body.code, "validation_failed");
+			else {
+				// The write has to actually fail, or this proves nothing: a 200 here means the
+				// injected reload error never reached the transaction and the comparison below
+				// would pass for the wrong reason.
+				if (w.status != 500) {
+					t.assert_equal(sprintf("expected the injected reload failure to surface, got %d %J",
+					                       w.status, w.body), "500");
+					return;
+				}
+				t.assert_equal(w.body.code, "reload_failed_restored");
 			}
-			t.assert_equal(w.body.code, "reload_failed_restored");
 
 			let after = snapshot(conn);
 			if (!ph.json_eq(json(before), json(after)))
