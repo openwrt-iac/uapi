@@ -186,9 +186,11 @@ whole section for anything else, because `validate_data` rejecting a value makes
 init script drop the section (`dropbear.init` and `sysntpd` both do this). The uci
 blob converter is narrower and case-sensitive: `true`/`1` and `false`/`0` only, from
 libuci `66127cd` (2025-12-02, the 25.12.5 SDK), and anything else drops the option
-rather than the section. So `system.log_remote`, `system/timeservers` and dropbear's
-auth flags read with `normalize_bool` until v4 retires it, and the v4 announcement
-(#310 in the v4 milestone) may cite these two pins as the evidence.
+rather than the section. So `system.log_remote` and `system/timeservers` read with `platform_bool` since v4 (#310),
+which changes what the word spellings `on`/`yes` read as: the blob converter does not take
+them, so they read false, and dropbear's auth flags keep `normalize_bool`, because
+dropbear.init reads them through libvalidate, which takes all ten spellings. The v4
+announcement (#310 in the v4 milestone) cites these two pins as the evidence.
 
 Writes still emit `"1"` / `"0"`, which every reader above accepts.
 
