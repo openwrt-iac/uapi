@@ -6,6 +6,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated string on write.** The request type is array-only in both directions; a string answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`, moved to "Removed in past releases" under 4.0.0, and the entry left the spec's "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the remaining `x-uapi-*` markers are documented once in `docs/versioning.md` (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
+
 ### Added
 
 - **`/diagnostics` reports interrupted writes.** A write now records itself in
@@ -171,6 +175,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Deprecated
 
 - **The rest of the v4 program is announced in the published spec and `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json` and the "Announced response-shape changes" section now also list the move of the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the always-present documented `runtime` envelope on every resource, and the pruning of dead error codes from the enum. The deprecation window runs from this release, not from v4. (#345)
+### Removed
+
+- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated string on write.** The request type is array-only in both directions; a string answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`, moved to "Removed in past releases" under 4.0.0, and the entry left the spec's "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the remaining `x-uapi-*` markers are documented once in `docs/versioning.md` (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
 
 ## [3.4.0] - 2026-11-04
 
