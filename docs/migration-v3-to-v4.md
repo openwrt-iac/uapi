@@ -10,6 +10,17 @@ One installation serves exactly one API major. The package upgrade flips the pre
 `/api/v3` to `/api/v4` and strips every older prefix, and a generated client takes the new base
 URL from the v4 spec's `servers` block.
 
+<<<<<<< HEAD
+=======
+## `network/routes.table` and `network/rules.lookup` accept a table name on write
+
+The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
+A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
+`/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422, as does
+an id of 0. The read still answers the id, so a plan stays stable when `rt_tables` changes, and a
+name stored by hand or by LuCI still reads as its id.
+
+>>>>>>> 2ca0856 (v4: routes.table and rules.lookup accept a table name on write (#240))
 ## `network/interfaces.ip6prefix` is array-only on write
 
 A space-separated string on write is refused with 422 `invalid_type` (announced since 3.2.0,
