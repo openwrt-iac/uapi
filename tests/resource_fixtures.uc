@@ -358,7 +358,7 @@ const CASES = [
 	},
 	{
 		file: "mwan3.interfaces.uc", id: "mwan", pkg: "mwan3",
-		section: { check_quality: '1', keep_failure_interval: '1', '.type': 'interface', family: 'ipv4', enabled: '1', track_method: 'ping', reliability: '1' },
+		section: { check_quality: '1', keep_failure_interval: '1', '.type': 'interface', family: 'ipv6', enabled: '1', track_method: 'ping', reliability: '1' },
 	},
 	{
 		file: "mwan3.members.uc", id: "m1", pkg: "mwan3",
