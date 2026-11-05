@@ -42,7 +42,12 @@ function toUci(json) {
 	if (json.target != null)    out.target = json.target;
 	if (json.netmask != null)   out.netmask = json.netmask;
 	if (json.gateway != null)   out.gateway = json.gateway;
-	if (json.table != null)     out.table = "" + json.table;
+	// A table name on write is resolved like netifd resolves it and stored as its id, so a
+	// plan that reads the id back stays stable when /etc/iproute2/rt_tables changes.
+	if (json.table != null)
+		out.table = "" + (type(json.table) == "string"
+			? rt_table_id(json.table, () => fs.readfile("/etc/iproute2/rt_tables"))
+			: json.table);
 	if (json.metric != null)    out.metric = "" + json.metric;
 	if (json.mtu != null)       out.mtu = "" + json.mtu;
 	if (json.source != null)    out.source = json.source;
@@ -76,6 +81,10 @@ function validate(json, conn) {
 	if (json.table === 0)
 		push(errs, { field: "table", code: "out_of_range",
 		             message: "must be from 1 to 4294967295: netifd drops a route whose table is 0, or a name it cannot resolve, which reads as 0" });
+	if (type(json.table) == "string"
+	    && rt_table_id(json.table, () => fs.readfile("/etc/iproute2/rt_tables")) == 0)
+		push(errs, { field: "table", code: "invalid_format",
+		             message: "must be an id from 1 to 4294967295 or a name from /etc/iproute2/rt_tables (default, main and local included): netifd drops a route whose table it cannot resolve, which reads as 0" });
 
 	let needs_iface = (json.type == null || json.type == "unicast");
 	if (conn != null && needs_iface && json.interface != null && json.interface != "") {
@@ -109,8 +118,9 @@ return {
 		             description: "IPv4 netmask if target is an address (not CIDR)" },
 		gateway:   { type: ["string", "null"],
 		             description: "IPv4 next-hop address" },
-		table:     { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
-		             description: "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write of 0 answers 422." },
+		table:     { type: ["integer", "string", "null"], minimum: 0, maximum: 4294967295,
+		             "x-uapi-write": { minimum: 1 },
+		             description: "Routing table. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0." },
 		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		source:    { type: ["string", "null"],
