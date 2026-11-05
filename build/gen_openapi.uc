@@ -1539,17 +1539,16 @@ function build_schemas() {
 			delete properties.managed;
 		}
 
-		// runtime is derived from ubus and toUci ignores it, so it can never be
-		// written on any resource. Saying so matters twice over: for the fields
-		// that deliberately disagree with the configured value, where a generator
-		// treating them as writable produces a diff no configuration can resolve;
-		// and for the resources that merely carry an empty runtime, where an
-		// un-annotated `type: object` reads to a generator as an ordinary
-		// writable free-form map. The annotation has to land whether or not the
-		// module documents its runtime shape, which is why it is applied to the
-		// property rather than folded into the openapi_runtime override.
-		if (type(properties.runtime) == "object") {
-			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : properties.runtime;
+		// v4 (#322): runtime is always present in a response and documented on every
+		// resource. The module's openapi_runtime wins when declared; otherwise the shape
+		// is an object with the envelope's description. readOnly because toUci ignores it,
+		// so it can never be written: a generator treating it as writable would produce a
+		// diff no configuration can resolve. Collections are item lists, not envelopes.
+		if (ep.kind != "collection") {
+			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : {
+				"type": "object",
+				"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+			};
 			properties.runtime = { ...documented, readOnly: true };
 		}
 
@@ -1583,7 +1582,11 @@ function build_schemas() {
 			"properties": resp_props,
 		};
 
-		let resp_required = [ ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
+		// v4 (#322): id and runtime are always present in a resource response. Collections
+		// are item lists, so only their own required lists apply.
+		let resp_required = (ep.kind == "collection")
+			? [ ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ]
+			: [ "id", "runtime", ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
 		if (length(resp_required) > 0)
 			s.required = resp_required;
 
