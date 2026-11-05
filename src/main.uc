@@ -823,6 +823,202 @@ function maybe_304(resp, ctx) {
 	return { status: 304, headers: h, body: null };
 }
 
+function openapi_route(ctx) {
+	let f = fs.open("/usr/share/uapi/openapi.json", "r");
+	if (!f)
+		return errors.error(ctx, "not_found", "openapi.json not installed");
+	let content = f.read("all") ?? "";
+	f.close();
+	return { status: 200,
+	         headers: { "Content-Type": "application/json",
+	                    "X-Request-Id": ctx.request_id },
+	         body: content };
+}
+
+// Routes served before the bearer check, so reachable without a token. Today that
+// is exactly /openapi.json, /healthz and anything under /schema, pinned by tests
+// 10, 02 and 31. An endpoint added here is public whether or not that was the
+// intent.
+const PUBLIC_ROUTES = [
+	{ path: "/openapi.json", methods: ["GET"], not_allowed: "openapi.json only supports GET",
+	  fn: function(ctx, parts) { return openapi_route(ctx); } },
+	{ path: "/healthz", methods: ["GET"], not_allowed: "healthz only supports GET",
+	  fn: function(ctx, parts) { return healthz_response(ctx); } },
+	{ prefix: "schema", methods: ["GET"], not_allowed: "schema only supports GET",
+	  fn: function(ctx, parts) { return schema_response(ctx, parts); } },
+];
+
+// Exact-path routes served after authentication. `scope` names the token scope the
+// request needs, at level `verb`.
+const AUTH_EXACT_ROUTES = [
+	{ path: "/metrics", methods: ["GET"], not_allowed: "metrics only supports GET",
+	  scope: ["uapi", "metrics"], verb: "ro", scope_what: "reading uapi/metrics",
+	  fn: function(conn, ctx, token, parts, method, body, query, env) {
+		  return metrics_response(ctx);
+	  } },
+	{ path: "/batch",
+	  fn: function(conn, ctx, token, parts, method, body, query, env) {
+		  return batch_dispatch(conn, ctx, token, method, body);
+	  } },
+	{ path: "/diagnostics", methods: ["GET"], not_allowed: "diagnostics only supports GET",
+	  scope: ["uapi", "diagnostics"], verb: "ro", scope_what: "reading uapi/diagnostics",
+	  fn: function(conn, ctx, token, parts, method, body, query, env) {
+		  return diagnostics_response(ctx, conn, token.scopes, query.validate == "1");
+	  } },
+];
+
+function auth_route(conn, ctx, token, parts, method, body, query, env) {
+	if (length(parts) == 2 && parts[1] == "whoami") {
+		if (method != "GET")
+			return errors.error(ctx, "method_not_allowed",
+			                     "auth/whoami only supports GET");
+		return whoami_response(ctx, token, env);
+	}
+	return errors.error(ctx, "not_found",
+		sprintf("Unknown auth sub-path %J",
+		        length(parts) >= 2 ? parts[1] : ""));
+}
+
+function tokens_route(conn, ctx, token, parts, method, body, query, env) {
+	let id = length(parts) >= 2 ? parts[1] : null;
+	if (length(parts) > 2)
+		return errors.error(ctx, "not_found", "Unknown tokens sub-path");
+	let verb = method_verb(method);
+	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "tokens"], verb,
+		"this operation on uapi/tokens");
+	if (denied != null) return denied;
+	let resp;
+	if (method == "GET" && id == null) {
+		resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
+	} else if (method == "GET") {
+		let rec = token_store.get_public(conn, id);
+		if (rec == null) resp = errors.error(ctx, "not_found",
+			sprintf("Token %J not found", id));
+		else resp = errors.ok(ctx, rec);
+	} else if (method == "POST" && id == null) {
+		let r = token_store.create(conn, body, token.scopes, ctx.now_epoch);
+		resp = tokens_translate(ctx, r);
+	} else if (method == "DELETE" && id != null) {
+		let r = token_store.remove(conn, id, ctx.now_epoch);
+		if (r.ok) resp = errors.no_content(ctx);
+		else resp = tokens_translate(ctx, r);
+	} else {
+		resp = errors.error(ctx, "method_not_allowed",
+			sprintf("Method %J not allowed on tokens%s",
+			        method, id != null ? "/<id>" : ""));
+	}
+	return resp;
+}
+
+function raw_route(conn, ctx, token, parts, method, body, query, env) {
+	if (length(parts) < 2) return null;
+	let pkg = parts[1];
+	let id = length(parts) >= 3 ? parts[2] : null;
+	let resp;
+	if (id == null) {
+		if (method == "GET")  resp = raw.list(conn, ctx, token.scopes, pkg);
+		else if (method == "POST") resp = raw.create(conn, ctx, token.scopes, pkg, body);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on /raw/%s collection", method, pkg));
+	} else {
+		if (method == "GET")    resp = raw.get_one(conn, ctx, token.scopes, pkg, id);
+		else if (method == "PUT")    resp = raw.replace(conn, ctx, token.scopes, pkg, id, body);
+		else if (method == "PATCH")  resp = raw.patch(conn, ctx, token.scopes, pkg, id, body);
+		else if (method == "DELETE") resp = raw.remove(conn, ctx, token.scopes, pkg, id);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on /raw/%s/<id>", method, pkg));
+	}
+	return resp;
+}
+
+function packages_route(conn, ctx, token, parts, method, body, query, env) {
+	if (length(parts) < 2) return null;
+	let sub = parts[1];
+	if (sub != "installed" && sub != "feeds") {
+		return errors.error(ctx, "not_found",
+		                    sprintf("Unknown packages subresource %J", sub));
+	}
+	if (length(parts) > 3) {
+		return errors.error(ctx, "not_found",
+		                    sprintf("Unknown sub-path under packages/%s", sub));
+	}
+	let id  = length(parts) >= 3 ? parts[2] : null;
+	let verb = method_verb(method);
+	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["packages", sub], verb,
+		sprintf("this operation on packages/%s", sub));
+	if (denied != null) return denied;
+	let resp;
+	if (sub == "installed") {
+		if (method == "GET" && id == null)        resp = packages.list_installed(ctx);
+		else if (method == "GET")                  resp = packages.get_installed(ctx, id);
+		else if (method == "POST" && id == null)   resp = packages.install(ctx, body);
+		else if (method == "DELETE" && id != null) resp = packages.remove_installed(ctx, id);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on packages/installed%s",
+		                                 method, id != null ? "/<name>" : ""));
+	} else {
+		if (method == "GET" && id == null)        resp = packages.list_feeds(ctx);
+		else if (method == "GET")                  resp = packages.get_feed(ctx, id);
+		else if (method == "POST" && id == null)   resp = packages.create_feed(ctx, body);
+		else if (method == "DELETE" && id != null) resp = packages.remove_feed(ctx, id);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on packages/feeds%s",
+		                                 method, id != null ? "/<id>" : ""));
+	}
+	return resp;
+}
+
+function system_special_route(conn, ctx, token, parts, method, body, query, env) {
+	if (length(parts) < 2) return null;
+	let sub = parts[1];
+	if (sub != "password" && sub != "authorized_keys" && sub != "cron_jobs") return null;
+	if (length(parts) > 3) {
+		return errors.error(ctx, "not_found",
+		                    sprintf("Unknown sub-path under system/%s", sub));
+	}
+	let id  = length(parts) >= 3 ? parts[2] : null;
+	let verb = method_verb(method);
+	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["system", sub], verb,
+		sprintf("this operation on system/%s", sub));
+	if (denied != null) return denied;
+	let resp;
+	if (sub == "password") {
+		if (method == "POST" && id == null) resp = system_access.set_password(ctx, body);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on system/password%s",
+		                                 method, id != null ? "/<id>" : ""));
+	} else if (sub == "authorized_keys") {
+		if (method == "GET" && id == null)        resp = system_access.list_keys(ctx);
+		else if (method == "GET")                  resp = system_access.get_key(ctx, id);
+		else if (method == "POST" && id == null)   resp = system_access.add_key(ctx, body);
+		else if (method == "PUT" && id == null)    resp = system_access.replace_keys(ctx, body);
+		else if (method == "DELETE" && id != null) resp = system_access.remove_key(ctx, id);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on system/authorized_keys%s",
+		                                 method, id != null ? "/<id>" : ""));
+	} else {
+		if (method == "GET" && id == null)        resp = crontab.list_entries(ctx, conn);
+		else if (method == "GET")                  resp = crontab.get_entry(ctx, conn, id);
+		else if (method == "POST" && id == null)   resp = crontab.add_entry(ctx, conn, body);
+		else if (method == "DELETE" && id != null) resp = crontab.remove_entry(ctx, conn, id);
+		else resp = errors.error(ctx, "method_not_allowed",
+		                         sprintf("Method %J not allowed on system/cron_jobs%s",
+		                                 method, id != null ? "/<id>" : ""));
+	}
+	return resp;
+}
+
+// Prefix routes served after authentication, matched on the first path segment,
+// in this order. A route fn returns null when the path is not its, and the
+// search continues.
+const PREFIX_ROUTES = [
+	{ seg: "auth",     fn: auth_route },
+	{ seg: "tokens",   fn: tokens_route },
+	{ seg: "raw",      fn: raw_route },
+	{ seg: "packages", fn: packages_route },
+	{ seg: "system",   fn: system_special_route },
+];
+
 function dispatch(env, start) {
 	// uhttpd's CGI env drops If-Match/If-None-Match/X-Request-Id/Idempotency-Key.
 	// Fall back to query params; reverse proxies that forward the headers still
@@ -846,34 +1042,14 @@ function dispatch(env, start) {
 	ctx.if_match = env.HTTP_IF_MATCH ?? qs.if_match ?? null;
 	ctx.if_none_match = env.HTTP_IF_NONE_MATCH ?? qs.if_none_match ?? null;
 
-	if (path == "/openapi.json") {
-		if (method != "GET")
-			return { ctx, resp: errors.error(ctx, "method_not_allowed",
-			                                 "openapi.json only supports GET") };
-		let f = fs.open("/usr/share/uapi/openapi.json", "r");
-		if (!f)
-			return { ctx, resp: errors.error(ctx, "not_found", "openapi.json not installed") };
-		let content = f.read("all") ?? "";
-		f.close();
-		return { ctx, resp: { status: 200,
-		                      headers: { "Content-Type": "application/json",
-		                                 "X-Request-Id": ctx.request_id },
-		                      body: content } };
-	}
-
-	if (path == "/healthz") {
-		if (method != "GET")
-			return { ctx, resp: errors.error(ctx, "method_not_allowed",
-			                                 "healthz only supports GET") };
-		let resp = healthz_response(ctx);
-		return { ctx, resp };
-	}
-
-	if (length(split_path(path)) >= 1 && split_path(path)[0] == "schema") {
-		if (method != "GET")
-			return { ctx, resp: errors.error(ctx, "method_not_allowed",
-			                                 "schema only supports GET") };
-		return { ctx, resp: schema_response(ctx, split_path(path)) };
+	let parts = split_path(path);
+	for (let r in PUBLIC_ROUTES) {
+		let hit = (r.path != null) ? (path == r.path)
+		                           : (length(parts) >= 1 && parts[0] == r.prefix);
+		if (!hit) continue;
+		if (index(r.methods, method) < 0)
+			return { ctx, resp: errors.error(ctx, "method_not_allowed", r.not_allowed) };
+		return { ctx, resp: r.fn(ctx, parts) };
 	}
 
 	let body = null;
@@ -942,12 +1118,11 @@ function dispatch(env, start) {
 		                                 "ubus unreachable") };
 	}
 
-	// Authentication boundary. Everything routed above this line is reachable without a
+	// Authentication boundary. Everything in PUBLIC_ROUTES above is reachable without a
 	// bearer token, and today that is exactly three endpoints: `/openapi.json`,
-	// `/healthz`, and anything under `/schema`. An endpoint added above here is public,
-	// whether or not that was the intent, so add new routes below unless the intent is
-	// public and tests/integration asserts it (10_openapi, 02_api_skeleton and
-	// 31_batch4_endpoints each pin one of the three unauthenticated).
+	// `/healthz`, and anything under `/schema`, pinned by tests 10, 02 and 31. An endpoint
+	// added to PUBLIC_ROUTES is public, whether or not that was the intent, so add new
+	// routes below unless the intent is public and tests/integration asserts it.
 	//
 	// Not the same thing as "nothing happens before auth": the TLS check, the request
 	// body parse and the ubus connect all run above this for every path, so an
@@ -956,6 +1131,7 @@ function dispatch(env, start) {
 	let tokens = token_store.list_for_auth(conn);
 	let now_epoch;
 	try { now_epoch = time(); } catch (_) { now_epoch = null; }
+	ctx.now_epoch = now_epoch;
 	let auth_result = auth.authorize(tokens, env.HTTP_AUTHORIZATION, hash_bearer,
 		{ remote_addr: env.REMOTE_ADDR, now: now_epoch });
 	if (!auth_result.ok) {
@@ -1011,100 +1187,25 @@ function dispatch(env, start) {
 			                            "Idempotency-Key was previously used with a different body") };
 	}
 
-	let parts = split_path(path);
-
-	if (path == "/metrics") {
-		if (method != "GET")
-			return { ctx, token,
-			         resp: errors.error(ctx, "method_not_allowed",
-			                            "metrics only supports GET") };
-		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "metrics"], "ro",
-			"reading uapi/metrics");
-		if (denied != null) return { ctx, token, resp: denied };
-		return { ctx, token, resp: metrics_response(ctx) };
-	}
-
-	if (path == "/batch") {
-		return { ctx, token, resp: batch_dispatch(conn, ctx, token, method, body) };
-	}
-
-	if (path == "/diagnostics") {
-		if (method != "GET")
-			return { ctx, token,
-			         resp: errors.error(ctx, "method_not_allowed",
-			                            "diagnostics only supports GET") };
-		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "diagnostics"], "ro",
-			"reading uapi/diagnostics");
-		if (denied != null) return { ctx, token, resp: denied };
-		return { ctx, token,
-		         resp: diagnostics_response(ctx, conn, token.scopes, query.validate == "1") };
-	}
-
-	if (length(parts) >= 1 && parts[0] == "auth") {
-		if (length(parts) == 2 && parts[1] == "whoami") {
-			if (method != "GET")
-				return { ctx, token,
-				         resp: errors.error(ctx, "method_not_allowed",
-				                            "auth/whoami only supports GET") };
-			return { ctx, token, resp: whoami_response(ctx, token, env) };
+	for (let r in AUTH_EXACT_ROUTES) {
+		if (path != r.path) continue;
+		if (r.scope != null) {
+			let denied = scope.require_or_deny(errors, ctx, token.scopes, r.scope, r.verb,
+				r.scope_what);
+			if (denied != null) return { ctx, token, resp: denied };
 		}
-		return { ctx, token,
-		         resp: errors.error(ctx, "not_found",
-		                            sprintf("Unknown auth sub-path %J",
-		                                    length(parts) >= 2 ? parts[1] : "")) };
-	}
-
-	if (length(parts) >= 1 && parts[0] == "tokens") {
-		let id = length(parts) >= 2 ? parts[1] : null;
-		if (length(parts) > 2)
+		if (r.methods != null && index(r.methods, method) < 0)
 			return { ctx, token,
-			         resp: errors.error(ctx, "not_found", "Unknown tokens sub-path") };
-		let verb = method_verb(method);
-		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "tokens"], verb,
-			"this operation on uapi/tokens");
-		if (denied != null) return { ctx, token, resp: denied };
-		let resp;
-		if (method == "GET" && id == null) {
-			resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
-		} else if (method == "GET") {
-			let rec = token_store.get_public(conn, id);
-			if (rec == null) resp = errors.error(ctx, "not_found",
-				sprintf("Token %J not found", id));
-			else resp = errors.ok(ctx, rec);
-		} else if (method == "POST" && id == null) {
-			let r = token_store.create(conn, body, token.scopes, now_epoch);
-			resp = tokens_translate(ctx, r);
-		} else if (method == "DELETE" && id != null) {
-			let r = token_store.remove(conn, id, now_epoch);
-			if (r.ok) resp = errors.no_content(ctx);
-			else resp = tokens_translate(ctx, r);
-		} else {
-			resp = errors.error(ctx, "method_not_allowed",
-				sprintf("Method %J not allowed on tokens%s",
-					method, id != null ? "/<id>" : ""));
-		}
-		return { ctx, token, resp };
+			         resp: errors.error(ctx, "method_not_allowed", r.not_allowed) };
+		return { ctx, token, resp: r.fn(conn, ctx, token, parts, method, body, query, env) };
 	}
 
-	if (length(parts) >= 2 && parts[0] == "raw") {
-		let pkg = parts[1];
-		let id = length(parts) >= 3 ? parts[2] : null;
-		let resp;
-		if (id == null) {
-			if (method == "GET")  resp = raw.list(conn, ctx, token.scopes, pkg);
-			else if (method == "POST") resp = raw.create(conn, ctx, token.scopes, pkg, body);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on /raw/%s collection", method, pkg));
-		} else {
-			if (method == "GET")    resp = raw.get_one(conn, ctx, token.scopes, pkg, id);
-			else if (method == "PUT")    resp = raw.replace(conn, ctx, token.scopes, pkg, id, body);
-			else if (method == "PATCH")  resp = raw.patch(conn, ctx, token.scopes, pkg, id, body);
-			else if (method == "DELETE") resp = raw.remove(conn, ctx, token.scopes, pkg, id);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on /raw/%s/<id>", method, pkg));
-		}
-		return { ctx, token, resp };
+	for (let r in PREFIX_ROUTES) {
+		if (length(parts) < 1 || parts[0] != r.seg) continue;
+		let resp = r.fn(conn, ctx, token, parts, method, body, query, env);
+		if (resp != null) return { ctx, token, resp };
 	}
+
 	let singleton_key = null;
 	let singleton_scope_path = null;
 	if (length(parts) == 1) {
@@ -1130,84 +1231,6 @@ function dispatch(env, start) {
 			return { ctx, token, resp };
 		}
 	}
-	if (parts[0] == "packages" && length(parts) >= 2) {
-		let sub = parts[1];
-		if (sub != "installed" && sub != "feeds") {
-			return { ctx, token,
-			         resp: errors.error(ctx, "not_found",
-			                            sprintf("Unknown packages subresource %J", sub)) };
-		}
-		if (length(parts) > 3) {
-			return { ctx, token,
-			         resp: errors.error(ctx, "not_found",
-			                            sprintf("Unknown sub-path under packages/%s", sub)) };
-		}
-		let id  = length(parts) >= 3 ? parts[2] : null;
-		let verb = method_verb(method);
-		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["packages", sub], verb,
-			sprintf("this operation on packages/%s", sub));
-		if (denied != null) return { ctx, token, resp: denied };
-		let resp;
-		if (sub == "installed") {
-			if (method == "GET" && id == null)        resp = packages.list_installed(ctx);
-			else if (method == "GET")                  resp = packages.get_installed(ctx, id);
-			else if (method == "POST" && id == null)   resp = packages.install(ctx, body);
-			else if (method == "DELETE" && id != null) resp = packages.remove_installed(ctx, id);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on packages/installed%s",
-			                                 method, id != null ? "/<name>" : ""));
-		} else {
-			if (method == "GET" && id == null)        resp = packages.list_feeds(ctx);
-			else if (method == "GET")                  resp = packages.get_feed(ctx, id);
-			else if (method == "POST" && id == null)   resp = packages.create_feed(ctx, body);
-			else if (method == "DELETE" && id != null) resp = packages.remove_feed(ctx, id);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on packages/feeds%s",
-			                                 method, id != null ? "/<id>" : ""));
-		}
-		return { ctx, token, resp };
-	}
-
-	if (parts[0] == "system" && length(parts) >= 2
-	    && (parts[1] == "password" || parts[1] == "authorized_keys" || parts[1] == "cron_jobs")) {
-		let sub = parts[1];
-		if (length(parts) > 3) {
-			return { ctx, token,
-			         resp: errors.error(ctx, "not_found",
-			                            sprintf("Unknown sub-path under system/%s", sub)) };
-		}
-		let id  = length(parts) >= 3 ? parts[2] : null;
-		let verb = method_verb(method);
-		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["system", sub], verb,
-			sprintf("this operation on system/%s", sub));
-		if (denied != null) return { ctx, token, resp: denied };
-		let resp;
-		if (sub == "password") {
-			if (method == "POST" && id == null) resp = system_access.set_password(ctx, body);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on system/password%s",
-			                                 method, id != null ? "/<id>" : ""));
-		} else if (sub == "authorized_keys") {
-			if (method == "GET" && id == null)        resp = system_access.list_keys(ctx);
-			else if (method == "GET")                  resp = system_access.get_key(ctx, id);
-			else if (method == "POST" && id == null)   resp = system_access.add_key(ctx, body);
-			else if (method == "PUT" && id == null)    resp = system_access.replace_keys(ctx, body);
-			else if (method == "DELETE" && id != null) resp = system_access.remove_key(ctx, id);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on system/authorized_keys%s",
-			                                 method, id != null ? "/<id>" : ""));
-		} else {
-			if (method == "GET" && id == null)        resp = crontab.list_entries(ctx, conn);
-			else if (method == "GET")                  resp = crontab.get_entry(ctx, conn, id);
-			else if (method == "POST" && id == null)   resp = crontab.add_entry(ctx, conn, body);
-			else if (method == "DELETE" && id != null) resp = crontab.remove_entry(ctx, conn, id);
-			else resp = errors.error(ctx, "method_not_allowed",
-			                         sprintf("Method %J not allowed on system/cron_jobs%s",
-			                                 method, id != null ? "/<id>" : ""));
-		}
-		return { ctx, token, resp };
-	}
-
 	if (length(parts) >= 2) {
 		let h = RESOURCES[parts[0] + ":" + parts[1]];
 		if (h != null) {
