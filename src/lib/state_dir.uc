@@ -8,6 +8,7 @@ const EUID = match(fs.readfile("/proc/self/status") ?? "", /\nUid:\s+\d+\s+(\d+)
 const DIRS = {
 	error_ring: "/var/run/uapi-error-ring",
 	idempotency: "/var/run/uapi-idempotency",
+	interrupted_writes: "/var/run/uapi-interrupted-writes",
 	last_used: "/var/run/uapi-token-update",
 	metrics: "/var/run/uapi-metrics",
 	ratelimit: "/var/run/uapi-ratelimit",

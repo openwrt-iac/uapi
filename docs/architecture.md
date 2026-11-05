@@ -762,24 +762,25 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Metrics counters             | `/var/run/uapi-metrics/`                    | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
 | Recent errors                | `/var/run/uapi-error-ring/`                 | The last 20, until reboot |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
+| Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is removed when its write ends; a record whose request process is gone was left by a killed request and `/diagnostics` reports it under `interrupted_writes` |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
 
 uapi keeps the rate-limit buckets, the idempotency cache, the metrics
-counters, the recent errors and the last-used sentinels under `/var/run`,
-in directories of mode 0700 with files of mode 0600. It uses one only when
-`state_dir.owned()` accepts it: a directory owned by the effective uid of
-the request process, that neither the group nor others can write. One of
-its own with another mode is narrowed to 0700. A package install or
-upgrade, after its uhttpd restart, removes these five directories and the
-four that an older uapi kept in `/tmp`, each when it is a directory that
-root owns. A request of the older version still in flight at the restart
+counters, the recent errors, the last-used sentinels and the interrupted-write
+journal under `/var/run`, in directories of mode 0700 with files of mode 0600.
+It uses one only when `state_dir.owned()` accepts it: a directory owned by
+the effective uid of the request process, that neither the group nor others
+can write. One of its own with another mode is narrowed to 0700. A package
+install or upgrade, after its uhttpd restart, removes these six directories
+and the four that an older uapi kept in `/tmp`, each when it is a directory
+that root owns. A request of the older version still in flight at the restart
 can write one of them again.
 
 `/var/run` is tmpfs on OpenWrt, as `/var` is `/tmp`: rate-limit buckets,
-idempotency entries, metrics counters, recent errors and sentinels reset on
-reboot. This is acceptable: operational counters that span uptime aren't a
+idempotency entries, metrics counters, recent errors, sentinels and
+interrupted-write records reset on reboot. This is acceptable: operational counters that span uptime aren't a
 uapi responsibility - point a `node_exporter` or central collector at the
 box and aggregate there.
 

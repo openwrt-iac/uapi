@@ -1,6 +1,7 @@
 let fs = require('fs');
 let wg = require('wg');
 let limits = require('limits');
+let write_journal = require('write_journal');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -427,7 +428,7 @@ function conflict_result(message) {
 	return { ok: false, kind: "conflict", message: message + ". Nothing was written. A retry reads the new state." };
 }
 
-function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
+function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, request_id) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -439,6 +440,12 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
 	// keeps what another writer committed while the request ran. Taken when the lock was, it put back
 	// the file from before such a commit.
 	let snapshot = conn.uci_export(pkg);
+	// The journal record is written before the commit and under the lock, so the record and the
+	// commit are ordered together: a request that uhttpd kills after the commit leaves the
+	// record behind, and /diagnostics reports it as an interrupted write.
+	let staged = [];
+	conn.uci_foreach(pkg, null, function(s) { push(staged, s['.name']); });
+	write_journal.record_start([pkg], request_id, staged);
 	let committed = conn.uci_commit(pkg);
 	if (type(committed) == "object")
 		return conflict_result(committed.conflict);
@@ -447,6 +454,7 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied) {
 	if (!committed)
 		return { ..._finalize_after_reload(null, null, result.body, [], ops, applied), unchanged: true };
 
+	write_journal.mark_reload_started();
 	let stored = conn.uci_export(pkg);
 	return _finalize_after_reload(apply(), function(left) {
 		let why = put_back(conn, pkg, snapshot, stored);
@@ -547,10 +555,13 @@ function transaction(conn, params) {
 		result = run_inner(conn, pkg, services, fn,
 		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied, watch),
 		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops, watch),
-		                   wg_ops, wg_applied);
+		                   wg_ops, wg_applied, params.request_id);
 	} catch (e) {
 		caught = e;
 	}
+	// Every path the request can still reach ends here, under the lock. A kill or a throw after
+	// the commit skips this, which is exactly what leaves the record behind.
+	write_journal.clear();
 	release(lock);
 	if (caught != null) die(caught);
 	return with_unverified(result, watch);
@@ -658,6 +669,7 @@ function multi_transaction(conn, params) {
 			// others are reverted, so that the cursor holds no write that uci
 			// did not store, and the reconcile after a failed reload reads the
 			// network package from the file.
+			write_journal.record_start(packages, params.request_id, null);
 			let committed = [], stored = {};
 			let commit_err = null, conflict = null;
 			for (let pkg in sorted) {
@@ -680,6 +692,8 @@ function multi_transaction(conn, params) {
 					stored[pkg] = conn.uci_export(pkg);
 				}
 			}
+			if (commit_err == null && length(committed) > 0)
+				write_journal.mark_reload_started();
 			let ran = services_of(by_package, committed);
 			// Returns the packages that it wrote back.
 			let put_back_all = function(left) {
@@ -717,6 +731,7 @@ function multi_transaction(conn, params) {
 		}
 	} catch (e) { caught = e; }
 
+	write_journal.clear();
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
 	if (caught != null) die(caught);
@@ -734,10 +749,12 @@ function with_lock(params) {
 	if (type(lock) == "object" && lock.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
 
+	write_journal.record_start(params.journal_packages ?? [], params.request_id, null);
 	let result = null;
 	let caught = null;
 	try { result = fn(); }
 	catch (e) { caught = e; }
+	write_journal.clear();
 	release(lock);
 	if (caught != null) die(caught);
 	return result ?? { ok: true };

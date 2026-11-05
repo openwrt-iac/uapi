@@ -1365,6 +1365,7 @@ function build_schemas() {
 		"DiagnosticsResponse": {
 			"type": "object",
 			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "limits", "request_id"],
+			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "interrupted_writes", "request_id"],
 			"properties": {
 				"version":          { "type": "string" },
 				"uptime_seconds":   { "type": "integer" },
@@ -1386,6 +1387,18 @@ function build_schemas() {
 				                } },
 				"state_dirs": { "type": "object", "additionalProperties": { "type": ["boolean", "null"] },
 				                "description": "Each state directory under /var/run, keyed by its path, as uapi finds it. The read creates and changes nothing. true: a directory owned by the effective uid of the request process, with mode 0700, which uapi uses. false: the path holds anything else, and uapi does not use it as it stands. null: the path does not exist yet, and uapi creates it at its first write there." },
+				"interrupted_writes": { "type": "array",
+				                       "description": "Write journal records whose request process no longer exists: uhttpd killed it (client disconnect or script_timeout) after the commit, so the write landed in uci with no check, no restore and no answer. Read-only report; uapi corrects nothing. Empty when no write was interrupted.",
+				                       "items": { "type": "object",
+				                                  "required": ["pid", "request_id", "packages", "started_at", "reload_started"],
+				                                  "properties": {
+				                                    "pid":            { "type": "integer" },
+				                                    "request_id":     { "type": ["string", "null"] },
+				                                    "packages":       { "type": "array", "items": { "type": "string" } },
+				                                    "staged":         { "type": ["array", "null"], "items": { "type": "string" } },
+				                                    "started_at":     { "type": "integer" },
+				                                    "reload_started": { "type": "boolean" },
+				                                  } } },
 				// Present only when the route lookup resolved; `interface` is null when no
 				// uci interface claims the device the request arrived on.
 				"management_path": {

@@ -80,8 +80,8 @@ define Package/uapi/postinst
 # VM writes them until the restart above. Only an entry that is itself a directory owned by root is
 # removed.
 for d in /var/run/uapi-idempotency /var/run/uapi-metrics /var/run/uapi-ratelimit \
-	/var/run/uapi-error-ring /var/run/uapi-token-update /tmp/uapi-idempotency \
-	/tmp/uapi-metrics /tmp/uapi-ratelimit /tmp/uapi-error-ring; do
+	/var/run/uapi-error-ring /var/run/uapi-token-update /var/run/uapi-interrupted-writes \
+	/tmp/uapi-idempotency /tmp/uapi-metrics /tmp/uapi-ratelimit /tmp/uapi-error-ring; do
 	find "$$d" -maxdepth 0 -type d -user 0 -exec rm -rf {} \; 2>/dev/null
 done
 # Only show the bootstrap message when no token exists yet. The token store

@@ -794,9 +794,10 @@ function make(resource, opts) {
 		return validate_unique_field(c, pkg, sec_type, resource.unique_field, val, ignore_id);
 	}
 
-	function tx_params(extra) {
+	function tx_params(ctx, extra) {
 		let p = { package: pkg, reload_services: reload_services,
-		          reload_if_running: resource.reload_if_running };
+		          reload_if_running: resource.reload_if_running,
+		          request_id: ctx?.request_id };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;
@@ -854,7 +855,7 @@ function make(resource, opts) {
 	function create(conn, ctx, body) {
 		let kops = ctx.kernel_sink ?? [];
 		let mgmt_path = mgmt_path_before(resource, conn, ctx);
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			wg_ops: kops,
 			fn: function(c, p) {
 				// Section-name resolution: caller's body.id wins, else the
@@ -903,7 +904,7 @@ function make(resource, opts) {
 		let kops = ctx.kernel_sink ?? [];
 		let mgmt_changed = null, mgmt_device = null;
 		let mgmt_path = mgmt_path_before(resource, conn, ctx);
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			wg_ops: kops,
 			fn: function(c, p) {
 				// Read before validating so a masked secret can be restored first,
@@ -964,7 +965,7 @@ function make(resource, opts) {
 		let kops = ctx.kernel_sink ?? [];
 		let mgmt_changed = null, mgmt_device = null;
 		let mgmt_path = mgmt_path_before(resource, conn, ctx);
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			wg_ops: kops,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
@@ -1030,7 +1031,7 @@ function make(resource, opts) {
 		let mgmt_changed = resource.mgmt_path_guard ? [ "removed" ] : null;
 		let mgmt_device = null;
 		let mgmt_path = mgmt_path_before(resource, conn, ctx);
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			wg_ops: kops,
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
@@ -1080,7 +1081,7 @@ function make(resource, opts) {
 		// Anonymous (cfgXXXXXX) section: needs a uci_rename to a stable
 		// name, so we go through the full transaction (snapshot + commit +
 		// reload + restore-on-failure).
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			fn: function(c, p) {
 				let existing = load_section(c, p, id);
 				if (!existing || !type_predicate(existing['.type']))
@@ -1157,9 +1158,10 @@ function make_singleton(resource, opts) {
 	let create_if_missing = !!resource.create_if_missing;
 	let singleton_section_name = resource.singleton_section_name ?? "main";
 
-	function tx_params(extra) {
+	function tx_params(ctx, extra) {
 		let p = { package: pkg, reload_services: reload_services,
-		          reload_if_running: resource.reload_if_running };
+		          reload_if_running: resource.reload_if_running,
+		          request_id: ctx?.request_id };
 		for (let k in tx_overrides) p[k] = tx_overrides[k];
 		for (let k in extra) p[k] = extra[k];
 		return p;
@@ -1184,7 +1186,7 @@ function make_singleton(resource, opts) {
 	}
 
 	function patch(conn, ctx, body) {
-		let result = transaction.transaction(conn, tx_params({
+		let result = transaction.transaction(conn, tx_params(ctx, {
 			fn: function(c, p) {
 				let existing = find(c);
 				let synthesized = false;
