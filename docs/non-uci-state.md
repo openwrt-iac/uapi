@@ -13,8 +13,7 @@ The bar for adding to category 1 is high. New non-uci resources should justify t
 |---|---|---|---|---|
 | `packages/installed` | apk DB (`apk add`/`del` shell-out) | `with_lock` on global | none | postinst runs as root; package's responsibility to wire its own uci/init scripts |
 | `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` on global | none | url-validated, name-validated |
-| `dhcp/leases` | `/tmp/dhcp.leases` (parse) | none (read-only) | n/a | dnsmasq IPv4 leases |
-| `dhcp/leases6` | `/tmp/hosts/odhcpd` (parse), fallback `/tmp/odhcpd.leases` | none (read-only) | n/a | odhcpd IPv6 leases |
+| `dhcp/leases` | `/tmp/dhcp.leases` (v4), `/tmp/hosts/odhcpd` with fallback `/tmp/odhcpd.leases` (v6, via `?family=v6`) | none (read-only) | n/a | dnsmasq IPv4 and odhcpd IPv6 leases |
 | `network/wireguard_kernel_peers` | `wg show <iface> dump` (parse) | none (read-only) | n/a | kernel wg peers that no uci section claims |
 | `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` on global | none | write-only; audit logs token+user, never the password |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` on global for writes; reads lock-free | none | dropbear re-reads the file per connection |
@@ -44,17 +43,10 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 
 ### `dhcp/leases` (read-only)
 
-- **Source of truth.** `/tmp/dhcp.leases` (the dnsmasq lease dump).
+- **Source of truth.** `/tmp/dhcp.leases` (the dnsmasq lease dump) for IPv4; `/tmp/hosts/odhcpd` (preferred) or `/tmp/odhcpd.leases` (older odhcpd versions) for IPv6, selected with `?family=v6` (merged in v4, #320).
 - **Lock.** None; reads only.
-- **Format.** Space-separated lines: `<expires_at> <mac> <ip> <hostname> <duid?>`.
+- **Format.** v4: space-separated lines `<expires_at> <mac> <ip> <hostname> <duid?>`. v6: best-effort parser, one entry per assigned address: `<duid> <iaid> <hostname> <expires_at> <interface> <IA_NA|IA_PD> <ip>[/<prefixlen>] [<ip2> ...]`. Lines that don't match are silently skipped; parser drift never breaks the read path.
 - **Why not uci.** Active leases are runtime state, by definition not in `/etc/config/`.
-
-### `dhcp/leases6` (read-only)
-
-- **Source of truth.** `/tmp/hosts/odhcpd` (preferred) or `/tmp/odhcpd.leases` (older odhcpd versions).
-- **Lock.** None; reads only.
-- **Format.** Best-effort parser, one entry per assigned address: `<duid> <iaid> <hostname> <expires_at> <interface> <IA_NA|IA_PD> <ip>[/<prefixlen>] [<ip2> ...]`. Lines that don't match this shape are silently skipped. odhcpd's statefile format varies across versions; parser failure on a single line never breaks the read path for the rest.
-- **Why not uci.** Same as `dhcp/leases`; runtime state.
 
 ### `network/wireguard_kernel_peers` (read-only)
 

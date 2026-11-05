@@ -102,11 +102,7 @@
 		},
 		{
 			"name": "Dhcp / Leases",
-			"description": "IPv4 leases parsed from /tmp/dhcp.leases (read-only)."
-		},
-		{
-			"name": "Dhcp / Leases6",
-			"description": "IPv6 leases from odhcpd statefile (read-only)."
+			"description": "Leases parsed from /tmp/dhcp.leases (read-only); ?family=v6 returns the odhcpd IPv6 leases instead."
 		},
 		{
 			"name": "System",
@@ -299,8 +295,7 @@
 				"Dhcp / Servers",
 				"Dhcp / Dnsmasq",
 				"Dhcp / Odhcpd",
-				"Dhcp / Leases",
-				"Dhcp / Leases6"
+				"Dhcp / Leases"
 			]
 		},
 		{
@@ -8280,111 +8275,6 @@
 				},
 				"tags": [
 					"Dhcp / Leases"
-				]
-			}
-		},
-		"/dhcp/leases6": {
-			"get": {
-				"summary": "List leases6 (read-only)",
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/DhcpLeases6Response"
-									}
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Dhcp / Leases6"
-				]
-			}
-		},
-		"/dhcp/leases6/{id}": {
-			"parameters": [
-				{
-					"name": "id",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string"
-					}
-				}
-			],
-			"get": {
-				"summary": "Get one leases6 by id",
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/DhcpLeases6Response"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Dhcp / Leases6"
 				]
 			}
 		},
@@ -28926,7 +28816,7 @@
 					},
 					"mac": {
 						"type": "string",
-						"description": "Client MAC address"
+						"description": "Client MAC address (v4 entries)"
 					},
 					"ip": {
 						"type": "string",
@@ -28942,58 +28832,8 @@
 						"type": [
 							"string",
 							"null"
-						]
-					}
-				}
-			},
-			"DhcpLeases6Response": {
-				"type": "object",
-				"description": "uapi resource backed by uci dhcp.lease6",
-				"properties": {
-					"duid": {
-						"type": "string",
-						"description": "Client DUID (hex)"
-					},
-					"iaid": {
-						"type": "string",
-						"description": "Identity Association ID (hex)"
-					},
-					"hostname": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"interface": {
-						"type": "string",
-						"description": "Server-side interface that issued the lease"
-					},
-					"ia_type": {
-						"type": "string",
-						"enum": [
-							"IA_NA",
-							"IA_TA",
-							"IA_PD"
 						],
-						"description": "DHCPv6 Identity Association type"
-					},
-					"ip": {
-						"type": "string",
-						"description": "Assigned IPv6 address or prefix"
-					},
-					"prefix_length": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"description": "Prefix length for IA_PD; null for IA_NA"
-					},
-					"expires_at": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"description": "Unix epoch seconds when the lease expires; null for non-numeric values like 'forever'"
+						"description": "Client DUID (v4 entries carry it, v6 entries always do)"
 					}
 				}
 			},
