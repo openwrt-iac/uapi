@@ -546,15 +546,21 @@ t.describe('network.rules match options through the handler', () => {
 		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 200);
 		for (let k, v in LUCI) t.assert_equal(c._state.uci.network.m1[k], v, k);
 	});
-	t.it('a PATCH and a PUT keep stored values that a write refuses, while they stay as they are', () => {
+	// v4 (#308): LuCI's model, the stored values that a write refuses block every write of the
+	// section, so a PATCH and a PUT answer 422 and name them all, and uci stays as it is.
+	t.it('a PATCH and a PUT answer 422 for stored values that a write refuses, which stay as they are', () => {
 		let c = stored(REFUSED);
-		t.assert_equal(h.patch(c, ctx(), 'm1', { priority: 30021 }).status, 200);
-		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 200);
+		let r = h.patch(c, ctx(), 'm1', { priority: 30021 });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(sort(fields(r)),
+		                    sort([ 'suppress_prefixlength out_of_range', 'tos not_in_enum', 'ipproto invalid_type',
+		                           'uidrange invalid_format', 'sport invalid_format', 'dport out_of_range' ]));
+		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 422);
 		for (let k, v in REFUSED) t.assert_equal(c._state.uci.network.m1[k], v, k);
-		t.assert_equal(h.patch(c, ctx(), 'm1', { ipproto: 6 }).status, 200);
-		t.assert_equal(c._state.uci.network.m1.ipproto, '6');
+		t.assert_equal(h.patch(c, ctx(), 'm1', { ipproto: 6 }).status, 422);
+		t.assert_equal(c._state.uci.network.m1.ipproto, '06');
 	});
-	t.it('a write that changes a value to one that it refuses answers 422 with one error', () => {
+	t.it('a write that changes a value to one that it refuses answers 422 with the errors of the section', () => {
 		let c = stored(LUCI);
 		for (let k, v in { suppress_prefixlength: 33, tos: 10, uidrange: '5-4', ipproto: 'tcp', sport: '0-65535', dport: '65535' }) {
 			let r = h.patch(c, ctx(), 'm1', { [k]: v });
@@ -562,22 +568,32 @@ t.describe('network.rules match options through the handler', () => {
 			t.assert_equal(length(filter(fields(r), (f) => substr(f, 0, length(k) + 1) == k + ' ')), 1, k);
 			t.assert_equal(c._state.uci.network.m1[k], LUCI[k], k);
 		}
-		t.assert_deep_equal(fields(h.patch(stored(REFUSED), ctx(), 'm1', { sport: '80  ' })), [ 'sport invalid_format' ]);
+		t.assert_deep_equal(sort(fields(h.patch(stored(REFUSED), ctx(), 'm1', { sport: '80  ' }))),
+		                    sort([ 'suppress_prefixlength out_of_range', 'tos not_in_enum', 'ipproto invalid_type',
+		                           'uidrange invalid_format', 'sport invalid_format', 'dport out_of_range' ]));
 	});
 	t.it('a create refuses them too', () => {
 		let r = h.create(stored({}), ctx(), { id: 'm2', src: '10.9.1.0/24', lookup: 42, tos: 10, ipproto: 'sctp' });
 		t.assert_equal(r.status, 422);
 		t.assert_deep_equal(sort(fields(r)), [ 'ipproto invalid_type', 'tos not_in_enum' ]);
 	});
-	t.it('enabling a rule passes for the values netifd installs, and refuses one that it drops or the kernel refuses', () => {
+	// v4 (#308): LuCI's model, enabling the rule is refused while it stores a value that a
+	// write refuses, and the 422 names them all, the ones the write does not touch included.
+	t.it('enabling a rule is refused while it stores a value that a write refuses', () => {
 		let installs = { suppress_prefixlength: '64', ipproto: '06', uidrange: '1000-1005x', sport: '80 ', disabled: '1' };
+		let base = [ 'suppress_prefixlength out_of_range', 'ipproto invalid_type', 'uidrange invalid_format', 'sport invalid_format' ];
 		let c = stored(installs);
-		t.assert_equal(h.patch(c, ctx(), 'm1', { disabled: false }).status, 200);
-		t.assert_equal(c._state.uci.network.m1.disabled, '0');
-		for (let o in [ [ 'tos', '10', 'not_in_enum' ], [ 'ipproto', '0', 'out_of_range' ], [ 'ipproto', 'sctp', 'invalid_type' ],
-		                [ 'dport', '65535', 'out_of_range' ], [ 'uidrange', '4294967295', 'out_of_range' ] ]) {
+		let r = h.patch(c, ctx(), 'm1', { disabled: false });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(sort(fields(r)), sort(base));
+		t.assert_equal(c._state.uci.network.m1.disabled, '1');
+		for (let o in [ [ 'tos', '10', 'not_in_enum', null ], [ 'ipproto', '0', 'out_of_range', 'ipproto invalid_type' ],
+		                [ 'ipproto', 'sctp', 'invalid_type', 'ipproto invalid_type' ],
+		                [ 'dport', '65535', 'out_of_range', null ], [ 'uidrange', '4294967295', 'out_of_range', 'uidrange invalid_format' ] ]) {
 			c = stored({ ...installs, [o[0]]: o[1] });
-			t.assert_deep_equal(fields(h.patch(c, ctx(), 'm1', { disabled: false })), [ o[0] + ' ' + o[2] ], o[1]);
+			let want = filter(base, (f) => f != o[3]);
+			push(want, o[0] + ' ' + o[2]);
+			t.assert_deep_equal(sort(fields(h.patch(c, ctx(), 'm1', { disabled: false }))), sort(want), o[1]);
 			t.assert_equal(c._state.uci.network.m1.disabled, '1', o[1]);
 		}
 	});

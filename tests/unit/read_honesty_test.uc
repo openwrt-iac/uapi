@@ -50,6 +50,14 @@ const WG_PUB = fx.WG_PUB;
 let world = fx.world;
 const CASES = fx.CASES;
 
+// The seeds that store values validate_new() refuses: v4 (#308) answers 422 for a write of
+// their own read, naming these stored errors.
+const STORED_REFUSED = {
+	"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
+	                          "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
+	"snmpd.accesses.uc/ac1": [ "notify required", "write required" ],
+};
+
 function seeded(c) {
 	let uci = world();
 	if (uci[c.pkg] == null) uci[c.pkg] = {};
@@ -89,7 +97,13 @@ t.describe('property: a read written straight back changes nothing', () => {
 			delete sent.runtime;
 
 			let put = write(h, c, conn, sent);
-			if (put.status != 200) {
+			if (put.status == 422) {
+				// v4 (#308): LuCI's model, the seed stores values that validate_new() refuses,
+				// so the write of the read answers 422 naming them; nothing is written either way.
+				t.assert_equal(put.body.code, "validation_failed");
+				t.assert_deep_equal(sort(map(put.body.errors, (e) => e.field + " " + e.code)),
+				                    sort(STORED_REFUSED[c.file + "/" + c.id] ?? []), sprintf("%J", put.body));
+			} else if (put.status != 200) {
 				// Surface the reason rather than just the code: a bare 422 here costs
 				// the next reader a debugging session.
 				t.assert_equal(sprintf("write rejected the body it just served: %J", put.body),
@@ -222,7 +236,13 @@ t.describe('property: a PATCH that names nothing leaves uci as stored', () => {
 			                    : handler.make(mod, { tx: tx_stub() });
 			let moved = empty_patch_moves(h, c, c.section);
 			if (moved == null) {
-				t.assert_equal("PATCH {} failed on the seed", "PATCH 200");
+				// v4 (#308): the seed itself stores values that validate_new() refuses, so even
+				// an empty PATCH answers 422 naming them, and uci stays as stored.
+				let conn = seeded(c);
+				let r = c.singleton ? h.patch(conn, ctx(), {}) : h.patch(conn, ctx(), c.id, {});
+				t.assert_equal(r.status, 422, r.body);
+				t.assert_deep_equal(sort(map(r.body.errors ?? [], (e) => e.field + " " + e.code)),
+				                    sort(STORED_REFUSED[c.file + "/" + c.id] ?? []), sprintf("%J", r.body));
 				return;
 			}
 			moved = map(moved, (m) => "seed, " + m);
