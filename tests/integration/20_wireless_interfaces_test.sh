@@ -224,7 +224,10 @@ $SSH "uci set wireless.uapi20r=wifi-iface; uci set wireless.uapi20r.device=radio
       uci set wireless.uapi20r.encryption=none; uci set wireless.uapi20r.disabled=1
       uci set wireless.uapi20r.reassociation_deadline=500; uci commit wireless"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/uapi20r" -d '{"disabled":false}')
-echo "$r" | tail -1 | grep -q '^200$' || fail "enabling an SSID on a disabled radio: $r"
+# v4 (#308): the stored reassociation_deadline=500 is an error the section holds, so any write is refused.
+echo "$r" | tail -1 | grep -q '^422$' || fail "enabling an SSID with a stored bad value expected 422: $r"
+echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["reassociation_deadline", "out_of_range"]]' >/dev/null \
+	|| fail "expected the stored reassociation_deadline error: $r"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
 echo "$r" | tail -1 | grep -q '^422$' || fail "turning radio0 on expected 422: $r"
 echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["disabled", "conflict"]]

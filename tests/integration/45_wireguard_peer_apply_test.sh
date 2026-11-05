@@ -548,18 +548,20 @@ else
 fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/description","value":"esc"}]')
-[ "$(status_of "$r")" = "200" ] || fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")"
+# v4 (#308): the stored public_key with an escape is an error the section holds, so any write is refused.
+[ "$(status_of "$r")" = "422" ] || fail "JSON Patch of another field of a peer with a stored bad key expected 422 on v4: $(body_of "$r")"
 if wg_ucode_platform; then
-	has_peer "$ESC_PEER" && fail "the JSON Patch set the peer that the handler leaves out"
+	has_peer "$ESC_PEER" && fail "the platform set the peer that the handler leaves out"
 else
-	has_peer "$ESC_PEER" || fail "the JSON Patch removed the peer with an escape from the kernel"
+	has_peer "$ESC_PEER" || fail "the refused JSON Patch removed the peer with an escape from the kernel"
 fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/public_key","value":"'"${PEER3%=}"'\\075"}]')
 [ "$(status_of "$r")" = "422" ] || fail "a JSON Patch that sets a key with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":true}')
-[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of the peer with an escape: $(body_of "$r")"
-has_peer "$ESC_PEER" && fail "the disabled peer with an escape is still in the kernel"
+# v4 (#308): the stored bad key blocks every write of the section, disabling included; fix it first.
+[ "$(status_of "$r")" = "422" ] || fail "PATCH disabled of the peer with an escape expected 422 on v4: $(body_of "$r")"
+has_peer "$ESC_PEER" || fail "the refused PATCH removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
 if wg_ucode_platform; then
 	# The handler leaves the peer out, so its key keeps no interface down and enabling it passes.
