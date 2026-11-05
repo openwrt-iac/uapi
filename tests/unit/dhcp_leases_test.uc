@@ -50,7 +50,7 @@ t.describe('handler.make_collection, list', () => {
 	function fixture(items) {
 		let mod = {
 			package: "dhcp", type: "lease", id_field: "mac",
-			list_fn: function() { return items; },
+			list_fn: function(conn, query) { return items; },
 		};
 		return handler.make_collection(mod);
 	}
@@ -74,7 +74,7 @@ t.describe('handler.make_collection, get_one', () => {
 	function fixture(items, id_field) {
 		let mod = {
 			package: "dhcp", type: "lease", id_field: id_field,
-			list_fn: function() { return items; },
+			list_fn: function(conn, query) { return items; },
 		};
 		return handler.make_collection(mod);
 	}
@@ -102,7 +102,7 @@ t.describe('handler.make_collection, get_one', () => {
 t.describe('handler.make_collection, write methods all return 405', () => {
 	let h = handler.make_collection({
 		package: "dhcp", type: "lease", id_field: "mac",
-		list_fn: function() { return []; },
+		list_fn: function(conn, query) { return []; },
 	});
 	let c = bus.stub();
 
