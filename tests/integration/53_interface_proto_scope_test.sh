@@ -142,7 +142,7 @@ $SSH "uci set network.uapi53t=interface; uci set network.uapi53t.proto=6in4; uci
 read_back=$(body "$(call "$URL/network/interfaces/uapi53t")")
 printf '%s' "$read_back" | jq -e '.ipaddr == "192.0.2.1" and .ip6prefix == ["2001:db8:53::/48"] and (has("hostname") | not)' \
 	>/dev/null || fail "a 6in4 read did not show what uci stores: $read_back"
-r=$(send PATCH /uapi53t '{"ip6prefix":"2001:db8:54::/48","nohostroute":true}')
+r=$(send PATCH /uapi53t '{"ip6prefix":["2001:db8:54::/48"],"nohostroute":true}')
 [ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53t.ip6prefix)" = 2001:db8:54::/48 ] && [ "$(uci_get uapi53t.nohostroute)" = 1 ] \
 	&& [ "$(uci_get uapi53t.ipaddr)" = 192.0.2.1 ] || fail "a PATCH on a 6in4 section was refused or lost ipaddr: $r"
 before=$($SSH 'uci show network.uapi53t')
