@@ -289,31 +289,13 @@ check_schema_types = function(schema_properties, body, prefix) {
 	return errs;
 };
 
-// A stored value can break a validate_new() rule, and a write that leaves it alone must stay
-// possible, or a broken section could not even be disabled. So only an error that the write adds
-// counts: one in a field that the write changes, one that the section did not have, or one that
-// was dormant and is now live. A resource marks an error `live: false` when the daemon does not
-// read the value yet, so a write that makes a stored value live, by enabling the section for
-// instance, adds an error. The sweep passes no `before`.
-function new_errors(resource, after, before, conn) {
+// v4 (#308): LuCI's model. LuCI validates every visible field of a form at save, so a stored
+// value that breaks a rule blocks every save of the section until it is fixed. A write now
+// answers 422 for any error the resulting section holds, not only the ones the write adds.
+// Before v4 a write that left a stored value alone stayed possible, so a broken section could
+// still be disabled; now the fix comes first (or goes through /raw).
+function new_errors(resource, after, conn) {
 	let errs = resource.validate_new(after, conn) ?? [];
-	if (length(errs) > 0 && before != null) {
-		let id = (e) => sprintf("%s|%s|%s", e.field, e.code, e.message);
-		let had = {};
-		for (let e in resource.validate_new(before, conn) ?? []) had[id(e)] = had[id(e)] || e.live !== false;
-		// An option is the list of its words, as netifd splits it. Two lists are the same only
-		// entry by entry, because wifi-scripts writes each entry as a line of its own.
-		let same = function(a, b) {
-			if (type(a) == "string" && type(b) == "array") a = split(a, /\s+/);
-			if (type(b) == "string" && type(a) == "array") b = split(b, /\s+/);
-			return sprintf("%J", a) == sprintf("%J", b);
-		};
-		errs = filter(errs, function(e) {
-			let f = match(e.field, /^[A-Za-z0-9_]+/)?.[0];
-			return !same(after[f], before[f]) || !exists(had, id(e))
-			       || (e.live !== false && !had[id(e)]);
-		});
-	}
 	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
 	return map(errs, (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
 }
@@ -363,7 +345,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	}
 	// Two validate_new() rules on one field are two errors, so that one does not hide the other.
 	if (resource.validate_new != null)
-		for (let e in new_errors(resource, validate_body, before, conn))
+		for (let e in new_errors(resource, validate_body, conn))
 			if (!seen[e.field + "|" + e.code]) push(merged, e);
 	return merged;
 }
