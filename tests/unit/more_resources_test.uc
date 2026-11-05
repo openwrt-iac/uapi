@@ -177,7 +177,7 @@ t.describe('network.interfaces', () => {
 	t.it('accepts the static IPv6 and broadcast fields LuCI declares', () => {
 		t.assert_equal(length(interfaces.validate(
 			{ proto: 'static', ipaddrs: ['192.0.2.1/24'], broadcast: '192.0.2.255',
-			  ip6addrs: ['fd00::1/64'], ip6gw: 'fd00::ffff', ip6prefix: 'fd00:beef::/48' }, null)), 0);
+			  ip6addrs: ['fd00::1/64'], ip6gw: 'fd00::ffff', ip6prefix: ['fd00:beef::/48'] }, null)), 0);
 	});
 
 	t.it('rejects a broadcast that is not IPv4, and a prefixed ip6gw', () => {
@@ -737,7 +737,7 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_equal(v.metric, 3);
 		for (let k in [ 'hostname', 'listen_port', 'netmask', 'has_private_key', 'broadcast_flag' ])
 			t.assert_false(exists(v, k), k);
-		let body = { proto: '6in4', ipaddrs: [ '192.0.2.1' ], ip6prefix: '2001:db8:1::/48', nohostroute: true };
+		let body = { proto: '6in4', ipaddrs: [ '192.0.2.1' ], ip6prefix: [ '2001:db8:1::/48' ], nohostroute: true };
 		t.assert_deep_equal(filter(interfaces.validate(body, null), (e) => e.code == 'conflict'), []);
 		let u = interfaces.toUci(body);
 		t.assert_deep_equal(u.ipaddr, [ '192.0.2.1' ]);
@@ -1281,7 +1281,7 @@ t.describe('vnstat/config carries the interface list vnstat actually reads', () 
 });
 
 // netifd and the proto scripts read ip6prefix as a list, and LuCI writes a list for wireguard
-// and 6in4. A read is always an array; a write still takes a space-separated string.
+// and 6in4. A read is always an array, and since v4 a write takes an array too.
 t.describe('network.interfaces ip6prefix is a list', () => {
 	let read = (v) => interfaces.fromUci({ '.name': 'x', proto: 'static', ip6prefix: v }, null).ip6prefix;
 	let write = (v) => interfaces.toUci({ proto: 'static', ip6prefix: v }).ip6prefix;
@@ -1292,19 +1292,17 @@ t.describe('network.interfaces ip6prefix is a list', () => {
 		t.assert_equal(read(''), null);
 		t.assert_equal(read(null), null);
 	});
-	t.it('writes one prefix as a scalar and several as a list, from an array or a string', () => {
+	t.it('writes one prefix as a scalar and several as a list, from an array', () => {
 		t.assert_deep_equal(write([ 'fd00:1::/48', 'fd00:2::/48' ]), [ 'fd00:1::/48', 'fd00:2::/48' ]);
 		t.assert_equal(write([ 'fd00:1::/48' ]), 'fd00:1::/48');
-		t.assert_deep_equal(write('fd00:1::/48 fd00:2::/48'), [ 'fd00:1::/48', 'fd00:2::/48' ]);
-		t.assert_equal(write('fd00:1::/48'), 'fd00:1::/48');
 		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6prefix: [] }), 'ip6prefix'));
-		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6prefix: '' }), 'ip6prefix'));
+	});
+	t.it('ignores a string ip6prefix in toUci; the type gate refuses it first', () => {
+		t.assert_false(exists(interfaces.toUci({ proto: 'static', ip6prefix: 'fd00:1::/48 fd00:2::/48' }), 'ip6prefix'));
 	});
 	t.it('checks each prefix, and the type of each entry', () => {
 		let body = { proto: 'static', ip6addrs: [ 'fd00::1/64' ] };
 		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 'nope' ] }, null),
-		                                'ip6prefix[1]'), [ 'invalid_format' ]);
-		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: 'fd00:1::/48 nope' }, null),
 		                                'ip6prefix[1]'), [ 'invalid_format' ]);
 		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...body, ip6prefix: [ 'fd00:1::/48', 1 ] }, null),
 		                                'ip6prefix[1]'), [ 'invalid_type' ]);
