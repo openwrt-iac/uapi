@@ -138,16 +138,17 @@ r=$(send PATCH network/rules/uapi59x '{"disabled":true}')
 r=$(send PATCH network/rules/uapi59x '{"disabled":false}')
 [ "$(status "$r")" = 422 ] && [ "$(body "$r" | jq -r '[.errors[].field] | join(",")')" = ipproto ] \
 	|| fail "enabling the rule with ipproto 0 expected 422 on ipproto: $r"
-[ "$(uci_get uapi59x.disabled)" = 1 ] || fail "the refused enable changed the rule"
+# the enable was refused too (stored ipproto 0 blocks every write), so disabled stays unset
+[ "$(uci_get uapi59x.disabled)" != 0 ] || fail "the refused enable changed the rule"
 read_back uapi59h | jq -e '.suppress_prefixlength == 64 and .ipproto == "06" and .uidrange == "1000-1005x"' \
 	>/dev/null || fail "the hand-written forms read wrong: $(read_back uapi59h)"
+# v4 (#308): the hand-written forms are stored errors, so every write of the rule is refused.
 r=$(send PATCH network/rules/uapi59h '{"disabled":false}')
-[ "$(status "$r")" = 200 ] || fail "enabling the rule with ipproto 06 expected 200: $r"
-wait_for "netifd did not install the hand-written forms as 64, 6 and 1000-1005: $(kernel_rule 30599)" \
-	'has 30599 ".suppress_prefixlen == 64 and .ip_proto == 6 and .uid_range == [1000,1005]"'
+[ "$(status "$r")" = 422 ] || fail "enabling the rule with stored bad forms expected 422 on v4: $r"
 r=$(send PUT network/rules/uapi59h "$(read_back uapi59h)")
-[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi59h.ipproto)" = 06 ] && [ "$(uci_get uapi59h.suppress_prefixlength)" = 64 ] \
-	|| fail "PUT of the read of the hand-written forms expected 200 and kept: $r"
+[ "$(status "$r")" = 422 ] || fail "PUT of the read of the hand-written forms expected 422 on v4: $r"
+[ "$(uci_get uapi59h.ipproto)" = 06 ] && [ "$(uci_get uapi59h.suppress_prefixlength)" = 64 ] \
+	|| fail "a refused write changed the stored forms: $r"
 
 echo "--- a write of a value that a write refuses answers 422 and stores nothing ---"
 for b in '"tos":10' '"tos":32' '"dport":"0-65535"' '"sport":"2000-1000"' '"ipproto":"tcp"' '"ipproto":0' \
