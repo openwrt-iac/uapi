@@ -43,7 +43,6 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
 | 412  | `precondition_failed`           | Stale `If-Match` ETag, a matching `If-None-Match` on a write, or JSON Patch `test` op mismatch |
 | 413  | `payload_too_large`             | A POST, PUT or PATCH whose body is over 262144 bytes (256 KiB), sent with a `Content-Length` or chunked, whose `Content-Length` is not a whole number from 0 to 262144, or whose body holds more than 2000 `{` and `[` characters. All are checked before the bearer check and before the JSON parse. On every path, uapi reads and drops what is left of a body before it answers, up to 10 s after the start of the request |
-| 415  | `unsupported_media_type`        | Reserved, never returned. See the note below before branching on it |
 | 422  | `validation_failed`             | Body parsed but failed schema or per-field rules             |
 | 423  | `locked`                        | Another write transaction holds a lock on the same package (or the global lock for a non-uci writer); retry. The response message names the specific lock. |
 | 429  | `too_many_requests`             | Per-token rate limit exceeded                                |
@@ -54,15 +53,10 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
 | 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /batch` answers 503 for a DELETE there too, because it commits as one write |
 
-`unsupported_media_type` is reserved and never emitted. uapi never rejects a body
-on `Content-Type`; the header is read for one thing only, switching a PATCH into
-RFC 6902 mode on `application/json-patch+json`. `text/plain`, or no header, is accepted
-and the write takes effect, so nothing can reach a 415. The code stays in the
-published `ErrorEnvelope.code` enum so a client that already branches on it does
-not have the value disappear, and no operation declares a 415 response. Enforcing
-it later would reject bodies that work today, which makes it a breaking change
-rather than a fix, and `POST /batch` sub-requests carry no per-item media type,
-so any rule could only apply to the outer request.
+`unsupported_media_type` was reserved and never emitted: uapi never rejects a body on
+`Content-Type` (the header only switches a PATCH into RFC 6902 mode). It left the published
+`ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1. Clients branching on it must drop
+that branch.
 
 `batch_partial_failure` is special: it appears only in the body of a
 `POST /batch` abort response, with the HTTP status taken from the failing
