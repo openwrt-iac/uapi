@@ -41,8 +41,6 @@ const WAIVERS = {
 		"method on the object bus.connect() returns, not an export of bus.uc",
 	"bus.uci_export":
 		"method on the object bus.connect() returns, not an export of bus.uc",
-	"unsupported_media_type":
-		"documented as reserved and never returned; the check exists to catch the next one",
 	"make defconfig":
 		"a target of the OpenWrt SDK tree, not of this Makefile",
 	"make package/uapi/compile":
