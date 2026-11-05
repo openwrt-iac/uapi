@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 
@@ -10,13 +10,13 @@ function fromUci(section) {
 		// The init reads this with `uci -q get`, defaults it to 1 when absent, and then
 		// compares `[ "$ENABLED" -gt 0 ]`. That is numeric, not a bool parse: `enabled 'true'`
 		// makes ash bail with "out of range" and usteer stays down, while `enabled '2'` starts
-		// it. normalize_bool called the word spellings true, so the read disagreed with the
-		// daemon on exactly the values a hand-written config is likely to carry.
+		// it. The other booleans go through the uci blob converter, which takes only 1/true
+		// and 0/false, so platform_bool reads them and the word spellings read false (#310).
 		enabled:                       (section.enabled == null) ? true : (int(section.enabled) > 0),
 		network:                       section.network ?? null,
-		syslog:                        normalize_bool(section.syslog, true),
+		syslog:                        platform_bool(section.syslog, true),
 		debug_level:                   as_int(section.debug_level),
-		ipv6:                          normalize_bool(section.ipv6, false),
+		ipv6:                          platform_bool(section.ipv6, false),
 		sta_block_timeout:             as_int(section.sta_block_timeout),
 		local_sta_timeout:             as_int(section.local_sta_timeout),
 		local_sta_update:              as_int(section.local_sta_update),
@@ -28,7 +28,7 @@ function fromUci(section) {
 		band_steering_threshold:       as_int(section.band_steering_threshold),
 		remote_update_interval:        as_int(section.remote_update_interval),
 		remote_node_timeout:           as_int(section.remote_node_timeout),
-		assoc_steering:                normalize_bool(section.assoc_steering, false),
+		assoc_steering:                platform_bool(section.assoc_steering, false),
 		min_connect_snr:               as_int(section.min_connect_snr),
 		min_snr:                       as_int(section.min_snr),
 		min_snr_kick_delay:            as_int(section.min_snr_kick_delay),
