@@ -12,9 +12,7 @@ let scope = require("scope");
 let handler = require("handler");
 let transaction = require("transaction");
 let bus = require("bus");
-let packages = require("packages");
-let system_access = require("system_access");
-let crontab = require("crontab");
+let nonuci = require("nonuci");
 let token_store = require("token_store");
 let ratelimit = require("ratelimit");
 let metrics = require("metrics");
@@ -101,6 +99,12 @@ for (let k in RESOURCE_SOURCES) {
 }
 
 let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
+
+// The non-uci special endpoints (packages/*, system/password, authorized_keys,
+// cron_jobs) as route handlers. Deliberately not in RESOURCE_SOURCES: /schema,
+// /diagnostics and the metric labels must not see them.
+const NONUCI = {};
+for (let k in nonuci) NONUCI[k] = handler.make_nonuci(nonuci[k]);
 
 function read_version() {
 	let f = fs.open("/usr/share/uapi/VERSION", "r");
@@ -931,81 +935,33 @@ function raw_route(conn, ctx, token, parts, method, body, query, env) {
 	return resp;
 }
 
-function packages_route(conn, ctx, token, parts, method, body, query, env) {
+function nonuci_route(conn, ctx, token, parts, method, body, query, env) {
 	if (length(parts) < 2) return null;
-	let sub = parts[1];
-	if (sub != "installed" && sub != "feeds") {
-		return errors.error(ctx, "not_found",
-		                    sprintf("Unknown packages subresource %J", sub));
+	let key = parts[0] + "/" + parts[1];
+	let h = NONUCI[key];
+	if (h == null) {
+		if (parts[0] == "packages")
+			return errors.error(ctx, "not_found",
+				sprintf("Unknown packages subresource %J", parts[1]));
+		return null;
 	}
-	if (length(parts) > 3) {
+	if (length(parts) > 3)
 		return errors.error(ctx, "not_found",
-		                    sprintf("Unknown sub-path under packages/%s", sub));
-	}
-	let id  = length(parts) >= 3 ? parts[2] : null;
+			sprintf("Unknown sub-path under %s", key));
+	let id = length(parts) >= 3 ? parts[2] : null;
 	let verb = method_verb(method);
-	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["packages", sub], verb,
-		sprintf("this operation on packages/%s", sub));
+	let denied = scope.require_or_deny(errors, ctx, token.scopes, [parts[0], parts[1]], verb,
+		sprintf("this operation on %s", key));
 	if (denied != null) return denied;
-	let resp;
-	if (sub == "installed") {
-		if (method == "GET" && id == null)        resp = packages.list_installed(ctx);
-		else if (method == "GET")                  resp = packages.get_installed(ctx, id);
-		else if (method == "POST" && id == null)   resp = packages.install(ctx, body);
-		else if (method == "DELETE" && id != null) resp = packages.remove_installed(ctx, id);
-		else resp = errors.error(ctx, "method_not_allowed",
-		                         sprintf("Method %J not allowed on packages/installed%s",
-		                                 method, id != null ? "/<name>" : ""));
-	} else {
-		if (method == "GET" && id == null)        resp = packages.list_feeds(ctx);
-		else if (method == "GET")                  resp = packages.get_feed(ctx, id);
-		else if (method == "POST" && id == null)   resp = packages.create_feed(ctx, body);
-		else if (method == "DELETE" && id != null) resp = packages.remove_feed(ctx, id);
-		else resp = errors.error(ctx, "method_not_allowed",
-		                         sprintf("Method %J not allowed on packages/feeds%s",
-		                                 method, id != null ? "/<id>" : ""));
+	if (id == null) {
+		if (method == "GET" && h.list != null)    return h.list(conn, ctx, query);
+		if (method == "POST" && h.create != null) return h.create(conn, ctx, body);
+		if (method == "PUT" && h.replace != null) return h.replace(conn, ctx, body);
+		return h.na(ctx, method, null);
 	}
-	return resp;
-}
-
-function system_special_route(conn, ctx, token, parts, method, body, query, env) {
-	if (length(parts) < 2) return null;
-	let sub = parts[1];
-	if (sub != "password" && sub != "authorized_keys" && sub != "cron_jobs") return null;
-	if (length(parts) > 3) {
-		return errors.error(ctx, "not_found",
-		                    sprintf("Unknown sub-path under system/%s", sub));
-	}
-	let id  = length(parts) >= 3 ? parts[2] : null;
-	let verb = method_verb(method);
-	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["system", sub], verb,
-		sprintf("this operation on system/%s", sub));
-	if (denied != null) return denied;
-	let resp;
-	if (sub == "password") {
-		if (method == "POST" && id == null) resp = system_access.set_password(ctx, body);
-		else resp = errors.error(ctx, "method_not_allowed",
-		                         sprintf("Method %J not allowed on system/password%s",
-		                                 method, id != null ? "/<id>" : ""));
-	} else if (sub == "authorized_keys") {
-		if (method == "GET" && id == null)        resp = system_access.list_keys(ctx);
-		else if (method == "GET")                  resp = system_access.get_key(ctx, id);
-		else if (method == "POST" && id == null)   resp = system_access.add_key(ctx, body);
-		else if (method == "PUT" && id == null)    resp = system_access.replace_keys(ctx, body);
-		else if (method == "DELETE" && id != null) resp = system_access.remove_key(ctx, id);
-		else resp = errors.error(ctx, "method_not_allowed",
-		                         sprintf("Method %J not allowed on system/authorized_keys%s",
-		                                 method, id != null ? "/<id>" : ""));
-	} else {
-		if (method == "GET" && id == null)        resp = crontab.list_entries(ctx, conn);
-		else if (method == "GET")                  resp = crontab.get_entry(ctx, conn, id);
-		else if (method == "POST" && id == null)   resp = crontab.add_entry(ctx, conn, body);
-		else if (method == "DELETE" && id != null) resp = crontab.remove_entry(ctx, conn, id);
-		else resp = errors.error(ctx, "method_not_allowed",
-		                         sprintf("Method %J not allowed on system/cron_jobs%s",
-		                                 method, id != null ? "/<id>" : ""));
-	}
-	return resp;
+	if (method == "GET" && h.get_one != null)   return h.get_one(conn, ctx, id);
+	if (method == "DELETE" && h.remove != null) return h.remove(conn, ctx, id);
+	return h.na(ctx, method, id);
 }
 
 // Prefix routes served after authentication, matched on the first path segment,
@@ -1015,8 +971,8 @@ const PREFIX_ROUTES = [
 	{ seg: "auth",     fn: auth_route },
 	{ seg: "tokens",   fn: tokens_route },
 	{ seg: "raw",      fn: raw_route },
-	{ seg: "packages", fn: packages_route },
-	{ seg: "system",   fn: system_special_route },
+	{ seg: "packages", fn: nonuci_route },
+	{ seg: "system",   fn: nonuci_route },
 ];
 
 function dispatch(env, start) {
