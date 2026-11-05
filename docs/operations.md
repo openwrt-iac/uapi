@@ -387,12 +387,38 @@ operator visibility. Rate limit is a defense-in-depth abuse guard, not a
 security control on its own; use `allowed_cidrs` on the token for actual
 source-IP enforcement.
 
+## Request limits
+
+The request bounds are read per request from `config limits` in
+`/etc/config/uapi`; no reload is needed. The defaults below are also the
+fallback when an option is absent or outside its accepted range:
+
+```
+config limits
+    option max_body_bytes '262144'
+    option max_body_containers '2000'
+    option body_read_s '10'
+    option reload_budget_s '20'
+```
+
+- `max_body_bytes` (4096..16777216): largest request body accepted. A larger
+  `Content-Length` answers 413 before any read.
+- `max_body_containers` (16..65536): largest number of `{` and `[` characters
+  in a body, which bounds the `json()` parse.
+- `body_read_s` (1..60): deadline for a body to arrive in full, and for the
+  drain of a body no handler read.
+- `reload_budget_s` (1..120): total time a write waits for its daemon reloads,
+  after which the write answers `X-Reload-Status: unverified` instead of
+  waiting longer.
+
+`GET /diagnostics` reports the effective values under `limits`.
+
 ## Diagnostics
 
 `GET /api/v3/diagnostics` returns version, uptime, loaded resources,
 the uapi lock files present under `/var/lock`, whether uapi uses each
-state directory under `/var/run`, and the last 20 error envelopes. Scope:
-`uapi:diagnostics:ro`.
+state directory under `/var/run`, the effective request limits, and the
+last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 
 ```json
 {
@@ -409,6 +435,12 @@ state directory under `/var/run`, and the last 20 error envelopes. Scope:
     "/var/run/uapi-metrics": true,
     "/var/run/uapi-ratelimit": true,
     "/var/run/uapi-token-update": true
+  },
+  "limits": {
+    "max_body_bytes": 262144,
+    "max_body_containers": 2000,
+    "body_read_s": 10,
+    "reload_budget_s": 20
   },
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",

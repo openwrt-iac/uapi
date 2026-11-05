@@ -1371,11 +1371,20 @@ function build_schemas() {
 		},
 		"DiagnosticsResponse": {
 			"type": "object",
-			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "request_id"],
+			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "limits", "request_id"],
 			"properties": {
 				"version":          { "type": "string" },
 				"uptime_seconds":   { "type": "integer" },
 				"resources_loaded": { "type": "array", "items": { "type": "string" } },
+				"limits": { "type": "object",
+				            "description": "The effective request bounds, from `config limits` in /etc/config/uapi with the compiled defaults where the option is absent or out of bounds.",
+				            "required": ["max_body_bytes", "max_body_containers", "body_read_s", "reload_budget_s"],
+				            "properties": {
+				              "max_body_bytes":      { "type": "integer" },
+				              "max_body_containers": { "type": "integer" },
+				              "body_read_s":         { "type": "integer" },
+				              "reload_budget_s":     { "type": "integer" },
+				            } },
 				"lock_state": { "type": "object",
 				                "required": ["global_held", "per_package"],
 				                "properties": {
