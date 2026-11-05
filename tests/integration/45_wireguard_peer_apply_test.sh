@@ -623,29 +623,24 @@ call -X DELETE "$URL/network/wireguard_peers/$ds" >/dev/null
 # write that leaves them as uci holds them passes, sets the rest of the peer, and leaves the kernel
 # its endpoint and keepalive. Enabling such a peer is refused, because wireguard.sh would then give
 # the value to wg.
-echo "--- a stored port of 0 and an unreadable keepalive take a write that leaves them, and the kernel keeps its endpoint ---"
+echo "--- v4 (#308): a stored port of 0 and an unreadable keepalive block every write of the peer ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.35/32\"],
 	    \"endpoint_host\":\"198.51.100.7\",\"endpoint_port\":51820,\"persistent_keepalive\":25}")
 [ "$(status_of "$r")" = "200" ] || fail "POST peer for the stored port: $(body_of "$r")"
 kept=$(id_of "$r")
 $SSH "uci set network.$kept.endpoint_port=0; uci set network.$kept.persistent_keepalive=25x; uci commit network"
-for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}'; do
+for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}' '{"disabled":true}' '{"disabled":false}'; do
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
-	[ "$(status_of "$r")" = "200" ] || fail "PATCH $body of a peer with a stored port of 0: $(body_of "$r")"
+	[ "$(status_of "$r")" = "422" ] || fail "PATCH $body of a peer with stored errors expected 422 on v4: $(body_of "$r")"
 done
 endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
 [ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
 keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
 [ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
-$SSH "wg show $IFACE allowed-ips" | grep -q '10.98.99.36/32' || fail "the PATCH of allowed_ips did not reach the kernel"
 [ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
-	|| fail "a PATCH rewrote the stored port or keepalive"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":true}')
-[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of a peer with a stored port of 0: $(body_of "$r")"
-has_peer "$PEER3" && fail "the disabled peer is still in the kernel"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":false}')
-[ "$(status_of "$r")" = "422" ] || fail "enabling a peer with a stored port of 0 expected 422, got $(status_of "$r"): $(body_of "$r")"
+	|| fail "a refused PATCH rewrote the stored port or keepalive"
+has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
 call -X DELETE "$URL/network/wireguard_peers/$kept" >/dev/null
 
 # wireguard.sh gives every enabled peer to one `wg syncconf`, so one stored peer that wg refuses
