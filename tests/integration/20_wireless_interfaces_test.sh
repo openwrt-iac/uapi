@@ -125,21 +125,23 @@ echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of a 64-hex-digit r0kh entr
 $SSH "uci get wireless.$sid.r0kh" | grep -qx "02:00:00:00:00:01,ap-1.example.com,$kh$kh" \
 	|| fail "the r0kh entry was not stored"
 
-# wifi-scripts sets up no interface for a section with no mode, which a read reports as ap.
-echo "--- a POST with no mode stores mode ap, and wifi-scripts sets up the SSID ---"
+# wifi-scripts sets up no interface for a section with no mode, which a read reports as null (#307).
+echo "--- a POST with no mode stores no mode, and the read answers null ---"
 nomode=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" -d '{
 	"device": "radio0", "network": "lan", "ssid": "uapi-test-nomode", "encryption": "none"
 }')
 echo "$nomode" | tail -1 | grep -q '^200$' || fail "POST with no mode expected 200: $nomode"
 nid=$(echo "$nomode" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
-[ "$($SSH "uci -q get wireless.$nid.mode")" = ap ] || fail "a POST with no mode did not store mode ap"
+[ -z "$($SSH "uci -q get wireless.$nid.mode")" ] || fail "a POST with no mode stored a mode"
+echo "$(call "$URL/wireless/interfaces/$nid")" | sed '$d' | jq -e '.mode == null' >/dev/null \
+	|| fail "a section with no mode did not read null"
 up_ifname() { $SSH 'ubus call network.wireless status' | jq -r --arg s "$1" '[.[].interfaces[]? | select(.section == $s) | .ifname // empty][0] // empty'; }
 # The CI image has no network.wireless object, so wifi-scripts sets up nothing there. The checks of
 # what wifi-scripts and hostapd do run only where it does, such as the test VM.
 daemon=0
 $SSH 'ubus call network.wireless status' >/dev/null 2>&1 && daemon=1
 [ "$daemon" = 1 ] || echo "skip: no network.wireless object, so the wifi-scripts and hostapd checks do not run"
-[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for $nid" '[ -n "$(up_ifname "$nid")" ]'
+[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for $nid" '[ -z "$(up_ifname "$nid")" ]'
 
 echo "--- a mode, ssid or key that the daemons refuse answers 422 ---"
 for body in '{"mode":"wds"}' '{"ssid":"'"$(printf '%033d' 0)"'"}' \
@@ -149,8 +151,8 @@ for body in '{"mode":"wds"}' '{"ssid":"'"$(printf '%033d' 0)"'"}' \
 	echo "$r" | tail -1 | grep -q '^422$' || fail "PATCH $body expected 422: $r"
 done
 
-# Storing ap for the null turned a station into an access point that broadcast its SSID and key.
-echo "--- a write that sends mode as null answers 422 and keeps the stored mode ---"
+# v4 (#307): a null mode is accepted and removes the option; the section then sets up nothing.
+echo "--- a write that sends mode as null answers 200 and removes the stored mode ---"
 sta=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" -d '{
 	"device": "radio0", "network": "lan", "mode": "sta", "ssid": "uapi-test-sta",
 	"encryption": "psk2", "key": "correcthorse", "disabled": true
@@ -158,9 +160,7 @@ sta=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces
 echo "$sta" | tail -1 | grep -q '^200$' || fail "POST of a station expected 200: $sta"
 stid=$(echo "$sta" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 null_mode() {
-	echo "$2" | tail -1 | grep -q '^422$' || fail "$1 expected 422: $2"
-	echo "$2" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["mode", "required"]]' >/dev/null \
-		|| fail "$1 expected one required error on mode: $2"
+	echo "$2" | tail -1 | grep -q '^200$' || fail "$1 expected 200: $2"
 }
 put_body=$(call "$URL/wireless/interfaces/$stid" | sed '$d' \
 	| jq -c 'del(.id, .managed, .runtime, .has_key, .has_r0kh, .has_r1kh) | .mode = null')
@@ -174,9 +174,13 @@ null_mode "JSON Patch move" "$(call -X PATCH -H 'Content-Type: application/json-
 	"$URL/wireless/interfaces/$stid" -d '[{"op":"move","from":"/mode","path":"/network"}]')"
 null_mode "POST" "$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" \
 	-d '{"device":"radio0","ssid":"uapi-test-nullmode","mode":null}')"
-[ "$($SSH "uci -q get wireless.$stid.mode; uci -q get wireless.$stid.network" | tr '\n' ' ')" = "sta lan " ] \
-	|| fail "a refused null mode changed the stored mode or network"
-$SSH 'uci show wireless' | grep -q "uapi-test-nullmode" && fail "a refused POST stored a section"
+[ -z "$($SSH "uci -q get wireless.$stid.mode")" ] \
+	|| fail "a null mode did not remove the stored mode"
+# v4 (#307): the POST succeeds and stores a section with no mode.
+nid2=$(call "$URL/wireless/interfaces" | sed '$d' | jq -r '.[] | select(.ssid == "uapi-test-nullmode") | .id // empty')
+[ -n "$nid2" ] || fail "POST with mode null stored no section: $r"
+[ -z "$($SSH "uci -q get wireless.$nid2.mode")" ] || fail "a POST with mode null stored a mode"
+call -X DELETE "$URL/wireless/interfaces/$nid2" | tail -1 | grep -q '^204$' || fail "null-mode DELETE expected 204"
 call -X DELETE "$URL/wireless/interfaces/$stid" | tail -1 | grep -q '^204$' || fail "station DELETE expected 204"
 
 # netifd converts a number with ucode's `+v`, and validate.uc stops the setup of the radio for a

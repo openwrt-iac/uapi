@@ -478,7 +478,8 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(49) }, 'nasid'), [ 'out_of_range' ], enc);
 			t.assert_deep_equal(codes({ ...ft, nasid: 'é' + bytes(47) }, 'nasid'), [ 'out_of_range' ], enc);
 		}
-		// A section with no mode reads as mode ap, so a create without one is checked as an AP.
+		// A create without a mode stores none (the read answers null, #307), and is still
+		// validated as an AP, as before.
 		t.assert_deep_equal(codes({ encryption: 'sae', key: 'correcthorse', ieee80211r: true, nasid: bytes(49) }, 'nasid'),
 		                    [ 'out_of_range' ]);
 		// No fast transition: WPA1, owe, or a station.
@@ -734,18 +735,19 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 	});
 
-	// netifd and hostapd skip a section with no mode, which a read reports as ap.
-	t.it('a create or a PUT that sends no mode stores mode ap', () => {
+	// wifi-scripts sets up nothing for a section with no mode, so the read reports null (#307).
+	t.it('a create or a PUT that sends no mode stores no mode, and reads null', () => {
 		let c = ubus.stub({ uci: { wireless: {} } });
 		t.assert_equal(h().create(c, CTX, { id: 'w2', device: 'radio0', ssid: 'home', encryption: 'none' }).status, 200);
-		t.assert_equal(c._state.uci.wireless.w2.mode, 'ap');
+		t.assert_equal(c._state.uci.wireless.w2.mode, null);
+		t.assert_equal(h().get_one(c, CTX, 'w2').body.mode, null);
 		c = stored({ mode: 'sta' });
 		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'psk2' }).status, 200);
-		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
+		t.assert_equal(c._state.uci.wireless.w1.mode, null);
 	});
 
-	// Storing ap for the null turned a station into an access point that broadcast its SSID and key.
-	t.it('a write that sends mode as null answers 422 and keeps the stored mode', () => {
+	// v4 (#307): a null mode removes the option; the section then sets up nothing.
+	t.it('a write that sends mode as null answers 200 and removes the stored mode', () => {
 		let c = stored({ mode: 'sta' });
 		let put = { ...read_back(c), mode: null };
 		let jp = { ...CTX, json_patch: true };
@@ -755,9 +757,8 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                [ 'JSON Patch replace', () => h().patch(c, jp, 'w1', [ { op: 'replace', path: '/mode', value: null } ]) ],
 		                [ 'JSON Patch move', () => h().patch(c, jp, 'w1', [ { op: 'move', from: '/mode', path: '/network' } ]) ],
 		                [ 'create', () => h().create(c, CTX, { id: 'w2', device: 'radio0', ssid: 'x', mode: null }) ] ])
-			t.assert_deep_equal(map(w[1]().body.errors, (e) => [ e.field, e.code ]), [ [ 'mode', 'required' ] ], w[0]);
-		t.assert_equal(c._state.uci.wireless.w1.mode, 'sta');
-		t.assert_equal(c._state.uci.wireless.w2, null);
+			t.assert_equal(w[1]().status, 200, w[0]);
+		t.assert_equal(c._state.uci.wireless.w1.mode, null);
 	});
 
 	t.it('refuses mode wds on write, and reads a stored one', () => {
@@ -863,8 +864,8 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	});
 
 	t.it('refuses 802.11r with owe on an access point', () => {
-		t.assert_deep_equal(codes({ encryption: 'owe', ieee80211r: true }, 'ieee80211r'), [ 'conflict' ]);
-		t.assert_deep_equal(live({ encryption: 'owe', ieee80211r: true, disabled: true }, 'ieee80211r'), [ false ]);
+		t.assert_deep_equal(codes({ mode: 'ap', encryption: 'owe', ieee80211r: true }, 'ieee80211r'), [ 'conflict' ]);
+		t.assert_deep_equal(live({ mode: 'ap', encryption: 'owe', ieee80211r: true, disabled: true }, 'ieee80211r'), [ false ]);
 		for (let b in [ { encryption: 'owe' }, { mode: 'sta', encryption: 'owe', ieee80211r: true },
 		                { encryption: 'sae', key: 'correcthorse', ieee80211r: true } ])
 			t.assert_deep_equal(codes(b, 'ieee80211r'), [], b);
