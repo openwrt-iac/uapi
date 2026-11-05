@@ -18,7 +18,7 @@ done
 
 echo "--- ?validate=1 sweeps and reports what it swept ---"
 status=$(curl -sS -o /tmp/uapi_sweep_on.json -w '%{http_code}' -H "$ADMIN" \
-	"$URL/uapi/uapi/diagnostics?validate=1")
+	"$URL/uapi/diagnostics?validate=1")
 [ "$status" = "200" ] || fail "sweep expected 200, got $status"
 for k in invalid_sections swept_resources skipped_for_scope; do
 	grep -q "\"$k\"" /tmp/uapi_sweep_on.json || fail "sweep missing $k"
@@ -37,13 +37,13 @@ uci set firewall.sweepprobe.target=ACCEPT
 uci add_list firewall.sweepprobe.proto=all
 uci add_list firewall.sweepprobe.dest_port=22
 uci commit firewall' >/dev/null
-curl -sS -o /tmp/uapi_sweep_bad.json -H "$ADMIN" "$URL/uapi/uapi/diagnostics?validate=1" >/dev/null
+curl -sS -o /tmp/uapi_sweep_bad.json -H "$ADMIN" "$URL/uapi/diagnostics?validate=1" >/dev/null
 grep -q 'sweepprobe' /tmp/uapi_sweep_bad.json || fail "sweep did not report the planted section"
 grep -q 'match.proto' /tmp/uapi_sweep_bad.json || fail "sweep did not name the offending field"
 $SSH 'uci delete firewall.sweepprobe; uci commit firewall' >/dev/null
 
 echo "--- clean again once the section is gone ---"
-curl -sS -o /tmp/uapi_sweep_clean.json -H "$ADMIN" "$URL/uapi/uapi/diagnostics?validate=1" >/dev/null
+curl -sS -o /tmp/uapi_sweep_clean.json -H "$ADMIN" "$URL/uapi/diagnostics?validate=1" >/dev/null
 grep -q 'sweepprobe' /tmp/uapi_sweep_clean.json && fail "sweep still reports a removed section"
 
 echo "--- the sweep is scoped per resource, and says what it skipped ---"
@@ -54,7 +54,7 @@ echo "--- the sweep is scoped per resource, and says what it skipped ---"
 # substring match here would pass even with both arrays empty.
 DIAG_ONLY=$($SSH 'uapi-token create --name test_sweep_diag_only --scope "uapi:diagnostics:ro"' 2>/dev/null | head -1)
 curl -sS -o /tmp/uapi_sweep_diag.json -H "Authorization: Bearer $DIAG_ONLY" \
-	"$URL/uapi/uapi/diagnostics?validate=1" >/dev/null
+	"$URL/uapi/diagnostics?validate=1" >/dev/null
 python3 - /tmp/uapi_sweep_diag.json <<'PY' || fail "diagnostics-only token: wrong sweep scope"
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -65,7 +65,7 @@ PY
 
 FW_DIAG=$($SSH 'uapi-token create --name test_sweep_fw_diag --scope "firewall:ro" --scope "uapi:diagnostics:ro"' 2>/dev/null | head -1)
 curl -sS -o /tmp/uapi_sweep_fw.json -H "Authorization: Bearer $FW_DIAG" \
-	"$URL/uapi/uapi/diagnostics?validate=1" >/dev/null
+	"$URL/uapi/diagnostics?validate=1" >/dev/null
 python3 - /tmp/uapi_sweep_fw.json <<'PY' || fail "firewall-reader token: wrong sweep scope"
 import json, sys
 d = json.load(open(sys.argv[1]))
