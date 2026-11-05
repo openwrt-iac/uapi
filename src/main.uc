@@ -304,12 +304,6 @@ function dispatch_resource(h, scopes, ctx, conn, method, domain, sub, id, extra,
 		                    sprintf("Method %J not allowed on %s/%s collection", method, domain, sub));
 	}
 
-	if (extra == "adopt") {
-		if (method != "POST")
-			return errors.error(ctx, "method_not_allowed", "adopt requires POST");
-		return h.adopt(conn, ctx, id);
-	}
-
 	if (extra != null)
 		return errors.error(ctx, "not_found", "Unknown sub-path");
 
@@ -488,7 +482,7 @@ for (let l in [ "/packages/installed", "/packages/feeds",
 }
 for (let k in SINGLETONS) METRIC_ROUTES.labels["/" + replace(k, ":", "/")] = true;
 for (let k in RESOURCES)
-	for (let s in [ "", "/:id", "/:id/adopt" ])
+	for (let s in [ "", "/:id" ])
 		METRIC_ROUTES.labels["/" + replace(k, ":", "/") + s] = true;
 for (let k in RESOURCE_SOURCES) {
 	let d = split(k, ":");
@@ -1066,9 +1060,10 @@ function dispatch(env, start) {
 		// carrying no instruction materialised defaults into uci. Measured on a box, an empty
 		// PATCH added `enabled '1'` to a firewall rule that had no such option.
 		//
-		// POST is deliberately excluded: `/<resource>/{id}/adopt` is a POST that takes no body
-		// at all. Every one of the 74 PUT and PATCH operations declares requestBody.required,
-		// so refusing an absent one contradicts nothing in the published contract.
+		// POST is deliberately excluded: no POST route takes no body anymore (the adopt
+		// route left in v4, #321). Every one of the 74 PUT and PATCH operations declares
+		// requestBody.required, so refusing an absent one contradicts nothing in the
+		// published contract.
 		else if (method == "PUT" || method == "PATCH")
 			return { ctx, resp: errors.error(ctx, "bad_request",
 			                                 "Request body is required") };
