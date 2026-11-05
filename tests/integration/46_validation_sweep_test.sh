@@ -96,12 +96,12 @@ diff /tmp/uapi_emptybody_before.txt /tmp/uapi_emptybody_after.txt \
 	|| fail "a refused empty body still changed uci"
 $SSH 'uci -q delete firewall.emptybody; uci commit firewall' >/dev/null
 
-echo "--- v4 (#321): the adopt route is gone, and a POST without a body answers 400 ---"
+echo "--- v4 (#321): the adopt route is gone, and a POST without a body is refused ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" \
 	"$URL/firewall/rules/someid/adopt")
 [ "$status" = "404" ] || fail "adopt route expected 404 on v4, got $status"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" \
 	"$URL/firewall/rules")
-[ "$status" = "400" ] || fail "bodyless POST on a resource expected 400, got $status"
+[ "$status" = "422" ] || fail "bodyless POST on a resource expected 422, got $status"
 
 echo "PASS 46_validation_sweep_test"
