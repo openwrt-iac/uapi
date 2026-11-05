@@ -11,6 +11,25 @@ One installation serves exactly one API major. The package upgrade flips the pre
 URL from the v4 spec's `servers` block.
 
 <<<<<<< HEAD
+## `mwan3/interfaces.family` reads `ipv4` when unset
+
+
+
+`mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the read now answers
+`"ipv4"` instead of `null` for a section that stores none (announced in 3.4.0, #306). `family` is
+no longer in the request schema's `required`: a write may omit it, and a `null` removes the option,
+after which the read answers `ipv4` again.
+
+## Curated string fields refuse newlines and carriage returns
+
+
+
+One check in the type gate now refuses `\n` and `\r` in every curated string on write (announced
+in 3.4.0, #276), replacing the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about
+`\r`. The only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several lines on
+purpose. Free-text fields such as descriptions that no daemon reads as one line are refused too;
+that is the announced breaking part. Per-field `pattern`s keep their word, quote and glob rules.
+
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
 
 
