@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.** It was reserved and never emitted (uapi never rejects a body on `Content-Type`); the audit of emitted vs declared codes found it the only dead one. Announced in 3.4.1 (#323); clients branching on 415 must drop that branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
+
 ### Changed
 
 - **BREAKING: a `wireless/interfaces` section with no `mode` reads `null`.** wifi-scripts sets up nothing for such a section, so the read no longer reports an access point that does not exist. The write side changes the same way: a `null` mode is accepted and removes the option, and a create or PUT that sends no mode stores none. Announced in 3.4.0 (#307); migration note in `docs/migration-v3-to-v4.md`. (#347)
@@ -65,6 +69,9 @@ All notable changes to this project will be documented in this file. Format foll
 - **BREAKING: curated string fields refuse a newline and a carriage return on write.** One check in the type gate (`check_schema_types`) replaces the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about `\r`; the only opt-out is `system.notes`, marked `x-uapi-multiline`. Free-text fields such as descriptions are refused too. Announced in 3.4.0 (#276); migration note in `docs/migration-v3-to-v4.md`. (#344)
 - **BREAKING: `mwan3/interfaces.family` reads `ipv4` when the option is unset.** `mwan3.sh` and `mwan3track` both default an unset family to ipv4, so the read now follows the daemon instead of answering null; `family` leaves the request schema's `required`, and a `null` on write removes the option, after which the read answers `ipv4`. Announced in 3.4.0 (#306); migration note in `docs/migration-v3-to-v4.md`. (#346)
 - **BREAKING: a `wireless/interfaces` section with no `mode` reads `null`.** wifi-scripts sets up nothing for such a section, so the read no longer reports an access point that does not exist. The write side changes the same way: a `null` mode is accepted and removes the option, and a create or PUT that sends no mode stores none. Announced in 3.4.0 (#307); migration note in `docs/migration-v3-to-v4.md`. (#347)
+### Removed
+
+- **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.** It was reserved and never emitted (uapi never rejects a body on `Content-Type`); the audit of emitted vs declared codes found it the only dead one. Announced in 3.4.1 (#323); clients branching on 415 must drop that branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
 
 ## [3.4.0] - 2026-11-04
 
