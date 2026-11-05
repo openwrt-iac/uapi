@@ -274,6 +274,32 @@ whose sub-requests run before the apply of the batch: `main.uc` marks them with 
 way: read in a write, it would come from before the apply, and a POST would answer
 `in_kernel: false` beside `X-Kernel-Status: ok`.
 
+### Dynamic section types and a post-commit kernel apply (`type_predicate`, `kernel_ops`)
+
+Some resources map to a family of uci section types carried by the section name
+rather than a fixed one: `network/wireguard_peers` models `wireguard_<iface>`
+sections. Such a module declares `type_predicate(t)` to match the family and
+`create_type(body)` to pick the section type at create, plus optionally
+`id_prefix` and `id_for_create`. It cannot declare `unique_field`; the loader
+refuses to load the module (see above).
+
+When the daemon a write feeds does not converge from uci on its own: a netifd
+reload of the `network` package leaves a peer edit out of the kernel, and the
+module declares `kernel_ops(kind, opts, sec_type, existing, staged)`.
+`handler.make` collects what it returns into the request's kernel sink (shared
+with `/batch`, so sub-requests accumulate into one ordered apply), and the
+transaction applies the ops after the commit and reports the outcome in
+`X-Kernel-Status` / `X-Kernel-Applied`. `opts` is the `toUci` output, `existing`
+the raw section before the write, `staged` the section as the write leaves it,
+`kind` is create/replace/patch/remove. `read_runtime` pairs with it for the
+runtime a GET alone reads (above), and `merge_for_patch` overrides the merge
+semantics of a PATCH when the default is wrong.
+
+Today exactly one resource exercises this machinery: `network/wireguard_peers`.
+Do not generalize it further without a second consumer. This section is the
+recipe; `src/resources/network.wireguard_peers.uc` is the reference
+implementation.
+
 ## 3. JSON conventions
 
 Per CLAUDE.md:
