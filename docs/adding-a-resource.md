@@ -434,6 +434,26 @@ become eligible for `POST /batch` via main.uc's `BARE_RESOURCES` /
 `BARE_SINGLETONS` construction loop - no extra step needed. Read-only
 collections are excluded from batch (they have no `toUci`).
 
+### Read-only runtime collections (`make_collection`)
+
+Non-uci runtime state exposed as a read-only collection follows one recipe;
+`dhcp/leases`, `dhcp/leases6` and `network/wireguard_kernel_peers` are the
+instances today. The module declares:
+
+- `package` / `type`: naming only, used in 404/405 messages.
+- `id_field`: the item field that `GET /<resource>/<id>` matches.
+- `list_fn(conn, query)`: returns the items array. Reads run without the uapi
+  lock and return no ETag, so the id must be a stable content id (for example
+  a truncated sha256 of the item's identifying fields), never a row position.
+- `schema_properties`: the item shape, published under `/schema/...`.
+
+Register with `handler.make_collection(load_resource(...))` like any other
+resource. The handler answers GET list (paginated) and GET one, and 405
+everything else. `build/gen_openapi.uc` needs `kind: "collection"` in
+`ENDPOINTS` so the spec publishes only the two GETs. Unit-test the parser and
+the handler contract (see `tests/unit/dhcp_leases_test.uc`), and cover
+list/get/404/405 in an integration test.
+
 ## 6. Add an integration test
 
 `tests/integration/<NN>_<resource>_test.sh`. Use the install helper:
