@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: one documented `runtime` envelope on every resource.** `runtime` is now always present in a resource response and declared in every response schema: `id` and `runtime` joined the `required` list of all 45 resources, the four hand-written `openapi_runtime` blocks are kept, and the rest get the documented empty-object shape. Read-only collections are item lists and unchanged. Announced in 3.4.1 (#322); migration note in `docs/migration-v3-to-v4.md`. (#354)
+
 ### Removed
 
 - **BREAKING: `managed` and the adopt flow are removed.** Every curated response envelope was `{id, managed, runtime, fields}`; it is now `{id, runtime, fields}`. `POST /<resource>/<id>/adopt` answers 404, the `?managed=` query filter is gone, and the `unmanaged_resource` (409) error code left the enum: sections that pre-exist in `/etc/config/` are addressed by their name like any other. Announced in 3.4.1 (#321); migration note in `docs/migration-v3-to-v4.md`. (#353)
