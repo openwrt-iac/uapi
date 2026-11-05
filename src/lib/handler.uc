@@ -228,12 +228,24 @@ _check_value = function(spec, val, field_path, errs) {
 	if (is_num && spec.maximum != null && val > spec.maximum)
 		push(errs, { field: field_path, code: "out_of_range",
 		             message: sprintf("must be <= %d", spec.maximum) });
+	let string_refused = false;
 	if (type(val) == "string" && spec.pattern != null) {
 		let re = regexp(spec.pattern);
-		if (re != null && !match(val, re))
+		if (re != null && !match(val, re)) {
 			push(errs, { field: field_path, code: "invalid_format",
 			             message: sprintf("must match %s", spec.pattern) });
+			string_refused = true;
+		}
 	}
+	// v4 (#276): one rule for newlines in curated strings. A field whose daemon reads it as one
+	// line is refused here with both \n and \r, which removes the old LINE_RE/ONE_LINE_RE
+	// difference; a field that legitimately holds several lines opts out with
+	// "x-uapi-multiline": true (system.notes). Skipped when the pattern already refused the
+	// value, so one refusal per field. Per-field patterns keep the word, quote and glob rules.
+	if (type(val) == "string" && !string_refused && spec["x-uapi-multiline"] !== true
+	    && (index(val, "\n") >= 0 || index(val, "\r") >= 0))
+		push(errs, { field: field_path, code: "invalid_format",
+		             message: "must not contain a newline or carriage return" });
 	if (type(val) == "array" && spec.items != null) {
 		for (let i = 0; i < length(val); i++)
 			_check_value(spec.items, val[i],
