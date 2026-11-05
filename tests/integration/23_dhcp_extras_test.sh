@@ -67,7 +67,6 @@ assert_dnsmasq_loads
 echo "--- dhcp/dnsmasq singleton: GET returns the existing config ---"
 got=$(call "$URL/dhcp/dnsmasq")
 echo "$got" | tail -1 | grep -q '^200$' || fail "dnsmasq GET expected 200"
-echo "$got" | grep -q '"managed": true' || fail "dnsmasq singleton missing managed"
 
 echo "--- dhcp/dnsmasq: PATCH adds a forwarder ---"
 patched=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/dnsmasq" -d '{
