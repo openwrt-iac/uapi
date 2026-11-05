@@ -118,7 +118,12 @@ function toUci(json) {
 	if (json.src != null)     out.src = json.src;
 	if (json.dest != null)    out.dest = json.dest;
 	if (json.priority != null) out.priority = "" + json.priority;
-	if (json.lookup != null)  out.lookup = "" + json.lookup;
+	// A lookup table name on write is resolved like netifd resolves it and stored as its id,
+	// so a plan that reads the id back stays stable when /etc/iproute2/rt_tables changes.
+	if (json.lookup != null)
+		out.lookup = "" + (type(json.lookup) == "string"
+			? rt_table_id(json.lookup, () => fs.readfile("/etc/iproute2/rt_tables"))
+			: json.lookup);
 	if (json['goto'] != null) out['goto'] = "" + json['goto'];
 	// Cleared for lookup and goto, so a write repairs a stored `action 'goto'` that netifd
 	// would drop with the whole rule.
@@ -154,6 +159,10 @@ function validate(json) {
 	if (json.lookup === 0)
 		push(errs, { field: "lookup", code: "out_of_range",
 		             message: "must be from 1 to 4294967295: netifd drops a rule whose lookup is 0, or a name it cannot resolve, which reads as 0" });
+	if (type(json.lookup) == "string"
+	    && rt_table_id(json.lookup, () => fs.readfile("/etc/iproute2/rt_tables")) == 0)
+		push(errs, { field: "lookup", code: "invalid_format",
+		             message: "must be an id from 1 to 4294967295 or a name from /etc/iproute2/rt_tables (default, main and local included): netifd drops a rule whose lookup it cannot resolve, which reads as 0" });
 	if (action == "goto" && (json['goto'] == null || json['goto'] === ""))
 		push(errs, { field: "goto", code: "required",
 		             message: "is required when action is goto" });
@@ -241,8 +250,9 @@ return {
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
 		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766,
 		            description: "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same." },
-		lookup:   { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
-		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write of 0 answers 422." },
+		lookup:   { type: ["integer", "string", "null"], minimum: 0, maximum: 4294967295,
+		            "x-uapi-write": { minimum: 1 },
+		            description: "Routing table to look up when action is lookup. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0." },
 		goto:     { type: ["integer", "null"], minimum: 0, maximum: 2147483647, "x-uapi-write": { minimum: 1 },
 		            description: "Priority of the rule to jump to when action is goto. It must be above `priority`: the kernel refuses a goto that does not jump forward, and without a priority netifd places the rule by its position, so a goto that does not jump past it fails too." },
 		action:   { type: "string", enum: keys(VALID_ACTIONS),
