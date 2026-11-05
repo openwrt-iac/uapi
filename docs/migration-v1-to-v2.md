@@ -159,14 +159,14 @@ either remove the field from the payload or correct its type.
 | `GET /schema`                     | (public)                     | Lists all resources                       |
 | `GET /schema/<package>`           | (public)                     | Schemas for one package                   |
 | `GET /schema/<package>/<res>`     | (public)                     | One resource's `schema_properties`        |
-| `GET /auth/whoami`                | (any authed token)           | Current token metadata                    |
-| `GET /tokens`                     | `uapi:tokens:ro` / `*:ro`    | List tokens (no secrets surfaced)         |
-| `GET /tokens/<id>`                | `uapi:tokens:ro` / `*:ro`    | One token's metadata                      |
+| `GET /uapi/whoami`                | (any authed token)           | Current token metadata                    |
+| `GET /uapi/tokens`                     | `uapi:tokens:ro` / `*:ro`    | List tokens (no secrets surfaced)         |
+| `GET /uapi/tokens/<id>`                | `uapi:tokens:ro` / `*:ro`    | One token's metadata                      |
 | `POST /tokens`                    | `uapi:tokens:rw` / `*:rw`    | Mint a new bearer (returns cleartext once)|
-| `DELETE /tokens/<id>`             | `uapi:tokens:rw` / `*:rw`    | Revoke                                    |
-| `GET /metrics`                    | `uapi:metrics:ro` / `*:ro`   | Prometheus text                           |
-| `GET /diagnostics`                | `uapi:diagnostics:ro` / `*:rw`| Version + lock state + recent errors      |
-| `POST /batch`                     | each sub-request scope-checked| Multi-package all-or-nothing              |
+| `DELETE /uapi/tokens/<id>`             | `uapi:tokens:rw` / `*:rw`    | Revoke                                    |
+| `GET /uapi/metrics`                    | `uapi:metrics:ro` / `*:ro`   | Prometheus text                           |
+| `GET /uapi/diagnostics`                | `uapi:diagnostics:ro` / `*:rw`| Version + lock state + recent errors      |
+| `POST /uapi/batch`                     | each sub-request scope-checked| Multi-package all-or-nothing              |
 
 ## New headers
 

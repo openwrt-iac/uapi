@@ -58,7 +58,7 @@ return {
     singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
     unique_field: "name",              // optional. Value of this field must be unique among same-type sections in this package. See "Cross-section reference fields" below.
     rewrite_when_named: ["<option>"], // optional. Options that a PATCH writes whenever the request names their field, which must carry the option's name, even when uci holds another spelling of the value that the read gives. For an option that two daemons read differently, such as `maindhcp` of dhcp/odhcpd, so that a write makes them agree.
-    reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as dnsmasq, odhcpd and unbound read dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd holds a `config.change` trigger for the service, and skipped without a 503 otherwise. The write asks procd under its locks, and when the list names an installed unbound, those include the lock of `unbound`, whether unbound runs or not. A LuCI save reloads a daemon whose trigger is on the package that it commits, or on one that the package affects in LuCI's ucitrack, as `system` affects `dhcp`. uapi takes any `config.change` trigger instead: the list here already names the daemons that read the package, and a `system` write reaches unbound only through that `affects`. LuCI's ucitrack also has `network` affect `dhcp`, and a `network` resource lists only `odhcpd` here, for the reason that `docs/raw.md` gives. For dnsmasq, odhcpd and unbound, which each register one on `dhcp`, the two rules agree. A resource whose every daemon is such a daemon lists them all here and declares no `reload`. A POST /batch reloads and lists its services sorted.
+    reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as dnsmasq, odhcpd and unbound read dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd holds a `config.change` trigger for the service, and skipped without a 503 otherwise. The write asks procd under its locks, and when the list names an installed unbound, those include the lock of `unbound`, whether unbound runs or not. A LuCI save reloads a daemon whose trigger is on the package that it commits, or on one that the package affects in LuCI's ucitrack, as `system` affects `dhcp`. uapi takes any `config.change` trigger instead: the list here already names the daemons that read the package, and a `system` write reaches unbound only through that `affects`. LuCI's ucitrack also has `network` affect `dhcp`, and a `network` resource lists only `odhcpd` here, for the reason that `docs/raw.md` gives. For dnsmasq, odhcpd and unbound, which each register one on `dhcp`, the two rules agree. A resource whose every daemon is such a daemon lists them all here and declares no `reload`. A POST /uapi/batch reloads and lists its services sorted.
 };
 ```
 
@@ -183,7 +183,7 @@ leaves out, where a PUT removes it.
 `delta` names it. A PATCH that switches the proto still carries the old
 proto's fields in `json`, and `toUci` drops them. `firewall.rules` checks
 `json` instead, so a target switch has to send `null` for the old target's
-fields. The sweep behind `GET /diagnostics?validate=1` passes the `fromUci`
+fields. The sweep behind `GET /uapi/diagnostics?validate=1` passes the `fromUci`
 read as `delta`, so an option that the read hides never flags. A PATCH that
 switches to wireguard keeps a `listen_port` that the read of the old proto
 hides, so `network.interfaces` checks the stored option only when `partial`
@@ -388,7 +388,7 @@ Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.
 
 **Never interpolate a write-only value into a `validate()` message.** The
-validation sweep behind `GET /diagnostics?validate=1` restores masked secrets
+validation sweep behind `GET /uapi/diagnostics?validate=1` restores masked secrets
 before validating, because otherwise every section holding one reports its own
 secret as missing. That makes error messages the one channel where a real secret
 can reach a caller who holds only `:ro` on the resource and can never see it
@@ -434,7 +434,7 @@ So the module file has to be named `<domain>.<plural-type>.uc`, matching the key
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
 for read-only runtime lists. Writable resources also automatically
-become eligible for `POST /batch` via main.uc's `BARE_RESOURCES` /
+become eligible for `POST /uapi/batch` via main.uc's `BARE_RESOURCES` /
 `BARE_SINGLETONS` construction loop - no extra step needed. Read-only
 collections are excluded from batch (they have no `toUci`).
 

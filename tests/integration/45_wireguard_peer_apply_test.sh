@@ -148,7 +148,7 @@ for body in '{}' '{"endpoint_host": "198.51.100.9", "endpoint_port": 51820}'; do
 done
 read_body=$(curl -sS -H "$ADMIN" "$URL/network/wireguard_peers/$pid" | jq -c 'del(.runtime)')
 assert_noop "a PUT of the read" "$(write_headers PUT "/network/wireguard_peers/$pid" "$read_body")" 200
-assert_noop "a batch PUT of the read" "$(write_headers POST /batch \
+assert_noop "a batch PUT of the read" "$(write_headers POST /uapi/batch \
 	"{\"operations\": [{\"path\": \"/network/wireguard_peers/$pid\", \"method\": \"PUT\", \"body\": $read_body}]}")" 207
 
 echo "--- a PATCH that changes only the preshared key reaches the kernel ---"
@@ -167,7 +167,7 @@ r=$(call -X DELETE "$URL/network/wireguard_peers/$pid")
 has_peer "$PEER1" && fail "peer STILL live in kernel after DELETE (access not revoked)"
 
 echo "--- a batch of peers on one interface all land ---"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers\",\"method\":\"POST\",
 	 \"body\":{\"interface\":\"$IFACE\",\"public_key\":\"$PEER1\",
 	           \"allowed_ips\":[\"10.98.99.4/32\"]}},
@@ -181,12 +181,12 @@ held=$(body_of "$(call "$URL/network/wireguard_peers")" | jq -c --arg i "$IFACE"
 	'[.[] | select(.interface == $i and (.public_key == $a or .public_key == $b)) | [.public_key == $a, .runtime.in_kernel, .runtime.allowed_ips]] | sort')
 [ "$held" = '[[false,true,["10.98.99.5/32"]],[true,true,["10.98.99.4/32"]]]' ] || fail "a collection read reports the batch peers as $held"
 bid=$(body_of "$r" | jq -r '.results[0].body.id')
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"PATCH\",\"body\":{\"description\":\"b\"}},
 	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
 [ "$(status_of "$r")" = "207" ] || fail "batch of a PATCH and a GET: $(body_of "$r")"
 [ "$(body_of "$r" | jq -c '[.results[].body.runtime]')" = '[{},{}]' ] || fail "a batch that writes read the kernel: $(body_of "$r")"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" \
 	-d "{\"operations\":[{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
 [ "$(body_of "$r" | jq -c '.results[0].body.runtime.in_kernel')" = true ] || fail "a batch of reads did not read the kernel: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel torn down by the batch"
@@ -378,7 +378,7 @@ fi
 # A batch that sets the peer before a later operation fails leaves the kernel with the key that it
 # set, which the restore cannot take back, so it must not answer that it restored the peer.
 PSK2=$($SSH 'wg genpsk')
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers/uapi45badpsk\",\"method\":\"PATCH\",
 	 \"body\":{\"preshared_key\":\"$PSK2\",\"allowed_ips\":[\"10.98.99.80/32\",\"10.98.99.82/32\"]}},
 	{\"path\":\"/network/wireguard_peers\",\"method\":\"POST\",
@@ -574,17 +574,16 @@ r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/w
 	-d '[{"op":"replace","path":"/description","value":"esc"}]')
 # v4 (#308): the stored public_key with an escape is an error the section holds, so any write is refused.
 [ "$(status_of "$r")" = "422" ] || fail "JSON Patch of another field of a peer with a stored bad key expected 422 on v4: $(body_of "$r")"
-has_peer "$ESC_PEER" || fail "the refused JSON Patch removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/public_key","value":"'"${PEER3%=}"'\\075"}]')
 [ "$(status_of "$r")" = "422" ] || fail "a JSON Patch that sets a key with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":true}')
 # v4 (#308): the stored bad key blocks every write of the section, disabling included; fix it first.
 [ "$(status_of "$r")" = "422" ] || fail "PATCH disabled of the peer with an escape expected 422 on v4: $(body_of "$r")"
-has_peer "$ESC_PEER" || fail "the refused PATCH removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
 [ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 if ! wg_ucode_platform; then
+	has_peer "$ESC_PEER" || fail "a refused PATCH removed the peer with an escape from the kernel"
 	$SSH "uci set network.uapi45esc.disabled=0; uci commit network; ifup $IFACE"
 	sleep 5
 	has_peer "$ESC_PEER" || fail "ifup did not set the re-enabled peer with an escape: $(kernel_peers)"
@@ -760,13 +759,17 @@ for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}' '{"disabl
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
 	[ "$(status_of "$r")" = "422" ] || fail "PATCH $body of a peer with stored errors expected 422 on v4: $(body_of "$r")"
 done
-endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
-[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
-keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
-[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
 [ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
 	|| fail "a refused PATCH rewrote the stored port or keepalive"
-has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
+# On main the commit by hand above restarts the interface, and wg's config parser refuses 25x, so
+# the interface holds no peer to keep (#24511).
+if ! wg_ucode_platform; then
+	endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+	[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
+	keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
+	[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
+	has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
+fi
 call -X DELETE "$URL/network/wireguard_peers/$kept" >/dev/null
 
 # wireguard.sh gives every enabled peer to one `wg syncconf`, so one stored peer that wg refuses

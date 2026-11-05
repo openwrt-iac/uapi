@@ -604,7 +604,7 @@ for (let p in paths) {
 			// /batch commits and reloads once for the whole set, so its 207 carries the same
 			// four headers, aggregated. It is not a curated-resource path, so it needs naming
 			// here rather than falling into the "emits none of them" branch below.
-			if (p == "/batch") {
+			if (p == "/uapi/batch") {
 				let want = (verb == "post" && code == "207");
 				if (want && length(present) != length(TX_HEADERS))
 					note(where, sprintf("the batch 207 declares %J; it emits all four, aggregated over the sub-writes", present));

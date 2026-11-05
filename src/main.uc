@@ -471,8 +471,8 @@ const METRIC_ROUTES = {
 	labels: {},
 	raw_package: (p) => match(p, /^[A-Za-z0-9_-]+$/) && fs.stat("/etc/config/" + p)?.type == "file",
 };
-for (let l in [ "/openapi.json", "/healthz", "/metrics", "/batch", "/diagnostics", "/schema",
-                "/tokens", "/tokens/:id", "/auth/whoami", "/system/password" ])
+for (let l in [ "/openapi.json", "/healthz", "/uapi/metrics", "/uapi/batch", "/uapi/diagnostics",
+                "/schema", "/uapi/tokens", "/uapi/tokens/:id", "/uapi/whoami", "/system/password" ])
 	METRIC_ROUTES.labels[l] = true;
 for (let l in [ "/packages/installed", "/packages/feeds",
                 "/system/authorized_keys", "/system/cron_jobs" ]) {
@@ -491,7 +491,7 @@ for (let k in RESOURCE_SOURCES) {
 
 function record_metrics_for(method, path, status, duration_ms, token) {
 	let tpl = metrics.path_label(split_path(path), METRIC_ROUTES);
-	if (tpl == "/healthz" || tpl == "/metrics") return;
+	if (tpl == "/healthz" || tpl == "/uapi/metrics") return;
 	let token_id = (token != null) ? token.name : null;
 	metrics.record_request(method, tpl, status, duration_ms, token_id);
 }
@@ -854,63 +854,63 @@ const PUBLIC_ROUTES = [
 // Exact-path routes served after authentication. `scope` names the token scope the
 // request needs, at level `verb`.
 const AUTH_EXACT_ROUTES = [
-	{ path: "/metrics", methods: ["GET"], not_allowed: "metrics only supports GET",
+	{ path: "/uapi/metrics", methods: ["GET"], not_allowed: "metrics only supports GET",
 	  scope: ["uapi", "metrics"], verb: "ro", scope_what: "reading uapi/metrics",
 	  fn: function(conn, ctx, token, parts, method, body, query, env) {
 		  return metrics_response(ctx);
 	  } },
-	{ path: "/batch",
+	{ path: "/uapi/batch",
 	  fn: function(conn, ctx, token, parts, method, body, query, env) {
 		  return batch_dispatch(conn, ctx, token, method, body);
 	  } },
-	{ path: "/diagnostics", methods: ["GET"], not_allowed: "diagnostics only supports GET",
+	{ path: "/uapi/diagnostics", methods: ["GET"], not_allowed: "diagnostics only supports GET",
 	  scope: ["uapi", "diagnostics"], verb: "ro", scope_what: "reading uapi/diagnostics",
 	  fn: function(conn, ctx, token, parts, method, body, query, env) {
 		  return diagnostics_response(ctx, conn, token.scopes, query.validate == "1");
 	  } },
 ];
 
-function auth_route(conn, ctx, token, parts, method, body, query, env) {
-	if (length(parts) == 2 && parts[1] == "whoami") {
+function uapi_route(conn, ctx, token, parts, method, body, query, env) {
+	if (length(parts) < 2) return null;
+	let sub = parts[1];
+	if (sub == "whoami" && length(parts) == 2) {
 		if (method != "GET")
 			return errors.error(ctx, "method_not_allowed",
-			                     "auth/whoami only supports GET");
+			                     "uapi/whoami only supports GET");
 		return whoami_response(ctx, token, env);
 	}
-	return errors.error(ctx, "not_found",
-		sprintf("Unknown auth sub-path %J",
-		        length(parts) >= 2 ? parts[1] : ""));
-}
-
-function tokens_route(conn, ctx, token, parts, method, body, query, env) {
-	let id = length(parts) >= 2 ? parts[1] : null;
-	if (length(parts) > 2)
-		return errors.error(ctx, "not_found", "Unknown tokens sub-path");
-	let verb = method_verb(method);
-	let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "tokens"], verb,
-		"this operation on uapi/tokens");
-	if (denied != null) return denied;
-	let resp;
-	if (method == "GET" && id == null) {
-		resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
-	} else if (method == "GET") {
-		let rec = token_store.get_public(conn, id);
-		if (rec == null) resp = errors.error(ctx, "not_found",
-			sprintf("Token %J not found", id));
-		else resp = errors.ok(ctx, rec);
-	} else if (method == "POST" && id == null) {
-		let r = token_store.create(conn, body, token.scopes, ctx.now_epoch);
-		resp = tokens_translate(ctx, r);
-	} else if (method == "DELETE" && id != null) {
-		let r = token_store.remove(conn, id, ctx.now_epoch);
-		if (r.ok) resp = errors.no_content(ctx);
-		else resp = tokens_translate(ctx, r);
-	} else {
-		resp = errors.error(ctx, "method_not_allowed",
-			sprintf("Method %J not allowed on tokens%s",
-			        method, id != null ? "/<id>" : ""));
+	if (sub == "tokens") {
+		let id = length(parts) >= 3 ? parts[2] : null;
+		if (length(parts) > 3)
+			return errors.error(ctx, "not_found", "Unknown tokens sub-path");
+		let verb = method_verb(method);
+		let denied = scope.require_or_deny(errors, ctx, token.scopes, ["uapi", "tokens"], verb,
+			"this operation on uapi/tokens");
+		if (denied != null) return denied;
+		let resp;
+		if (method == "GET" && id == null) {
+			resp = errors.ok(ctx, { tokens: token_store.list_public(conn) });
+		} else if (method == "GET") {
+			let rec = token_store.get_public(conn, id);
+			if (rec == null) resp = errors.error(ctx, "not_found",
+				sprintf("Token %J not found", id));
+			else resp = errors.ok(ctx, rec);
+		} else if (method == "POST" && id == null) {
+			let r = token_store.create(conn, body, token.scopes, ctx.now_epoch);
+			resp = tokens_translate(ctx, r);
+		} else if (method == "DELETE" && id != null) {
+			let r = token_store.remove(conn, id, ctx.now_epoch);
+			if (r.ok) resp = errors.no_content(ctx);
+			else resp = tokens_translate(ctx, r);
+		} else {
+			resp = errors.error(ctx, "method_not_allowed",
+				sprintf("Method %J not allowed on uapi/tokens%s",
+					method, id != null ? "/<id>" : ""));
+		}
+		return resp;
 	}
-	return resp;
+	return errors.error(ctx, "not_found",
+		sprintf("Unknown uapi sub-path %J", sub));
 }
 
 function raw_route(conn, ctx, token, parts, method, body, query, env) {
@@ -967,8 +967,7 @@ function nonuci_route(conn, ctx, token, parts, method, body, query, env) {
 // in this order. A route fn returns null when the path is not its, and the
 // search continues.
 const PREFIX_ROUTES = [
-	{ seg: "auth",     fn: auth_route },
-	{ seg: "tokens",   fn: tokens_route },
+	{ seg: "uapi",     fn: uapi_route },
 	{ seg: "raw",      fn: raw_route },
 	{ seg: "packages", fn: nonuci_route },
 	{ seg: "system",   fn: nonuci_route },

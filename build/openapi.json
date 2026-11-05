@@ -20819,7 +20819,7 @@
 				]
 			}
 		},
-		"/auth/whoami": {
+		"/uapi/whoami": {
 			"get": {
 				"summary": "Introspection: the calling token's own metadata",
 				"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
@@ -20866,7 +20866,7 @@
 				]
 			}
 		},
-		"/tokens": {
+		"/uapi/tokens": {
 			"get": {
 				"summary": "List all tokens (no secrets surfaced)",
 				"description": "Scope: uapi:tokens:ro (or *:ro). Each entry omits salt and hash.",
@@ -21005,7 +21005,7 @@
 				]
 			}
 		},
-		"/tokens/{id}": {
+		"/uapi/tokens/{id}": {
 			"parameters": [
 				{
 					"name": "id",
@@ -21110,7 +21110,7 @@
 				]
 			}
 		},
-		"/metrics": {
+		"/uapi/metrics": {
 			"get": {
 				"summary": "Prometheus 0.0.4 text exposition",
 				"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
@@ -21158,7 +21158,7 @@
 				]
 			}
 		},
-		"/diagnostics": {
+		"/uapi/diagnostics": {
 			"get": {
 				"summary": "Operational snapshot (lock state, uptime, loaded resources)",
 				"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
@@ -21219,7 +21219,7 @@
 				]
 			}
 		},
-		"/batch": {
+		"/uapi/batch": {
 			"post": {
 				"summary": "Multi-package atomic transaction",
 				"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
@@ -22019,7 +22019,7 @@
 					},
 					"name": {
 						"type": "string",
-						"description": "Stable token id (also the uci section name). Use as the path segment in `GET /tokens/{name}`, `DELETE /tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)."
+						"description": "Stable token id (also the uci section name). Use as the path segment in `GET /uapi/tokens/{name}`, `DELETE /uapi/tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)."
 					}
 				}
 			},
@@ -37064,7 +37064,7 @@
 				}
 			},
 			"XReloadStatus": {
-				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
+				"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /uapi/batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
 				"schema": {
 					"type": "string",
 					"enum": [
@@ -37075,7 +37075,7 @@
 				}
 			},
 			"XReloadServices": {
-				"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
+				"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /uapi/batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
 				"schema": {
 					"type": "string",
 					"example": "firewall,dnsmasq"
