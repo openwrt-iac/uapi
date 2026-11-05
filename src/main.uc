@@ -14,6 +14,7 @@ let transaction = require("transaction");
 let bus = require("bus");
 let nonuci = require("nonuci");
 let limits = require("limits");
+let write_journal = require("write_journal");
 let token_store = require("token_store");
 let ratelimit = require("ratelimit");
 let metrics = require("metrics");
@@ -783,6 +784,7 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 		lock_state: { global_held, per_package: pkg_held },
 		state_dirs: state_dir.used(),
 		limits: limits.load(conn),
+		interrupted_writes: write_journal.stale(),
 		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
 	};
