@@ -82,7 +82,7 @@ function base_encryption(e) {
 // iface_roaming() in wifi-scripts runs in mode ap from WPA2 up, and writes the key holder lists
 // only when ft_psk_generate_local is off, which is its default for every mode but psk, psk2 and
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
-// section with no mode reads as mode ap, as fromUci() reads it.
+// write that sends no mode is validated as mode ap, as the rules below read it.
 const BELOW_WPA2 = { "none": true, "wep": true, "psk": true, "wpa": true };
 const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
@@ -146,7 +146,10 @@ function fromUci(section, conn) {
 		managed: !anonymous,
 		device: section.device ?? null,
 		network: section.network ?? null,
-		mode: section.mode ?? "ap",
+		// wifi-scripts sets up nothing for a section without a mode (mac80211.sh skips an
+		// absent mode as it skips an unknown one), so the read reports null, not an ap that
+		// does not exist.
+		mode: section.mode ?? null,
 		ssid: section.ssid ?? null,
 		encryption: section.encryption ?? "none",
 		disabled: platform_bool(section.disabled, false),
@@ -180,8 +183,9 @@ function toUci(json) {
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.network != null) out.network = json.network;
-	// wifi-scripts sets up no interface for a section with no mode, which fromUci() reads as ap.
-	out.mode = json.mode ?? "ap";
+	// v4 (#307): no mode is stored as none. wifi-scripts sets up no interface for a section
+	// with no mode, and the read answers null.
+	if (json.mode != null) out.mode = json.mode;
 	if (json.ssid != null) out.ssid = json.ssid;
 	if (json.encryption != null) out.encryption = json.encryption;
 	if (json.key != null) out.key = json.key;
@@ -208,11 +212,9 @@ function validate(json, conn, id, delta) {
 
 	values.require_present(errs, json, "device");
 
-	// Removing the mode leaves an SSID that wifi-scripts never sets up, and storing ap for the null
-	// would turn a station into an access point that broadcasts the station's SSID and key.
-	if (exists(delta, "mode") && delta.mode == null)
-		push(errs, { field: "mode", code: "required",
-		             message: "must not be null: wifi-scripts sets up no interface without a mode. Leave mode out of a PATCH to keep it, or out of a create or a PUT to store ap" });
+	// v4 (#307): a null mode removes the option, and wifi-scripts sets up nothing for the
+	// section, so the read then answers null. Refusing the null used to force storing ap,
+	// which turned a station into an access point broadcasting the station's SSID and key.
 
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",
@@ -384,8 +386,6 @@ return {
 	radios: radios,
 	openapi_singular: "wireless interface",
 	openapi_required: ["device"],
-	// validate() refuses a null mode, so a null is not a removal.
-	openapi_patch_non_null: ["mode"],
 	openapi_conditional: [
 		{ if:   { properties: { encryption: { enum: KEY_ENCRYPTION } },
 		          required: ["encryption"] },
@@ -422,8 +422,8 @@ return {
 		              description: "Parent radio (wireless/devices id)" },
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },
-		mode:       { type: "string", enum: keys(VALID_MODES), "x-uapi-write": { enum: WRITE_MODES }, default: "ap",
-		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
+		mode:       { type: ["string", "null"], enum: [ ...keys(VALID_MODES), null ], "x-uapi-write": { enum: [ ...WRITE_MODES, null ] },
+		              description: "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up." },
 		ssid:       { type: ["string", "null"], "x-uapi-write": { maxLength: SSID_MAX },
 		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },
