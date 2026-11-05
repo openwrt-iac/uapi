@@ -50,15 +50,24 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed, the reload of the restore had not ended when uapi stopped waiting for it, or the restore left a package that another writer, such as LuCI or a shell, committed to after the commit of the request, which `restore_error` names. Loudest case; manual recovery |
 | 503  | `service_unavailable`           | ubus unreachable, service not running                        |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
-| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /batch` answers 503 for a DELETE there too, because it commits as one write |
+| 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /uapi/batch` answers 503 for a DELETE there too, because it commits as one write |
 
 `unsupported_media_type` was reserved and never emitted: uapi never rejects a body on
 `Content-Type` (the header only switches a PATCH into RFC 6902 mode). It left the published
 `ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1. Clients branching on it must drop
 that branch.
+`unsupported_media_type` is reserved and never emitted. uapi never rejects a body
+on `Content-Type`; the header is read for one thing only, switching a PATCH into
+RFC 6902 mode on `application/json-patch+json`. `text/plain`, or no header, is accepted
+and the write takes effect, so nothing can reach a 415. The code stays in the
+published `ErrorEnvelope.code` enum so a client that already branches on it does
+not have the value disappear, and no operation declares a 415 response. Enforcing
+it later would reject bodies that work today, which makes it a breaking change
+rather than a fix, and `POST /uapi/batch` sub-requests carry no per-item media type,
+so any rule could only apply to the outer request.
 
 `batch_partial_failure` is special: it appears only in the body of a
-`POST /batch` abort response, with the HTTP status taken from the failing
+`POST /uapi/batch` abort response, with the HTTP status taken from the failing
 sub-request. The body carries `{code: "batch_partial_failure",
 aborted_at_index, error: <sub-envelope>, reverted: true}`.
 
@@ -95,7 +104,7 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `read_only`      | Field is computed/runtime and can't be set. In `/raw/`, a `.type` or `id` that differs from the section |
 | `unknown_field`  | No such field on this resource. `id`, `managed` and `runtime` are tolerated at the top level so a read-modify-write cycle can send the response back unchanged |
 
-Two more appear only inside `invalid_sections` in `GET /diagnostics?validate=1`, never in a
+Two more appear only inside `invalid_sections` in `GET /uapi/diagnostics?validate=1`, never in a
 request rejection, because they describe a section the sweep could not judge rather than a
 field the caller got wrong:
 
@@ -130,12 +139,12 @@ Every response carries:
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288.                                                              |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`.                                       |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. See `docs/operations.md` "Success != converged". |
-| `X-Reload-Services`          | curated-resource writes and the `POST /batch` 207, when status=ok or unverified | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`), in order. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. On a batch, the services of the packages that the batch changed, sorted. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it. With all of them running, `dhcp/servers` and `dhcp/hosts` answer `dnsmasq,odhcpd,unbound`, `dhcp/odhcpd` answers `odhcpd,dnsmasq,unbound`, `dhcp/dnsmasq` answers `dnsmasq,unbound`, `system` answers `system,log,dnsmasq,odhcpd,unbound`, `system/timeservers` answers `sysntpd,dnsmasq`, and each `network` resource answers `network,odhcpd`. Each leaves out a daemon that does not run. A batch that holds a `dhcp/odhcpd` write lists `dnsmasq,odhcpd,unbound`. |
-| `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied. `partial` = some were and some were skipped. `skipped` = it targeted interfaces and none was applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path or the write changed nothing in uci. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. On OpenWrt main, netifd restarts the interface on each peer change, so the apply first waits, up to 8 s, for that restart to end. A restart that does not end in time fails the write with a restore (`reload_failed_restored`, or `reload_failed_unrecovered` when the restore fails too). That handler sets all the peers of the interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down. |
-| `X-Kernel-Applied`           | curated-resource writes and the `POST /batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
+| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /uapi/batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Services`          | curated-resource writes and the `POST /uapi/batch` 207, when status=ok or unverified | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`), in order. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. On a batch, the services of the packages that the batch changed, sorted. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it. With all of them running, `dhcp/servers` and `dhcp/hosts` answer `dnsmasq,odhcpd,unbound`, `dhcp/odhcpd` answers `odhcpd,dnsmasq,unbound`, `dhcp/dnsmasq` answers `dnsmasq,unbound`, `system` answers `system,log,dnsmasq,odhcpd,unbound`, `system/timeservers` answers `sysntpd,dnsmasq`, and each `network` resource answers `network,odhcpd`. Each leaves out a daemon that does not run. A batch that holds a `dhcp/odhcpd` write lists `dnsmasq,odhcpd,unbound`. |
+| `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /uapi/batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied. `partial` = some were and some were skipped. `skipped` = it targeted interfaces and none was applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path or the write changed nothing in uci. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. On OpenWrt main, netifd restarts the interface on each peer change, so the apply first waits, up to 8 s, for that restart to end. A restart that does not end in time fails the write with a restore (`reload_failed_restored`, or `reload_failed_unrecovered` when the restore fails too). That handler sets all the peers of the interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down. |
+| `X-Kernel-Applied`           | curated-resource writes and the `POST /uapi/batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
 | `X-Kernel-Unread`            | `GET /network/wireguard_kernel_peers` and a read of one of its entries, when an up wireguard interface could not be read | Comma-separated up interfaces with proto=wireguard whose kernel peers uapi could not read, because `wg show <interface> dump` failed or printed a shape that uapi does not read. The list holds no entry for them. Absent when every up interface was read. |
-| `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
+| `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /uapi/diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
 The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than "writes" because that is
@@ -146,7 +155,7 @@ measured, not assumed: raw passthrough (`/raw/...`) and the non-uci writes
 `runtime.crond_running`, because the init script exits 0 even when crond stops. Until 2.5.0 the OpenAPI document declared
 the reload pair on those responses anyway, which is why the wording here matters: a client
 generated from the spec was told to expect a header that was never going to arrive.
-`POST /batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
+`POST /uapi/batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
 carries the same four headers from the batch handler's own aggregation: a batch commits
 and reloads once for the whole set, so there is one outcome to report rather than one per
 sub-request. A pure-read batch runs no transaction and carries none of them.
@@ -162,7 +171,7 @@ guard finds no management path, and a batch cannot warn that it moved the caller
 The four security headers (`Strict-Transport-Security`, `X-Content-Type-Options`,
 `Referrer-Policy`, `Cache-Control`) come from the shared envelope builder, so they ride
 every response whose body it builds and are absent from the ones assembled by hand:
-`204 No Content`, the `POST /batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A
+`204 No Content`, the `POST /uapi/batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A
 `304 Not Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
 it replaces, and nothing else.
 
@@ -176,7 +185,7 @@ that uci does not hold, so a PATCH that names no field, or a PUT or a PATCH that
 already holds, commits nothing. Such a PUT or PATCH still answers `409 conflict`
 when another writer deleted the section during the request. A PUT of the read still writes what
 it stores in another form than uci holds, such as a list that uci holds as an option, and the PUT
-of the read after it commits nothing. A POST or DELETE always writes. A `POST /batch` reloads the
+of the read after it commits nothing. A POST or DELETE always writes. A `POST /uapi/batch` reloads the
 services of the packages that its writes changed, and none when they changed nothing. In 3.1.0 such a PATCH reloaded the daemon anyway
 and answered `ok`, and on a WireGuard peer without an endpoint the kernel apply removed the
 peer and set it again, which reset its session. In 3.2.0 such a PUT still did.

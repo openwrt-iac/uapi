@@ -151,7 +151,7 @@ until $SSH 'test -e /tmp/uapi56-held'; do
 	n=$((n + 1)); [ $n -lt 50 ] || fail "the holder never took the flock of /etc/config/dhcp"; sleep 0.2
 done
 curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d "{\"operations\": [
+	-X POST "$URL/uapi/batch" -d "{\"operations\": [
 		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56r2\"}},
 		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56h2\"}}]}" \
 	> /tmp/uapi_staged_batch.status &
@@ -226,7 +226,7 @@ until $SSH 'test -e /tmp/uapi56-held'; do
 done
 $SSH 'touch /tmp/fw-fail-once'
 curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d "{\"operations\": [
+	-X POST "$URL/uapi/batch" -d "{\"operations\": [
 		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56r2\"}},
 		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PATCH\", \"body\": {\"name\": \"uapi56h2\"}}]}" \
 	> /tmp/uapi_staged_batch.status &
@@ -269,7 +269,7 @@ until $SSH 'test -e /tmp/uapi56-held'; do
 	n=$((n + 1)); [ $n -lt 50 ] || fail "the holder never took the flock of /etc/config/dhcp"; sleep 0.2
 done
 curl -sS -o /tmp/uapi_staged_batch.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d "{\"operations\": [
+	-X POST "$URL/uapi/batch" -d "{\"operations\": [
 		{\"path\": \"/firewall/rules/$rid\", \"method\": \"PUT\", \"body\": $rule},
 		{\"path\": \"/dhcp/hosts/$hid\", \"method\": \"PUT\", \"body\": $host}]}" \
 	> /tmp/uapi_staged_batch.status &
