@@ -101,7 +101,7 @@ $SSH "grep -q uapi-test-unknown-directive /etc/unbound/unbound_srv.conf" \
 unbound_running || fail "unbound is not running after the restore"
 
 echo "--- the same refusal through /batch ---"
-resp=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d '{"operations": [
+resp=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d '{"operations": [
 	{"method": "PATCH", "path": "/unbound/ext", "body": {"enabled": true, "ext_line": ["uapi-test-unknown-clause:"]}}
 ]}')
 status=$(echo "$resp" | tail -1)

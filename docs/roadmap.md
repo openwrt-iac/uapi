@@ -12,12 +12,12 @@ catalog in `CHANGELOG.md`'s v2.0.0 section; migration table in
 - snake_case rename across dropbear/snmpd/vnstat + strict integer typing +
   full `schema_properties` completeness sweep.
 - Conditional GET, `WWW-Authenticate` on 401, inbound `X-Request-Id`,
-  `/healthz` subsystem checks, `/schema/<...>`, `/auth/whoami`.
+  `/healthz` subsystem checks, `/schema/<...>`, `/uapi/whoami`.
 - Token expiry, IP scoping (`allowed_cidrs`), last-used tracking,
   `/tokens` HTTP route, scope subset guard on mint.
 - Per-token rate limit (`429 too_many_requests`), Prometheus `/metrics`,
   idempotency keys, cursor pagination, `/diagnostics`.
-- `POST /batch` (multi-package all-or-nothing), JSON Patch (RFC 6902),
+- `POST /uapi/batch` (multi-package all-or-nothing), JSON Patch (RFC 6902),
   per-resource ETags + `If-Match` optimistic concurrency.
 - Non-uci base library, lock-and-state audit, function-level coverage gate,
   soak harness in CI, per-endpoint latency measurement in CI, signed-tag
@@ -175,11 +175,11 @@ Committed, in rough dependency order:
      enabled-but-failed, which is the case an operator most needs told apart. If
      the wait runs long enough to hurt, this is the option to revisit first.
 
-4. **Validation sweep on `/diagnostics?validate=1`** (#47). Done. Reports the
+4. **Validation sweep on `/uapi/diagnostics?validate=1`** (#47). Done. Reports the
    sections a write would now reject, before a write finds them one at a time.
 
 5. **Advisory management-path guard.** Done. The cheap protection against the
-   lockout class commit-confirm was meant to cover: `GET /diagnostics` reports
+   lockout class commit-confirm was meant to cover: `GET /uapi/diagnostics` reports
    `management_path`, the interface this request arrived through, and a
    `network/interfaces` write that moves that interface's `disabled`, `proto`,
    `ipaddrs` or `netmask`, or deletes it, carries `X-Mgmt-Path-Warning`.
@@ -254,7 +254,7 @@ record; this is the engineering one.
 
 **Additive, and the one item that was never announced because it did not need to be:**
 
-- `POST /batch` reports its transaction outcome on the 207, aggregated over the sub-writes.
+- `POST /uapi/batch` reports its transaction outcome on the 207, aggregated over the sub-writes.
   It cannot be per-operation: the results array carries `{status, body}` and drops
   sub-response headers, which is the same reason the management-path guard is inert inside a
   batch.
@@ -307,7 +307,7 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **A write that the daemon refuses or ignores no longer answers 200.** An `mtu` that netifd or
   pppd does not apply, table 0, a `goto` that the kernel refuses and a raw option that uci
   cannot store answer 422, and a package with no file under `/etc/config/` answers
-  `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /batch` then
+  `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /uapi/batch` then
   restores what it committed and runs no reload and no kernel apply (#277). A `dhcp_option`
   entry in which an address is followed by whitespace and a second option answers 422, and a
   write whose generated config `dnsmasq --test` refuses answers `500 reload_failed_restored`

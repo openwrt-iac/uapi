@@ -16,6 +16,20 @@ URL from the v4 spec's `servers` block.
 
 
 
+## The special endpoints move under `/uapi/...`
+
+
+
+
+The authenticated special endpoints now live under the domain their scopes already named
+(announced in 3.4.1, #319): `/tokens` becomes `/uapi/tokens` (and `/tokens/<id>` becomes
+`/uapi/tokens/<id>`), `/metrics` becomes `/uapi/metrics`, `/diagnostics` becomes
+`/uapi/diagnostics`, `/batch` becomes `/uapi/batch`, and `/auth/whoami` becomes `/uapi/whoami`. The
+scopes are unchanged (`uapi:tokens`, `uapi:metrics`, `uapi:diagnostics`). The unauthenticated trio
+stays at the top level: `/healthz`, `/openapi.json`, `/schema/*`. The old top-level paths answer
+404. The Prometheus `path` label of the moved endpoints changes with them (e.g.
+`path="/uapi/tokens"`).
+
 ## `dhcp/leases6` merges into `dhcp/leases`
 
 
@@ -33,6 +47,17 @@ endpoint.
 The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
 and never emitted (announced in 3.4.1, #323). Clients branching on it must drop that branch; uapi
 never rejects a body on `Content-Type`.
+
+## A write is refused for any stored error the section holds
+
+
+
+
+Like LuCI, which validates every visible field of a form at save, a write now answers 422 for any
+error the resulting section holds, not only the ones the write adds (announced in 3.4.0, #308).
+Before v4 a write that left a stored value alone answered 200, so a broken section could still be
+disabled; now the fix comes first, or goes through `/raw`. `GET /uapi/diagnostics?validate=1`
+already listed these stored errors.
 
 ## Boolean reads follow the platform's reader
 

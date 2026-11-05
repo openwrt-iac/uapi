@@ -49,7 +49,7 @@ key=$(head -c 4000 /dev/zero | tr '\0' k)
 r=$(curl -sS -w "\n%{http_code}\n" -X POST -H 'Content-Type: application/json' \
 	"$URL/firewall/rules" -d "{\"$key\\u0001\":1}")
 echo "$r" | tail -1 | grep -q '^400$' || fail "long-key POST expected 400: $(echo "$r" | tail -1)"
-len=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq '[.recent_errors[] | .message | length] | max')
+len=$(curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq '[.recent_errors[] | .message | length] | max')
 [ "$len" -le 515 ] || fail "the error ring kept a message of $len bytes"
 
 echo "--- a body that arrives in several parts is read whole ---"
