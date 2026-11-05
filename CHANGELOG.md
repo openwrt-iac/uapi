@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated string on write.** The request type is array-only in both directions; a string answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`, moved to "Removed in past releases" under 4.0.0, and the entry left the spec's "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the remaining `x-uapi-*` markers are documented once in `docs/versioning.md` (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
+
 ### Added
 
 - **`/diagnostics` reports interrupted writes.** A write now records itself in `/var/run/uapi-interrupted-writes/` before the commit, under the package lock so the record and the commit are ordered together, and removes the record when the recipe ends on any path the request can still reach. When uhttpd kills the request process after the commit (client disconnect or `script_timeout`), the record survives: `GET /diagnostics` lists it under `interrupted_writes` with the packages, the request id, the staged sections and whether the reload had started. Report only; uapi still never finishes or restores another request's write. Additive. (#341)
@@ -31,6 +35,9 @@ All notable changes to this project will be documented in this file. Format foll
 ### Deprecated
 
 - **The rest of the v4 program is announced in the published spec and `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json` and the "Announced response-shape changes" section now also list the move of the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the always-present documented `runtime` envelope on every resource, and the pruning of dead error codes from the enum. The deprecation window runs from this release, not from v4. (#345)
+### Removed
+
+- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated string on write.** The request type is array-only in both directions; a string answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`, moved to "Removed in past releases" under 4.0.0, and the entry left the spec's "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the remaining `x-uapi-*` markers are documented once in `docs/versioning.md` (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
 
 ## [3.4.0] - 2026-11-04
 
