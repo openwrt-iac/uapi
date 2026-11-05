@@ -124,7 +124,7 @@ args_of odhcp6c | grep -q -- "-P2001:db8::/56" || fail "odhcp6c did not keep run
 
 echo "--- static options left on a dhcp section are hidden, kept by PATCH and removed by PUT ---"
 $SSH 'uci set network.uapi53d.netmask=255.255.255.0; uci set network.uapi53d.ipaddr=10.253.9.1; uci commit network'
-sweep=$(body "$(call "$URL/uapi/uapi/diagnostics?validate=1")")
+sweep=$(body "$(call "$URL/uapi/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi53d") | not' >/dev/null \
 	|| fail "the sweep flagged options a dhcp section keeps for another proto: $sweep"
 read_back=$(body "$(call "$URL/network/interfaces/uapi53d")")
