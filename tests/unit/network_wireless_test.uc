@@ -448,15 +448,20 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	// Another writer, such as LuCI, can switch the mode or the encryption later, so the value is
 	// refused whatever reads it now. Only a newline ends a line in the daemons' config readers.
 	t.it('refuses a newline in a key, nasid or key holder entry that a write sends', () => {
+		// A newline is refused by the default type-gate rule (#276) and again by validate().
 		for (let b in [ { encryption: 'psk2' }, { encryption: 'wpa2' }, { mode: 'sta', encryption: 'psk2' },
 		                { mode: 'mesh', encryption: 'sae' }, { encryption: 'none' } ])
-			t.assert_deep_equal(codes({ ...b, key: 'abcdefgh\nssid2="x"' }, 'key'), [ 'invalid_format' ], b);
-		t.assert_deep_equal(codes({ nasid: 'ap1\nssid2="x"' }, 'nasid'), [ 'invalid_format' ]);
-		t.assert_deep_equal(codes({ encryption: 'psk2', key: 'correct\thorse\r' }, 'key'), []);
+			t.assert_deep_equal(codes({ ...b, key: 'abcdefgh\nssid2="x"' }, 'key'),
+			                    [ 'invalid_format', 'invalid_format' ], b);
+		t.assert_deep_equal(codes({ nasid: 'ap1\nssid2="x"' }, 'nasid'),
+		                    [ 'invalid_format', 'invalid_format' ]);
+		// A carriage return is refused too now: LINE_RE used to accept it, ONE_LINE_RE did not.
+		t.assert_deep_equal(codes({ encryption: 'psk2', key: 'correct\thorse\r' }, 'key'),
+		                    [ 'invalid_format' ]);
 		t.assert_deep_equal(codes({ nasid: 'ap1\t' }, 'nasid'), []);
 		for (let f in [ 'r0kh', 'r1kh' ])
 			t.assert_deep_equal(codes({ [f]: [ 'ff:ff:ff:ff:ff:ff,*,' + H64 + '\nssid2="x"' ] }, f + '[0]'),
-			                    [ 'invalid_format' ], f);
+			                    [ 'invalid_format', 'invalid_format' ], f);
 	});
 
 	// hostapd takes the rest of a line longer than 4095 bytes as a directive.
@@ -464,7 +469,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(codes({ nasid: bytes(1024) }, 'nasid'), []);
 		t.assert_deep_equal(codes({ nasid: bytes(1025) }, 'nasid'), [ 'out_of_range' ]);
 		t.assert_deep_equal(codes({ nasid: 'é' + bytes(1023) }, 'nasid'), [ 'out_of_range' ]);
-		t.assert_deep_equal(codes({ nasid: bytes(1025) + '\n' }, 'nasid'), [ 'out_of_range', 'invalid_format' ]);
+		// The newline is refused by the default type-gate rule (#276) on top of the length checks.
+		t.assert_deep_equal(codes({ nasid: bytes(1025) + '\n' }, 'nasid'),
+		                    [ 'invalid_format', 'out_of_range', 'invalid_format' ]);
 		for (let enc in [ 'psk2', 'sae', 'wpa2' ]) {
 			let ft = { mode: 'ap', encryption: enc, key: 'correcthorse', ieee80211r: true };
 			t.assert_deep_equal(codes({ ...ft, nasid: bytes(48) }, 'nasid'), [], enc);
@@ -816,15 +823,19 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 			for (let enc in [ 'psk2', 'sae-mixed' ]) {
 				for (let k in [ bytes(7), bytes(64), H64 ])
 					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'out_of_range' ], [ m, enc, k ]);
-				for (let k in [ bytes(8) + '\t', bytes(8) + '\r', bytes(8) + '\x7f' ])
+				for (let k in [ bytes(8) + '\t', bytes(8) + '\x7f' ])
 					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'invalid_format' ], [ m, enc, k ]);
+				// A carriage return is refused by the default type-gate rule (#276) and again by validate().
+				t.assert_deep_equal(codes({ mode: m, encryption: enc, key: bytes(8) + '\r' }, 'key'),
+				                    [ 'invalid_format', 'invalid_format' ], [ m, enc ]);
 				for (let k in [ bytes(8), bytes(63), 'pässwörd', 'a b c d e' ])
 					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [], [ m, enc, k ]);
 			}
 			for (let k in [ 'abc', H64, 'ab\tc' ])
 				t.assert_deep_equal(codes({ mode: m, encryption: 'sae', key: k }, 'key'), [], [ m, k ]);
 		}
-		t.assert_deep_equal(codes({ mode: 'sta', encryption: 'psk2', key: bytes(8) + '\n' }, 'key'), [ 'invalid_format' ]);
+		t.assert_deep_equal(codes({ mode: 'sta', encryption: 'psk2', key: bytes(8) + '\n' }, 'key'),
+		                    [ 'invalid_format', 'invalid_format' ]);
 		t.assert_deep_equal(codes({ mode: 'mesh', encryption: 'psk2', key: 'abc' }, 'key'), []);
 	});
 
@@ -906,8 +917,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 		c = stored({ mobility_domain: '4f5\n', r1_key_holder: '02aabbccdde\n' });
 		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code ]),
-		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'mobility_domain', 'invalid_format' ],
-		                      [ 'r1_key_holder', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
+		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 	});
 });
 
