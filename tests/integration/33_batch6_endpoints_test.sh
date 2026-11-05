@@ -130,7 +130,7 @@ wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)"
 
 echo "--- /diagnostics reports that uapi uses each state directory ---"
 used=$(curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -cS .state_dirs)
-[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
+[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-interrupted-writes":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
 	|| fail "state_dirs reads $used"
 
 echo "--- /diagnostics reports a state directory as it finds it, and creates or narrows none ---"
