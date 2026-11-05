@@ -98,6 +98,30 @@ t.describe('network.rules.validate', () => {
 	});
 });
 
+// v4 (#240): a write takes a table name as well as an id; the read still answers the id.
+t.describe('table names on write (routes.table, rules.lookup)', () => {
+	t.it('resolves an alias name to its id in toUci', () => {
+		t.assert_equal(routes.toUci({ target: '10.0.0.0/24', table: 'main' }).table, "254");
+		t.assert_equal(routes.toUci({ target: '10.0.0.0/24', table: 'default' }).table, "253");
+		t.assert_equal(rules.toUci({ lookup: 'local' }).lookup, "255");
+		t.assert_equal(rules.toUci({ lookup: 43 }).lookup, "43");
+	});
+	t.it('accepts a resolvable name and refuses one that does not resolve', () => {
+		t.assert_deep_equal(full_validate(routes, { target: '10.0.0.0/24', table: 'main' }, null), []);
+		t.assert_deep_equal(full_validate(rules, { lookup: 'main' }, null), []);
+		let re = filter(full_validate(routes, { target: '10.0.0.0/24', table: 'no_such_table_xyz' }, null),
+		                (e) => e.field == "table");
+		t.assert_equal(re[0].code, "invalid_format");
+		let le = filter(full_validate(rules, { lookup: 'no_such_table_xyz' }, null),
+		                (e) => e.field == "lookup");
+		t.assert_equal(le[0].code, "invalid_format");
+	});
+	t.it('the read still answers the id of a stored name', () => {
+		t.assert_equal(routes.fromUci({ '.name': 'r1', target: '10.0.0.0/24', table: 'main' }).table, 254);
+		t.assert_equal(rules.fromUci({ '.name': 'nr1', lookup: 'main' }).lookup, 254);
+	});
+});
+
 t.describe('network.bridge_vlans contract', () => {
 	t.it('declares package, type, reload', () => {
 		t.assert_equal(bv.package, "network");
