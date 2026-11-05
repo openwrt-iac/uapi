@@ -132,7 +132,9 @@ wait_for "the kernel did not take ipproto 17" 'has 30597 ".ip_proto == 17"'
 
 echo "--- enabling a rule refuses ipproto 0, which netifd drops, and takes the forms that netifd installs ---"
 r=$(send PATCH network/rules/uapi59x '{"disabled":true}')
-[ "$(status "$r")" = 200 ] || fail "PATCH that disables the rule with ipproto 0 expected 200: $r"
+# v4 (#308): the stored ipproto 0 blocks every write of the rule, disabling included.
+[ "$(status "$r")" = 422 ] || fail "PATCH that disables the rule with ipproto 0 expected 422 on v4: $r"
+[ "$(uci_get uapi59x.disabled)" = 0 ] || fail "the refused PATCH changed disabled: $r"
 r=$(send PATCH network/rules/uapi59x '{"disabled":false}')
 [ "$(status "$r")" = 422 ] && [ "$(body "$r" | jq -r '[.errors[].field] | join(",")')" = ipproto ] \
 	|| fail "enabling the rule with ipproto 0 expected 422 on ipproto: $r"
