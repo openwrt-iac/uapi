@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Changed
 
 - **BREAKING: `network/routes.table` and `network/rules.lookup` accept a table name on write.** The request type of both is now a union of integer and string. A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422 `invalid_format`, as does an id of 0. The read still answers the id, so a plan stays stable when `rt_tables` changes, and a name stored by hand or by LuCI still reads as its id. Announced in 3.4.0 (#240). Migration note in `docs/migration-v3-to-v4.md`. (#343)
+- **BREAKING: curated string fields refuse a newline and a carriage return on write.** One check in the type gate (`check_schema_types`) replaces the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about `\r`; the only opt-out is `system.notes`, marked `x-uapi-multiline`. Free-text fields such as descriptions are refused too. Announced in 3.4.0 (#276); migration note in `docs/migration-v3-to-v4.md`. (#344)
 
 ### Removed
 
@@ -46,6 +47,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Changed
 
 - **BREAKING: `network/routes.table` and `network/rules.lookup` accept a table name on write.** The request type of both is now a union of integer and string. A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422 `invalid_format`, as does an id of 0. The read still answers the id, so a plan stays stable when `rt_tables` changes, and a name stored by hand or by LuCI still reads as its id. Announced in 3.4.0 (#240). Migration note in `docs/migration-v3-to-v4.md`. (#343)
+- **BREAKING: curated string fields refuse a newline and a carriage return on write.** One check in the type gate (`check_schema_types`) replaces the per-field `LINE_RE`/`ONE_LINE_RE` audits, which had disagreed about `\r`; the only opt-out is `system.notes`, marked `x-uapi-multiline`. Free-text fields such as descriptions are refused too. Announced in 3.4.0 (#276); migration note in `docs/migration-v3-to-v4.md`. (#344)
 
 ## [3.4.0] - 2026-11-04
 
