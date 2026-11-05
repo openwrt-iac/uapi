@@ -105,7 +105,11 @@ minors while the major is in flight.
   ruleset when the branch is created, by copying the `main` ruleset and
   setting its name to `<branch>: required checks` and its
   `conditions.ref_name.include` to `["refs/heads/<branch>"]`. Every future
-  major preparation branch gets the same ruleset.
+  major preparation branch gets the same ruleset. Add the organization
+  admins to `bypass_actors` with `bypass_mode: "always"`: the checks stay
+  required on pull requests to the branch, and admins can push the branch
+  directly for the rebases below (without the bypass, a ruleset on a branch
+  rejects direct pushes).
 - Rebase the preparation branch onto `main` after every merge into `main`,
   so breaking PRs start from a current base and conflicts stay small.
 - Until the release, the preparation branch still serves the current API
