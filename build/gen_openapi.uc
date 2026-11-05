@@ -680,14 +680,14 @@ const TAGS = [
 	{ name: "Raw / Generic uci passthrough", group: "Generic uci passthrough", description: "Escape hatch for any uci section type uapi does not curate. Same atomic-transaction recipe, same auth model. Stable URL/verb/error contract; payload follows uci's moving target.", path_prefix: "/raw/" },
 	{ name: "Packages / Installed",        group: "Packages", description: "Manage on-router apk packages (shells out to `apk add`/`del`).", path_prefix: "/packages/installed" },
 	{ name: "Packages / Feeds",            group: "Packages", description: "Manage `/etc/apk/repositories.d/*.list` feed files.",          path_prefix: "/packages/feeds" },
-	{ name: "Auth / Whoami",               group: "Auth & tokens", description: "Token introspection: read the calling bearer's own metadata.", path_prefix: "/auth/whoami" },
-	{ name: "Auth / Tokens",               group: "Auth & tokens", description: "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope).", path_prefix: "/tokens" },
+	{ name: "Auth / Whoami",               group: "Auth & tokens", description: "Token introspection: read the calling bearer's own metadata.", path_prefix: "/uapi/whoami" },
+	{ name: "Auth / Tokens",               group: "Auth & tokens", description: "HTTP token rotation: list, mint, revoke. Mint enforces scope-subset (caller must hold every requested scope).", path_prefix: "/uapi/tokens" },
 	{ name: "Operational / Healthz",       group: "Operational endpoints", description: "Liveness + subsystem checks. No auth. Treat `version` as the stable version-skew probe.", path_prefix: "/healthz" },
 	{ name: "Operational / OpenAPI spec",  group: "Operational endpoints", description: "Self-describing endpoint serving this OpenAPI document. No auth.", path_prefix: "/openapi.json" },
 	{ name: "Operational / Schema discovery", group: "Operational endpoints", description: "Per-resource schema_properties for dynamic clients without parsing the full spec. No auth.", path_prefix: "/schema" },
-	{ name: "Operational / Metrics",       group: "Operational endpoints", description: "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.", path_prefix: "/metrics" },
-	{ name: "Operational / Diagnostics",   group: "Operational endpoints", description: "Lock state, uptime, loaded resources.",       path_prefix: "/diagnostics" },
-	{ name: "Operational / Batch",         group: "Operational endpoints", description: "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.", path_prefix: "/batch" },
+	{ name: "Operational / Metrics",       group: "Operational endpoints", description: "Prometheus 0.0.4 text. Path-template labels normalize concrete ids.", path_prefix: "/uapi/metrics" },
+	{ name: "Operational / Diagnostics",   group: "Operational endpoints", description: "Lock state, uptime, loaded resources.",       path_prefix: "/uapi/diagnostics" },
+	{ name: "Operational / Batch",         group: "Operational endpoints", description: "Multi-package atomic transaction (max 50 ops). 207 Multi-Status on success.", path_prefix: "/uapi/batch" },
 ];
 
 function build_tags() {
@@ -946,7 +946,7 @@ function build_paths() {
 		         "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResourceSchema" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
 	};
 
-	paths["/auth/whoami"] = {
+	paths["/uapi/whoami"] = {
 		"get": {
 			"summary": "Introspection: the calling token's own metadata",
 			"description": "No additional scope check. Any authenticated bearer can read its own metadata.",
@@ -956,7 +956,7 @@ function build_paths() {
 		},
 	};
 
-	paths["/tokens"] = {
+	paths["/uapi/tokens"] = {
 		"get": {
 			"summary": "List all tokens (no secrets surfaced)",
 			"description": "Scope: uapi:tokens:ro (or *:ro). Each entry omits salt and hash.",
@@ -975,7 +975,7 @@ function build_paths() {
 			}),
 		},
 	};
-	paths["/tokens/{id}"] = {
+	paths["/uapi/tokens/{id}"] = {
 		"parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
 		"get":    { "summary": "Get one token's metadata",
 		            "responses": responses("get", { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenMetadata" } } } } }) },
@@ -983,7 +983,7 @@ function build_paths() {
 		            "responses": responses("delete", { "204": { "description": "Revoked" } }) },
 	};
 
-	paths["/metrics"] = {
+	paths["/uapi/metrics"] = {
 		"get": {
 			"summary": "Prometheus 0.0.4 text exposition",
 			"description": "Scope: uapi:metrics:ro (or *:ro). Series: uapi_requests_total, uapi_request_duration_seconds_bucket, uapi_request_duration_seconds_count, uapi_rate_limit_drops_total, uapi_lock_contention_total, uapi_validate_errors_total. Path-template labels normalize concrete ids to :id to keep cardinality bounded.",
@@ -993,7 +993,7 @@ function build_paths() {
 		},
 	};
 
-	paths["/diagnostics"] = {
+	paths["/uapi/diagnostics"] = {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
 			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
@@ -1008,7 +1008,7 @@ function build_paths() {
 		},
 	};
 
-	paths["/batch"] = {
+	paths["/uapi/batch"] = {
 		"post": {
 			"summary": "Multi-package atomic transaction",
 			"description": "Each sub-request is scope-checked independently. Pure-read batches acquire no lock. Writes acquire per-package EX locks in sorted order (deadlock-free) under one combined snapshot/restore. First sub-request failure aborts the batch and reverts all packages; success returns 207 Multi-Status with the per-sub-request results. Max 50 ops.",
@@ -1297,7 +1297,7 @@ function build_schemas() {
 		},
 		// Deliberately standalone rather than composed from WhoamiResponse. It used to be
 		// `allOf` over it, which inherited that schema's `required` and so demanded
-		// `token_id` and `source_ip` from every entry of `GET /tokens`, neither of which the
+		// `token_id` and `source_ip` from every entry of `GET /uapi/tokens`, neither of which the
 		// token endpoints return: the listing names the token `name`, and `source_ip` is the
 		// caller's address, meaningful only for whoami. Every entry the live endpoint
 		// returned therefore violated its own published schema, so a strict generated client
@@ -1339,7 +1339,7 @@ function build_schemas() {
 				"bearer": { "type": "string", "writeOnly": true,
 				            "description": "Cleartext bearer token. Shown exactly once at mint time; uapi keeps only the salted sha256 on disk. Store securely and pass back as `Authorization: Bearer <bearer>` on subsequent requests." },
 				"name":   { "type": "string",
-				            "description": "Stable token id (also the uci section name). Use as the path segment in `GET /tokens/{name}`, `DELETE /tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)." },
+				            "description": "Stable token id (also the uci section name). Use as the path segment in `GET /uapi/tokens/{name}`, `DELETE /uapi/tokens/{name}`. Must match `[A-Za-z0-9_]+` (uci section-name charset)." },
 			},
 		},
 		"DiagnosticsResponse": {
@@ -1703,11 +1703,11 @@ function build_doc() {
 					"schema": { "type": "string", "enum": ["true"] },
 				},
 				"XReloadStatus": {
-					"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
+					"description": "Outcome of the post-commit daemon reload. `ok` = init script exited 0 (NOT a runtime-convergence promise, see docs/operations.md). `no_reload` = no init script ran, because the write changed nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds, or because procd runs none of the daemons that read the write. Only a `dhcp` write meets the second case: dnsmasq, odhcpd and unbound are each reloaded only while procd runs them. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown. Either an init script was still running when uapi stopped waiting for the reloads of the request, 20 s after the first started, and uapi did not kill it, so it and the reloads after it run on. Or every init script exited 0, but the `dnsmasq --test` check that follows a dhcp write did not finish: it was killed after 10 s, or by another SIGKILL. Present on curated-resource writes and the `POST /uapi/batch` 207, where it covers the services of the packages that the batch changed. A `system/cron_jobs` write answers it alone, as `unverified`, when its reload of cron was still running, and syslog then holds the note. Raw passthrough and the other non-uci writes return no reload headers.",
 					"schema": { "type": "string", "enum": ["ok", "no_reload", "unverified"] },
 				},
 				"XReloadServices": {
-					"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
+					"description": "Comma-separated list of init scripts that were reloaded after the write committed, in the order in which they ran. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it: a `dhcp/servers` or `dhcp/hosts` write answers `dnsmasq,odhcpd,unbound`, and leaves out each of them that does not run. A `system` write answers `system,log,dnsmasq,odhcpd,unbound`, and a `network` write `network,odhcpd`, in the same way. The `POST /uapi/batch` 207 lists its services sorted. Present when X-Reload-Status is `ok` or `unverified`, absent when it is `no_reload`, and absent wherever X-Reload-Status itself is.",
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
 				},
 				"XKernelStatus": {

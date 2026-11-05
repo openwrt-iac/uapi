@@ -135,7 +135,7 @@ for body in '{}' '{"endpoint_host": "198.51.100.9", "endpoint_port": 51820}'; do
 done
 read_body=$(curl -sS -H "$ADMIN" "$URL/network/wireguard_peers/$pid" | jq -c 'del(.runtime)')
 assert_noop "a PUT of the read" "$(write_headers PUT "/network/wireguard_peers/$pid" "$read_body")" 200
-assert_noop "a batch PUT of the read" "$(write_headers POST /batch \
+assert_noop "a batch PUT of the read" "$(write_headers POST /uapi/batch \
 	"{\"operations\": [{\"path\": \"/network/wireguard_peers/$pid\", \"method\": \"PUT\", \"body\": $read_body}]}")" 207
 
 echo "--- a PATCH that changes only the preshared key reaches the kernel ---"
@@ -154,7 +154,7 @@ r=$(call -X DELETE "$URL/network/wireguard_peers/$pid")
 has_peer "$PEER1" && fail "peer STILL live in kernel after DELETE (access not revoked)"
 
 echo "--- a batch of peers on one interface all land ---"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers\",\"method\":\"POST\",
 	 \"body\":{\"interface\":\"$IFACE\",\"public_key\":\"$PEER1\",
 	           \"allowed_ips\":[\"10.98.99.4/32\"]}},
@@ -168,12 +168,12 @@ held=$(body_of "$(call "$URL/network/wireguard_peers")" | jq -c --arg i "$IFACE"
 	'[.[] | select(.interface == $i and (.public_key == $a or .public_key == $b)) | [.public_key == $a, .runtime.in_kernel, .runtime.allowed_ips]] | sort')
 [ "$held" = '[[false,true,["10.98.99.5/32"]],[true,true,["10.98.99.4/32"]]]' ] || fail "a collection read reports the batch peers as $held"
 bid=$(body_of "$r" | jq -r '.results[0].body.id')
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"PATCH\",\"body\":{\"description\":\"b\"}},
 	{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
 [ "$(status_of "$r")" = "207" ] || fail "batch of a PATCH and a GET: $(body_of "$r")"
 [ "$(body_of "$r" | jq -c '[.results[].body.runtime]')" = '[{},{}]' ] || fail "a batch that writes read the kernel: $(body_of "$r")"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" \
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" \
 	-d "{\"operations\":[{\"path\":\"/network/wireguard_peers/$bid\",\"method\":\"GET\"}]}")
 [ "$(body_of "$r" | jq -c '.results[0].body.runtime.in_kernel')" = true ] || fail "a batch of reads did not read the kernel: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel torn down by the batch"
@@ -311,7 +311,7 @@ body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore s
 # A batch that sets the peer before a later operation fails leaves the kernel with the key that it
 # set, which the restore cannot take back, so it must not answer that it restored the peer.
 PSK2=$($SSH 'wg genpsk')
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operations\":[
+r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"operations\":[
 	{\"path\":\"/network/wireguard_peers/uapi45badpsk\",\"method\":\"PATCH\",
 	 \"body\":{\"preshared_key\":\"$PSK2\",\"allowed_ips\":[\"10.98.99.80/32\",\"10.98.99.82/32\"]}},
 	{\"path\":\"/network/wireguard_peers\",\"method\":\"POST\",

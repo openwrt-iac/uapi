@@ -153,7 +153,7 @@ without uci state change.
    `503 config_missing` with the path. A DELETE checks the file first and
    answers `404 not_found` for a missing one, because no section
    can exist there, and a client reads a 404 on DELETE as already gone. A
-   `POST /batch` answers the 503 for a DELETE too, because it commits as one
+   `POST /uapi/batch` answers the 503 for a DELETE too, because it commits as one
    write.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking), and EX on `unbound` when one of the `reload` services, or
@@ -464,7 +464,7 @@ what keeps a peer orphaned by deleting its parent interface deletable.
 
 ## Multi-package transactions (`/batch`)
 
-`POST /batch` composes N sub-requests under one combined snapshot/restore:
+`POST /uapi/batch` composes N sub-requests under one combined snapshot/restore:
 
 1. Pre-resolve every sub-request's target (path → package + reload services),
    and check its scope, before the pre-flight checks: their 503 would tell a token
@@ -684,7 +684,7 @@ A counter is written to a temp file, which is renamed over it only when
 its size on disk is the size of the line, and a counter file that holds no
 count is left out of a scrape and starts again at its next increment.
 
-`GET /metrics` walks the tree, decodes the labels, emits Prometheus 0.0.4
+`GET /uapi/metrics` walks the tree, decodes the labels, emits Prometheus 0.0.4
 text. Path templates are normalized (`/firewall/rules/:id` not
 `/firewall/rules/r_01HX...`) to keep cardinality bounded as clients
 create/destroy resources. A path that no route serves is recorded as
@@ -721,7 +721,7 @@ two stores of one key at the same moment each write a whole entry. A
 package install or upgrade removes the directory, so no entry of an older
 version stays. At most once an hour, a store removes the entries
 older than the TTL, so the directory holds the writes of about one TTL. A
-`POST /batch` that only reads stores no entry: replaying a read gives
+`POST /uapi/batch` that only reads stores no entry: replaying a read gives
 nothing that running it again does not give.
 
 ## Audit and request_id
@@ -784,6 +784,6 @@ interrupted-write records reset on reboot. This is acceptable: operational count
 uapi responsibility - point a `node_exporter` or central collector at the
 box and aggregate there.
 
-`GET /diagnostics` reports in `state_dirs` whether uapi uses each of these
+`GET /uapi/diagnostics` reports in `state_dirs` whether uapi uses each of these
 directories, as it finds them, without creating or narrowing one.
 `docs/operations.md` § Diagnostics says what each value means and costs.
