@@ -23,6 +23,37 @@ The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415) or
 `unmanaged_resource` (409), both dead (announced in 3.4.1, #323 and #321). The first was reserved
 and never emitted (uapi never rejects a body on `Content-Type`); the second left with the
 `managed` field and the adopt flow. Clients branching on either code must drop that branch.
+## A write is refused for any stored error the section holds
+
+
+
+
+
+Like LuCI, which validates every visible field of a form at save, a write now answers 422 for any
+error the resulting section holds, not only the ones the write adds (announced in 3.4.0, #308).
+Before v4 a write that left a stored value alone answered 200, so a broken section could still be
+disabled; now the fix comes first, or goes through `/raw`. `GET /diagnostics?validate=1` already
+listed these stored errors, and is the natural pre-flight check.
+
+## `dhcp/leases6` merges into `dhcp/leases`
+
+
+
+
+
+The `/dhcp/leases6` endpoint is removed (announced in 3.4.1, #320). `GET /dhcp/leases` still
+returns the IPv4 leases, and `GET /dhcp/leases?family=v6` returns the IPv6 ones from odhcpd's
+statefile. The entry id is the MAC for v4 entries and the IP for v6 ones. The `dhcp:leases6` scope
+is gone with the endpoint.
+
+## `unsupported_media_type` leaves the error enum
+
+
+
+
+The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
+and never emitted (announced in 3.4.1, #323). Clients branching on it must drop that branch; uapi
+never rejects a body on `Content-Type`.
 
 ## Boolean reads follow the platform's reader
 

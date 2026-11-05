@@ -174,7 +174,9 @@ t.describe('snmpd/accesses fields that snmpd.init needs', () => {
 		t.assert_true(index(acc.validate_new({ ...STOCK, context: "" })[0].message, '"none"') >= 0);
 	});
 
-	t.it('refuse a create without them, and take a write that leaves a stored gap alone', () => {
+	// v4 (#308): LuCI's model, a stored gap blocks every write of the section until a write
+	// fixes it, so the writes that leave it alone answer 422 and name it.
+	t.it('refuse a create without them, and refuse a write that leaves a stored gap alone', () => {
 		let c = stored();
 		let r = h().create(c, CTX, { id: 'a2', group: 'public' });
 		t.assert_equal(r.status, 422);
@@ -182,10 +184,14 @@ t.describe('snmpd/accesses fields that snmpd.init needs', () => {
 		t.assert_equal(h().create(c, CTX, { ...STOCK, id: 'a3' }).status, 200);
 
 		t.assert_equal(length(h().sweep(c)), 1);
-		t.assert_equal(h().patch(c, CTX, 'a1', { read: 'none' }).status, 200);
+		let w = h().patch(c, CTX, 'a1', { read: 'none' });
+		t.assert_equal(w.status, 422, w.body);
+		t.assert_deep_equal(map(w.body.errors, (e) => [ e.field, e.code ]), [ [ 'context', 'required' ] ]);
 		let put = { ...STOCK };
 		delete put.context;
-		t.assert_equal(h().replace(c, CTX, 'a1', put).status, 200);
+		let rep = h().replace(c, CTX, 'a1', put);
+		t.assert_equal(rep.status, 422, rep.body);
+		t.assert_deep_equal(map(rep.body.errors, (e) => e.field), [ 'context' ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'a1', { context: '' }).body.errors, (e) => e.field), [ 'context' ]);
 		t.assert_equal(h().patch(c, CTX, 'a1', { context: 'none' }).status, 200);
 		t.assert_equal(length(h().sweep(c)), 0);
