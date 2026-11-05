@@ -191,7 +191,7 @@ before=$(refused)
 $SSH "uci set wireless.$nid.reassociation_deadline=' 500'; uci commit wireless; ubus call network reload"
 r=$(call "$URL/wireless/interfaces/$nid" | sed '$d')
 echo "$r" | jq -e '.reassociation_deadline == 500' >/dev/null || fail "' 500' did not read 500: $r"
-sweep=$(call "$URL/uapi/uapi/diagnostics?validate=1" | sed '$d')
+sweep=$(call "$URL/uapi/diagnostics?validate=1" | sed '$d')
 echo "$sweep" | jq -e --arg s "$nid" '.invalid_sections | tostring | contains($s)' >/dev/null \
 	|| fail "the sweep did not list reassociation_deadline ' 500': $sweep"
 [ "$daemon" = 0 ] || wait_for "validate.uc did not refuse reassociation_deadline 500" '[ "$(refused)" -gt "$before" ]'
