@@ -58,7 +58,6 @@ const RESOURCES = {
 	"wireless:interfaces": handler.make(load_resource("wireless:interfaces")),
 	"dhcp:hosts":          handler.make(load_resource("dhcp:hosts")),
 	"dhcp:leases":         handler.make_collection(load_resource("dhcp:leases")),
-	"dhcp:leases6":        handler.make_collection(load_resource("dhcp:leases6")),
 	"dhcp:servers":        handler.make(load_resource("dhcp:servers")),
 	"sqm:queues":          handler.make(load_resource("sqm:queues")),
 	"snmpd:agents":        handler.make(load_resource("snmpd:agents")),
@@ -307,7 +306,7 @@ function dispatch_resource(h, scopes, ctx, conn, method, domain, sub, id, extra,
 	if (extra != null)
 		return errors.error(ctx, "not_found", "Unknown sub-path");
 
-	if (method == "GET")    return h.get_one(conn, ctx, id);
+	if (method == "GET")    return h.get_one(conn, ctx, id, query);
 	if (method == "PUT")    return h.replace(conn, ctx, id, body);
 	if (method == "PATCH")  return h.patch(conn, ctx, id, body);
 	if (method == "DELETE") return h.remove(conn, ctx, id);
@@ -561,7 +560,7 @@ function batch_run_one(conn, sub_ctx, op) {
 		return errors.error(sub_ctx, "method_not_allowed",
 			sprintf("Method %s not allowed on %s", m, op.path));
 	}
-	if (m == "GET")    return tgt.h.get_one(conn, sub_ctx, id);
+	if (m == "GET")    return tgt.h.get_one(conn, sub_ctx, id, {});
 	if (m == "PUT")    return tgt.h.replace(conn, sub_ctx, id, op.body);
 	if (m == "PATCH")  return tgt.h.patch(conn, sub_ctx, id, op.body);
 	if (m == "DELETE") return tgt.h.remove(conn, sub_ctx, id);
