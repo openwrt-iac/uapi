@@ -1503,9 +1503,11 @@ function build_schemas() {
 			"properties": {
 				"results": { "type": "array",
 				             "items": { "type": "object",
-				                        "required": ["status"],
+				                        "required": ["status", "headers"],
 				                        "properties": {
 				                          "status": { "type": "integer" },
+				                          "headers": { "type": "object",
+				                                       "description": "The headers the sub-request's own response carried: ETag, X-Reload-Status, X-Kernel-Status, X-Kernel-Applied, X-Mgmt-Path-Warning and the sub-request's X-Request-Id, exactly as N separate requests would have answered." },
 				                          "body": {},
 				                        } } },
 				"request_id": { "type": "string" },
