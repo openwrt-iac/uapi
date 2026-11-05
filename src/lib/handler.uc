@@ -32,9 +32,11 @@ function compute_etag(body) {
 	// to-second on an unchanged uci section. Including it would make ETags
 	// non-deterministic and trip spurious 412s on every If-Match round-trip.
 	let canon = body;
-	if (type(body) == "object" && body.runtime != null) {
+	if (type(body) == "object" && (body.runtime != null || body.managed != null)) {
 		canon = { ...body };
 		delete canon.runtime;
+		// v4 (#321): managed left the envelope, so it is not part of the ETag either.
+		delete canon.managed;
 	}
 	return _hash(sprintf("%J", canon));
 }
@@ -265,7 +267,7 @@ _check_value = function(spec, val, field_path, errs) {
 // every response and in no request schema, and every IaC apply is a read-modify-write, so
 // rejecting them would break the round trip `47_read_honesty_test.sh` exists to hold. They are
 // tolerated at the top level and ignored on write, exactly as before.
-const ROUND_TRIP_ONLY = { id: true, managed: true, runtime: true };
+const ROUND_TRIP_ONLY = { id: true, runtime: true };
 
 check_schema_types = function(schema_properties, body, prefix) {
 	let errs = [];
@@ -525,8 +527,6 @@ function translate_tx(ctx, result) {
 		return errors.validation_failed(ctx, build_field_errors(result.errors));
 	if (result.kind == "not_found")
 		return errors.error(ctx, "not_found", result.message);
-	if (result.kind == "unmanaged_resource")
-		return errors.error(ctx, "unmanaged_resource", result.message);
 	if (result.kind == "conflict")
 		return errors.error(ctx, "conflict", result.message);
 	if (result.kind == "precondition_failed")
@@ -840,19 +840,17 @@ function make(resource, opts) {
 	// in a /batch that writes runs before the apply of the batch too.
 	function read_view(s, conn, ctx) {
 		let r = resource.fromUci(s, conn);
+		// v4 (#321): the envelope is {id, runtime, fields}; managed is gone.
+		delete r.managed;
 		if (resource.read_runtime != null && !ctx.batch_writes) r.runtime = resource.read_runtime(s, conn);
 		return r;
 	}
 
 	function list(conn, ctx, query) {
-		let want_managed = query.managed;
 		let out = [];
 		conn.uci_foreach(pkg, null, function(s) {
 			if (!type_predicate(s['.type'])) return;
-			let r = read_view(s, conn, ctx);
-			if (want_managed == "true" && !r.managed) return;
-			if (want_managed == "false" && r.managed) return;
-			push(out, r);
+			push(out, read_view(s, conn, ctx));
 		});
 		return paginate(ctx, out, query);
 	}
@@ -904,6 +902,7 @@ function make(resource, opts) {
 				for (let k in new_opts) c.uci_set(p, new_id, k, new_opts[k]);
 				let staged = load_section(c, p, new_id);
 				let out = resource.fromUci(staged, conn);
+				delete out.managed;
 				collect_kernel_ops(kops, "create", new_opts, resolved_type, null, staged);
 				return { ok: true, body: out };
 			},
@@ -942,10 +941,7 @@ function make(resource, opts) {
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				// wireless/interfaces reads with three ubus calls under the lock, so a view that
 				// validate_new() needed is read once.
-				if (existing_view == null) existing_view = resource.fromUci(existing, conn);
-				if (!existing_view.managed)
-					return { ok: false, kind: "unmanaged_resource",
-					         message: "Section is not uapi-managed; adopt it first" };
+				if (existing_view == null) { existing_view = resource.fromUci(existing, conn); delete existing_view.managed; }
 				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
@@ -966,6 +962,7 @@ function make(resource, opts) {
 				c.uci_require(p, id);
 				let staged = load_section(c, p, id);
 				let out = resource.fromUci(staged, conn);
+				delete out.managed;
 				if (wrote)
 					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing, staged);
 				return { ok: true, body: out };
@@ -988,9 +985,7 @@ function make(resource, opts) {
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				id = existing['.name'];
 				let existing_view = resource.fromUci(existing, conn);
-				if (!existing_view.managed)
-					return { ok: false, kind: "unmanaged_resource",
-					         message: "Section is not uapi-managed; adopt it first" };
+				delete existing_view.managed;
 				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
@@ -1024,6 +1019,7 @@ function make(resource, opts) {
 				c.uci_require(p, id);
 				let staged = load_section(c, p, id);
 				let out = resource.fromUci(staged, conn);
+				delete out.managed;
 				if (wrote)
 					collect_kernel_ops(kops, "update", new_opts, existing['.type'], existing, staged);
 				return { ok: true, body: out };
@@ -1054,9 +1050,7 @@ function make(resource, opts) {
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				id = existing['.name'];
 				let existing_view = resource.fromUci(existing, conn);
-				if (!existing_view.managed)
-					return { ok: false, kind: "unmanaged_resource",
-					         message: "Section is not uapi-managed" };
+				delete existing_view.managed;
 				let pc = precondition_check(ctx, existing_view);
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
@@ -1142,6 +1136,7 @@ function make(resource, opts) {
 			let view, errs;
 			try {
 				view = resource.fromUci(s, conn);
+				delete view.managed;
 				errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
 				                             conn, id, view);
 			} catch (e) {
@@ -1156,7 +1151,7 @@ function make(resource, opts) {
 		return out;
 	}
 
-	return { list, get_one, create, replace, patch, remove, adopt, sweep };
+	return { list, get_one, create, replace, patch, remove, sweep };
 }
 
 function make_singleton(resource, opts) {
@@ -1196,6 +1191,7 @@ function make_singleton(resource, opts) {
 			return errors.error(ctx, "not_found",
 			                    sprintf("singleton %s.%s missing", pkg, sec_type));
 		let body = resource.fromUci(s, conn);
+		delete body.managed;
 		return set_etag_header(errors.ok(ctx, body), body);
 	}
 
@@ -1222,6 +1218,7 @@ function make_singleton(resource, opts) {
 				let id = existing['.name'];
 
 				let existing_view = resource.fromUci(existing, conn);
+				delete existing_view.managed;
 				// A synthesized section did not exist when the request arrived, and a
 				// precondition asks about the resource the caller addressed, not about the
 				// stub staged a few lines up. Passing the stub made `If-None-Match: *`
@@ -1251,7 +1248,9 @@ function make_singleton(resource, opts) {
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                 default_footprint(resource, existing, old_opts, new_opts),
 				                 named_rewrites(resource, r.delta));
-				return { ok: true, body: resource.fromUci(load_section(c, p, id), conn) };
+				let body = resource.fromUci(load_section(c, p, id), conn);
+				delete body.managed;
+				return { ok: true, body };
 			},
 		}));
 
@@ -1270,6 +1269,7 @@ function make_singleton(resource, opts) {
 		let view, errs;
 		try {
 			view = resource.fromUci(s, conn);
+			delete view.managed;
 			errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
 			                             conn, id, view);
 		} catch (e) {

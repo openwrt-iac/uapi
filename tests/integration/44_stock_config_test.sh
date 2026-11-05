@@ -109,15 +109,8 @@ for res in $RESOURCES; do
 	fi
 	for id in $ids; do
 		body=$(curl -sS -H "$ADMIN" "$URL/$res/$id")
-		managed=$(echo "$body" | jq -r '.managed')
-		if [ "$managed" = "false" ]; then
-			adopted=$(curl -sS -H "$ADMIN" -X POST "$URL/$res/$id/adopt")
-			id=$(echo "$adopted" | jq -r '.id')
-			[ -n "$id" ] && [ "$id" != "null" ] \
-				|| fail "$res adopt: missing id in response"
-			body=$(curl -sS -H "$ADMIN" "$URL/$res/$id")
-		fi
-		# The body carries id, managed, and runtime; toUci ignores fields not
+		# v4 (#321): no managed field and no adopt step; the id is the uci section name.
+		# The body carries id and runtime; toUci ignores fields not
 		# in schema_properties, so we PUT it verbatim.
 		status=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' \
 			-o /tmp/uapi_put_resp.json -w '%{http_code}' \
