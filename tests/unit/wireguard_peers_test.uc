@@ -153,9 +153,13 @@ t.describe('network.wireguard_peers.validate', () => {
 		for (let h in [ 'vpn.example.com', '198.51.100.7', 'fd00::1', 'fe80::1%eth1', '1.2.3', '',
 		                '[192.0.2.1]', '[vpn.example.com]', ' fd00::1 ' ])
 			t.assert_equal(length(host_errs(h)), 0, h);
-		for (let h in [ '192.0.2.1\\0072443', 'vpn.example.com\nx', '[fd00::1]', 'fd00::1]', 'vpn.example.com#x',
+		for (let h in [ '192.0.2.1\\0072443', '[fd00::1]', 'fd00::1]', 'vpn.example.com#x',
 		                '192.0.2.1:51820', 'vpn:1', 'fd00::1x%eth1' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
+		// A newline is refused by the default type-gate rule (#276) and again by the
+		// endpoint_host checks in validate(), so it carries two errors.
+		t.assert_deep_equal(map(host_errs('vpn.example.com\nx'), (e) => e.code),
+		                    [ 'invalid_format', 'invalid_format' ]);
 		// Each problem is its own error.
 		t.assert_deep_equal(map(host_errs('fd00::1\\n[Peer]'), (e) => e.code), [ 'invalid_format', 'invalid_format' ]);
 		t.assert_equal(length(host_errs('vpn.example.com\t')), 0);
