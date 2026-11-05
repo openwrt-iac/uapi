@@ -114,7 +114,7 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/u
 	-d '{"ip6prefix":["fd54:3::/48","fd54:4::/48"]}')
 [ "$(status "$r")" = 200 ] && [ "$(stored uapi54w | grep -c "list ip6prefix")" = 2 ] \
 	|| fail "a string of two prefixes was not stored as a list: $r $(stored uapi54w)"
-sweep=$(body "$(call "$URL/uapi/uapi/diagnostics?validate=1")")
+sweep=$(body "$(call "$URL/uapi/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54") | not' >/dev/null \
 	|| fail "the sweep flagged a section with a list ip6prefix: $sweep"
 
@@ -133,7 +133,7 @@ printf '%s' "$read_back" | jq -e '.listen_port == -1' >/dev/null || fail "an unr
 r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d "$read_back")
 [ "$(status "$r")" = 422 ] && [ "$(uci_get uapi54w.listen_port)" = nosuchservice ] \
 	|| fail "a PUT of a -1 read expected 422 and no change: $r"
-sweep=$(body "$(call "$URL/uapi/uapi/diagnostics?validate=1")")
+sweep=$(body "$(call "$URL/uapi/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54w")' >/dev/null \
 	|| fail "the sweep did not list an unresolved listen_port: $sweep"
 $SSH "uci -q delete network.uapi54w.listen_port; uci commit network; ifup uapi54w"
@@ -146,7 +146,7 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/u
 $SSH "uci set network.uapi54w.mtu=60; uci commit network"
 r=$(body "$(call "$URL/network/interfaces/uapi54w")")
 printf '%s' "$r" | jq -e '.mtu == 60' >/dev/null || fail "a stored mtu of 60 did not read as 60: $r"
-sweep=$(body "$(call "$URL/uapi/uapi/diagnostics?validate=1")")
+sweep=$(body "$(call "$URL/uapi/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54w")' >/dev/null \
 	|| fail "the sweep did not list a stored mtu below 68: $sweep"
 
