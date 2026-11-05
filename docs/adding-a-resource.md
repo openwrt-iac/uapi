@@ -45,7 +45,7 @@ return {
     },
     openapi_singular: "firewall rule",            // required on CRUD resources (not singletons or
                                                   // read-only collections); `make openapi` dies
-                                                  // without it. Fills the adopt operation summary.
+                                                  // without it.
 
     // Optional, less common:
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
