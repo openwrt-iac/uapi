@@ -114,9 +114,12 @@ done
 [ "$(read_back uapi59x | jq -c '.ipproto')" = 0 ] || fail "ipproto 0 read wrong: $(read_back uapi59x)"
 [ "$(read_back uapi59y | jq -c '.ipproto')" = '"sctp"' ] || fail "ipproto sctp read wrong: $(read_back uapi59y)"
 r=$(send PUT network/rules/uapi59x "$(read_back uapi59x)")
-[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi59x.ipproto)" = 0 ] || fail "PUT of the read of ipproto 0 expected 200 and kept: $r"
+# v4 (#308): ipproto 0 is a stored error (netifd drops the rule), so any write is refused.
+[ "$(status "$r")" = 422 ] || fail "PUT of the read of ipproto 0 expected 422 on v4: $r"
+[ "$(uci_get uapi59x.ipproto)" = 0 ] || fail "a refused PUT changed ipproto: $r"
 r=$(send PATCH network/rules/uapi59u '{"invert":false}')
-[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi59u.tos)" = 32 ] || fail "PATCH beside tos 32 expected 200 and kept: $r"
+[ "$(status "$r")" = 422 ] || fail "PATCH beside tos 32 expected 422 on v4 (#308): $r"
+[ "$(uci_get uapi59u.tos)" = 32 ] || fail "a refused PATCH changed tos: $r"
 r=$(send PATCH network/rules/uapi59t '{"tos":12}')
 [ "$(status "$r")" = 200 ] || fail "PATCH tos 12 expected 200: $r"
 wait_for "the kernel did not take tos 12" 'has 30593 ".tos == 12"'
