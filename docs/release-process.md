@@ -93,6 +93,26 @@ Record the outcome even when it is empty. "Swept, nothing eligible" is worth
 saying, because the next reader cannot tell a sweep that found nothing from a
 sweep that never happened.
 
+## Major preparation branch
+
+A major's breaking work lands on a preparation branch cut from `main` (today
+`v4`), not on `main` itself. Breaking-change PRs target the preparation
+branch. Additive and internal PRs keep targeting `main` and can ship in
+minors while the major is in flight.
+
+- The preparation branch carries the same ruleset as `main`: required checks
+  `unit`, `lint`, `integration`, `entry`, `package`, strict. Create the
+  ruleset when the branch is created, by copying the `main` ruleset and
+  setting its name to `<branch>: required checks` and its
+  `conditions.ref_name.include` to `["refs/heads/<branch>"]`. Every future
+  major preparation branch gets the same ruleset.
+- Rebase the preparation branch onto `main` after every merge into `main`,
+  so breaking PRs start from a current base and conflicts stay small.
+- Until the release, the preparation branch still serves the current API
+  prefix. The mount move is the last commit before the rc tag.
+- At release time: rebase the preparation branch onto `main`, merge it into
+  `main`, then run the rc flow below.
+
 ## Release flow
 
 ### Major versions ship as `-rc` first
