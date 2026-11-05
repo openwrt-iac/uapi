@@ -30914,17 +30914,20 @@
 						"description": "Network interface this SSID bridges into"
 					},
 					"mode": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ap",
 							"sta",
 							"adhoc",
 							"wds",
 							"monitor",
-							"mesh"
+							"mesh",
+							null
 						],
-						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up."
 					},
 					"ssid": {
 						"type": [
@@ -31218,16 +31221,19 @@
 						"description": "Network interface this SSID bridges into"
 					},
 					"mode": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ap",
 							"sta",
 							"adhoc",
 							"monitor",
-							"mesh"
+							"mesh",
+							null
 						],
-						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up."
 					},
 					"ssid": {
 						"type": [
@@ -31734,13 +31740,17 @@
 						]
 					},
 					"mode": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ap",
 							"sta",
 							"adhoc",
 							"monitor",
-							"mesh"
+							"mesh",
+							null
 						]
 					},
 					"ssid": {
