@@ -9,14 +9,16 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 
-echo "--- dhcp/leases6: GET returns 200 with a JSON array ---"
-leases6=$(call "$URL/dhcp/leases6")
-echo "$leases6" | tail -1 | grep -q '^200$' || fail "leases6 GET expected 200"
+echo "--- dhcp/leases?family=v6: GET returns 200 with a JSON array; /dhcp/leases6 is gone (v4, #320) ---"
+leases6=$(call "$URL/dhcp/leases?family=v6")
+echo "$leases6" | tail -1 | grep -q '^200$' || fail "leases?family=v6 GET expected 200"
 body=$(echo "$leases6" | head -1)
 case "$body" in
 	'['*) ;;
-	*) fail "leases6 body must be a JSON array, got: $body" ;;
+	*) fail "leases?family=v6 body must be a JSON array, got: $body" ;;
 esac
+old=$(call "$URL/dhcp/leases6")
+echo "$old" | tail -1 | grep -q '^404$' || fail "leases6 endpoint expected 404 on v4: $old"
 
 echo "--- network/interfaces: GET surfaces a runtime object on each item ---"
 ifaces=$(call "$URL/network/interfaces")
@@ -52,4 +54,4 @@ case "$body" in
 		|| fail "wireless/interfaces response missing runtime" ;;
 esac
 
-echo "runtime blocks + dhcp/leases6 ok."
+echo "runtime blocks + dhcp/leases?family=v6 ok."

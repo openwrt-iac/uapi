@@ -241,7 +241,6 @@ for (let name in schemas) {
 // this needs no guesswork about what a resource is called.
 const SINGULAR_COLLECTIONS = {
 	"/firewall/nat": "\"nats\" reads badly; `nat` matches the uci section type and LuCI",
-	"/dhcp/leases6": "\"leases\" plus a family suffix; already plural",
 	"/raw/{package}": "passthrough, not a curated collection",
 };
 
