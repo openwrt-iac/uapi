@@ -123,7 +123,7 @@ GET responses never include `salt` or `hash`.
 ## Inspecting the current token
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" https://router/api/v3/auth/whoami
+curl -H "Authorization: Bearer $TOKEN" https://router/api/v3/uapi/whoami
 ```
 
 Returns `{token_id, scopes, source_ip, expires_at, allowed_cidrs,

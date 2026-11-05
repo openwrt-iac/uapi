@@ -42,18 +42,18 @@ echo "--- /schema 404s for unknown resources ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/schema/no/such")
 [ "$status" = "404" ] || fail "unknown schema expected 404, got $status"
 
-echo "--- /auth/whoami requires auth ---"
-status=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/auth/whoami")
+echo "--- /uapi/whoami requires auth ---"
+status=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/uapi/whoami")
 [ "$status" = "401" ] || fail "no auth expected 401, got $status"
 
-echo "--- /auth/whoami 401 carries WWW-Authenticate ---"
-header_line=$(curl -sS -D - -o /dev/null "$URL/auth/whoami" | tr -d '\r' \
+echo "--- /uapi/whoami 401 carries WWW-Authenticate ---"
+header_line=$(curl -sS -D - -o /dev/null "$URL/uapi/whoami" | tr -d '\r' \
 	| grep -i '^WWW-Authenticate:')
 echo "$header_line" | grep -q 'Bearer realm="uapi"' \
 	|| fail "401 missing WWW-Authenticate Bearer header: $header_line"
 
-echo "--- /auth/whoami returns token metadata ---"
-body=$(curl -sS -H "$ADMIN" "$URL/auth/whoami")
+echo "--- /uapi/whoami returns token metadata ---"
+body=$(curl -sS -H "$ADMIN" "$URL/uapi/whoami")
 echo "$body" | grep -q '"token_id": "test_admin"' || fail "whoami missing token_id"
 echo "$body" | grep -q '"scopes"'                || fail "whoami missing scopes"
 echo "$body" | grep -q '"source_ip"'             || fail "whoami missing source_ip"
@@ -63,12 +63,12 @@ echo "--- inbound request id (?request_id= fallback) is echoed back ---"
 # uhttpd's CGI env allowlist drops X-Request-Id. We pass it as a query param;
 # proxies that propagate the header still work via the header path.
 my_id="req-01HXTEST00000000000000"
-echoed=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/auth/whoami?request_id=$my_id" \
+echoed=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/uapi/whoami?request_id=$my_id" \
 	| tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | tr -d '[:space:]')
 [ "$echoed" = "$my_id" ] || fail "request_id not echoed: got '$echoed' want '$my_id'"
 
 echo "--- malformed request id is dropped (server generates a fresh one) ---"
-gen=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/auth/whoami?request_id=short" \
+gen=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/uapi/whoami?request_id=short" \
 	| tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | tr -d '[:space:]')
 [ -n "$gen" ] || fail "no X-Request-Id in response after malformed inbound"
 [ "$gen" != "short" ] || fail "server accepted a malformed request_id"

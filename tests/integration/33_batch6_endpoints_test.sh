@@ -16,7 +16,7 @@ echo "--- /metrics returns Prometheus text under *:ro ---"
 # Generate a couple of requests so there's data to scrape.
 curl -sS -o /dev/null -H "$ADMIN" "$URL/firewall/rules"
 curl -sS -o /dev/null -H "$ADMIN" "$URL/system"
-body=$(curl -sS -H "$ADMIN" "$URL/metrics")
+body=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 echo "$body" | grep -q 'uapi_requests_total{' || fail "metrics: uapi_requests_total missing"
 echo "$body" | grep -q 'uapi_request_duration_seconds_bucket' || fail "metrics: histogram missing"
 echo "$body" | grep -q 'path="/firewall/rules",status="200"' || fail "metrics: a route lost its path label"
@@ -25,7 +25,7 @@ echo "--- /metrics gives one path label to every path that no route serves ---"
 curl -sS -o /dev/null "$URL/nope_$(date +%s)_a/x"
 curl -sS -o /dev/null "$URL/raw/nope_$(date +%s)_b/x"
 curl -sS -o /dev/null -H "$ADMIN" "$URL/firewall/nope_$(date +%s)_c"
-body=$(curl -sS -H "$ADMIN" "$URL/metrics")
+body=$(curl -sS -H "$ADMIN" "$URL/uapi/metrics")
 echo "$body" | grep -q 'nope_' && fail "metrics: a path that no route serves has its own label"
 echo "$body" | grep -q 'path="unmatched",status="401",token_id="-"} 2$' \
 	|| fail "metrics: two unknown paths are not one unmatched series of 2"
@@ -35,12 +35,12 @@ echo "$body" | grep -q 'path="unmatched",status="404",token_id="test_admin"} 1$'
 echo "--- /metrics rejected with insufficient_scope when token lacks ro ---"
 # A token with only firewall:ro should NOT be able to read metrics.
 status=$(curl -sS -o /tmp/uapi_metrics_403.json -w '%{http_code}' \
-	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/metrics")
+	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/uapi/metrics")
 [ "$status" = "403" ] || fail "metrics scope check failed, got $status"
 grep -q 'insufficient_scope' /tmp/uapi_metrics_403.json || fail "expected insufficient_scope"
 
 echo "--- /diagnostics returns version + uptime + resources_loaded ---"
-status=$(curl -sS -o /tmp/uapi_diag.json -w '%{http_code}' -H "$ADMIN" "$URL/diagnostics")
+status=$(curl -sS -o /tmp/uapi_diag.json -w '%{http_code}' -H "$ADMIN" "$URL/uapi/diagnostics")
 [ "$status" = "200" ] || fail "diagnostics expected 200, got $status"
 grep -q '"version"'           /tmp/uapi_diag.json || fail "diag missing version"
 grep -q '"uptime_seconds"'    /tmp/uapi_diag.json || fail "diag missing uptime_seconds"
@@ -50,7 +50,7 @@ grep -q '"firewall:rules"'    /tmp/uapi_diag.json || fail "diag missing firewall
 
 echo "--- /diagnostics denied for token without uapi:diagnostics:ro ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
-	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/diagnostics")
+	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/uapi/diagnostics")
 [ "$status" = "403" ] || fail "diag scope check failed, got $status"
 
 echo "--- Idempotency-Key replays POST result on second use ---"
@@ -108,18 +108,18 @@ echo "--- the idempotency cache is private, and a batch that only reads leaves n
 [ -z "$($SSH 'ls -l /var/run/uapi-idempotency' | grep -v -e '^total' -e '^-rw------- ')" ] || fail "an idempotency entry is not 0600"
 before=$($SSH 'ls /var/run/uapi-idempotency | wc -l')
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch?idempotency_key=idem-$(date +%s)-read" \
+	-X POST "$URL/uapi/batch?idempotency_key=idem-$(date +%s)-read" \
 	-d '{"operations": [{"method": "GET", "path": "/firewall/rules"}]}')
 [ "$status" = "207" ] || fail "a batch that only reads expected 207, got $status"
 [ "$($SSH 'ls /var/run/uapi-idempotency | wc -l')" = "$before" ] || fail "a batch that only reads left an idempotency entry"
 key_w="idem-$(date +%s)-write"
 batch_w='{"operations": [{"method": "PATCH", "path": "/firewall/rules/'"$id1"'", "body": {"name": "idem-test-1b"}}]}'
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w")
+	-X POST "$URL/uapi/batch?idempotency_key=$key_w" -d "$batch_w")
 [ "$status" = "207" ] || fail "a batch that writes expected 207, got $status"
 [ "$($SSH 'ls /var/run/uapi-idempotency | wc -l')" = "$((before + 1))" ] || fail "a batch that writes left no idempotency entry"
 curl -sS -o /dev/null -D /tmp/uapi_idem_batch.h -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch?idempotency_key=$key_w" -d "$batch_w"
+	-X POST "$URL/uapi/batch?idempotency_key=$key_w" -d "$batch_w"
 grep -i '^idempotent-replayed:' /tmp/uapi_idem_batch.h >/dev/null || fail "the replay of a batch that writes is not marked replayed"
 
 echo "--- every state directory is 0700 and every file in it 0600 ---"
@@ -129,18 +129,18 @@ wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)"
 [ -z "$wrong" ] || fail "these are not 0700 or 0600: $wrong"
 
 echo "--- /diagnostics reports that uapi uses each state directory ---"
-used=$(curl -sS -H "$ADMIN" "$URL/diagnostics" | jq -cS .state_dirs)
-[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-interrupted-writes":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
+used=$(curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -cS .state_dirs)
+[ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
 	|| fail "state_dirs reads $used"
 
 echo "--- /diagnostics reports a state directory as it finds it, and creates or narrows none ---"
-idem() { curl -sS -H "$ADMIN" "$URL/diagnostics" | jq -c '.state_dirs["/var/run/uapi-idempotency"]'; }
+idem() { curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -c '.state_dirs["/var/run/uapi-idempotency"]'; }
 $SSH 'rm -rf /var/run/uapi-idempotency'
 [ "$(idem)" = "null" ] || fail "a missing idempotency directory reads $(idem), expected null"
-$SSH 'test -e /var/run/uapi-idempotency' && fail "/diagnostics created the idempotency directory"
+$SSH 'test -e /var/run/uapi-idempotency' && fail "/uapi/diagnostics created the idempotency directory"
 $SSH 'mkdir -m 0755 /var/run/uapi-idempotency'
 [ "$(idem)" = "false" ] || fail "an idempotency directory with mode 0755 reads $(idem), expected false"
-[ "$($SSH 'ls -ld /var/run/uapi-idempotency' | cut -c1-10)" = "drwxr-xr-x" ] || fail "/diagnostics changed the mode of the idempotency directory"
+[ "$($SSH 'ls -ld /var/run/uapi-idempotency' | cut -c1-10)" = "drwxr-xr-x" ] || fail "/uapi/diagnostics changed the mode of the idempotency directory"
 $SSH 'rmdir /var/run/uapi-idempotency'
 
 echo "--- pagination: ?limit=N returns a partial page + Link/X-Next-Cursor ---"

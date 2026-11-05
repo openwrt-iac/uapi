@@ -68,7 +68,7 @@ What uapi defends against, what it doesn't, and what the operator should do.
     write that moves the inbound interface's `disabled`, `proto`, `ipaddrs` or
     `netmask` returns `X-Mgmt-Path-Warning`, and so does a `network/devices`
     or `network/bridge_vlans` write naming the caller's device or the bridge
-    it is a port of. `GET /diagnostics` reports `management_path` so a caller
+    it is a port of. `GET /uapi/diagnostics` reports `management_path` so a caller
     can check before writing. Firewall lockout is
     deliberately not covered: it would need fw4 ordering modelled, and the
     requesting connection survives the reload by design, so uapi cannot detect

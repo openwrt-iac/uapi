@@ -122,10 +122,10 @@ t.describe('metrics.retire_tokens', () => {
 	// dashboard of all requests reads.
 	t.it('keeps the sum over token_id across two folds', () => {
 		wipe();
-		metrics.record_request("POST", "/tokens", 201, 1, "run_1");
-		metrics.record_request("POST", "/tokens", 201, 1, "run_1");
+		metrics.record_request("POST", "/uapi/tokens", 201, 1, "run_1");
+		metrics.record_request("POST", "/uapi/tokens", 201, 1, "run_1");
 		metrics.retire_tokens({});
-		metrics.record_request("POST", "/tokens", 201, 1, "run_2");
+		metrics.record_request("POST", "/uapi/tokens", 201, 1, "run_2");
 		metrics.retire_tokens({});
 		let out = metrics.format_prometheus();
 		t.assert_equal(requests_sum(out), 3, out);
@@ -204,6 +204,7 @@ t.describe('metrics.path_label', () => {
 	let routes = {
 		labels: { "/firewall/rules": true, "/firewall/rules/:id": true,
 		          "/tokens/:id": true },
+		          "/firewall/rules/:id/adopt": true, "/uapi/tokens/:id": true },
 		raw_package: (p) => p == "firewall",
 	};
 	function label(path) {
@@ -215,12 +216,14 @@ t.describe('metrics.path_label', () => {
 		// v4 (#321): the adopt route is gone, so its path reads as unmatched.
 		t.assert_equal(label("/firewall/rules/r_01ABC/adopt"), "unmatched");
 		t.assert_equal(label("/tokens/run_1"), "/tokens/:id");
+		t.assert_equal(label("/firewall/rules/r_01ABC/adopt"), "/firewall/rules/:id/adopt");
+		t.assert_equal(label("/uapi/tokens/run_1"), "/uapi/tokens/:id");
 		t.assert_equal(label("/raw/firewall/cfg01"), "/raw/firewall/:id");
 	});
 
 	t.it('records one label set for paths that no route serves', () => {
 		wipe();
-		for (let p in [ "/nope_1", "/nope_2/x", "/raw/nope/x", "/firewall/rules/x/y", "/tokens/a/b", "/" ])
+		for (let p in [ "/nope_1", "/nope_2/x", "/raw/nope/x", "/firewall/rules/x/y", "/uapi/tokens/a/b", "/" ])
 			metrics.record_request("GET", label(p), 401, 1, null);
 		let lines = filter(split(metrics.format_prometheus(), "\n"), (l) => match(l, /^uapi_requests_total\{/));
 		t.assert_deep_equal(lines,
