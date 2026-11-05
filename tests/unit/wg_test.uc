@@ -712,13 +712,16 @@ t.describe('a peer write on an up interface, against logging wg and ip', () => {
 	                                  a: peer({ public_key: substr(PK, 0, 43) + '\\075', allowed_ips: [ '10.0.0.2/32' ] }),
 	                                  b: peer({ public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] }) } });
 
-	// The kernel holds the peer under the key that wireguard.sh gave wg. Both writes answered 500.
+	// The kernel holds the peer under the key that wireguard.sh gave wg. v4 (#308): LuCI's
+	// model, the stored escape blocks the PATCH, which answers 422 and changes nothing in the
+	// kernel; the DELETE path does not validate, so it removes the peer and the key wg read.
 	t.it('disables and deletes a peer whose stored key holds an escape, and removes the key that wg read', () => {
-		for (let w in [ [ "patch(c, " + CTX + ", 'a', { disabled: true })", '200' ], [ "remove(c, " + CTX + ", 'a')", '204' ] ]) {
-			let r = peer_write(escaped(), w[0], false);
-			t.assert_equal(r.result, w[1], w[0]);
-			t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), [ 'wg|set|wg1|peer|' + PK + '|remove' ], w[0]);
-		}
+		let r = peer_write(escaped(), "patch(c, " + CTX + ", 'a', { disabled: true })", false);
+		t.assert_equal(r.result, '422 validation_failed');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), []);
+		r = peer_write(escaped(), "remove(c, " + CTX + ", 'a')", false);
+		t.assert_equal(r.result, '204');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), [ 'wg|set|wg1|peer|' + PK + '|remove' ]);
 	});
 
 	// The restore after a failed write of another peer stopped at the peer with the escape.
@@ -728,10 +731,12 @@ t.describe('a peer write on an up interface, against logging wg and ip', () => {
 		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
 	});
 
-	t.it('sets a peer whose stored key holds an escape under the key that wg reads, in a PATCH of another field', () => {
+	// v4 (#308): the stored escape blocks every write of the peer, so the PATCH of another
+	// field answers 422 and sets nothing in the kernel.
+	t.it('refuses a PATCH of another field of a peer whose stored key holds an escape', () => {
 		let r = peer_write(escaped(), "patch(c, " + CTX + ", 'a', { description: 'x' })", false);
-		t.assert_equal(r.result, '200');
-		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+		t.assert_equal(r.result, '422 validation_failed');
+		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), []);
 	});
 
 	t.it('deletes a peer whose stored key gives wg two keys, and removes both', () => {
@@ -744,13 +749,14 @@ t.describe('a peer write on an up interface, against logging wg and ip', () => {
 		                    [ 'wg|set|wg1|peer|' + PK + '|remove', 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
 	});
 
-	// Its schema check read the whole patched document, which holds the stored key, so a JSON Patch
-	// answered 422 where a merge patch of the same change passed.
-	t.it('takes a JSON Patch of another field of a peer whose stored key holds an escape, and refuses one that sets such a key', () => {
+	// Its schema check read the whole patched document, which holds the stored key. v4 (#308):
+	// the stored escape blocks the JSON Patch of another field as well, so both it and one
+	// that sets such a key answer 422.
+	t.it('refuses a JSON Patch of another field of a peer whose stored key holds an escape, and one that sets such a key', () => {
 		const JCTX = "{ request_id: '01hx0000000000000000000000', json_patch: true }";
 		let r = peer_write(escaped(), "patch(c, " + JCTX + ", 'a', [ { op: 'replace', path: '/description', value: 'x' } ])", false);
-		t.assert_equal(r.result, '200');
-		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+		t.assert_equal(r.result, '422 validation_failed');
+		t.assert_deep_equal(r.commands, []);
 		let ops = [ { op: 'replace', path: '/public_key', value: substr(PK, 0, 43) + '\\075' } ];
 		r = peer_write(escaped(), sprintf("patch(c, %s, 'b', %J)", JCTX, ops), false);
 		t.assert_equal(r.result, '422 validation_failed');
