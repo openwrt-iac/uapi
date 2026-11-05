@@ -1741,9 +1741,9 @@ t.describe('handler.make_singleton object guard', () => {
 		t.assert_equal(r.body.forward, 'REJECT');
 	});
 
-	// Without the stored view, every error that validate_new() finds in the stored section
-	// counts as new, so a singleton that adopted it would refuse every write.
-	t.it('refuses only a validate_new() error that the PATCH adds', () => {
+	// v4 (#308): LuCI's model, a stored error counts for every write of the section, so a
+	// singleton that holds one refuses them all until a write fixes it.
+	t.it('refuses a write while the section holds a validate_new() error', () => {
 		let strict = handler.make_singleton({ ...defaults_mod, validate_new: (b) =>
 			(b.forward == 'REJECT') ? [ { field: 'forward', code: 'invalid_format', message: 'x' } ] : [],
 		}, {
@@ -1752,7 +1752,9 @@ t.describe('handler.make_singleton object guard', () => {
 				reload: function() { return null; }, check_services: function() { return null; },
 			},
 		});
-		t.assert_equal(strict.patch(seeded(), ctx(), { input: 'DROP' }).status, 200);
+		let r = strict.patch(seeded(), ctx(), { input: 'DROP' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'forward', 'invalid_format' ] ]);
 		let c = seeded();
 		c._state.uci.firewall.defaults.forward = 'DROP';
 		t.assert_equal(strict.patch(c, ctx(), { forward: 'REJECT' }).status, 422);
