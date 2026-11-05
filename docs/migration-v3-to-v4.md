@@ -15,6 +15,14 @@ URL from the v4 spec's `servers` block.
 
 
 
+## A `wireless/interfaces` section with no `mode` reads `null`
+
+
+wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips an absent mode as
+it skips an unknown one), so the read now answers `null` instead of `"ap"` (announced in 3.4.0,
+#307). The write side changes the same way: a `null` mode is accepted and removes the option,
+leaving a section that sets up nothing. A create or PUT that sends no mode stores none.
+
 `mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the read now answers
 `"ipv4"` instead of `null` for a section that stores none (announced in 3.4.0, #306). `family` is
 no longer in the request schema's `required`: a write may omit it, and a `null` removes the option,
@@ -33,8 +41,8 @@ that is the announced breaking part. Per-field `pattern`s keep their word, quote
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
 
 
-=======
 ## Curated string fields refuse newlines and carriage returns
+
 
 
 
@@ -48,6 +56,8 @@ that is the announced breaking part. Per-field `pattern`s keep their word, quote
 
 
 
+
+=======
 The request type of both fields is now a union of integer and string (announced in 3.4.0, #240).
 A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then
 `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422, as does
