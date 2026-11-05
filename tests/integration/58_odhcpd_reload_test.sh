@@ -133,7 +133,7 @@ echo "--- a /batch PATCH of ra reloads odhcpd, and its 207 names it ---"
 mark batch
 hdrs=$(mktemp)
 status=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{"operations":[{"path":"/dhcp/servers/tdhcp6","method":"PATCH","body":{"ra":"server"}}]}')
+	-X POST "$URL/uapi/batch" -d '{"operations":[{"path":"/dhcp/servers/tdhcp6","method":"PATCH","body":{"ra":"server"}}]}')
 services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
 rm -f "$hdrs"
 [ "$status" = "207" ] || fail "batch expected 207, got $status"
@@ -184,7 +184,7 @@ await_ndp "the raw network PATCH" "$(printf '%s\n' "$body" | jq -c '.reload_serv
 mark batch_network
 hdrs=$(mktemp)
 status=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/batch" -d '{"operations":[{"path":"/network/interfaces/tdhcp6","method":"PATCH","body":{"metric":7}}]}')
+	-X POST "$URL/uapi/batch" -d '{"operations":[{"path":"/network/interfaces/tdhcp6","method":"PATCH","body":{"metric":7}}]}')
 services=$(grep -i '^X-Reload-Services:' "$hdrs" | tr -d '\r' || true)
 rm -f "$hdrs"
 [ "$status" = "207" ] || fail "network batch expected 207, got $status"
