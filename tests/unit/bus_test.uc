@@ -747,22 +747,42 @@ t.describe('bus.connect, a write that changes nothing commits nothing', () => {
 		assert_noop(patch(c, [ { op: "test", path: "/public_key", value: fx.WG_PUB } ], { json_patch: true }));
 	});
 
+	// The seeds that store values validate_new() refuses: v4 (#308) answers 422 for a write of
+	// their read, with these errors, instead of committing nothing.
+	const STORED_ERRORS = {
+		"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
+		                           "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
+		"snmpd.accesses.uc/ac1": [ "notify required", "write required" ],
+	};
 	// A PUT stores some reads in another form, such as a default that the seed does not hold, a list
 	// that uci holds as an option, a number in hex or a legacy option name, so the PUT of the read
 	// after it is the one that must commit nothing. A first one that leaves uci as it was commits
 	// nothing either.
 	for (let c in fx.CASES)
 		t.it(sprintf("a %s of the read of %s, and of the read after it", c.singleton ? "PATCH" : "PUT", c.file + "/" + c.id), () => {
-			assert_noop(run(c, function(h, conn, disk) {
+			let w = run(c, function(h, conn, disk) {
 				let seed = json(sprintf("%J", disk.files));
 				let first = write_read(h, conn, c);
+				if (first.status == 422) {
+					// v4 (#308): LuCI's model, the seed stores values that validate_new()
+					// refuses, so the write of the read answers 422 naming them all.
+					t.assert_equal(first.body.code, "validation_failed");
+					t.assert_deep_equal(sort(map(first.body.errors, (e) => e.field + " " + e.code)),
+					                    sort(STORED_ERRORS[c.file + "/" + c.id] ?? []), sprintf("%J", first.body));
+					return first;
+				}
 				t.assert_equal(first.status, 200, first.body);
 				if (ph.json_eq(disk.files, seed)) t.assert_equal(disk.commits, null);
 				disk.commits = null;
 				reloaded = [];
 				kernel_ops = [];
 				return write_read(h, conn, c);
-			}));
+			});
+			if (w.r.status == 422) {
+				t.assert_equal(w.disk.commits, null);
+				t.assert_deep_equal(reloaded, []);
+				t.assert_deep_equal(kernel_ops, []);
+			} else assert_noop(w);
 		});
 
 	// LuCI's flags store nothing for their default, and a POST stores no field that it leaves out.

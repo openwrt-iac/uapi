@@ -565,11 +565,15 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                    [ 'r0kh[0]' ]);
 	});
 
-	t.it('a stored ssid with a single quote blocks only a write that enables it or moves it to a shell mode', () => {
+	// v4 (#308): LuCI's model, a stored ssid with a single quote blocks every write of the
+	// section in a shell mode, not only the ones that enable it or move it there.
+	t.it('a stored ssid with a single quote blocks every write while it is stored', () => {
 		let c = stored({ mode: 'monitor', ssid: "Bob's" });
 		t.assert_equal(length(h().sweep(c)), 1);
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: "Bob's" }).status, 200);
-		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: "Bob's" });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'ssid', 'invalid_format' ] ]);
+		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 422);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'ssid' ]);
 		c = stored({ ssid: "Bob's" });
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'mesh' }).body.errors, (e) => e.field), [ 'ssid' ]);
@@ -588,17 +592,18 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad' ] }).status, 200);
 	});
 
-	// A write is never refused for a value that it leaves alone, so disabling an injected SSID, the
-	// write that stops the injection, passes. The sweep lists the SSID whether it is enabled or not,
-	// and enabling it again is refused until a write replaces the value.
-	t.it('a stored injection is listed by the sweep and blocks only the write that enables it', () => {
-		for (let extra in [ { key: 'abcdefgh\nssid2="x"' }, { nasid: 'ap1\nx=1' },
-		                    { encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0',
-		                      r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] } ]) {
-			let c = stored(extra);
+	// v4 (#308): LuCI's model, a stored injection blocks every write of the section, not only
+	// the one that enables it. The sweep lists it whether it is enabled or not.
+	t.it('a stored injection is listed by the sweep and blocks every write of the section', () => {
+		for (let p in [ [ { key: 'abcdefgh\nssid2="x"' }, 'key' ], [ { nasid: 'ap1\nx=1' }, 'nasid' ],
+		                [ { encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0',
+		                    r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 + '\nx=1' ] }, 'r1kh[0]' ] ]) {
+			let c = stored(p[0]);
 			t.assert_equal(length(h().sweep(c)), 1);
-			t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
-			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 200);
+			let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+			t.assert_equal(r.status, 422, r.body);
+			t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ p[1] ]);
+			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: true }).status, 422);
 			t.assert_equal(length(h().sweep(c)), 1);
 			t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 		}
@@ -609,15 +614,20 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { nasid: bytes(1100) }).body.errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'nasid', 'out_of_range' ], [ 'nasid', 'out_of_range' ] ]);
 		c = stored({ disabled: '1', encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ 'bad' ] });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'r0kh[0]' ]);
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 	});
 
-	// A value that the daemon does not read yet makes no trouble until a write makes it read: by
-	// changing the encryption, the mode, or turning the key holder lists on.
-	t.it('a write that makes a stored injection live is refused', () => {
+	// A value that the daemon does not read yet still blocks every write of the section while
+	// it is stored (v4, #308), and a write that makes it live is refused as before: by changing
+	// the encryption, the mode, or turning the key holder lists on.
+	t.it('a write that makes a stored injection live is refused, and so is any other while it is stored', () => {
 		let c = stored({ encryption: 'none', key: 'abcdefgh\nssid2="x"' });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'key' ]);
 		t.assert_equal(h().patch(c, CTX, 'w1', { encryption: 'psk2' }).status, 422);
 		c = stored({ mode: 'sta', nasid: 'ap1\nx=1' });
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap' }).status, 422);
@@ -626,29 +636,35 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	});
 
 	// wifi-scripts writes mobility_domain with fast roaming on, and r1_key_holder with the key
-	// holder lists too.
-	t.it('a stored newline in an 802.11r option is refused once hostapd reads it', () => {
+	// holder lists too. v4 (#308): the stored newline blocks every write while it is stored.
+	t.it('a stored newline in an 802.11r option is refused once hostapd reads it, and before too', () => {
 		let c = stored({ encryption: 'sae', mobility_domain: 'abcd\nssid2="x"' });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_equal(r.body.errors[0].field, 'mobility_domain');
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'mobility_domain', 'invalid_format' ] ]);
 		c = stored({ ieee80211r: '1', r1_key_holder: bytes(1025) });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false }).body.errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'r1_key_holder', 'out_of_range' ], [ 'r1_key_holder', 'invalid_format' ] ]);
 	});
 
 	// ap.uc writes mobility_domain as erp_domain on an EAP SSID with fils, which uapi does not model.
-	t.it('a stored newline in mobility_domain is live on an EAP access point without 802.11r', () => {
+	t.it('a stored newline in mobility_domain blocks every write of an EAP access point without 802.11r', () => {
 		let c = stored({ disabled: '1', encryption: 'wpa2', mobility_domain: 'abcd\nssid2="x"' });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 	});
 
 	// erp_domain takes any domain, so only the mobility domain of 802.11r needs 4 hex digits.
-	t.it('a stored mobility_domain in another form blocks an EAP access point only with 802.11r', () => {
+	// v4 (#308): the stored other form blocks every write meanwhile, and the sweep still
+	// reports it as not live without 802.11r.
+	t.it('a stored mobility_domain in another form blocks every write of an EAP access point', () => {
 		let c = stored({ disabled: '1', encryption: 'wpa2', mobility_domain: 'xyz' });
-		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { disabled: false });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'mobility_domain', 'invalid_format' ] ]);
 		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code, e.live ]),
 		                    [ [ 'mobility_domain', 'invalid_format', false ] ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => [ e.field, e.code ]),
@@ -659,7 +675,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	t.it('a text option that uci holds as a list is checked as its joined entries', () => {
 		let c = stored({ disabled: '1', nasid: [ 'ap1', 'x\nssid2="x"' ] });
 		t.assert_equal(length(h().sweep(c)), 1);
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'nasid' ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
 		let eight = [ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'x\nssid2="x"' ];
 		t.assert_deep_equal(map(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).body.errors,
@@ -685,10 +703,13 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	});
 
 	// netifd reads a list held as an option as its words, so a PATCH that sends those words as a
-	// list leaves the value as it is.
-	t.it('a list with the words of a stored option is the same value', () => {
+	// list leaves the value as it is, and v4 (#308) still refuses the write for the stored
+	// entry that the words hold.
+	t.it('a list with the words of a stored option is the same value, and is refused all the same', () => {
 		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: 'ff:ff:ff:ff:ff:ff,*,' + H32 + ' bad' });
-		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ] }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ] });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'r0kh[1]', 'invalid_format' ] ]);
 	});
 
 	// wifi-scripts writes each entry as a line, so joining two entries changes what hostapd reads:
@@ -699,38 +720,47 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ inj + ' bbbbbbbb' ] }).status, 422);
 	});
 
-	// The handler compares the errors of the SSID before and after the write, so a stored error that
-	// the write leaves as it is never blocks it, whichever field the write names.
-	t.it('a write is not refused for a stored error that it leaves as it is', () => {
+	// v4 (#308): LuCI's model, a stored error blocks every write of the section, whichever
+	// field the write names.
+	t.it('a write is refused for a stored error that it leaves as it is', () => {
 		let c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0', r0kh: [ 'bad' ] });
-		t.assert_equal(h().patch(c, CTX, 'w1', { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 ] }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 ] });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'r0kh[0]', 'invalid_format' ] ]);
 		c = stored({ encryption: 'sae', ieee80211r: '1', nasid: bytes(49) });
-		t.assert_equal(h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'sae', ieee80211r: true,
-		                                           nasid: bytes(49), disabled: true }).status, 200);
+		let rep = h().replace(c, CTX, 'w1', { device: 'radio0', ssid: 'home', encryption: 'sae', ieee80211r: true,
+		                                       nasid: bytes(49), disabled: true });
+		t.assert_equal(rep.status, 422, rep.body);
+		t.assert_deep_equal(map(rep.body.errors, (e) => [ e.field, e.code ]), [ [ 'nasid', 'out_of_range' ] ]);
 	});
 
-	// An error that the field already had is new when the write changes the field, so swapping one
-	// injection for another is refused, and one error cannot hide another that the write adds.
+	// An error that the field already had is refused along with the one the write adds, so
+	// swapping one injection for another is refused, and one error cannot hide another.
 	t.it('a write that changes a field with an error, or adds a second error to it, is refused', () => {
 		let c = stored({ key: 'abcdefgh\nfoo=1' });
 		t.assert_equal(h().patch(c, CTX, 'w1', { key: 'abcdefgh\nssid2="evil"' }).status, 422);
 		c = stored({ disabled: '1', nasid: 'ap1\nx=1' });
 		t.assert_equal(h().patch(c, CTX, 'w1', { nasid: 'ap1\nssid2="evil"' }).status, 422);
 		c = stored({ encryption: 'sae', nasid: bytes(60) + '\nx=1' });
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => e.code), [ 'out_of_range' ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ieee80211r: true }).body.errors, (e) => e.code),
+		                    [ 'invalid_format', 'out_of_range' ]);
 		c = stored({ encryption: 'sae', ieee80211r: '1', ft_psk_generate_local: '0',
 		             r0kh: [ 'ff:ff:ff:ff:ff:ff,*,' + H32, 'bad' ], r1kh: [ '00:00:00:00:00:00,00:00:00:00:00:00,' + H32 ] });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 422);
 		t.assert_equal(h().patch(c, CTX, 'w1', { r0kh: [ 'bad', 'ff:ff:ff:ff:ff:ff,*,' + H32 ] }).status, 422);
 	});
 
-	t.it('a long stored nasid blocks the writes that turn fast transition on, and no other', () => {
+	// v4 (#308): the long stored nasid blocks every write of the section, not only the ones
+	// that turn fast transition on.
+	t.it('a long stored nasid blocks every write of the section', () => {
 		let c = stored({ ieee80211r: '1', nasid: bytes(49) });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'nasid', 'out_of_range' ] ]);
 		t.assert_equal(length(h().sweep(c)), 1);
 		let body = read_back(c);
 		body.disabled = true;
-		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
+		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 422);
 		t.assert_equal(c._state.uci.wireless.w1.nasid, bytes(49));
 		t.assert_equal(h().patch(c, CTX, 'w1', { disabled: false }).status, 422);
 	});
@@ -766,7 +796,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(live({ mode: 'wds', disabled: true }, 'mode'), [ false ]);
 		let c = stored({ mode: 'wds', disabled: '1' });
 		t.assert_equal(read_back(c).mode, 'wds');
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2' }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'mode' ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'mode' ]);
 		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap', disabled: false }).status, 200);
 	});
@@ -781,7 +813,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		for (let b in [ { mode: 'monitor' }, { mode: 'mesh' }, { mode: 'ap', disabled: true } ])
 			t.assert_deep_equal(live({ ...b, ssid: bytes(33) }, 'ssid'), [ false ], b);
 		let c = stored({ mode: 'mesh', ssid: bytes(40) });
-		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: bytes(40) }).status, 200);
+		let r = h().patch(c, CTX, 'w1', { ssid: bytes(40) });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'ssid' ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'ap' }).body.errors, (e) => e.field), [ 'ssid' ]);
 	});
 
@@ -893,7 +927,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(length(h().sweep(c)), 1);
 		let body = read_back(c);
 		body.ssid = 'home2';
-		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
+		let rep = h().replace(c, CTX, 'w1', body);
+		t.assert_equal(rep.status, 422, rep.body);
+		t.assert_deep_equal(map(rep.body.errors, (e) => e.field), [ 'reassociation_deadline' ]);
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'reassociation_deadline' ]);
 	});
 
@@ -905,17 +941,21 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	});
 
 	// The form of mobility_domain and r1_key_holder was a schema pattern, which a PUT or a JSON Patch
-	// checked on a stored value that it kept, and which hid a newline in the sweep.
-	t.it('a write keeps a stored mobility_domain or r1_key_holder in another form until hostapd reads it', () => {
+	// checked on a stored value that it kept, and which hid a newline in the sweep. v4 (#308): the
+	// stored other form blocks every write of the section meanwhile.
+	t.it('a write is refused for a stored mobility_domain or r1_key_holder in another form', () => {
 		let c = stored({ encryption: 'sae', mobility_domain: 'xyz', r1_key_holder: 'xyz', disabled: '1' });
 		let body = read_back(c);
 		body.ssid = 'home2';
-		t.assert_equal(h().replace(c, CTX, 'w1', body).status, 200);
-		t.assert_equal(h().patch(c, { ...CTX, json_patch: true }, 'w1', [ { op: 'replace', path: '/ssid', value: 'home3' } ]).status, 200);
-		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 200);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false, disabled: false }).body.errors,
-		                        (e) => [ e.field, e.code ]),
-		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
+		let rep = h().replace(c, CTX, 'w1', body);
+		t.assert_equal(rep.status, 422, rep.body);
+		t.assert_deep_equal(sort(map(rep.body.errors, (e) => e.field + ' ' + e.code)),
+		                    sort([ 'mobility_domain invalid_format', 'r1_key_holder invalid_format' ]));
+		t.assert_equal(h().patch(c, { ...CTX, json_patch: true }, 'w1', [ { op: 'replace', path: '/ssid', value: 'home3' } ]).status, 422);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ieee80211r: true }).status, 422);
+		t.assert_deep_equal(sort(map(h().patch(c, CTX, 'w1', { ft_psk_generate_local: false, disabled: false }).body.errors,
+		                        (e) => e.field + ' ' + e.code)),
+		                    sort([ 'mobility_domain invalid_format', 'r1_key_holder invalid_format' ]));
 		c = stored({ mobility_domain: '4f5\n', r1_key_holder: '02aabbccdde\n' });
 		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
@@ -949,22 +989,29 @@ t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
 		t.assert_equal(c._state.uci.wireless.radio0.channel, '6');
 	});
 
-	t.it('refuses a number outside its range on write, and keeps a stored one that a write leaves alone', () => {
+	// v4 (#308): the stored out-of-range value blocks every write of the radio until one
+	// replaces it, not only a write of that field.
+	t.it('refuses a number outside its range on write, and refuses a write that leaves a stored one alone', () => {
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', txpower: 40 }).status, 422);
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', radio: -1 }).status, 422);
 		let c = radio({ txpower: '40' });
-		t.assert_equal(h.patch(c, ctx, 'radio0', { disabled: true }).status, 200);
+		let r = h.patch(c, ctx, 'radio0', { disabled: true });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'txpower', 'out_of_range' ] ]);
 		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 41 }).status, 422);
 		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 20 }).status, 200);
 	});
 
 	// A 6 GHz radio on channel 233 comes up, and so does a radio with a power above 30, which iw
 	// clamps. Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc.
-	t.it('enables a radio that stores a value outside the write range, unless wifi-scripts stops it', () => {
-		for (let opts in [ { band: '6g', channel: '233', disabled: '1' }, { txpower: '40', disabled: '1' } ])
-			t.assert_equal(h.patch(radio(opts), ctx, 'radio0', { disabled: false }).status, 200, sprintf("%J", opts));
+	// v4 (#308): the stored values block every write of the radio meanwhile.
+	t.it('refuses a write while the radio stores a value outside the write range, unless wifi-scripts stops it', () => {
+		t.assert_equal(h.patch(radio({ band: '6g', channel: '233', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 200);
+		let r = h.patch(radio({ txpower: '40', disabled: '1' }), ctx, 'radio0', { disabled: false });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'txpower', 'out_of_range' ] ]);
 		let c = radio({ cell_density: '4', disabled: '1' });
-		t.assert_equal(h.patch(c, ctx, 'radio0', { channel: 6 }).status, 200);
+		t.assert_equal(h.patch(c, ctx, 'radio0', { channel: 6 }).status, 422);
 		t.assert_deep_equal(map(h.patch(c, ctx, 'radio0', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
 		                    [ [ 'cell_density', 'out_of_range' ] ]);
 	});
@@ -998,34 +1045,40 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 		return map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
 	}
 
-	t.it('an SSID on a disabled or missing radio takes an enable, and still refuses a new bad value', () => {
+	// v4 (#308): the stored bad value blocks the enable too, on a disabled or missing radio
+	// as anywhere else, and a new bad value is refused as well.
+	t.it('an SSID on a disabled or missing radio is refused while it holds a bad value, and still refuses a new one', () => {
 		for (let dev in [ 'radio1', 'radio9', 'w0' ]) {
 			let c = box({ disabled: '1' }, { w0: ssid({ device: 'radio0' }), w1: ssid({ device: dev, disabled: '1', key: INJECTED }) });
-			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, 200, dev);
+			let r = ifaces.patch(c, ctx, 'w1', { disabled: false });
+			t.assert_equal(r.status, 422, dev);
+			t.assert_deep_equal(fields(r), [ [ 'key', 'invalid_format' ] ], dev);
 			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { key: 'abcdefgh\nssid3="y"' })),
 			                    [ [ 'key', 'invalid_format' ] ], dev);
 		}
 	});
 
-	t.it('moving an SSID with a stored bad value onto an enabled radio is refused, and off it is not', () => {
+	t.it('moving an SSID with a stored bad value is refused, onto an enabled radio or off it', () => {
 		for (let dev in [ 'radio1', 'radio9' ]) {
 			let c = box({ disabled: '1' }, { w1: ssid({ device: dev, key: INJECTED }) });
 			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: 'radio0' })), [ [ 'key', 'invalid_format' ] ], dev);
 			t.assert_equal(c._state.uci.wireless.w1.device, dev);
 		}
 		let c = box({ disabled: '1' }, { w1: ssid({ device: 'radio0', key: INJECTED }) });
-		t.assert_equal(ifaces.patch(c, ctx, 'w1', { device: 'radio1' }).status, 200);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { device: 'radio1' }).status, 422);
 	});
 
-	t.it('an SSID that names several radios, as words or as a list, counts while one of them is enabled', () => {
-		for (let p in [ [ 'radio1 radio0', 422 ], [ [ 'radio1', 'radio0' ], 422 ], [ 'radio1 radio9', 200 ] ]) {
-			let c = box({ disabled: '1' }, { w1: ssid({ device: p[0], disabled: '1', key: INJECTED }) });
-			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, p[1], p[0]);
+	t.it('an SSID that names several radios, as words or as a list, is refused while it holds a bad value', () => {
+		for (let p in [ 'radio1 radio0', [ 'radio1', 'radio0' ], 'radio1 radio9' ]) {
+			let c = box({ disabled: '1' }, { w1: ssid({ device: p, disabled: '1', key: INJECTED }) });
+			let r = ifaces.patch(c, ctx, 'w1', { disabled: false });
+			t.assert_equal(r.status, 422, p);
+			t.assert_deep_equal(fields(r), [ [ 'key', 'invalid_format' ] ], p);
 		}
 	});
 
 	t.it('reads the disabled option of the radio as netifd does', () => {
-		for (let p in [ [ 'true', 200 ], [ '0', 422 ], [ 'yes', 422 ] ]) {
+		for (let p in [ [ 'true', 422 ], [ '0', 422 ], [ 'yes', 422 ] ]) {
 			let c = box({ disabled: p[0] }, { w1: ssid({ disabled: '1', key: INJECTED }) });
 			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, p[1], p[0]);
 		}
@@ -1098,9 +1151,15 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 		// A list indexes no handler in netifd either.
 		for (let none in [ null, [ 'mac80211' ] ]) {
 			let c = box({ type: none }, { w0: ssid({ device: 'radio0' }), w1: ssid({ disabled: '1', key: INJECTED }) });
-			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, 200, none);
-			t.assert_deep_equal(fields(radios.patch(c, ctx, 'radio1', { type: 'mac80211' })), [ [ 'disabled', 'conflict' ] ], none);
-			t.assert_deep_equal(c._state.uci.wireless.radio1.type, none, none);
+			// v4 (#308): the stored key blocks the enable even though the radio counts as off.
+			let r = ifaces.patch(c, ctx, 'w1', { disabled: false });
+			t.assert_equal(r.status, 422, none);
+			t.assert_deep_equal(fields(r), [ [ 'key', 'invalid_format' ] ], none);
+			// The radio write turns it on; w1 is still disabled, so no SSID of it is checked.
+			let rr = radios.patch(c, ctx, 'radio1', { type: 'mac80211' });
+			t.assert_equal(rr.status, 200, none);
+			t.assert_deep_equal(fields(rr), [], none);
+			t.assert_equal(c._state.uci.wireless.radio1.type, 'mac80211', none);
 			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: 'radio0' })), [ [ 'key', 'invalid_format' ] ], none);
 		}
 		let c = box({ type: null }, { w1: ssid({ key: INJECTED }) });
