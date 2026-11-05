@@ -1300,5 +1300,30 @@ function make_collection(resource) {
 	};
 }
 
-return { make, make_singleton, make_collection, translate_tx, load_section,
+// A non-uci resource (apk packages, feeds, ssh keys, cron jobs, the root password)
+// declares its verbs as functions of (ctx, conn, arg) that return full responses,
+// plus list_fn returning the items array. Verbs it does not declare come back
+// null, and the route answers them 405 through na().
+function make_nonuci(resource) {
+	function na(ctx, method, id) {
+		return errors.error(ctx, "method_not_allowed",
+			sprintf("Method %J not allowed on %s%s", method, resource.path,
+			        id != null ? "/" + resource.id_noun : ""));
+	}
+	function wrap(fn) {
+		if (fn == null) return null;
+		return function(conn, ctx, arg) { return fn(ctx, conn, arg); };
+	}
+	return {
+		list:    resource.list_fn != null
+			? function(conn, ctx, query) { return errors.ok(ctx, resource.list_fn(ctx, conn)); } : null,
+		get_one: wrap(resource.get_fn),
+		create:  wrap(resource.create_fn),
+		replace: wrap(resource.replace_fn),
+		remove:  wrap(resource.remove_fn),
+		na,
+	};
+}
+
+return { make, make_singleton, make_collection, make_nonuci, translate_tx, load_section,
          check_schema_types };
