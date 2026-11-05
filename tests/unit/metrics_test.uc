@@ -203,8 +203,7 @@ t.describe('metrics, a directory that is not uapi\'s own', () => {
 t.describe('metrics.path_label', () => {
 	let routes = {
 		labels: { "/firewall/rules": true, "/firewall/rules/:id": true,
-		          "/tokens/:id": true },
-		          "/firewall/rules/:id/adopt": true, "/uapi/tokens/:id": true },
+		          "/uapi/tokens/:id": true },
 		raw_package: (p) => p == "firewall",
 	};
 	function label(path) {
@@ -215,8 +214,6 @@ t.describe('metrics.path_label', () => {
 		t.assert_equal(label("/firewall/rules/r_01ABC"), "/firewall/rules/:id");
 		// v4 (#321): the adopt route is gone, so its path reads as unmatched.
 		t.assert_equal(label("/firewall/rules/r_01ABC/adopt"), "unmatched");
-		t.assert_equal(label("/tokens/run_1"), "/tokens/:id");
-		t.assert_equal(label("/firewall/rules/r_01ABC/adopt"), "/firewall/rules/:id/adopt");
 		t.assert_equal(label("/uapi/tokens/run_1"), "/uapi/tokens/:id");
 		t.assert_equal(label("/raw/firewall/cfg01"), "/raw/firewall/:id");
 	});

@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Changed
 
 - **BREAKING: the last `normalize_bool` readers now follow the platform's blob converter.** `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the `usteer/config` booleans read with `platform_bool`: the uci blob converter takes only `1`/`true` and `0`/`false` (libuci `66127cd`), so `on`/`yes`/`enabled` now read `false` instead of `true`. Fields whose daemon takes the wider set (fw4 `parse_bool`, libvalidate `:bool:` for dropbear's auth flags) keep `normalize_bool`. Announced in 3.4.0 (#310, evidence #312, ubox `6f78fa4`); migration note in `docs/migration-v3-to-v4.md`. (#348)
+- **BREAKING: the special endpoints move under `/uapi/...`.** `/tokens` (and `/tokens/<id>`), `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami` become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and `/uapi/whoami`, matching the scopes that already existed. The scopes are unchanged, the public trio `/healthz`, `/openapi.json`, `/schema/*` stays at the top level, the old top-level paths answer 404, and the Prometheus `path` labels move with them. Announced in 3.4.1 (#319); migration note in `docs/migration-v3-to-v4.md`. (#352)
 
 ### Changed
 
