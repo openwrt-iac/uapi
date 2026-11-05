@@ -837,7 +837,7 @@ function make(resource, opts) {
 		return paginate(ctx, out, query);
 	}
 
-	function get_one(conn, ctx, id) {
+	function get_one(conn, ctx, id, query) {
 		let s = load_section(conn, pkg, id);
 		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
@@ -1233,13 +1233,15 @@ function make_collection(resource) {
 		return paginate(ctx, resource.list_fn(conn, query), query, resource.cursor_field ?? resource.id_field);
 	}
 
-	function get_one(conn, ctx, id) {
-		if (resource.id_field == null)
+	function get_one(conn, ctx, id, query) {
+		// id_field may depend on the query (dhcp/leases: mac for v4, ip for v6).
+		let idf = (type(resource.id_field) == "function") ? resource.id_field(query) : resource.id_field;
+		if (idf == null)
 			return method_not_allowed(ctx, "individual lookup");
-		for (let item in resource.list_fn(conn))
-			if (item[resource.id_field] == id) return errors.ok(ctx, item);
+		for (let item in resource.list_fn(conn, query))
+			if (item[idf] == id) return errors.ok(ctx, item);
 		return errors.error(ctx, "not_found",
-		                    sprintf("No %s with %s=%J", sec_type, resource.id_field, id));
+		                    sprintf("No %s with %s=%J", sec_type, idf, id));
 	}
 
 	return {

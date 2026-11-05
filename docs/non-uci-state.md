@@ -13,8 +13,7 @@ The bar for adding to category 1 is high. New non-uci resources should justify t
 |---|---|---|---|---|
 | `packages/installed` | apk DB (`apk add`/`del` shell-out) | `with_lock` on global | none | postinst runs as root; package's responsibility to wire its own uci/init scripts |
 | `packages/feeds` | `/etc/apk/repositories.d/*.list` + `apk update` | `with_lock` on global | none | url-validated, name-validated |
-| `dhcp/leases` | `/tmp/dhcp.leases` (parse) | none (read-only) | n/a | dnsmasq IPv4 leases |
-| `dhcp/leases6` | the `leasefile` of odhcpd, `/tmp/odhcpd.leases` by default | none (read-only) | n/a | odhcpd IPv6 leases |
+| `dhcp/leases` | `/tmp/dhcp.leases` (v4), the `leasefile` of odhcpd, `/tmp/odhcpd.leases` by default (v6, via `?family=v6`) | none (read-only) | n/a | dnsmasq IPv4 and odhcpd IPv6 leases |
 | `network/wireguard_kernel_peers` | `wg show <iface> dump` (parse) | none (read-only) | n/a | kernel wg peers that no uci section claims |
 | `system/password` | `/bin/busybox passwd <user>` (stdin pipe) | `with_lock` on global | none | write-only; audit logs token+user, never the password |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (mode 0600) | `with_lock` on global for writes; reads lock-free | none | dropbear re-reads the file per connection |
@@ -44,18 +43,18 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 
 ### `dhcp/leases` (read-only)
 
-- **Source of truth.** `/tmp/dhcp.leases` (the dnsmasq lease dump).
+- **Source of truth.** `/tmp/dhcp.leases` (the dnsmasq lease dump) for IPv4. `?family=v6` reads the IPv6 leases of odhcpd, see below (merged in v4, #320).
 - **Lock.** None; reads only.
-- **Format.** Space-separated lines: `<expires_at> <mac> <ip> <hostname> <duid?>`.
+- **Format.** Space-separated lines `<expires_at> <mac> <ip> <hostname> <duid?>`.
 - **Why not uci.** Active leases are runtime state, by definition not in `/etc/config/`.
 
-### `dhcp/leases6` (read-only)
+### `dhcp/leases?family=v6` (read-only)
 
 - **Source of truth.** The `leasefile` of each `config odhcpd` section in `/etc/config/dhcp`, or `/tmp/odhcpd.leases` when no section sets one, as rpcd-mod-luci reads it for LuCI.
 - **Lock.** None; reads only.
 - **Format.** odhcpd writes one line for each lease: `# <device> <duid> <iaid> <hostname> <valid until> <id> <length> <address>/<length> [...]`, the same in 25.12 and on OpenWrt main. A length of 128 is an address (`IA_NA`), any other a delegated prefix (`IA_PD`). The read gives one entry for each address or prefix. It skips the line of a DHCPv4 lease that odhcpd serves, which has `ipv4` for the iaid, the hosts lines, and any line whose fields do not parse, as a client hostname can make them. `interface` is the device that odhcpd names, for example `br-lan`. `dhcp/servers` counts the leases of its interface, a lease of several addresses once, through the `l3_device` that netifd reports for it. Two uci interfaces on one device count each other's leases.
-- **Pagination.** The cursor of a page is the `ip` of its last entry, for `dhcp/leases` too: dnsmasq can hold two leases for one MAC, and holds one lease for each address.
-- **Why not uci.** Same as `dhcp/leases`; runtime state.
+- **Pagination.** The cursor of a page is the `ip` of its last entry, for the IPv4 leases too: dnsmasq can hold two leases for one MAC, and holds one lease for each address.
+- **Why not uci.** Same as the IPv4 leases; runtime state.
 
 ### `network/wireguard_kernel_peers` (read-only)
 

@@ -50,7 +50,7 @@ t.describe('handler.make_collection, list', () => {
 	function fixture(items) {
 		let mod = {
 			package: "dhcp", type: "lease", id_field: "mac",
-			list_fn: function() { return items; },
+			list_fn: function(conn, query) { return items; },
 		};
 		return handler.make_collection(mod);
 	}
@@ -86,7 +86,7 @@ t.describe('handler.make_collection, list', () => {
 		let v4 = [ { mac: "aa:bb:cc:00:00:01", ip: "192.168.1.10" }, { mac: "aa:bb:cc:00:00:01", ip: "192.168.1.11" },
 		           { mac: "aa:bb:cc:00:00:02", ip: "192.168.1.12" } ];
 		t.assert_deep_equal(pages(leases_mod, v4), [ [ "192.168.1.10" ], [ "192.168.1.11" ], [ "192.168.1.12" ] ]);
-		t.assert_deep_equal(pages(loadfile('src/resources/dhcp.leases6.uc')(), [ { ip: "fd99:6::b" }, { ip: "fd99:6::c" } ]),
+		t.assert_deep_equal(pages(leases_mod, [ { ip: "fd99:6::b" }, { ip: "fd99:6::c" } ]),
 		                    [ [ "fd99:6::b" ], [ "fd99:6::c" ] ]);
 	});
 });
@@ -95,7 +95,7 @@ t.describe('handler.make_collection, get_one', () => {
 	function fixture(items, id_field) {
 		let mod = {
 			package: "dhcp", type: "lease", id_field: id_field,
-			list_fn: function() { return items; },
+			list_fn: function(conn, query) { return items; },
 		};
 		return handler.make_collection(mod);
 	}
@@ -123,7 +123,7 @@ t.describe('handler.make_collection, get_one', () => {
 t.describe('handler.make_collection, write methods all return 405', () => {
 	let h = handler.make_collection({
 		package: "dhcp", type: "lease", id_field: "mac",
-		list_fn: function() { return []; },
+		list_fn: function(conn, query) { return []; },
 	});
 	let c = bus.stub();
 
