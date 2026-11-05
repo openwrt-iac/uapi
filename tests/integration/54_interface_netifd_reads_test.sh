@@ -129,9 +129,12 @@ r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uap
 [ "$(status "$r")" = 200 ] && [ "$(stored uapi54w)" = "	option ip6prefix 'fd54:3::/48'" ] \
 	|| fail "a PUT of the read did not write one prefix as a scalar: $r $(stored uapi54w)"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" \
-	-d '{"ip6prefix":"fd54:3::/48 fd54:4::/48"}')
+	-d '{"ip6prefix":["fd54:3::/48","fd54:4::/48"]}')
 [ "$(status "$r")" = 200 ] && [ "$(stored uapi54w | grep -c "list ip6prefix")" = 2 ] \
-	|| fail "a string of two prefixes was not stored as a list: $r $(stored uapi54w)"
+	|| fail "an array of two prefixes was not stored as a list: $r $(stored uapi54w)"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" \
+	-d '{"ip6prefix":"fd54:3::/48 fd54:4::/48"}')
+[ "$(status "$r")" = 422 ] || fail "a string ip6prefix was not refused on v4: $r"
 sweep=$(body "$(call "$URL/diagnostics?validate=1")")
 printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi54") | not' >/dev/null \
 	|| fail "the sweep flagged a section with a list ip6prefix: $sweep"

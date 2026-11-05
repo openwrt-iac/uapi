@@ -2064,10 +2064,13 @@ t.describe('handler writes network/interfaces.ip6prefix as a list', () => {
 		t.assert_equal(put_read(two).status, 200);
 		t.assert_deep_equal(two._state.uci.network.wg9.ip6prefix, [ 'fd00:9::/48', 'fd00:8::/48' ]);
 	});
-	t.it('a string of two prefixes is stored as a list', () => {
+	t.it('a string of two prefixes is refused with 422 invalid_type', () => {
 		let c = seeded(null);
-		t.assert_equal(ifaces.patch(c, cx(), 'wg9', { ip6prefix: 'fd00:9::/48 fd00:8::/48' }).status, 200);
-		t.assert_deep_equal(c._state.uci.network.wg9.ip6prefix, [ 'fd00:9::/48', 'fd00:8::/48' ]);
+		let r = ifaces.patch(c, cx(), 'wg9', { ip6prefix: 'fd00:9::/48 fd00:8::/48' });
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.errors[0].code, "invalid_type");
+		t.assert_equal(r.body.errors[0].field, "ip6prefix");
+		t.assert_equal(c._state.uci.network.wg9.ip6prefix, null);
 	});
 	t.it('the sweep does not flag a stored list', () => {
 		t.assert_deep_equal(ifaces.sweep(seeded([ 'fd00:9::/48', 'fd00:8::/48' ])), []);
