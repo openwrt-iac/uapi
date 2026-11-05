@@ -245,19 +245,21 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		});
 	}
 
-	// The handler compares the errors of the peer before and after the write, so a merge PATCH that
-	// leaves a stored host or key as it is is never refused for it by validation, and the sweep lists
-	// the peer whether it is enabled or not. Enabling it is refused until a write replaces the value.
-	// A PUT still carries a stored key into the schema check, as on main.
-	t.it('a stored broken host or key blocks only the write that enables the peer', () => {
+	// v4 (#308): LuCI's model, a merge PATCH that leaves a stored host or key as it is is
+	// refused for it all the same, and the sweep lists the peer whether it is enabled or not.
+	// Enabling it is refused until a write replaces the value.
+	t.it('a stored broken host or key blocks every write of the peer', () => {
 		for (let extra in [ { endpoint_host: '[fd00::1]' }, { endpoint_host: '192.0.2.1\\n[Peer]' },
 		                    { preshared_key: 'K\\n[Peer]' } ]) {
 			let c = with_wg();
-			for (let k, v in extra) c._state.uci.network.g_existing[k] = v;
+			let field = null;
+			for (let k, v in extra) { c._state.uci.network.g_existing[k] = v; field = k; }
 			let h = make_handler();
 			t.assert_equal(length(h.sweep(c)), 1, extra);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200, extra);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200, extra);
+			let r = h.patch(c, ctx(), 'g_existing', { description: 'x' });
+			t.assert_equal(r.status, 422, extra);
+			t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ field ], extra);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 422, extra);
 			t.assert_equal(length(h.sweep(c)), 1, extra);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422, extra);
 		}
@@ -278,13 +280,17 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	const UNUSABLE = [ { persistent_keepalive: '25x' }, { endpoint_host: '192.0.2.1', endpoint_port: 'nosuchservice' },
 	                   { endpoint_host: '192.0.2.1', endpoint_port: '0' } ];
 
-	t.it('a stored port or keepalive that wg cannot use does not block a write that leaves it as it is', () => {
+	// v4 (#308): a stored port or keepalive that wg cannot use blocks every write of the peer,
+	// and the sweep still lists the peer.
+	t.it('a stored port or keepalive that wg cannot use blocks every write of the peer', () => {
 		for (let stored in UNUSABLE) {
 			let c = with_wg();
 			for (let k, v in stored) c._state.uci.network.g_existing[k] = v;
 			let h = make_handler();
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200, stored);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200, stored);
+			let r = h.patch(c, ctx(), 'g_existing', { description: 'x' });
+			t.assert_equal(r.status, 422, stored);
+			t.assert_equal(length(r.body.errors), 1, stored);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 422, stored);
 			for (let k, v in stored) t.assert_equal(c._state.uci.network.g_existing[k], v, stored);
 			t.assert_equal(length(h.sweep(c)), 1, stored);
 		}
@@ -299,18 +305,20 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		}
 	});
 
-	// wireguard.sh writes the port only with a host, and no peer without a key.
+	// wireguard.sh writes the port only with a host, and no peer without a key. v4 (#308): the
+	// stored port blocks every write meanwhile, even one that only enables the peer.
 	t.it('a port that reads 0 is live only with a host, and a value only on a peer with a key', () => {
 		let c = with_wg();
 		for (let k, v in { endpoint_port: 'nosuchservice', disabled: '1' }) c._state.uci.network.g_existing[k] = v;
 		let h = make_handler();
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422);
 		t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.1' })), [ [ 'endpoint_port', 'out_of_range' ] ]);
 		t.assert_deep_equal(map(wgp.validate_new({ persistent_keepalive: -1 }), (e) => e.live), [ false ]);
 		t.assert_deep_equal(map(wgp.validate_new({ persistent_keepalive: -1, public_key: PK }), (e) => e.live), [ true ]);
 	});
 
-	// The kernel apply sends an endpoint only with a port.
+	// The kernel apply sends an endpoint only with a port. v4 (#308): the stored port that wg
+	// cannot use blocks every write of the peer, whichever field the write names.
 	t.it('a write that changes the host or the key of an enabled peer whose port reads 0 is refused', () => {
 		for (let port in [ '0', 'nosuchservice' ]) {
 			let c = with_wg();
@@ -318,13 +326,13 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			let h = make_handler();
 			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' })), [ [ 'endpoint_port', 'out_of_range' ] ], port);
 			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { public_key: PK2 })), [ [ 'endpoint_port', 'out_of_range' ] ], port);
-			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: ' 192.0.2.1 ' }).status, 200, port);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: ' 192.0.2.1 ' }).status, 422, port);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { public_key: PK2, endpoint_port: 51820 }).status, 200, port);
 			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2', endpoint_port: 51820 }).status, 200, port);
 		}
 		let c = with_wg();
 		for (let k, v in { endpoint_host: '192.0.2.1', endpoint_port: '0', disabled: '1' }) c._state.uci.network.g_existing[k] = v;
-		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' }).status, 200);
+		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' }).status, 422);
 	});
 
 	t.it('a write that sends -1 or 0 is refused', () => {
@@ -340,7 +348,8 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 
 	// toUci writes the number that the PUT sends. wg refuses -1 as it refuses the stored text, and a
 	// stored decimal 0 is what it was, but wg takes port 0 where it cannot resolve the stored name.
-	t.it('a PUT of the read stores only a port or keepalive that wg reads as it read the stored one', () => {
+	// v4 (#308): the stored value blocks the PUT of the read as well.
+	t.it('a PUT of the read is refused for a port or keepalive that wg cannot use', () => {
 		let put_read = function(stored) {
 			let c = with_wg();
 			for (let k, v in stored) c._state.uci.network.g_existing[k] = v;
@@ -351,26 +360,31 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 			return { r, c, read: h.get_one(c, ctx(), 'g_existing').body };
 		};
 		let p = put_read(UNUSABLE[0]);
-		t.assert_equal(p.r.status, 200);
-		t.assert_equal(p.c._state.uci.network.g_existing.persistent_keepalive, '-1');
-		t.assert_equal(p.read.persistent_keepalive, -1);
+		t.assert_equal(p.r.status, 422);
+		t.assert_deep_equal(fields_of(p.r), [ [ 'persistent_keepalive', 'out_of_range' ] ]);
+		t.assert_equal(p.c._state.uci.network.g_existing.persistent_keepalive, '25x');
 		p = put_read(UNUSABLE[1]);
-		t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'conflict' ] ]);
+		t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'conflict' ], [ 'endpoint_port', 'out_of_range' ] ]);
 		t.assert_equal(p.c._state.uci.network.g_existing.endpoint_port, 'nosuchservice');
 		for (let stored in [ ' 70000', '  ' ])
-			t.assert_deep_equal(fields_of(put_read({ endpoint_host: '192.0.2.1', endpoint_port: stored }).r), [ [ 'endpoint_port', 'conflict' ] ], stored);
+			t.assert_deep_equal(fields_of(put_read({ endpoint_host: '192.0.2.1', endpoint_port: stored }).r),
+			                    [ [ 'endpoint_port', 'conflict' ], [ 'endpoint_port', 'out_of_range' ] ], stored);
 		for (let stored in [ UNUSABLE[2], { endpoint_host: '192.0.2.1', endpoint_port: ' +00' } ]) {
 			p = put_read(stored);
-			t.assert_equal(p.r.status, 200, stored);
-			t.assert_equal(p.read.endpoint_port, 0, stored);
+			t.assert_equal(p.r.status, 422, stored);
+			t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'out_of_range' ] ], stored);
 		}
 	});
 
-	t.it('a stored prefix length with a leading zero blocks only the write that routes it', () => {
+	// v4 (#308): the stored prefix length with a leading zero blocks every write of the peer,
+	// not only the one that routes it.
+	t.it('a stored prefix length with a leading zero blocks every write of the peer', () => {
 		let conn = with_wg();
 		conn._state.uci.network.g_existing.allowed_ips = [ 'fd00::/010' ];
 		let h = make_handler();
-		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		let r = h.patch(conn, ctx(), 'g_existing', { description: 'x' });
+		t.assert_equal(r.status, 422, r.body);
+		t.assert_deep_equal(fields_of(r), [ [ 'allowed_ips[0]', 'invalid_format' ] ]);
 		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { route_allowed_ips: true }).status, 422);
 	});
 
@@ -413,20 +427,23 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	});
 
 	// A PUT sends the read back, without its write-only keys and without `disabled` when the client
-	// leaves the default out.
-	t.it('a PUT is judged like a PATCH: a stored host it resends is old, and enabling is new', () => {
+	// leaves the default out. v4 (#308): a stored broken host blocks every PUT of the peer,
+	// enabling it or not.
+	t.it('a PUT of a peer that stores a broken host is refused, enabling it or not', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.endpoint_host = '[fd00::1]';
 		let h = make_handler();
 		let body = h.get_one(c, ctx(), 'g_existing').body;
 		for (let k in [ 'id', 'managed', 'runtime', 'has_preshared_key' ]) delete body[k];
-		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, description: 'x' }).status, 200);
-		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true }).status, 200);
+		let r = h.replace(c, ctx(), 'g_existing', { ...body, description: 'x' });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'endpoint_host' ]);
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true }).status, 422);
 		let enable = { ...body };
 		delete enable.disabled;
 		t.assert_equal(h.replace(c, ctx(), 'g_existing', enable).status, 422);
 		c._state.uci.network.g_existing.endpoint_host = [ '[fd00::1]', 'x' ];
-		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true, endpoint_host: '[fd00::1] x' }).status, 200);
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', { ...body, disabled: true, endpoint_host: '[fd00::1] x' }).status, 422);
 	});
 
 	t.it('a write to a disabled peer still refuses a broken value that it sends', () => {
