@@ -228,15 +228,14 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/
 echo "$r" | tail -1 | grep -q '^422$' || fail "enabling an SSID with a stored bad value expected 422: $r"
 echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["reassociation_deadline", "out_of_range"]]' >/dev/null \
 	|| fail "expected the stored reassociation_deadline error: $r"
+# v4 (#308): the SSID above could not be enabled while its stored value was bad, so the radio
+# comes on cleanly; the stored error was already reported by the refused PATCH.
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
-echo "$r" | tail -1 | grep -q '^422$' || fail "turning radio0 on expected 422: $r"
-echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["disabled", "conflict"]]
-	and (.errors[0].message | contains("uapi20r (reassociation_deadline)"))' >/dev/null || fail "turning radio0 on: $r"
-[ "$($SSH 'uci get wireless.radio0.disabled')" = 1 ] || fail "a refused PATCH turned radio0 on"
+echo "$r" | tail -1 | grep -q '^200$' || fail "turning radio0 on after the refused SSID: $r"
 $SSH 'uci delete wireless.uapi20r.reassociation_deadline; uci commit wireless'
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
-echo "$r" | tail -1 | grep -q '^200$' || fail "turning radio0 on with a clean SSID: $r"
-[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for uapi20r" '[ -n "$(up_ifname uapi20r)" ]'
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/uapi20r" -d '{"disabled":false}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "enabling the SSID after the stored value was fixed out-of-band: $r"
+[ "$daemon" = 0 ] || wait_for "wifi-scripts set up the enabled SSID for uapi20r" '[ -n "$(up_ifname uapi20r)" ]'
 restore_radio
 trap cleanup EXIT INT TERM
 
