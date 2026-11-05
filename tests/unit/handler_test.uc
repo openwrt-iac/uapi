@@ -134,7 +134,7 @@ t.describe('handler.list pagination', () => {
 			t.assert_deep_equal([ limit.minimum, limit.maximum, cursor.pattern ],
 			                    [ 1, 500, spec.components.headers.XNextCursor.schema.pattern ], path);
 		}
-		for (let p in [ "/firewall/rules", "/dhcp/leases", "/dhcp/leases6", "/network/wireguard_kernel_peers" ])
+		for (let p in [ "/firewall/rules", "/dhcp/leases", "/network/wireguard_kernel_peers" ])
 			t.assert_true(index(paged, p) >= 0, p);
 		let re = regexp(spec.components.headers.XNextCursor.schema.pattern);
 		t.assert_true(match("c_192.168.1.10", re) && match("c_fd99::1", re) && match("c_01hx0000000000000000000000", re));

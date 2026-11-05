@@ -133,7 +133,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `network` | `interfaces`, `devices`, `routes`, `rules`, `bridge_vlans`, `wireguard_peers`, `wireguard_kernel_peers` |
 | `wireless` | `devices`, `interfaces` |
 | `firewall` | `zones`, `rules`, `redirects`, `nat`, `forwardings`, `defaults` |
-| `dhcp` | `hosts`, `leases`, `leases6`, `servers`, `dnsmasq`, `odhcpd` |
+| `dhcp` | `hosts`, `leases`, `servers`, `dnsmasq`, `odhcpd` |
 | `system` | (singleton), `timeservers`, `password`, `authorized_keys`, `cron_jobs` |
 | `dropbear` | `instances` |
 | `uhttpd` | `instances`, `certs` |

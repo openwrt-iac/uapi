@@ -1,4 +1,5 @@
 let fs = require('fs');
+let odhcpd_leases = require('odhcpd_leases');
 
 const LEASES_PATH = "/tmp/dhcp.leases";
 
@@ -23,30 +24,35 @@ function parse_leases(content) {
 
 function read_file(path) {
 	let f = fs.open(path, "r");
-	if (!f) return "";
+	if (!f) return null;
 	let content = f.read("all") ?? "";
 	f.close();
 	return content;
 }
 
+// v4 (#320): one endpoint. No query parameter returns the v4 leases; ?family=v6
+// returns the v6 ones. The query parameter keeps the entry schema untouched.
 function list_fn(conn, query) {
-	return parse_leases(read_file(LEASES_PATH));
+	if (query != null && query.family == "v6")
+		return odhcpd_leases.read(conn);
+	return parse_leases(read_file(LEASES_PATH) ?? "");
 }
 
 return {
 	package: "dhcp",
 	type: "lease",
-	id_field: "mac",
+	// v4 (#320): the entry id is the MAC for v4 leases and the IP for v6 ones.
+	id_field: (query) => (query != null && query.family == "v6") ? "ip" : "mac",
 	// dnsmasq keys a lease by client id, so one MAC can hold two leases, and a cursor on the MAC
-	// repeated the page that ends on the second. It holds one lease per address.
+	// repeated the page that ends on the second. It holds one lease per address, as odhcpd does.
 	cursor_field: "ip",
 	list_fn: list_fn,
 	parse_leases: parse_leases,
 	schema_properties: {
 		expires_at: { type: "integer", description: "Unix epoch seconds when the lease expires" },
-		mac: { type: "string", description: "Client MAC address" },
+		mac: { type: "string", description: "Client MAC address (v4 entries)" },
 		ip: { type: "string", description: "Assigned IP address" },
 		hostname: { type: ["string", "null"] },
-		duid:     { type: ["string", "null"] },
+		duid:     { type: ["string", "null"], description: "Client DUID (v4 entries carry it, v6 entries always do)" },
 	},
 };
