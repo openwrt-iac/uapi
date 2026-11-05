@@ -52,6 +52,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Removed
 
 - **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.** It was reserved and never emitted (uapi never rejects a body on `Content-Type`); the audit of emitted vs declared codes found it the only dead one. Announced in 3.4.1 (#323); clients branching on 415 must drop that branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
+- **BREAKING: `managed` and the adopt flow are removed.** Every curated response envelope becomes `{id, runtime, fields}` (was `{id, managed, runtime, fields}`); `POST /<resource>/<id>/adopt` is gone (404), the `?managed=` query filter is gone, and `unmanaged_resource` (409) left the error enum. A section pre-existing in `/etc/config/`, named or anonymous, is addressed by its name like any other and is writable directly; a PUT of the read keeps the name. Announced in 3.4.1 (#321); migration note in `docs/migration-v3-to-v4.md`. (#353)
 
 ## [3.4.0] - 2026-11-04
 

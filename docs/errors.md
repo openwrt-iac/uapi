@@ -39,7 +39,6 @@ For DELETE success, the response is `204 No Content` with the `X-Request-Id` hea
 | 404  | `not_found`                     | Resource does not exist                                      |
 | 405  | `method_not_allowed`            | Verb not supported on this resource                          |
 | 409  | `conflict`                      | Duplicate name, dangling cross-reference, etc. Also a write whose package another writer, such as LuCI or a shell, changed during the request so that the writes of the request no longer apply. Nothing was written, and a retry reads the new state |
-| 409  | `unmanaged_resource`            | Tried to write to a section that needs to be adopted first   |
 | 409  | `idempotency_key_conflict`      | Same `Idempotency-Key` reused with a different body          |
 | 412  | `precondition_failed`           | Stale `If-Match` ETag, a matching `If-None-Match` on a write, or JSON Patch `test` op mismatch |
 | 413  | `payload_too_large`             | A POST, PUT or PATCH whose body is over 262144 bytes (256 KiB), sent with a `Content-Length` or chunked, whose `Content-Length` is not a whole number from 0 to 262144, or whose body holds more than 2000 `{` and `[` characters. All are checked before the bearer check and before the JSON parse. On every path, uapi reads and drops what is left of a body before it answers, up to 10 s after the start of the request |
@@ -166,8 +165,7 @@ the write changed nothing in uci, and uapi then ran no init script and nothing i
 `no_reload` when none of them runs. A PUT or a PATCH
 writes only the options that it changes, and no default that the read fills in for an option
 that uci does not hold, so a PATCH that names no field, or a PUT or a PATCH that sends what uci
-already holds, commits nothing. So does the adopt of an anonymous section that another writer
-named while the request waited for its lock. Such a PUT or PATCH still answers `409 conflict`
+already holds, commits nothing. Such a PUT or PATCH still answers `409 conflict`
 when another writer deleted the section during the request. A PUT of the read still writes what
 it stores in another form than uci holds, such as a list that uci holds as an option, and the PUT
 of the read after it commits nothing. A POST or DELETE always writes. A `POST /batch` reloads the

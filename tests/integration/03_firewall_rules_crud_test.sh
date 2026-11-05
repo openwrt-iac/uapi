@@ -26,7 +26,6 @@ request_id=$(echo "$created" | grep -i '^X-Request-Id:' | tail -1 | sed 's/^[Xx]
 body=$(echo "$created" | sed -n '/^{/,/^}/p')
 [ "$status" = "200" ] || fail "POST expected 200, got $status"
 [ -n "$request_id" ] || fail "POST response missing X-Request-Id header"
-echo "$body" | grep -q '"managed": true' || fail "created rule missing managed:true"
 echo "$body" | grep -q '"target": "ACCEPT"' || fail "created rule missing target"
 id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 [ -n "$id" ] || fail "created rule missing id"
