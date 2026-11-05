@@ -572,23 +572,16 @@ else
 fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/description","value":"esc"}]')
-if wg_ucode_platform; then
-	# The handler refuses the stored key with the whole config, so the interface never settles, before
-	# the write or after it. Read pending at the deadline, it fails the write, and read down, it skips.
-	case "$(status_of "$r")" in
-		200|500) ;;
-		*) fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")" ;;
-	esac
-else
-	[ "$(status_of "$r")" = "200" ] || fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")"
-	has_peer "$ESC_PEER" || fail "the JSON Patch removed the peer with an escape from the kernel"
-fi
+# v4 (#308): the stored public_key with an escape is an error the section holds, so any write is refused.
+[ "$(status_of "$r")" = "422" ] || fail "JSON Patch of another field of a peer with a stored bad key expected 422 on v4: $(body_of "$r")"
+has_peer "$ESC_PEER" || fail "the refused JSON Patch removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/public_key","value":"'"${PEER3%=}"'\\075"}]')
 [ "$(status_of "$r")" = "422" ] || fail "a JSON Patch that sets a key with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":true}')
-[ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of the peer with an escape: $(body_of "$r")"
-has_peer "$ESC_PEER" && fail "the disabled peer with an escape is still in the kernel"
+# v4 (#308): the stored bad key blocks every write of the section, disabling included; fix it first.
+[ "$(status_of "$r")" = "422" ] || fail "PATCH disabled of the peer with an escape expected 422 on v4: $(body_of "$r")"
+has_peer "$ESC_PEER" || fail "the refused PATCH removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
 [ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 if ! wg_ucode_platform; then
