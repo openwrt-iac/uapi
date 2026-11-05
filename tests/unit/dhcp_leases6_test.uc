@@ -2,7 +2,8 @@ let t = require('harness');
 let bus = require('bus');
 let fs = require('fs');
 let odhcpd_leases = require('odhcpd_leases');
-let leases6 = loadfile('src/resources/dhcp.leases6.uc')();
+let handler = require('handler');
+let leases = loadfile('src/resources/dhcp.leases.uc')();
 let servers = loadfile('src/resources/dhcp.servers.uc')();
 
 // The first line is what odhcpd 25.12.5 wrote for a DHCPv6 client on a test interface. The others
@@ -25,11 +26,39 @@ function with_leasefile(content, fn) {
 	return r;
 }
 
-t.describe('dhcp.leases6 contract', () => {
-	t.it('declares package, type, id_field, and lists what odhcpd_leases reads', () => {
-		t.assert_equal(leases6.package, "dhcp");
-		t.assert_equal(leases6.type, "lease6");
-		t.assert_equal(leases6.id_field, "ip");
+// v4 (#320): dhcp/leases6 merged into dhcp/leases with ?family=v6.
+t.describe('dhcp.leases merged endpoint (#320)', () => {
+	function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+
+	t.it('id_field is mac for v4 and ip for v6', () => {
+		t.assert_equal(leases.id_field({}), "mac");
+		t.assert_equal(leases.id_field(null), "mac");
+		t.assert_equal(leases.id_field({ family: "v6" }), "ip");
+	});
+
+	t.it('get_one with family=v6 finds an entry by ip', () => {
+		let h = handler.make_collection({
+			package: "dhcp", type: "lease",
+			id_field: (q) => (q != null && q.family == "v6") ? "ip" : "mac",
+			list_fn: function(conn, query) {
+				return (query != null && query.family == "v6")
+					? [ { ip: "2001:db8::1", duid: "aa" } ] : [ { mac: "aa:bb", ip: "192.0.2.1" } ];
+			},
+		});
+		let c = bus.stub();
+		let r = h.get_one(c, ctx(), "2001:db8::1", { family: "v6" });
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.ip, "2001:db8::1");
+		t.assert_equal(h.get_one(c, ctx(), "aa:bb", {}).status, 200);
+		t.assert_equal(h.get_one(c, ctx(), "2001:db8::1", {}).status, 404);
+	});
+});
+
+t.describe('dhcp/leases?family=v6 lists what odhcpd_leases reads', () => {
+	t.it('from the leasefile of the odhcpd section', () => {
+		t.assert_deep_equal(with_leasefile(FILE, (c) => leases.list_fn(c, { family: "v6" })),
+		                    with_leasefile(FILE, (c) => odhcpd_leases.read(c)));
+		t.assert_equal(length(with_leasefile(FILE, (c) => leases.list_fn(c, { family: "v6" }))), 4);
 	});
 });
 

@@ -526,7 +526,7 @@ section to name:
 That is deliberately a finding rather than a failed request: a resource that could
 not be checked must not be reported as clean.
 
-`dhcp/leases` and `dhcp/leases6` are not swept. They are read-only views of
+`dhcp/leases` is not swept. They are read-only views of
 daemon state with no validation to run.
 
 The `recent_errors` ring is best-effort: writes to `/var/run/uapi-error-ring/`
