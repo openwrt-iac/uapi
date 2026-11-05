@@ -24117,7 +24117,6 @@
 							"idempotency_key_conflict",
 							"precondition_failed",
 							"payload_too_large",
-							"unsupported_media_type",
 							"validation_failed",
 							"locked",
 							"too_many_requests",
