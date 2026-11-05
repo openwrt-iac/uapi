@@ -36,7 +36,6 @@ in this table and in the field's own `description`, which is the honest signal a
 
 These land in v4, not before. The list is mirrored in the published spec's own "Upcoming in v4" block, which `make lint-doc-refs` keeps in sync with this section by count.
 
-- **Curated string fields will refuse a newline and a carriage return by default in v4.** One check in `check_schema_types` replaces the per-field audits, with an opt-out annotation for `system.notes`, which holds several lines on purpose. (#276)
 - **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** mwan3 reads an unset family as ipv4, while a read today gives null and a PATCH of null answers 200. (#306)
 - **A `wireless/interfaces` section with no `mode` will read as null in v4 instead of `ap`.** wifi-scripts sets up nothing for such a section, so the current read reports an access point that does not exist. (#307)
 - **A write will be refused for any stored error the section holds in v4, as LuCI does.** Today a write refuses only the errors it adds. (#308)
