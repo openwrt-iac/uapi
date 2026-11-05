@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let platform_bool = values.platform_bool;
 let as_int = values.as_int;
 
 function fromUci(section) {
@@ -14,7 +14,7 @@ function fromUci(section) {
 		log_size: as_int(section.log_size),
 		log_ip: section.log_ip ?? null,
 		log_proto: section.log_proto ?? null,
-		log_remote: normalize_bool(section.log_remote, false),
+		log_remote: platform_bool(section.log_remote, false),
 		urandom_seed: section.urandom_seed ?? null,
 		runtime: {},
 	};
