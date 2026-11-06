@@ -13,7 +13,7 @@ echo "$out" | grep -q '"memory"' || { echo "FAIL: ubus call system info missing 
 $SSH 'uci get system.@system[0].hostname' | grep -q . \
 	|| { echo "FAIL: uci get returned empty hostname"; exit 1; }
 
-$SSH 'pgrep uhttpd' >/dev/null \
-	|| { echo "FAIL: uhttpd is not running in the VM"; exit 1; }
+# No uhttpd check here: the stable image ships it, the main snapshot's bare
+# image does not, and 01 installs and probes it either way.
 
 echo "smoke ok"
