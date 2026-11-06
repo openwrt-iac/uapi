@@ -162,20 +162,17 @@ jobs:
       - name: Run integration tests
         run: tests/integration/run.sh
 
-      # DEBUG (temporary branch): collect the uhttpd death window, then try
-      # to bring it back by hand to separate a broken start from a kill.
+      # DEBUG (temporary branch): isolate whether the require failure is the
+      # ucode version or the uhttpd startup context.
       - name: VM diagnostics on failure
         if: failure()
         run: |
           {
-            tests/vm/ssh.sh 'pgrep -a uhttpd || echo "uhttpd NOT running"'
-            tests/vm/ssh.sh 'netstat -tlnp 2>/dev/null | grep -E ":80 |:443 " || echo "nothing listens on 80/443"'
-            tests/vm/ssh.sh 'logread | grep -i uhttpd | tail -40'
-            tests/vm/ssh.sh 'logread | grep -i procd | tail -10'
-            tests/vm/ssh.sh '/etc/init.d/uhttpd restart 2>&1; sleep 3'
-            tests/vm/ssh.sh 'pgrep -a uhttpd || echo "uhttpd STILL dead after manual restart"'
-            tests/vm/ssh.sh 'logread | tail -12'
-            tests/vm/ssh.sh 'wget -qO- --timeout=5 http://127.0.0.1/api/v3/healthz 2>&1 | head -3' || true
+            tests/vm/ssh.sh 'apk info -e uhttpd ucode | head -4'
+            tests/vm/ssh.sh 'ls /usr/share/uapi/lib/ | head -8'
+            tests/vm/ssh.sh 'ucode -e "print(REQUIRE_SEARCH_PATH)"'
+            tests/vm/ssh.sh 'ucode -e "push(REQUIRE_SEARCH_PATH, \"/usr/share/uapi/lib/*.uc\"); print(require(\"log\") != null)"'
+            tests/vm/ssh.sh 'ucode /usr/share/uapi/main.uc 2>&1 | head -6' || true
           } 2>&1 || true
 
       - name: Soak test (60s read-only with RSS/fd leak watch)
