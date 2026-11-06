@@ -48,17 +48,37 @@ source_fingerprint() {
 # was already on the box instead of the working tree, and a run that passed
 # that way looked exactly like a real pass. Recording the fingerprint also
 # makes an edit-then-rerun cycle correct rather than merely fast.
+# The DEPENDS of the package is the one source of truth for what the handler
+# needs: the bootstrap installs exactly what `apk add uapi` would pull, so the
+# suite can never run against a module list the package does not ship. A
+# hand-kept list here once missed ucode-mod-log, which the stable image ships
+# and the main snapshot's bare image does not, and the handler then killed
+# uhttpd at its start on every request.
+package_depends() {
+	awk '/DEPENDS:=/ { f = 1; sub(/^.*DEPENDS:=/, "") }
+	     f { print; if (!/\\$/) f = 0 }' build/openwrt/uapi/Makefile \
+		| tr ' \\' '  ' | tr -s ' ' '\n' | sed 's/^+//' | grep -v '^$' | tr '\n' ' '
+}
+
 bootstrap_uapi() {
-	local want installed spec
+	local want installed spec deps install_out
 	want=$(source_fingerprint)
 	installed=$($SSH 'cat /var/run/uapi-bootstrapped 2>/dev/null' 2>/dev/null || true)
 	if [ "$want" = "$installed" ] && [ -z "${UAPI_FORCE_BOOTSTRAP:-}" ]; then
 		return 0
 	fi
 
-	# ucode-mod-log is the system syslog module that main.uc requires; the
-	# stable image ships it, the main snapshot's bare image does not.
-	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest ucode-mod-io ucode-mod-log 2>&1' | tail -3
+	deps=$(package_depends)
+	[ -n "$deps" ] || fail "no DEPENDS parsed from build/openwrt/uapi/Makefile"
+	install_out=$($SSH "apk add $deps 2>&1")
+	printf '%s\n' "$install_out" | tail -3
+	case "$install_out" in
+	*rpcd-mod-iwinfo*)
+		# rpcd loads its plugins only at start, so one installed under a
+		# running rpcd stays invisible until it restarts.
+		$SSH '/etc/init.d/rpcd restart >/dev/null 2>&1 || true'
+		;;
+	esac
 	# shellcheck disable=SC2086
 	if ! tar c -C . $PUSH_PATHS \
 		| $SSH '
@@ -262,17 +282,14 @@ assert_dnsmasq_loads() {
 # Installed here rather than inside a test, and guarded on its own rather than on the
 # bootstrap fingerprint, which covers the source tree and not this package list: adding
 # a package would otherwise be a no-op on any VM already carrying the current source.
-# The stable image carries rpcd-mod-iwinfo from its package set; the main
-# snapshot's bare image does not, and the wireless runtime reads go through its
-# ubus object, so it is installed here rather than leaned on the image.
+# lldpd and vnstat2 are outside the bare image, so their resources answered 503
+# init_script_missing and were never exercised against a real daemon. That is how
+# `vnstat/interfaces` shipped modelling a section type vnstat never reads.
+#
+# Installed here rather than inside a test, and guarded on its own rather than on
+# the bootstrap fingerprint, which covers the source tree and not this package list: adding a
+# package would otherwise be a no-op on any VM already carrying the current source.
 ensure_daemon_packages() {
-	$SSH 'apk info -e rpcd-mod-iwinfo >/dev/null 2>&1' || {
-		# rpcd loads its plugins at start, so one installed under a running
-		# rpcd stays invisible until it restarts.
-		$SSH 'apk add rpcd-mod-iwinfo 2>&1 | tail -3' || return 1
-		$SSH '/etc/init.d/rpcd restart >/dev/null 2>&1 || true'
-		$SSH 'apk info -e rpcd-mod-iwinfo >/dev/null 2>&1' || return 1
-	}
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1' && return 0
 	$SSH 'apk add lldpd vnstat2 2>&1 | tail -3' || return 1
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1'
