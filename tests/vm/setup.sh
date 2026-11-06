@@ -2,8 +2,15 @@
 set -eu
 cd "$(dirname "$0")"
 
-IMAGE_URL=https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-25.12.5-x86-64-generic-ext4-combined.img.gz
-IMAGE_GZ=openwrt-25.12.5.img.gz
+# The stable series boots the current release. The main series (the v4 line)
+# boots the daily snapshot, whose filename is fixed while its content is not.
+if [ "${OPENWRT_SERIES:-stable}" = main ]; then
+	IMAGE_URL=https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
+	IMAGE_GZ=openwrt-main.img.gz
+else
+	IMAGE_URL=https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-25.12.6-x86-64-generic-ext4-combined.img.gz
+	IMAGE_GZ=openwrt-25.12.6.img.gz
+fi
 IMAGE=openwrt.img
 KEY=id_ed25519
 
@@ -13,7 +20,9 @@ if [ ! -f "$IMAGE_GZ" ]; then
 	mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
 fi
 
-if [ ! -f "$IMAGE" ]; then
+# A re-download replaces the archive, so decompress and inject again: the
+# markers below compare against the archive, not only against each other.
+if [ ! -f "$IMAGE" ] || [ "$IMAGE" -ot "$IMAGE_GZ" ]; then
 	echo "Decompressing"
 	gunzip -k -c "$IMAGE_GZ" > "$IMAGE.tmp"
 	mv "$IMAGE.tmp" "$IMAGE"
@@ -24,7 +33,7 @@ if [ ! -f "$KEY" ]; then
 	ssh-keygen -t ed25519 -N '' -f "$KEY" -C uapi-ci -q
 fi
 
-if [ -f .injected ] && [ .injected -nt "$KEY.pub" ]; then
+if [ -f .injected ] && [ .injected -nt "$KEY.pub" ] && [ .injected -nt "$IMAGE_GZ" ]; then
 	echo "SSH key already injected"
 	exit 0
 fi

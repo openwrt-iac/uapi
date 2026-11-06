@@ -28,7 +28,8 @@ the release on a missing per-arch SDK pin, a tarball that does not match
 its pin, a cross-build that breaks under any of the three, or a build
 that produces no `.apk` - which is what 2.4.1 actually relied on. Per-arch SDK tarball sha256 lives in
 `build/sdk.sha256`; refresh those lines whenever `OPENWRT_VERSION` bumps
-(URLs are in the matrix in `.github/workflows/ci.yml`).
+(the matrix in `.github/workflows/ci.yml` names the targets, and
+`tools/openwrt-sdk.sh` resolves each URL from the pin).
 
 ### Pre-tag arch validation
 

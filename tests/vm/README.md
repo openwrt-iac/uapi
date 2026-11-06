@@ -1,15 +1,24 @@
 # Integration VM
 
-Boots a real OpenWrt 25.12.5 x86_64 QEMU VM for integration testing.
+Boots a real OpenWrt x86_64 QEMU VM for integration testing.
 
 ## Pinned versions
 
-- OpenWrt release: **25.12.5**
-- Image: `openwrt-25.12.5-x86-64-generic-ext4-combined.img.gz`
-- Source: `https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/`
+Two series run, selected by `OPENWRT_SERIES` (`stable` by default, `main` on the
+v4 line, where CI sets it from the ref):
 
-When bumping the OpenWrt target, update `IMAGE_URL` and `IMAGE_GZ` in `setup.sh`, the coupled
-`OPENWRT_VERSION` and `OPENWRT_IMAGE_CACHE_KEY` in `.github/workflows/ci.yml`, and this file.
+- **stable**: OpenWrt release **25.12.6**, image
+  `openwrt-25.12.6-x86-64-generic-ext4-combined.img.gz` from
+  `https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/`.
+- **main**: the daily snapshot, image
+  `openwrt-x86-64-generic-ext4-combined.img.gz` from
+  `https://downloads.openwrt.org/snapshots/targets/x86/64/`. The filename is
+  fixed while the content is not; `setup.sh` re-decompresses and re-injects
+  whenever the downloaded archive is newer than what it prepared.
+
+When bumping the stable target, update the `stable` branch of the series case
+in `setup.sh`, `OPENWRT_VERSION` and `OPENWRT_IMAGE_CACHE_KEY` in
+`.github/workflows/ci.yml`, the pins in `build/sdk.sha256`, and this file.
 
 ## Scripts
 
@@ -30,3 +39,8 @@ tests/vm/stop.sh
 ```
 
 `make test-integration` runs `setup`, `start`, `wait`, the integration suite, then `stop` even on failure.
+
+```sh
+# The main snapshot instead of the stable release
+OPENWRT_SERIES=main make test-integration
+```
