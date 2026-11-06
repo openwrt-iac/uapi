@@ -16,7 +16,9 @@ on:
     # release/vX.Y.Z-rcN topic branches, which a pull_request run already covers. Without
     # this a patch on an old major reached its tag having never been built: the tag run is
     # the first CI it sees, and by then the tag exists.
-    branches: [main, 'release/*.x']
+    # `v4` rides the push trigger too, so every rebase of the branch runs the
+    # suite against the OpenWrt main snapshot (OPENWRT_SERIES below).
+    branches: [main, v4, 'release/*.x']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -44,10 +46,15 @@ concurrency:
         && github.event_name != 'workflow_dispatch' }}
 
 env:
-  OPENWRT_VERSION: 25.12.5
-  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.5-x86-64-ext4-combined
-  OPENWRT_SDK_CACHE_KEY: openwrt-sdk-25.12.5-x86_64
-  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+  # v4 tracks OpenWrt main: the change it still waits for (#311) needs the netifd
+  # the next major will ship. Every other ref, tags included, tests the stable
+  # series. The stable SDK is pinned by checksum in build/sdk.sha256; a snapshot
+  # has no filename to pin (the gcc version is part of it), so the main series
+  # verifies against the sha256sums published beside the tarball. Both paths
+  # live in tools/openwrt-sdk.sh.
+  OPENWRT_SERIES: ${{ (github.ref_name == 'v4' || github.base_ref == 'v4') && 'main' || 'stable' }}
+  OPENWRT_VERSION: 25.12.6
+  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.6-x86-64-ext4-combined
 
 jobs:
   unit:
@@ -134,7 +141,10 @@ jobs:
         # reports "already satisfied" and never pulls `referencing`, which 4.18+ needs.
         run: pip install --break-system-packages --quiet --upgrade jsonschema
 
-      - name: Cache OpenWrt image
+      # The snapshot changes daily, so a cached copy would be stale under a
+      # fresh key; the 15 MB download from the CDN costs less than the doubt.
+      - name: Cache OpenWrt image (stable series)
+        if: env.OPENWRT_SERIES == 'stable'
         uses: actions/cache@v6
         with:
           path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
@@ -196,12 +206,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Resolve the SDK tarball
+        id: sdk
+        run: echo "tarball=$(tools/openwrt-sdk.sh name x86/64)" >> "$GITHUB_OUTPUT"
+
       - name: Restore or claim the SDK cache
         id: sdkcache
         uses: actions/cache@v6
         with:
           path: build/sdk
-          key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
+          # The resolved tarball name is the key: a stable version bump or a
+          # snapshot toolchain bump changes it, which rotates the entry instead
+          # of serving a warm cache of the previous SDK.
+          key: ${{ steps.sdk.outputs.tarball }}
 
       - name: Install tooling
         if: steps.sdkcache.outputs.cache-hit != 'true'
@@ -213,17 +230,7 @@ jobs:
 
       - name: Download SDK (verified by sha256)
         if: steps.sdkcache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p build/sdk
-          SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
-          grep -q "  $SDK_TARBALL\$" build/sdk.sha256 || {
-            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
-            exit 1
-          }
-          curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
-          ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
-          tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" -C build/sdk --strip-components=1
-          rm -f "/tmp/$SDK_TARBALL"
+        run: tools/openwrt-sdk.sh fetch x86/64 build/sdk
 
       # Builds the package for real, because the point is to leave build_dir and staging_dir
       # populated with uapi's compiled dependency chain. Nothing is published from here.
@@ -281,42 +288,29 @@ jobs:
             build-essential libncurses-dev libssl-dev python3 \
             unzip gawk gettext xsltproc rsync wget
 
+      - name: Resolve the SDK tarball
+        id: sdk
+        run: echo "tarball=$(tools/openwrt-sdk.sh name x86/64)" >> "$GITHUB_OUTPUT"
+
       # Restore only, warm-sdk-cache being the one writer: an entry saved here is readable from
       # this pull request or tag ref alone, and each takes 2 GiB of the repository's 10 GB.
       - name: Restore the OpenWrt SDK cache
         uses: actions/cache/restore@v6
         with:
           path: build/sdk
-          key: ${{ env.OPENWRT_SDK_CACHE_KEY }}
+          key: ${{ steps.sdk.outputs.tarball }}
 
-      - name: Verify SDK pin is in sync with OPENWRT_VERSION
-        run: |
-          SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
-          grep -q "  $SDK_TARBALL\$" build/sdk.sha256 || {
-            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
-            echo "OPENWRT_VERSION=$OPENWRT_VERSION; OPENWRT_SDK_URL=$OPENWRT_SDK_URL."
-            echo "Regenerate the checksum from upstream and commit it."
-            exit 1
-          }
-
+      # The pin check lives in tools/openwrt-sdk.sh: the stable series fails
+      # there when build/sdk.sha256 does not pin the resolved tarball, which is
+      # the same failure this step used to catch, one step earlier.
       - name: Download SDK if cache miss (verified by sha256)
         run: |
           if [ ! -d build/sdk/staging_dir ]; then
-            mkdir -p build/sdk
-            SDK_TARBALL=$(basename "$OPENWRT_SDK_URL")
-            curl -fsSL -o "/tmp/$SDK_TARBALL" "$OPENWRT_SDK_URL"
-            # --ignore-missing: build/sdk.sha256 pins every arch this repo builds,
-            # but this job downloads only its own tarball, so a bare --check fails on
-            # the three it never fetched. verify-arch-build below has always passed the
-            # flag; this job did not, and the gap stayed invisible because the download
-            # only runs on a cache miss and the SDK cache was warm for every release
-            # until 2.4.0 hit a cold one.
-            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
-            tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" -C build/sdk --strip-components=1
-            rm -f "/tmp/$SDK_TARBALL"
+            tools/openwrt-sdk.sh fetch x86/64 build/sdk
           fi
 
-      - name: Cache OpenWrt VM image
+      - name: Cache OpenWrt VM image (stable series)
+        if: env.OPENWRT_SERIES == 'stable'
         uses: actions/cache@v6
         with:
           path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
@@ -467,11 +461,13 @@ jobs:
   # find-APK step prints a digest for a human to read; nothing enforces it.
   #
   # What it does enforce, by hard-failing, is what the 2.4.1 release actually
-  # relied on: every arch in the matrix has its SDK tarball pinned by checksum in
-  # build/sdk.sha256, the downloaded tarball matches that pin, the package
-  # cross-builds under all three SDKs, and each build yields an .apk. That is
-  # worth keeping on its own; a build that breaks under one arch's SDK fails here
-  # rather than at an operator's `apk add`.
+  # relied on: every arch in the matrix has its SDK tarball pinned by checksum,
+  # in build/sdk.sha256 for the stable series or in the sha256sums published
+  # beside the snapshot for the main series (see tools/openwrt-sdk.sh), the
+  # downloaded tarball matches that pin, the package cross-builds under all
+  # three SDKs, and each build yields an .apk. That is worth keeping on its
+  # own; a build that breaks under one arch's SDK fails here rather than at an
+  # operator's `apk add`.
   #
   # Making it prove arch-independence would mean adding an x86_64 leg and
   # comparing digests across legs. Runs on tag push in parallel with release-apk
@@ -479,8 +475,9 @@ jobs:
   #
   # To enable additional arches: add an entry to the matrix below and a
   # corresponding sha256 line to build/sdk.sha256 (per-arch SDK tarball
-  # checksum). The fail-fast: false flag lets the operator see all arch
-  # results in one CI run instead of stopping at the first failure.
+  # checksum; the main series needs no repo pin, see tools/openwrt-sdk.sh).
+  # The fail-fast: false flag lets the operator see all arch results in one CI
+  # run instead of stopping at the first failure.
   verify-arch-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -493,11 +490,11 @@ jobs:
       matrix:
         include:
           - arch: aarch64_generic
-            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/armsr/armv8/openwrt-sdk-25.12.5-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            target: armsr/armv8
           - arch: arm_cortex-a7
-            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/mediatek/mt7622/openwrt-sdk-25.12.5-mediatek-mt7622_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            target: mediatek/mt7622
           - arch: mips_24kc
-            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/ath79/generic/openwrt-sdk-25.12.5-ath79-generic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+            target: ath79/generic
     steps:
       - uses: actions/checkout@v7
 
@@ -508,32 +505,20 @@ jobs:
             curl zstd build-essential libncurses-dev libssl-dev python3 \
             unzip gawk gettext xsltproc rsync wget
 
+      - name: Resolve the SDK tarball
+        id: sdk
+        run: echo "tarball=$(tools/openwrt-sdk.sh name ${{ matrix.target }})" >> "$GITHUB_OUTPUT"
+
       - name: Cache OpenWrt SDK (${{ matrix.arch }})
         uses: actions/cache@v6
         with:
           path: build/sdk-${{ matrix.arch }}
-          key: openwrt-sdk-25.12.5-${{ matrix.arch }}
-
-      - name: Verify per-arch SDK pin
-        run: |
-          SDK_TARBALL=$(basename "${{ matrix.sdk_url }}")
-          if ! grep -q "  $SDK_TARBALL\$" build/sdk.sha256; then
-            echo "ERROR: build/sdk.sha256 does not pin $SDK_TARBALL."
-            echo "Add a 'sha256  $SDK_TARBALL' line for arch ${{ matrix.arch }} before tagging."
-            echo "Compute via: curl -fsSL ${{ matrix.sdk_url }} | sha256sum"
-            exit 1
-          fi
+          key: ${{ steps.sdk.outputs.tarball }}
 
       - name: Download SDK if cache miss
         run: |
           if [ ! -d build/sdk-${{ matrix.arch }}/staging_dir ]; then
-            mkdir -p build/sdk-${{ matrix.arch }}
-            SDK_TARBALL=$(basename "${{ matrix.sdk_url }}")
-            curl -fsSL -o "/tmp/$SDK_TARBALL" "${{ matrix.sdk_url }}"
-            ( cd /tmp && sha256sum --check "$GITHUB_WORKSPACE/build/sdk.sha256" --ignore-missing )
-            tar --use-compress-program=unzstd -xf "/tmp/$SDK_TARBALL" \
-                -C build/sdk-${{ matrix.arch }} --strip-components=1
-            rm -f "/tmp/$SDK_TARBALL"
+            tools/openwrt-sdk.sh fetch ${{ matrix.target }} build/sdk-${{ matrix.arch }}
           fi
 
       - name: Stage package
