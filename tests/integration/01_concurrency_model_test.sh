@@ -33,7 +33,7 @@ echo "--- restart uhttpd ---"
 $SSH "/etc/init.d/uhttpd restart 2>&1 || true; echo restart-exit-$?"
 sleep 3
 echo "--- uhttpd process state ---"
-$SSH 'pgrep -a uhttpd || echo "uhttpd NOT running"'
+$SSH 'pgrep -a uhttpd' || { echo "FAIL: uhttpd is not running after its restart"; exit 1; }
 $SSH 'logread | tail -20 | grep -i uhttpd || true'
 $SSH 'ls -la /usr/lib/uhttpd_*.so 2>/dev/null || echo "no uhttpd plugins found"'
 
