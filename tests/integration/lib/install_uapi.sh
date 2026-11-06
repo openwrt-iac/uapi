@@ -56,7 +56,9 @@ bootstrap_uapi() {
 		return 0
 	fi
 
-	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest ucode-mod-io 2>&1' | tail -3
+	# ucode-mod-log is the system syslog module that main.uc requires; the
+	# stable image ships it, the main snapshot's bare image does not.
+	$SSH 'apk add uhttpd-mod-ucode ucode-mod-uci ucode-mod-digest ucode-mod-io ucode-mod-log 2>&1' | tail -3
 	# shellcheck disable=SC2086
 	if ! tar c -C . $PUSH_PATHS \
 		| $SSH '
@@ -260,7 +262,17 @@ assert_dnsmasq_loads() {
 # Installed here rather than inside a test, and guarded on its own rather than on the
 # bootstrap fingerprint, which covers the source tree and not this package list: adding
 # a package would otherwise be a no-op on any VM already carrying the current source.
+# The stable image carries rpcd-mod-iwinfo from its package set; the main
+# snapshot's bare image does not, and the wireless runtime reads go through its
+# ubus object, so it is installed here rather than leaned on the image.
 ensure_daemon_packages() {
+	$SSH 'apk info -e rpcd-mod-iwinfo >/dev/null 2>&1' || {
+		# rpcd loads its plugins at start, so one installed under a running
+		# rpcd stays invisible until it restarts.
+		$SSH 'apk add rpcd-mod-iwinfo 2>&1 | tail -3' || return 1
+		$SSH '/etc/init.d/rpcd restart >/dev/null 2>&1 || true'
+		$SSH 'apk info -e rpcd-mod-iwinfo >/dev/null 2>&1' || return 1
+	}
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1' && return 0
 	$SSH 'apk add lldpd vnstat2 2>&1 | tail -3' || return 1
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1'
