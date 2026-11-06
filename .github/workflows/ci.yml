@@ -162,6 +162,24 @@ jobs:
       - name: Run integration tests
         run: tests/integration/run.sh
 
+      # DEBUG (temporary branch): the snapshot run resets every API connection;
+      # collect what the box says before the VM stops.
+      - name: VM diagnostics on failure
+        if: failure()
+        run: |
+          {
+            tests/vm/ssh.sh 'pgrep -a uhttpd || echo "uhttpd NOT running"'
+            tests/vm/ssh.sh 'logread | tail -50'
+            tests/vm/ssh.sh 'dmesg | grep -icE "segfault|sigsegv" || true'
+            tests/vm/ssh.sh 'dmesg | grep -iE "segfault|sigsegv|uhttpd|ucode" | tail -15'
+            tests/vm/ssh.sh 'uci -q show uhttpd | head -25'
+            tests/vm/ssh.sh 'curl -sv --max-time 5 http://127.0.0.1/api/v3/healthz 2>&1 | tail -12' || true
+            tests/vm/ssh.sh 'curl -sv --max-time 5 http://127.0.0.1/_probe 2>&1 | tail -6' || true
+            tests/vm/ssh.sh 'uapi-token create --name dbg --scope "*:ro" 2>&1 | head -3' || true
+            tests/vm/ssh.sh 'ucode -V; ucode -e "print(1+1)" 2>&1' || true
+            tests/vm/ssh.sh 'apk info -e uhttpd-mod-ucode ucode ucode-mod-uci ucode-mod-io ucode-mod-digest ucode-mod-fs 2>&1' || true
+          } 2>&1 || true
+
       - name: Soak test (60s read-only with RSS/fd leak watch)
         run: DURATION=60 PARALLEL=2 tests/soak/ci_soak.sh
 
