@@ -57,7 +57,7 @@ done
 
 echo "--- POST /dhcp/servers on tdhcp, then two options ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/servers" \
-	-d '{"id":"tdhcp","interface":"tdhcp","start":100,"limit":50,"leasetime":"12h"}')
+	-d '{"id":"tdhcp","interface":"tdhcp","dhcpv4":"server","start":100,"limit":50,"leasetime":"12h"}')
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "POST expected 200: $r"
 assert_dnsmasq_emits "dhcp-range=set:tdhcp,10.99.0.100,10.99.0.149,255.255.255.0,12h"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" \

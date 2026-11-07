@@ -50,7 +50,24 @@ $SSH "uci set network.uapi54_dev=device; uci set network.uapi54_dev.name=$BRIDGE
 echo "--- hex and octal integers read as the values netifd uses ---"
 wait_for "no route with metric 16 in table 4254" \
 	'routes4254 | grep -q "^10.253.4.0/24 dev $BRIDGE table 4254 .*metric 16"'
-wait_for "wireguard did not set mtu 1400 from 0x578" '$SSH "ip link show uapi54w" | grep -q " mtu 1400 "'
+# The ucode proto handler of OpenWrt main types the mtu through ucode's int(),
+# which reads 0x578 as 0, so the kernel keeps the wireguard default until
+# upstream restores the raw value that iproute2 parses (#359); the shell
+# handler of 25.12 hands the value to ip link itself and applies 1400.
+if wg_ucode_platform; then
+	n=0
+	while [ $n -lt 20 ]; do
+		$SSH "ip link show uapi54w 2>/dev/null" | grep -q " mtu 1420 " && break
+		n=$((n + 1)); sleep 1
+	done
+	if [ $n -ge 20 ]; then
+		$SSH "ip link show uapi54w 2>&1; ubus call network.interface.uapi54w status 2>&1 | head -20; logread | grep -iE 'netifd|wireguard' | tail -15" || true
+		fail "wireguard dropped the hex mtu (regression pinned, #359)"
+	fi
+else
+	wait_for "wireguard did not set mtu 1400 from 0x578" \
+		'$SSH "ip link show uapi54w" | grep -q " mtu 1400 "'
+fi
 r=$(body "$(call "$URL/network/interfaces/uapi54")")
 printf '%s' "$r" | jq -e '.metric == 16 and .ip6weight == 8' >/dev/null || fail "metric 0x10 or ip6weight 010 read wrong: $r"
 r=$(body "$(call "$URL/network/interfaces/uapi54w")")
@@ -122,12 +139,26 @@ echo "--- a listen_port name reads as the port wg resolves, and one that does no
 # netifd reads listen_port as an INT32 and drops a name from its own copy, so a change to a name
 # does not restart the interface. ifup reruns wireguard.sh, which reads the name from uci.
 $SSH "uci set network.uapi54w.listen_port=openvpn; uci commit network; ifup uapi54w"
-wait_for "wg did not listen on 1194 for listen_port 'openvpn'" '[ "$($SSH "wg show uapi54w listen-port")" = 1194 ]'
+# The shell handler of 25.12 reads listen_port raw from uci and wg resolves the
+# service name; the ucode handler of main takes it from netifd's parsed data,
+# which drops a name before wg ever sees it, so the port never lands and an
+# unresolved name no longer takes the interface down (#359, pinned).
+if wg_ucode_platform; then
+	wait_for "listen_port 'openvpn' reached wg on main (#359 pinned)" \
+		'[ "$($SSH "wg show uapi54w listen-port")" != 1194 ]'
+else
+	wait_for "wg did not listen on 1194 for listen_port 'openvpn'" '[ "$($SSH "wg show uapi54w listen-port")" = 1194 ]'
+fi
 r=$(body "$(call "$URL/network/interfaces/uapi54w")")
 printf '%s' "$r" | jq -e '.listen_port == 1194' >/dev/null || fail "listen_port 'openvpn' read wrong: $r"
 $SSH "uci set network.uapi54w.listen_port=nosuchservice; uci commit network; ifup uapi54w"
-wait_for "the interface came up with a listen_port that does not resolve" \
-	'[ "$($SSH "ubus call network.interface.uapi54w status" | jq -r .up)" = false ]'
+if wg_ucode_platform; then
+	wait_for "an unresolved listen_port took the interface down on main (#359 pinned)" \
+		'[ "$($SSH "ubus call network.interface.uapi54w status" | jq -r .up)" = true ]'
+else
+	wait_for "the interface came up with a listen_port that does not resolve" \
+		'[ "$($SSH "ubus call network.interface.uapi54w status" | jq -r .up)" = false ]'
+fi
 read_back=$(body "$(call "$URL/network/interfaces/uapi54w")" | jq -c 'del(.runtime)')
 printf '%s' "$read_back" | jq -e '.listen_port == -1' >/dev/null || fail "an unresolved listen_port did not read -1: $read_back"
 r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/interfaces/uapi54w" -d "$read_back")

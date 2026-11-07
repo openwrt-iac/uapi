@@ -78,7 +78,8 @@ function missing_config(conn, pkg) {
 // rc.common takes for the service, so the reload of the restore waited on it and was killed too.
 // So uapi waits for the reloads of a request, those of the restore included, for 20 s in all, and
 // then answers without them: they run on, and the write keeps its commit and answers unverified.
-// 20 s, the checks after the reloads and the flock wait of a restore fit in the 60 s.
+// 20 s, the checks after the reloads, the waits of the wireguard apply and the flock wait of a
+// restore fit in the 60 s.
 const RELOAD_MS = 20000;
 
 function now_ms() {
@@ -482,7 +483,13 @@ function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 		} else if (err == null)
 			err = run_check(watch);
 		if (err != null) return err;
-		return wg_apply(conn, ops, applied);
+		// The time for the reloads counts the reloads only. The kernel apply can wait for netifd's
+		// wireguard restart, and on that clock the restore of a failed apply had no time left for
+		// its own reloads.
+		let start = now_ms();
+		err = wg_apply(conn, ops, applied);
+		if (watch.budget.until != null) watch.budget.until += now_ms() - start;
+		return err;
 	};
 }
 
