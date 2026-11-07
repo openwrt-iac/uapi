@@ -51,13 +51,14 @@ echo "--- hex and octal integers read as the values netifd uses ---"
 wait_for "no route with metric 16 in table 4254" \
 	'routes4254 | grep -q "^10.253.4.0/24 dev $BRIDGE table 4254 .*metric 16"'
 # The ucode proto handler of OpenWrt main types the mtu through ucode's int(),
-# which reads 0x578 as 0, so the kernel keeps the wireguard default until
-# upstream restores the raw value that iproute2 parses (#359); the shell
-# handler of 25.12 hands the value to ip link itself and applies 1400.
+# which reads 0x578 as 0, so the device ends at mtu 0 or at the wireguard
+# default 1420 depending on the run, and never at 1400, until upstream restores
+# the raw value that iproute2 parses (#359); the shell handler of 25.12 hands
+# the value to ip link itself and applies 1400.
 if wg_ucode_platform; then
 	n=0
 	while [ $n -lt 20 ]; do
-		$SSH "ip link show uapi54w 2>/dev/null" | grep -q " mtu 1420 " && break
+		$SSH "ip link show uapi54w 2>/dev/null" | grep -qE " mtu (0|1420) " && break
 		n=$((n + 1)); sleep 1
 	done
 	if [ $n -ge 20 ]; then
