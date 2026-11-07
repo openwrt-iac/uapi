@@ -307,7 +307,10 @@ t.describe('wg.apply', () => {
 			{ iface: "wg1", action: "remove", public_key: PK },
 		]);
 		let status = filter(c._state.ubus_calls, function(x) { return x[1] == "status"; });
-		t.assert_equal(length(status), 1);
+		// Two readings, not one: a down interface settles only on the second
+		// quiet reading, because netifd's restart leaves a moment between its
+		// teardown and its setup that reads the same.
+		t.assert_equal(length(status), 2);
 	});
 
 	// A stored key that is not a WireGuard key made the DELETE of its peer, or a write that

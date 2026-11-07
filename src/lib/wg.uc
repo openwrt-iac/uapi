@@ -478,6 +478,43 @@ function is_up(conn, iface) {
 	return type(status) == "object" && status.up === true;
 }
 
+// netifd of OpenWrt main restarts a wireguard interface on every peer change, and
+// the kernel apply runs right after the write's reload, so the interface can be
+// mid-cycle here. A one-shot up check would skip the apply and leave netifd to
+// re-apply the peers from uci, which turns a peer that wg refuses into a
+// committed section and a setup_failed interface instead of this transaction's
+// 500. Waiting only while a setup is pending keeps a deliberately down
+// interface skipping at once, on every series. A setup that never settles,
+// which on main is a peer the platform's own re-apply refuses, reads null, so
+// the apply fails the write instead of skipping it.
+function settled_up(conn, iface) {
+	let deadline = time() + 15;
+	let quiet = 0;
+	for (;;) {
+		let status = null;
+		try {
+			status = conn.call("network.interface." + iface, "status", {});
+		} catch (e) {
+			return false;
+		}
+		if (type(status) != "object")
+			return false;
+		if (status.up === true && status.pending !== true)
+			return true;
+		// Between the teardown and the setup of one of netifd's restarts the
+		// interface reads down with no setup pending, so a single quiet
+		// reading settles nothing: the second, half a second later, is a
+		// down interface that no restart is walking to its feet.
+		if (status.pending === true)
+			quiet = 0;
+		else if (++quiet >= 2)
+			return false;
+		if (time() >= deadline)
+			return status.pending === true ? null : false;
+		sleep(500);
+	}
+}
+
 const NOT_HELD = { endpoint: null, allowed_ips: null, persistent_keepalive: null, latest_handshake: null,
                    rx_bytes: null, tx_bytes: null };
 
@@ -546,7 +583,7 @@ function reconcile(conn, interfaces, ops) {
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) continue;
 		if (seen[iface]) continue;
 		seen[iface] = true;
-		if (!is_up(conn, iface)) continue;
+		if (!settled_up(conn, iface)) continue;
 
 		let sections = peer_sections(conn, iface);
 		let wanted = {};
@@ -615,7 +652,10 @@ function apply(conn, ops, applied) {
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE))
 			return sprintf("refusing to apply to interface %J", iface);
 		if (up[iface] == null) {
-			up[iface] = is_up(conn, iface);
+			let settled = settled_up(conn, iface);
+			if (settled === null)
+				return sprintf("interface %s holds a setup pending that never ended after the reload, so its peers cannot be applied", iface);
+			up[iface] = settled;
 			if (up[iface] && type(applied) == "array")
 				push(applied, iface);
 		}

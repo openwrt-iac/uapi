@@ -281,7 +281,17 @@ without uci state change.
    its size, and again on a restore.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
-   matching `wg set`. Runs only after the reload returned zero, and reports the
+   matching `wg set`. On OpenWrt main netifd restarts a wireguard interface on
+   every peer change, so the check first waits, up to 15 s, for a setup that
+   is in flight to finish: without the wait the write's own reload would leave
+   the interface mid-cycle, the apply would skip, and netifd would re-apply
+   the peers from uci, which turns a peer that wg refuses into a committed
+   section and a `setup_failed` interface instead of the 500 below. An
+   interface that is down with no setup pending skips at once, on every
+   series, and a setup that never settles, which on main is a peer the
+   platform's own re-apply refuses, fails the write with a restore: the
+   caller gets the 500 that the per-peer refusal owes him, and the tunnel
+   keeps its committed state. Runs only after the reload returned zero, and reports the
    same way, so a failure here follows the recipe below. The interfaces actually
    applied are recorded and reported on the response as `X-Kernel-Status` and
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
