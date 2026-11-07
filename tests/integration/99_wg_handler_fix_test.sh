@@ -11,7 +11,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 echo "--- install the patched handler ---"
 ensure_wireguard || fail "could not install wireguard"
 curl -fsSL "$FIX_URL" -o /tmp/wireguard.uc.patched
-$SSH "cat > /usr/lib/netifd/proto/wireguard.uc" < /tmp/wireguard.uc.patched
+$SSH "cat > /lib/netifd/proto/wireguard.uc" < /tmp/wireguard.uc.patched
 $SSH '/etc/init.d/network restart' >/dev/null 2>&1 || true
 n=0
 while [ $n -lt 30 ]; do
