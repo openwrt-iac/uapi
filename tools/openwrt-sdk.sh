@@ -30,7 +30,7 @@ segment=$(printf '%s' "$target" | tr / -)
 if [ "$series" = main ]; then
 	base=https://downloads.openwrt.org/snapshots/targets/$target
 	sums=$(mktemp)
-	curl -fsSL "$base/sha256sums" -o "$sums"
+	curl -fsSL --retry 3 --retry-all-errors "$base/sha256sums" -o "$sums"
 	line=$(grep -m1 "openwrt-sdk-${segment}_gcc-.*Linux-x86_64\.tar\.zst" "$sums")
 else
 	base=https://downloads.openwrt.org/releases/$version/targets/$target
@@ -55,7 +55,7 @@ if [ "$cmd" != fetch ]; then
 fi
 
 mkdir -p "$dest"
-curl -fsSL -o "/tmp/$tarball" "$base/$tarball"
+curl -fsSL --retry 3 --retry-all-errors -o "/tmp/$tarball" "$base/$tarball"
 if [ "$series" = main ]; then
 	printf '%s\n' "$line" > /tmp/openwrt-sdk-sums.one
 	( cd /tmp && sha256sum -c openwrt-sdk-sums.one )
