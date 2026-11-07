@@ -9,6 +9,7 @@ FIX_URL="https://raw.githubusercontent.com/raspbeguy/openwrt/wireguard-contain-r
 fail() { echo "FAIL: $*"; exit 1; }
 
 echo "--- install the patched handler ---"
+ensure_wireguard || fail "could not install wireguard"
 curl -fsSL "$FIX_URL" -o /tmp/wireguard.uc.patched
 $SSH "cat > /usr/lib/netifd/proto/wireguard.uc" < /tmp/wireguard.uc.patched
 $SSH '/etc/init.d/network restart' >/dev/null 2>&1 || true
@@ -18,8 +19,6 @@ while [ $n -lt 30 ]; do
 	n=$((n + 1)); sleep 2
 done
 $SSH 'true' >/dev/null 2>&1 || fail "the network restart did not come back"
-
-ensure_wireguard || fail "could not install wireguard"
 
 echo "--- the #24511 scenario: one good peer, one unresolvable endpoint ---"
 PRIV=$($SSH 'wg genkey')
