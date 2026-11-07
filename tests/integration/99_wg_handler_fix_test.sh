@@ -42,7 +42,15 @@ done
 $SSH "ubus call network.interface.wgfix status" | grep -q '"up": *true' \
 	|| { $SSH 'ubus call network.interface.wgfix status; logread | grep -i wireguard | tail -10'; \
 	     fail "the interface stayed down for one unresolvable peer"; }
-$SSH "wg show wgfix peers" | grep -q "$GOOD" || fail "the good peer did not land"
+$SSH "wg show wgfix peers" | grep -q "$GOOD" || {
+	echo "--- DEBUG: state at the missing good peer ---"
+	$SSH "md5sum /lib/netifd/proto/wireguard.uc; wc -c /lib/netifd/proto/wireguard.uc" || true
+	$SSH "wg show wgfix; wg show wgfix peers; wg show wgfix endpoints" || true
+	$SSH "ubus call network.interface.wgfix status" || true
+	$SSH "logread | grep -iE 'wireguard|ucode|netifd.*wgfix' | tail -20" || true
+	$SSH "uci -q show network.wgfix; uci -q show network | grep wgfixp" || true
+	fail "the good peer did not land"
+}
 $SSH "wg show wgfix endpoints" | grep "$BAD" | grep -q '(none)' \
 	|| { $SSH "wg show wgfix endpoints"; fail "the bad peer is missing or holds an endpoint"; }
 $SSH "logread | grep -q 'nx.invalid'" || fail "the refusal is not logged"
