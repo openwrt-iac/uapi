@@ -55,10 +55,16 @@ if [ "$cmd" != fetch ]; then
 fi
 
 mkdir -p "$dest"
-# The CDN cuts long HTTP/2 transfers with a stream error, and a retry started the tarball over. -C -
-# resumes it, so a partial file left by an earlier run would be resumed too.
+# The CDN cuts long transfers, and curl's own --retry starts the file over even with -C -, so each
+# attempt is a new curl that resumes from the partial file. A partial file left by an earlier run
+# would be resumed too.
 rm -f "/tmp/$tarball"
-curl -fsSL --http1.1 -C - --retry 3 --retry-all-errors -o "/tmp/$tarball" "$base/$tarball"
+n=0
+until curl -fsSL --http1.1 -C - -o "/tmp/$tarball" "$base/$tarball"; do
+	n=$((n + 1))
+	[ $n -lt 10 ] || exit 1
+	sleep 5
+done
 if [ "$series" = main ]; then
 	printf '%s\n' "$line" > /tmp/openwrt-sdk-sums.one
 	( cd /tmp && sha256sum -c openwrt-sdk-sums.one )
