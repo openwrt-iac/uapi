@@ -533,7 +533,7 @@ function is_up(conn, iface) {
 // which on main is a peer the platform's own re-apply refuses, reads null, so
 // the apply fails the write instead of skipping it.
 function settled_up(conn, iface) {
-	let deadline = time() + 15;
+	let deadline = time() + 8;
 	let quiet = 0;
 	for (;;) {
 		let status = null;

@@ -282,7 +282,7 @@ without uci state change.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. On OpenWrt main netifd restarts a wireguard interface on
-   every peer change, so the check first waits, up to 15 s, for a setup that
+   every peer change, so the check first waits, up to 8 s, for a setup that
    is in flight to finish: without the wait the write's own reload would leave
    the interface mid-cycle, the apply would skip, and netifd would re-apply
    the peers from uci, which turns a peer that wg refuses into a committed
