@@ -22,7 +22,9 @@ $SSH 'true' >/dev/null 2>&1 || fail "the network restart did not come back"
 
 echo "--- the #24511 scenario: one good peer, one unresolvable endpoint ---"
 PRIV=$($SSH 'wg genkey')
-GOOD=$($SSH "echo '$PRIV' | wg pubkey")
+# A peer of the interface's own public key is not a peer: wg does not install it.
+GOODPRIV=$($SSH 'wg genkey')
+GOOD=$($SSH "echo '$GOODPRIV' | wg pubkey")
 BAD=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.wgfix=interface; uci set network.wgfix.proto='wireguard'
 	uci set network.wgfix.private_key='$PRIV'
