@@ -383,8 +383,11 @@ function route_still_wanted(conn, iface, r) {
 
 // Only `proto static` routes on this device are considered, which is how netifd
 // spells the ones it installs for route_allowed_ips; the interface's own on-link
-// prefix is `proto kernel` and so is never a candidate. Used on the reconcile
-// path, where the set of previously-wanted prefixes is not known from the request.
+// prefix is `proto kernel` and so is never a candidate. Both halves need real
+// iproute2, which the package depends on: the busybox applet ignores a proto
+// filter and would list the connected route, and every route beside it, as a
+// candidate for withdrawal. Used on the reconcile path, where the set of
+// previously-wanted prefixes is not known from the request.
 function installed_routes(conn, iface) {
 	let out = [];
 	for (let v6 in [false, true]) {
