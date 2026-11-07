@@ -71,7 +71,7 @@ $SSH "ubus call network.interface.wgfix status" | grep -q '"up": *true' \
 	|| fail "the interface went down for a refused keepalive"
 $SSH "wg show wgfix peers" | grep -q "$BAD" || fail "the peer with a refused keepalive vanished"
 $SSH '[ ! -e /tmp/wgfix_ran ]' || fail "the stored keepalive ran as a shell command"
-$SSH "wg show wgfix persistent-keepalive" | grep "$BAD" | grep -q ' off' \
+[ "$($SSH "wg show wgfix persistent-keepalive" | awk -v k="$BAD" '$1 == k { print $2 }')" = "off" ] \
 	|| fail "the refused keepalive reached the kernel"
 $SSH "logread | grep -q 'PersistentKeepalive'" || fail "the keepalive refusal is not logged"
 
