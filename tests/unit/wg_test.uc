@@ -10,8 +10,8 @@ const LONG = replace(sprintf('%600s', ''), ' ', 'x');
 // `wg` and `ip` are scripts here that log each command with its arguments joined by `|`, and print
 // the file named after the command when a test wrote one, so a test reads what an apply runs
 // without a WireGuard interface. A command that matches the shell pattern `fail` exits 1. The call
-// runs in a child, whose PATH finds the scripts first.
-function run_wg(uci, call, outputs, fail) {
+// runs in a child, whose PATH finds the scripts first. `load` is the expression that loads wg there.
+function run_wg(uci, call, outputs, fail, load) {
 	let mk = fs.popen("mktemp -d /tmp/uapi-wg-apply.XXXXXX");
 	let dir = trim(mk.read("all") ?? "");
 	mk.close();
@@ -21,8 +21,8 @@ function run_wg(uci, call, outputs, fail) {
 		fs.chmod(dir + "/" + name, 0o755);
 	}
 	for (let cmd, text in outputs ?? {}) fs.writefile(dir + "/" + cmd, text);
-	let script = sprintf("let wg = require('wg'); let c = require('bus').stub({ uci: %J }); c.set_ubus_response('network.interface.wg1', 'status', { up: true }); print(%s ?? 'ok');",
-	                     uci, call);
+	let script = sprintf("let wg = %s; let c = require('bus').stub({ uci: %J }); c.set_ubus_response('network.interface.wg1', 'status', { up: true }); print(%s ?? 'ok');",
+	                     load ?? "require('wg')", uci, call);
 	let p = fs.popen(sprintf("PATH=%s:\"$PATH\" ucode -L tests -L src/lib -e %s 2>&1", dir, wg.shellquote(script)));
 	let result = trim(p.read("all") ?? "");
 	p.close();
@@ -30,6 +30,8 @@ function run_wg(uci, call, outputs, fail) {
 	system([ "rm", "-rf", dir ]);
 	return { result, commands: filter(split(log, "\n"), (l) => l != "") };
 }
+// wg as it runs where netifd has the ucode proto handler of OpenWrt main.
+const UCODE_WG = "require('harness').load_with_fs({ ...require('fs'), access: (p) => p == '/lib/netifd/proto/wireguard.uc' || require('fs').access(p) }, [ 'wg' ])";
 const WG1 = { '.type': 'interface', '.anonymous': false, proto: 'wireguard' };
 let peer = (extra) => ({ '.type': 'wireguard_wg1', '.anonymous': false, ...extra });
 let set_of = (key, ips) => sprintf("wg|set|wg1|peer|%s|allowed-ips|%s|persistent-keepalive|0|preshared-key|/dev/null", key, ips);
@@ -961,5 +963,56 @@ t.describe('wg IPv6 endpoint bracketing', () => {
 	t.it('leaves IPv4 and hostnames alone', () => {
 		t.assert_equal(endpoint_arg('198.51.100.7'), '198.51.100.7:51820');
 		t.assert_equal(endpoint_arg('vpn.example.org'), 'vpn.example.org:51820');
+	});
+});
+
+// The ucode proto handler of OpenWrt main gives wg each value as uci holds it, routes each entry of
+// allowed_ips with the length that int() reads, leaves out a peer without a key with its routes, and
+// takes a flag only as "1".
+t.describe('wg under the ucode handler', () => {
+	let uc = t.load_with_fs({ ...fs, access: (p) => p == '/lib/netifd/proto/wireguard.uc' || fs.access(p) }, [ 'wg' ]);
+	let prefixes = (entries) => map(uc.route_prefixes(entries, true), (r) => r.prefix);
+
+	t.it('expands no escape in a key', () => {
+		t.assert_equal(uc.kernel_key(substr(PK, 0, 43) + '\\075'), null);
+		t.assert_equal(uc.kernel_key(PK + ' # peer B'), PK);
+		t.assert_equal(uc.kernel_key(PK + '\nPublicKey=' + PK2), false);
+		t.assert_deep_equal(uc.kernel_keys(PK + '\\nPublicKey=' + PK2), []);
+	});
+	t.it('reads a list entry as one entry and an option as its words, and expands no escape', () => {
+		t.assert_deep_equal(uc.allowed_ips([ '10.0.0.0/24 10.0.1.7' ]), [ '10.0.0.0/24 10.0.1.7' ]);
+		t.assert_deep_equal(uc.allowed_ips(' 10.0.0.0/24\t 10.0.1.7 '), [ '10.0.0.0/24', '10.0.1.7' ]);
+		t.assert_deep_equal(uc.allowed_ips('10.0.0.0/8\\054192.168.0.0/16'), [ '10.0.0.0/8\\054192.168.0.0/16' ]);
+		t.assert_equal(uc.allowed_ips(''), null);
+	});
+	t.it('cuts the line at the first #, with the entries after it', () => {
+		t.assert_deep_equal(uc.allowed_ips([ '10.0.0.0/24#/0x10', '10.0.1.7' ]), [ '10.0.0.0/24' ]);
+	});
+	t.it('routes each entry with the leading decimal digits of its length', () => {
+		t.assert_deep_equal(prefixes([ '10.98.152.0/24#/0x10', '10.98.152.0/0x10', '10.0.0.0/8\\054192.168.0.0/16' ]),
+		                    [ '10.98.152.0/24', '0.0.0.0/0', '10.0.0.0/8' ]);
+	});
+	t.it('routes a bare address as a host, as IPv6 only with a colon, and not an entry without a length it reads', () => {
+		t.assert_deep_equal(prefixes([ '10.0.0.7', 'fd00::1', '10.0.0.0/x', '10.0.0.0/8:1', '10.0.0.0/-1' ]),
+		                    [ '10.0.0.7/32', 'fd00:0:0:0:0:0:0:1/128' ]);
+	});
+	t.it('takes a flag as on only when it holds 1', () => {
+		let v = [ '1', 'true', 'yes', 'on', [ '1' ], '0', null ];
+		t.assert_deep_equal(map(v, (f) => uc.peer_flag(f)), [ true, false, false, false, false, false, false ]);
+		t.assert_deep_equal(map(v, (f) => wg.peer_flag(f)), [ true, true, true, true, true, false, false ]);
+	});
+	t.it('withdraws a route that only a peer without a key wants', () => {
+		let uci = { network: { wg1: WG1, k: peer({ allowed_ips: '10.0.0.0/24', route_allowed_ips: '1' }) } };
+		let ops = sprintf("wg.apply(c, %J)", [ { iface: 'wg1', action: 'remove', public_key: PK,
+		                                          prev_allowed_ips: [ '10.0.0.0/24' ], prev_route_allowed_ips: true } ]);
+		let del = (r) => filter(r.commands, (l) => match(l, /^ip\|route\|del/));
+		t.assert_deep_equal(del(run_wg(uci, ops, null, null, UCODE_WG)), [ 'ip|route|del|10.0.0.0/24|dev|wg1|proto|static|scope|link' ]);
+		t.assert_deep_equal(del(run_wg(uci, ops)), []);
+	});
+	t.it('restores a peer whose disabled holds true', () => {
+		let uci = { network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', disabled: 'true' }) } };
+		let sets = (r) => filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0);
+		t.assert_deep_equal(sets(run_wg(uci, "wg.reconcile(c, [ 'wg1' ])", null, null, UCODE_WG)), [ set_of(PK, '10.0.0.2/32') ]);
+		t.assert_deep_equal(sets(run_wg(uci, "wg.reconcile(c, [ 'wg1' ])")), []);
 	});
 });

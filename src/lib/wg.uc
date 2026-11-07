@@ -39,6 +39,26 @@ function run(argv) {
 	return { ok: code == 0, code: code, output: trim(output) };
 }
 
+// netifd of OpenWrt main replaced wireguard.sh with a ucode proto handler. It gives wg each value as
+// uci holds it, with no printf %b, takes a list of allowed IPs as its entries and an option as its
+// words, routes each of them, leaves out a peer without a key with its routes, and reads disabled
+// and route_allowed_ips as on only when they hold "1". uapi reads, sets and routes a peer as the
+// handler that netifd runs.
+const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
+
+function ucode_handler() {
+	return fs.access(UCODE_HANDLER) === true;
+}
+
+function peer_flag(v) {
+	return ucode_handler() ? v === "1" : values.shell_bool(values.config_get(v), false);
+}
+
+function handler_entries(v) {
+	if (v == null || v == "") return null;
+	return (type(v) == "array") ? v : split(trim(v), /[[:space:]]+/);
+}
+
 const ESCAPES = { a: 7, b: 8, e: 27, f: 12, n: 10, r: 13, t: 9, v: 11, "\\": 92 };
 
 // printf_b() walks a value byte by byte under the lock of `network`. A key line that escapes each of
@@ -83,14 +103,16 @@ function printf_b(s) {
 	return { text: join("", out), stopped: false };
 }
 
-// The lines that wg reads for a stored value from the config of wireguard.sh, which joins a list
-// with spaces, each cut at `#` and without whitespace. wg_line() also ends a line at a NUL byte, as
-// wg's parser does, because ucode's regex functions stop there. `stopped` when `\c` ended the
-// config in the value. null for a value that is not expanded.
+// The lines that wg reads for a stored value from the config of the handler, each cut at `#` and
+// without whitespace: wireguard.sh joins a list with spaces and expands the escapes, and the ucode
+// handler expands none. wg_line() also ends a line at a NUL byte, as wg's parser does, because
+// ucode's regex functions stop there. `stopped` when `\c` ended the config in the value. null for a
+// value that is not expanded.
 function config_lines(v) {
 	let s = values.config_get(v);
 	if (type(s) != "string") return { lines: [], stopped: false };
-	let x = (index(s, "\\") < 0) ? { text: s, stopped: false } : (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
+	let x = (index(s, "\\") < 0 || ucode_handler()) ? { text: s, stopped: false }
+		: (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
 	if (x == null) return null;
 	return { lines: map(split(x.text, "\n"), (l) => values.wg_line(l)), stopped: x.stopped };
 }
@@ -130,8 +152,13 @@ function kernel_keys(v) {
 // is left of it, so that reads as one empty entry, which a write refuses too. A value that the
 // expansion would give a second line, the end of the config or a byte that is not printable ASCII,
 // none of which an address holds, or that is too long to expand, reads unexpanded, so that its
-// backslash shows in an entry and the response stays valid UTF-8.
+// backslash shows in an entry and the response stays valid UTF-8. The ucode handler joins its
+// entries with commas and expands nothing, so a list entry that holds a space is one entry.
 function allowed_ips(v) {
+	if (ucode_handler()) {
+		let e = handler_entries(v);
+		return (e == null) ? null : split(split(join(",", e), "#")[0], ",");
+	}
 	let s = values.config_get(v);
 	if (type(s) != "string" || s == "") return null;
 	s = replace(s, " ", ",");
@@ -160,7 +187,7 @@ function peer_sections(conn, iface) {
 		if (s['.type'] != want) return;
 		// A disabled peer is one netifd omits when it builds the config, so the
 		// kernel should not carry it either.
-		if (values.shell_bool(values.config_get(s.disabled), false)) return;
+		if (peer_flag(s.disabled)) return;
 		push(out, s);
 	});
 	return out;
@@ -324,20 +351,35 @@ function word_route(w) {
 	return (r?.v6 === v6) ? r : null;
 }
 
-function routes_from(words, enabled) {
+// The ucode handler routes an entry as IPv6 when it holds a colon anywhere, with the address before
+// the first `/` and the length that ucode's int() reads from what follows it, its leading decimal
+// digits, so `/0x10` routes /0 and `/24#x` routes /24.
+function entry_route(e) {
+	let v6 = index(e, ":") >= 0, parts = split(e, "/");
+	let r = route_prefix(parts[0] + "/" + ((length(parts) > 1) ? int(parts[1]) : v6 ? 128 : 32));
+	return (r?.v6 === v6) ? r : null;
+}
+
+function routes_from(entries, enabled) {
 	if (!enabled) return [];
+	let route = ucode_handler() ? entry_route : word_route;
 	let out = [];
-	for (let w in (type(words) == "array" ? words : [])) {
-		let r = word_route(w);
+	for (let e in (type(entries) == "array" ? entries : [])) {
+		let r = route(e);
 		if (r != null) push(out, r);
 	}
 	return out;
 }
 
-// wireguard.sh installs a route for each word of `for allowed_ip in $peer_a_ips`.
+// What the handler routes from a stored allowed_ips: wireguard.sh each word of
+// `for allowed_ip in $peer_a_ips`, the ucode handler each entry.
+function route_entries(v) {
+	return ucode_handler() ? handler_entries(v) : values.config_get_words(v);
+}
+
 function peer_routes(section) {
-	return routes_from(values.config_get_words(section.allowed_ips) ?? [],
-	                   values.shell_bool(values.config_get(section.route_allowed_ips), false));
+	if (ucode_handler() && !section.public_key) return [];
+	return routes_from(route_entries(section.allowed_ips) ?? [], peer_flag(section.route_allowed_ips));
 }
 
 // netifd puts an interface's routes in ip4table / ip6table when those are set,
@@ -711,4 +753,4 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
+         peer_flag, route_entries, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

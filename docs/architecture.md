@@ -437,6 +437,18 @@ can carry overlapping `allowed_ips`. The kernel is never scanned for strays on t
 on the reconcile that follows a rollback, so a route uapi did not install is not
 at risk.
 
+OpenWrt main replaced `wireguard.sh` with a ucode proto handler,
+`/lib/netifd/proto/wireguard.uc`. `wg.uc` follows the handler that netifd
+runs, and it finds which one by the presence of that file. The ucode handler
+gives wg each value as uci holds it, with no printf %b. It takes a list of
+allowed IPs as its entries and an option as its words, and it routes each of
+them. A route takes the address before the first `/` and the length that
+ucode's `int()` reads after it. The handler leaves out a peer without a key,
+with its routes, and takes `disabled` and `route_allowed_ips` as on only when
+they hold `1`. The read, the kernel apply, the routes and the reconcile take
+these rules from `wg.uc`. So on main a GET reports an entry that wg refuses
+as that one entry, not as the prefixes that `wireguard.sh` made of it.
+
 One consequence to know: netifd reports the routes it installs in
 `network.interface.<name> status`, and routes installed here are not in that
 list until the next `ifup`. The kernel is correct; netifd's bookkeeping lags.
