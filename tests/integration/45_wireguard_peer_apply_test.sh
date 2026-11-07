@@ -543,40 +543,48 @@ has_peer "$WORDS_PEER" && fail "the hand-written peer is still in the kernel aft
 [ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
 
 # wireguard.sh hands its config to wg through printf %b, so ifup gives wg a public_key that ends in
-# `\075` with an `=` there. A write refuses such a key, and one written by hand keeps it. On an up
-# interface, the write that disabled such a peer and its DELETE answered 500, and so did the
-# restore of any failed write of the interface.
-echo "--- a hand-written key with an escape: ifup sets the key that wg reads, and a write restores around, disables and deletes the peer ---"
+# `\075` with an `=` there. The ucode handler of OpenWrt main gives wg the value as it is, which
+# wg refuses with the whole config, so the interface never comes up there. A write refuses such a
+# key, and one written by hand keeps it. On an up interface, the write that disabled such a peer
+# and its DELETE answered 500, and so did the restore of any failed write of the interface.
+echo "--- a hand-written key with an escape: the read follows the handler, and a write restores around, refuses and deletes the peer ---"
 ESC_PEER=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45esc=wireguard_$IFACE; uci set network.uapi45esc.public_key='${ESC_PEER%=}\\075'
 	uci add_list network.uapi45esc.allowed_ips=10.98.99.70/32; uci commit network; ifup $IFACE"
 sleep 5
-has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
-[ "$(read_peer uapi45esc '[.runtime.in_kernel, .runtime.allowed_ips]')" = '[true,["10.98.99.70/32"]]' ] \
-	|| fail "the read does not match the key with an escape to the peer of the kernel: $(read_peer uapi45esc .runtime)"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
-body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the peer with an escape: $(body_of "$r")"
-has_peer "$ESC_PEER" || fail "the restore removed the peer with an escape from the kernel"
+if wg_ucode_platform; then
+	has_peer "$ESC_PEER" && fail "the platform set a peer for a key with an escape"
+	[ "$(read_peer uapi45esc .runtime)" = '{}' ] \
+		|| fail "the read reports the kernel of an interface that never comes up: $(read_peer uapi45esc .runtime)"
+else
+	has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
+	[ "$(read_peer uapi45esc '[.runtime.in_kernel, .runtime.allowed_ips]')" = '[true,["10.98.99.70/32"]]' ] \
+		|| fail "the read does not match the key with an escape to the peer of the kernel: $(read_peer uapi45esc .runtime)"
+	r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+		-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
+		    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+	[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+	body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the peer with an escape: $(body_of "$r")"
+	has_peer "$ESC_PEER" || fail "the restore removed the peer with an escape from the kernel"
+fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/description","value":"esc"}]')
 # v4 (#308): the stored public_key with an escape is an error the section holds, so any write is refused.
 [ "$(status_of "$r")" = "422" ] || fail "JSON Patch of another field of a peer with a stored bad key expected 422 on v4: $(body_of "$r")"
-has_peer "$ESC_PEER" || fail "the refused JSON Patch removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/public_key","value":"'"${PEER3%=}"'\\075"}]')
 [ "$(status_of "$r")" = "422" ] || fail "a JSON Patch that sets a key with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":true}')
 # v4 (#308): the stored bad key blocks every write of the section, disabling included; fix it first.
 [ "$(status_of "$r")" = "422" ] || fail "PATCH disabled of the peer with an escape expected 422 on v4: $(body_of "$r")"
-has_peer "$ESC_PEER" || fail "the refused PATCH removed the peer with an escape from the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
 [ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
-$SSH "uci set network.uapi45esc.disabled=0; uci commit network; ifup $IFACE"
-sleep 5
-has_peer "$ESC_PEER" || fail "ifup did not set the re-enabled peer with an escape: $(kernel_peers)"
+if ! wg_ucode_platform; then
+	has_peer "$ESC_PEER" || fail "a refused PATCH removed the peer with an escape from the kernel"
+	$SSH "uci set network.uapi45esc.disabled=0; uci commit network; ifup $IFACE"
+	sleep 5
+	has_peer "$ESC_PEER" || fail "ifup did not set the re-enabled peer with an escape: $(kernel_peers)"
+fi
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45esc")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer with an escape: $(body_of "$r")"
 has_peer "$ESC_PEER" && fail "the deleted peer with an escape is still in the kernel"
@@ -596,31 +604,42 @@ has_peer "$PEER3" && fail "the disabled peer without allowed IPs is still in the
 r=$(call -X DELETE "$URL/network/wireguard_peers/$noips")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of a peer without allowed IPs: $(body_of "$r")"
 
-# A list entry is joined like an option, so it reads as its two prefixes, which wg holds and which
-# have a route each. Read whole, it answered 422, and a write that turned the routes off kept both.
-echo "--- a list entry of two prefixes reads as both, and turning its routes off withdraws both ---"
+# wireguard.sh joins a list entry like an option, so it reads as its two prefixes, which wg holds
+# and which have a route each. Read whole, it answered 422, and a write that turned the routes off
+# kept both. The ucode handler gives wg the entry as one, which wg refuses with the whole config.
+echo "--- a list entry of two prefixes reads as the handler gives it to wg, and turning its routes off withdraws them ---"
 $SSH "uci set network.uapi45list=wireguard_$IFACE; uci set network.uapi45list.public_key='$WORDS_PEER'
 	uci add_list network.uapi45list.allowed_ips='10.98.142.0/24 10.98.143.7'; uci set network.uapi45list.route_allowed_ips=1
 	uci commit network; ifup $IFACE"
 sleep 5
-static_routes | grep -q '^10.98.142.0/24 ' || fail "ifup installed no route for the first prefix: $(static_routes)"
-static_routes | grep -q '^10.98.143.7 ' || fail "ifup installed no route for the second prefix: $(static_routes)"
+routes_off() { call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45list" -d '{"route_allowed_ips":false}'; }
 view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45list")")
-[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.142.0/24","10.98.143.7"]' ] || fail "the list entry read wrong: $view"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45list" -d '{"route_allowed_ips":false}')
-[ "$(status_of "$r")" = "200" ] || fail "turning the routes off expected 200, got $(status_of "$r"): $(body_of "$r")"
-[ -z "$(static_routes)" ] || fail "routes left behind by turning them off: $(static_routes)"
-aips=$($SSH "wg show $IFACE allowed-ips" | awk -v k="$WORDS_PEER" '$1 == k { $1 = ""; print }')
-for pfx in 10.98.142.0/24 10.98.143.7/32; do
-	case " $aips " in *" $pfx "*) ;; *) fail "wg does not hold $pfx: $aips" ;; esac
-done
-call -X DELETE "$URL/network/wireguard_peers/uapi45list" >/dev/null
+if wg_ucode_platform; then
+	[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.142.0/24 10.98.143.7"]' ] || fail "the list entry read wrong: $view"
+	r=$(routes_off)
+	[ "$(status_of "$r")" = "422" ] || fail "a write of an entry that wg refuses expected 422, got $(status_of "$r"): $(body_of "$r")"
+else
+	static_routes | grep -q '^10.98.142.0/24 ' || fail "ifup installed no route for the first prefix: $(static_routes)"
+	static_routes | grep -q '^10.98.143.7 ' || fail "ifup installed no route for the second prefix: $(static_routes)"
+	[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.142.0/24","10.98.143.7"]' ] || fail "the list entry read wrong: $view"
+	r=$(routes_off)
+	[ "$(status_of "$r")" = "200" ] || fail "turning the routes off expected 200, got $(status_of "$r"): $(body_of "$r")"
+	[ -z "$(static_routes)" ] || fail "routes left behind by turning them off: $(static_routes)"
+	aips=$($SSH "wg show $IFACE allowed-ips" | awk -v k="$WORDS_PEER" '$1 == k { $1 = ""; print }')
+	for pfx in 10.98.142.0/24 10.98.143.7/32; do
+		case " $aips " in *" $pfx "*) ;; *) fail "wg does not hold $pfx: $aips" ;; esac
+	done
+fi
+r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45list")
+[ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer with a list entry of two prefixes: $(body_of "$r")"
+[ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
 
 # wireguard.sh gives wg the line `AllowedIPs=` through printf %b, so `\054` separates two prefixes
 # there, and routes each word of the option as uci holds it, with the address before the first `/`
 # and the length after the last. The read gave the word as one entry, so a write of the peer
-# answered 422, the restore gave wg the word and failed, and the DELETE withdrew no route.
-echo "--- an escape in allowed_ips reads as the prefixes that wg holds, and a write, the restore and the DELETE follow the route of netifd ---"
+# answered 422, the restore gave wg the word and failed, and the DELETE withdrew no route. The
+# ucode handler gives wg the word as it is, which wg refuses with the whole config.
+echo "--- an escape in allowed_ips reads as the handler gives it to wg, and a write, the restore and the DELETE follow the route of netifd ---"
 ESC_IPS=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45escips=wireguard_$IFACE; uci set network.uapi45escips.public_key='$ESC_IPS'
 	uci set network.uapi45escips.allowed_ips='10.98.150.0/24\\05410.98.151.0/25'; uci set network.uapi45escips.route_allowed_ips=1
@@ -633,39 +652,49 @@ escips_held() {
 	done
 	[ "$(static_routes | awk '{ print $1 }')" = "10.98.150.0/25" ] || fail "$1: the routes are $(static_routes)"
 }
-escips_held "after ifup"
+describe_esc() { call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45escips" -d '{"description":"esc"}'; }
 view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45escips")")
-[ "$(printf '%s\n' "$view" | jq -c '.allowed_ips')" = '["10.98.150.0/24","10.98.151.0/25"]' ] || fail "the escape read wrong: $view"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45escips" -d '{"description":"esc"}')
-[ "$(status_of "$r")" = "200" ] || fail "PATCH of a peer with an escape in allowed_ips: $(body_of "$r")"
-escips_held "after a PATCH"
-[ "$($SSH "uci get network.uapi45escips.allowed_ips")" = '10.98.150.0/24\05410.98.151.0/25' ] || fail "the PATCH rewrote allowed_ips"
-r=$(bad_write)
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
-body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the escape in allowed_ips: $(body_of "$r")"
-escips_held "after the restore"
+if wg_ucode_platform; then
+	[ "$(printf '%s\n' "$view" | jq -c '.allowed_ips')" = '["10.98.150.0/24\\05410.98.151.0/25"]' ] || fail "the escape read wrong: $view"
+	r=$(describe_esc)
+	[ "$(status_of "$r")" = "422" ] || fail "a write of an entry that wg refuses expected 422, got $(status_of "$r"): $(body_of "$r")"
+else
+	escips_held "after ifup"
+	[ "$(printf '%s\n' "$view" | jq -c '.allowed_ips')" = '["10.98.150.0/24","10.98.151.0/25"]' ] || fail "the escape read wrong: $view"
+	r=$(describe_esc)
+	[ "$(status_of "$r")" = "200" ] || fail "PATCH of a peer with an escape in allowed_ips: $(body_of "$r")"
+	escips_held "after a PATCH"
+	[ "$($SSH "uci get network.uapi45escips.allowed_ips")" = '10.98.150.0/24\05410.98.151.0/25' ] || fail "the PATCH rewrote allowed_ips"
+	r=$(bad_write)
+	[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+	body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the escape in allowed_ips: $(body_of "$r")"
+	escips_held "after the restore"
+fi
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45escips")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer with an escape in allowed_ips: $(body_of "$r")"
 has_peer "$ESC_IPS" && fail "the deleted peer with an escape in allowed_ips is still in the kernel"
 [ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
 
-# wg cuts the line at `#`, and the route of the word takes the length after its last `/`, which
-# netifd reads with strtoul in base 0, so 0x10 is 16.
-echo "--- the route of a word follows the length as netifd reads it, through a write, the restore and the DELETE ---"
+# wg cuts the line at `#`. wireguard.sh routes the word with the length after its last `/`, which
+# netifd reads with strtoul in base 0, so 0x10 is 16, and the ucode handler with the digits that
+# int() reads after the first `/`, so 24.
+echo "--- the route of an entry follows the length as the handler reads it, through a write, the restore and the DELETE ---"
+LEN_ROUTE=10.98.0.0/16
+wg_ucode_platform && LEN_ROUTE=10.98.152.0/24
 LEN_PEER=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45len=wireguard_$IFACE; uci set network.uapi45len.public_key='$LEN_PEER'
 	uci set network.uapi45len.allowed_ips='10.98.152.0/24#/0x10'; uci set network.uapi45len.route_allowed_ips=1
 	uci commit network; ifup $IFACE"
 sleep 5
-[ "$(static_routes | awk '{ print $1 }')" = "10.98.0.0/16" ] || fail "ifup installed other routes: $(static_routes)"
+[ "$(static_routes | awk '{ print $1 }')" = "$LEN_ROUTE" ] || fail "ifup installed other routes: $(static_routes)"
 view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45len")")
 [ "$(printf '%s\n' "$view" | jq -c '.allowed_ips')" = '["10.98.152.0/24"]' ] || fail "the allowed IPs read wrong: $view"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45len" -d '{"description":"len"}')
 [ "$(status_of "$r")" = "200" ] || fail "PATCH of the peer: $(body_of "$r")"
-[ "$(static_routes | awk '{ print $1 }')" = "10.98.0.0/16" ] || fail "the PATCH changed the routes: $(static_routes)"
+[ "$(static_routes | awk '{ print $1 }')" = "$LEN_ROUTE" ] || fail "the PATCH changed the routes: $(static_routes)"
 r=$(bad_write)
 body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore did not recover: $(body_of "$r")"
-[ "$(static_routes | awk '{ print $1 }')" = "10.98.0.0/16" ] || fail "the restore changed the routes: $(static_routes)"
+[ "$(static_routes | awk '{ print $1 }')" = "$LEN_ROUTE" ] || fail "the restore changed the routes: $(static_routes)"
 r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45len")
 [ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer: $(body_of "$r")"
 [ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
@@ -674,7 +703,10 @@ r=$(call -X DELETE "$URL/network/wireguard_peers/uapi45len")
 # just installed, and the restore after a failed write deleted a route that the kernel prints in
 # another spelling than uci holds.
 echo "--- a respelled prefix keeps its route, through a PUT and through a restore ---"
-static6() { $SSH "ip -6 route show dev $IFACE proto static 2>/dev/null" || true; }
+static6() {
+	wait_iface_settled "$IFACE" || true
+	$SSH "ip -6 route show dev $IFACE proto static 2>/dev/null" || true
+}
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"fd00:98:cc::/64\"],\"route_allowed_ips\":true}")
 [ "$(status_of "$r")" = "200" ] || fail "POST routed v6 peer: $(body_of "$r")"
@@ -724,13 +756,17 @@ for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}' '{"disabl
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
 	[ "$(status_of "$r")" = "422" ] || fail "PATCH $body of a peer with stored errors expected 422 on v4: $(body_of "$r")"
 done
-endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
-[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
-keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
-[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
 [ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
 	|| fail "a refused PATCH rewrote the stored port or keepalive"
-has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
+# On main the commit by hand above restarts the interface, and wg's config parser refuses 25x, so
+# the interface holds no peer to keep (#24511).
+if ! wg_ucode_platform; then
+	endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+	[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
+	keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
+	[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
+	has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
+fi
 call -X DELETE "$URL/network/wireguard_peers/$kept" >/dev/null
 
 # wireguard.sh gives every enabled peer to one `wg syncconf`, so one stored peer that wg refuses
@@ -771,27 +807,38 @@ done
 
 # wireguard.sh writes `AllowedIPs=${peer_a_ips// /, }`, so a tab between two prefixes reaches wg as
 # one entry, which it refuses. The read gave two entries, and a PUT of it stored a list that wg takes.
-echo "--- a tab between two allowed IPs reads as one entry, wg refuses it, a PUT of the read is refused and disabling passes ---"
+# The ucode handler splits an option at any whitespace, so the tab separates two entries there.
+echo "--- a tab between two allowed IPs reads as the handler gives it to wg, and a PUT of the read keeps what wg takes ---"
 TAB_PEER=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45tab=wireguard_$IFACE2; uci set network.uapi45tab.public_key='$TAB_PEER'
 	uci set network.uapi45tab.allowed_ips=\"\$(printf '10.98.95.2/32\t10.98.95.3/32')\"; uci commit network"
 view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45tab")")
-[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.95.2/32\t10.98.95.3/32"]' ] || fail "the allowed IPs read wrong: $view"
-r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
-[ "$(status_of "$r")" = "422" ] || fail "PUT of the read expected 422, got $(status_of "$r"): $(body_of "$r")"
-[ "$($SSH "uci -q get network.uapi45tab.allowed_ips" | tr '\t' '|')" = "10.98.95.2/32|10.98.95.3/32" ] \
-	|| fail "the refused PUT changed the stored allowed IPs"
-$SSH "ifup $IFACE2"
-sleep 10
-$SSH "ubus call network.interface.$IFACE2 status" | grep -q '"up": true' \
-	&& fail "$IFACE2 came up with the tab, so wg took what the read gives as one entry"
-r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d '{"disabled":true}')
-[ "$(status_of "$r")" = "200" ] || fail "disabling the peer expected 200, got $(status_of "$r"): $(body_of "$r")"
-$SSH "ifup $IFACE2"
-n=0
-until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
-	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the tab peer disabled"; sleep 1
-done
+up2() { $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; }
+if wg_ucode_platform; then
+	[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.95.2/32","10.98.95.3/32"]' ] || fail "the allowed IPs read wrong: $view"
+	r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+	[ "$(status_of "$r")" = "200" ] || fail "PUT of the read expected 200, got $(status_of "$r"): $(body_of "$r")"
+	n=0
+	until up2; do
+		n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the two entries of the tab"; sleep 1
+	done
+else
+	[ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["10.98.95.2/32\t10.98.95.3/32"]' ] || fail "the allowed IPs read wrong: $view"
+	r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d "$(printf '%s' "$view" | jq -c 'del(.runtime)')")
+	[ "$(status_of "$r")" = "422" ] || fail "PUT of the read expected 422, got $(status_of "$r"): $(body_of "$r")"
+	[ "$($SSH "uci -q get network.uapi45tab.allowed_ips" | tr '\t' '|')" = "10.98.95.2/32|10.98.95.3/32" ] \
+		|| fail "the refused PUT changed the stored allowed IPs"
+	$SSH "ifup $IFACE2"
+	sleep 10
+	up2 && fail "$IFACE2 came up with the tab, so wg took what the read gives as one entry"
+	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d '{"disabled":true}')
+	[ "$(status_of "$r")" = "200" ] || fail "disabling the peer expected 200, got $(status_of "$r"): $(body_of "$r")"
+	$SSH "ifup $IFACE2"
+	n=0
+	until up2; do
+		n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the tab peer disabled"; sleep 1
+	done
+fi
 call -X DELETE "$URL/network/wireguard_peers/uapi45tab" >/dev/null
 
 # wireguard.sh writes `AllowedIPs=` for a value that is not empty, and wg refuses the line when the cut
@@ -845,8 +892,11 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 [ "$(status_of "$r")" = "500" ] || fail "the write with the bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' || fail "the restore claimed to recover: $(body_of "$r")"
 body_of "$r" | grep -q 'marked + or -' || fail "the error names no marker entry: $(body_of "$r")"
-ips=$($SSH "wg show $IFACE2 allowed-ips" | grep -F "$MARK" | cut -f2)
-[ "$ips" = "10.98.94.2/32 10.98.94.99/32" ] || fail "the refused restore changed the kernel of the peer: '$ips'"
+# On main every restart re-derives the kernel from uci, so the hand-set IP is gone before the write.
+if ! wg_ucode_platform; then
+	ips=$($SSH "wg show $IFACE2 allowed-ips" | grep -F "$MARK" | cut -f2)
+	[ "$ips" = "10.98.94.2/32 10.98.94.99/32" ] || fail "the refused restore changed the kernel of the peer: '$ips'"
+fi
 $SSH "uci delete network.uapi45mark; uci commit network; wg set $IFACE2 peer '$MARK' remove"
 
 # The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
@@ -873,9 +923,13 @@ body_of "$r" | grep -q 'nosuchservice' && fail "the 422 quotes the stored value:
 [ "$($SSH "uci get network.$IFACE3.proto")" = "static" ] || fail "the refused switch changed the proto"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d "$TO_WG3,\"disabled\":true}")
 [ "$(status_of "$r")" = "200" ] || fail "switch with disabled true: $(body_of "$r")"
-$SSH "uci set network.$IFACE3.disabled=0; uci commit network; /etc/init.d/network reload"
-sleep 10
-up3 && fail "$IFACE3 came up with a listen_port that wg cannot resolve, so the refusal guards nothing"
+# The ucode handler of main drops a port name before wg sees it and brings the interface up, as
+# 54_interface_netifd_reads_test pins (#359). The switch refuses the name on both.
+if ! wg_ucode_platform; then
+	$SSH "uci set network.$IFACE3.disabled=0; uci commit network; /etc/init.d/network reload"
+	sleep 10
+	up3 && fail "$IFACE3 came up with a listen_port that wg cannot resolve, so the refusal guards nothing"
+fi
 $SSH "uci set network.$IFACE3.disabled=1; uci commit network; /etc/init.d/network reload"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d '{"disabled":false}')
 [ "$(status_of "$r")" = "422" ] || fail "enabling with the stored listen_port expected 422, got $(status_of "$r"): $(body_of "$r")"
