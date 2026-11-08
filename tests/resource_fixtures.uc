@@ -313,7 +313,7 @@ const CASES = [
 	},
 	{
 		file: "sqm.queues.uc", id: "q1", pkg: "sqm",
-		section: { '.type': 'queue', interface: 'lan', enabled: '0', download: '90000', upload: '10000', qdisc: 'cake', script: 'piece_of_cake.qos' },
+		section: { '.type': 'queue', interface: 'lan', enabled: '1', download: '90000', upload: '10000', qdisc: 'cake', script: 'piece_of_cake.qos' },
 	},
 	{
 		file: "snmpd.agents.uc", id: "ag1", pkg: "snmpd",
