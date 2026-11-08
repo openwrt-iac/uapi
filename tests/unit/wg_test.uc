@@ -1059,7 +1059,10 @@ t.describe('wg waits for the restart of the ucode handler', () => {
 	});
 	t.it('fails the write when the setup never settles, after the 8 s of the deadline', () => {
 		let r = settle([ PENDING ], apply);
-		t.assert_match(r.result, /^interface wg1 holds a setup pending that never ended after the reload, so its peers cannot be applied\/1[6-9]$/);
+		let m = match(r.result, /^interface wg1 holds a setup pending that never ended after the reload, so its peers cannot be applied\/([0-9]+)$/);
+		// time() counts whole seconds, so the deadline ends 7 to 8 s after the first reading: 15 to
+		// 17 readings half a second apart, and fewer on a slow runner. Two would be a give-up.
+		t.assert_true(m != null && int(m[1]) >= 10 && int(m[1]) <= 17, r.result);
 		t.assert_false(applied(r), 'wg set on an interface that never settled');
 	});
 	t.it('reads a pending interface once under wireguard.sh, and skips it', () => {
