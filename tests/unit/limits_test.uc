@@ -26,6 +26,16 @@ t.describe('limits.load', () => {
 		t.assert_equal(cfg.body_read_s, limits.DEFAULTS.body_read_s);
 	});
 
+	// The body is parsed before the bearer check, and the time bounds fill uhttpd's 60 s.
+	t.it('ignores a value above the default, which can only lower a bound', () => {
+		let cfg = limits.load(conn_with([{ max_body_bytes: "16777216", max_body_containers: "65536",
+		                                   body_read_s: "60", reload_budget_s: "120" }]));
+		t.assert_deep_equal(cfg, limits.DEFAULTS);
+		cfg = limits.load(conn_with([{ max_body_bytes: "262144", max_body_containers: "2000",
+		                               body_read_s: "10", reload_budget_s: "20" }]));
+		t.assert_deep_equal(cfg, limits.DEFAULTS);
+	});
+
 	t.it('ignores non-numeric values', () => {
 		let cfg = limits.load(conn_with([{ max_body_containers: "abc" }]));
 		t.assert_equal(cfg.max_body_containers, limits.DEFAULTS.max_body_containers);
