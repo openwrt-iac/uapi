@@ -696,13 +696,17 @@ The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-
 - [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), shipped in 3.4.0.
 - [Group the special endpoints under `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and the scopes disagree today, breaking.
 - [Merge `dhcp/leases6` into `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint less, breaking.
-- [Drop `managed` and the adopt flow](https://github.com/openwrt-iac/uapi/issues/321): the envelope loses a field and a route, breaking. The `v4` branch then reverted it and keeps both, because libuci names an anonymous section by its position, so its name moves when an earlier section is deleted.
 - [One documented runtime envelope on every resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources document their runtime today, breaking.
 - [Prune dead error codes from the enum](https://github.com/openwrt-iac/uapi/issues/323): `unsupported_media_type` is the documented-dead one, breaking for generated clients.
 - [Consolidate the `x-uapi-*` marker namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor markers, one of which dies with #241, internal.
 
 ## Out of scope by design
 
+- **Dropping `managed` and the adopt flow** ([#321](https://github.com/openwrt-iac/uapi/issues/321), withdrawn before v4).
+  libuci names an anonymous section at each load from its ordinal in the package and a hash of
+  its type, so the name moves to another section when an earlier one is deleted. A client that
+  stored such a name and wrote or deleted through it reached another section with a 2xx. `adopt`
+  is how a client gets a name that holds, and `managed` is how it knows that it needs one.
 - **Localization of error `message` strings.** English-only; codes are
   stable and translatable client-side.
 - **Async/parallel ubus.** `conn.call()` only, by design (see

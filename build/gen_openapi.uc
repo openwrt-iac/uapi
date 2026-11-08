@@ -101,7 +101,7 @@ function patch_name(endpoint) { return schema_name(endpoint) + "Patch"; }
 // A property a caller cannot write. Derived from uci or from ubus, ignored by every toUci, and
 // present only so a reader can see it. `id` is deliberately not here: it is the section name at
 // create, the universal input that replaced `network/interfaces.name`.
-const RESPONSE_ONLY = { "runtime": true };
+const RESPONSE_ONLY = { "runtime": true, "managed": true };
 
 const READ_NULLABLE = "x-uapi-read-nullable";
 // A field that may hold several lines opts out of the default newline/CR refusal (#276).
@@ -510,12 +510,13 @@ function build_crud_paths(ep) {
 	let request_ref = request_name(ep);
 	let mod = load_resource(ep.file);
 	if (type(mod.openapi_singular) != "string" || mod.openapi_singular == "")
-		die(sprintf("CRUD resource %s missing required `openapi_singular` declaration", ep.file));
+		die(sprintf("CRUD resource %s missing required `openapi_singular` declaration "
+		            + "(used by the adopt operation summary)", ep.file));
 	let singular = mod.openapi_singular;
 	let id_param = {
 		"name": "id", "in": "path", "required": true,
 		"schema": { "type": "string" },
-		"description": "Section identifier (the uci section name)"
+		"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 	};
 
 	let paths = {};
@@ -523,7 +524,12 @@ function build_crud_paths(ep) {
 	paths[ep.path] = {
 		"get": {
 			"summary": sprintf("List %s", ep.subresource),
-			"parameters": [ Q_LIMIT, Q_CURSOR ],
+			"parameters": [
+				{ "name": "managed", "in": "query", "required": false,
+				  "schema": { "type": "string", "enum": ["true", "false"] },
+				  "description": "Filter by managed flag" },
+				Q_LIMIT, Q_CURSOR,
+			],
 			"responses": responses("get", {
 				"200": {
 					"description": "OK",
@@ -582,6 +588,22 @@ function build_crud_paths(ep) {
 		            "parameters": [Q_IF_MATCH, Q_IF_NONE_MATCH],
 		            "responses": responses("delete", { "204": { "description": "Deleted" } },
 		                                   mgmt_headers(mod, UCI_TX)) },
+	};
+
+	paths[ep.path + "/{id}/adopt"] = {
+		"parameters": [id_param],
+		"post": {
+			"summary": sprintf("Adopt an anonymous %s", singular),
+			"description": sprintf(
+				"Adopt an anonymous %s into uapi management. The section is renamed " +
+				"to a uapi-generated ULID and `managed` flips to `true`; subsequent " +
+				"writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: " +
+				"the response carries the new ULID; any client state pointing at the " +
+				"original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: " +
+				"adopting an already-managed section returns 409 unmanaged_resource " +
+				"(see error envelope).", singular),
+			"responses": responses("post", { "200": make_response(200, "Adopted", schema_ref) }, UCI_TX)
+		},
 	};
 
 	return paths;
@@ -1120,6 +1142,7 @@ function build_schemas() {
 			"properties": {
 				"id": { "type": "string", "description": "The section name. A stored `option id` does not replace it." },
 				".type": { "type": "string" },
+				"managed": { "type": "boolean", "readOnly": true },
 			},
 			"additionalProperties": true,
 		},
@@ -1156,6 +1179,7 @@ function build_schemas() {
 			"required": ["id", "name", "installed"],
 			"properties": {
 				"id": { "type": "string", "description": "Package name (same as name)" },
+				"managed": { "type": "boolean", "readOnly": true },
 				"name": { "type": "string" },
 				"version": { "type": ["string", "null"],
 				             "description": "The installed apk version, such as `3.0.0-r1`. Null in the list response, which does not query versions." },
@@ -1176,6 +1200,7 @@ function build_schemas() {
 			"required": ["id", "url"],
 			"properties": {
 				"id": { "type": "string" },
+				"managed": { "type": "boolean", "readOnly": true },
 				"name": { "type": "string" },
 				"filename": { "type": "string" },
 				"url": { "type": "string" },
@@ -1536,10 +1561,10 @@ function build_schemas() {
 				if (mod.fromUci != null) {
 					example_in = mod.fromUci({ '.name': 'cfg00', '.anonymous': false, '.type': mod.type });
 				} else {
-					example_in = { id: "example" };
+					example_in = { id: "example", managed: false };
 				}
 			} catch (e) {
-				example_in = { id: "example" };
+				example_in = { id: "example", managed: false };
 			}
 
 			for (let k in example_in) {
@@ -1555,8 +1580,6 @@ function build_schemas() {
 			if (type(mod.schema_properties) == "object") {
 				for (let k in mod.schema_properties) properties[k] = mod.schema_properties[k];
 			}
-			// v4 (#321): managed left the envelope with the adopt route.
-			delete properties.managed;
 		}
 
 		// v4 (#322): runtime is always present in a response and documented on every
@@ -1572,7 +1595,19 @@ function build_schemas() {
 			properties.runtime = { ...documented, readOnly: true };
 		}
 
-		// v4 (#321): `managed` is gone from the envelope, along with the adopt route.
+		// Same reasoning for `managed`, which is derived from uci's `.anonymous` flag: no
+		// toUci reads it, and the write path hardcodes `.anonymous = false`, so a PUT
+		// sending `managed: false` answers 200 with `managed: true`. Management state
+		// moves only through the adopt endpoint. Emitted bare, it reads to a generator as
+		// an ordinary writable boolean, so it lands in the request model and every
+		// read-modify-write client sends a field the server ignores.
+		//
+		// Annotated here rather than in the modules on purpose: adding `managed` to a
+		// resource's schema_properties would also add it to the runtime type checker, and
+		// `managed: "true"` would go from 200 to 422. This is a documentation fix and
+		// should not change what the server accepts.
+		if (type(properties.managed) == "object")
+			properties.managed = { ...properties.managed, readOnly: true };
 
 		// 2.2.0: every CRUD resource accepts an optional `id` at create
 		// that becomes both the uci section name and the response id. If
@@ -1672,7 +1707,7 @@ function build_doc() {
 		"info": {
 			"title": "uapi",
 			"version": VERSION,
-			"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+			"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
 			"contact": { "name": "uapi", "url": "https://github.com/openwrt-iac/uapi" },
 			"license": { "name": "MIT", "identifier": "MIT" },
 		},

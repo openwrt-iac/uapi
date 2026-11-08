@@ -96,12 +96,14 @@ diff /tmp/uapi_emptybody_before.txt /tmp/uapi_emptybody_after.txt \
 	|| fail "a refused empty body still changed uci"
 $SSH 'uci -q delete firewall.emptybody; uci commit firewall' >/dev/null
 
-echo "--- v4 (#321): the adopt route is gone, and a POST without a body is refused ---"
+echo "--- POST keeps accepting no body, because adopt takes none ---"
+$SSH 'uci -q delete firewall.adoptme; uci set firewall.adoptme=rule
+uci set firewall.adoptme.target=ACCEPT; uci set firewall.adoptme.src=lan
+uci set firewall.adoptme.dest_port=9404; uci set firewall.adoptme.proto=tcp
+uci commit firewall' >/dev/null
 status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" \
-	"$URL/firewall/rules/someid/adopt")
-[ "$status" = "404" ] || fail "adopt route expected 404 on v4, got $status"
-status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" \
-	"$URL/firewall/rules")
-[ "$status" = "422" ] || fail "bodyless POST on a resource expected 422, got $status"
+	"$URL/firewall/rules/adoptme/adopt")
+[ "$status" = "200" ] || fail "bodyless adopt POST expected 200, got $status"
+$SSH 'uci -q delete firewall.adoptme; uci commit firewall' >/dev/null
 
 echo "PASS 46_validation_sweep_test"

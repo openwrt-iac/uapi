@@ -175,15 +175,26 @@ When unbound runs, a write to one of the three unbound resources waits 2 s after
 | `packages/installed` | apk DB | `GET` lists, `POST {name}` installs (`apk add`), `DELETE /<name>` removes. |
 | `packages/feeds` | `/etc/apk/repositories.d/*.list` | `POST {name, url}` creates a feed file + `apk update`. |
 
-## Section names and ids
+## Anonymous sections and adoption
 
-OpenWrt's uci distinguishes **named** sections (stable identifier across rewrites) from **anonymous** sections (auto-assigned `cfgXXXXXX` ids that change on rewrite).
+OpenWrt's uci distinguishes **named** sections (stable identifier across rewrites) from **anonymous** sections (auto-assigned `cfgXXXXXX` ids that change on rewrite). Anonymous ids are useless for IaC state tracking.
 
-uapi creates sections with a ULID-style name (Crockford base32, fitting uci's `[A-Za-z0-9_]` charset), optionally with a one-character type prefix (`r_01HX...` for rules). Section names are caller-pickable on every CRUD resource since 2.2.0: `POST /<resource>` accepts an optional `id` field that becomes the section name. The response `id` is always the uci section name.
+uapi-managed sections are always named: when a client POSTs to create a resource, the server emits a ULID-style identifier (Crockford base32, alphanumeric only, fitting uci's `[A-Za-z0-9_]` charset) and writes it as the section's `.name`. From that point on, the section behaves like any other named uci section and its id is stable. Optional one-character type prefix for grep-ability (`r_01HX...` for rules, `i_01HX...` for interfaces). No `uapi_` namespace prefix; uapi is just another writer to uci.
 
-### Pre-existing sections
+Section names are caller-pickable on every CRUD resource (since 2.2.0). `POST /<resource>` accepts an optional `id` field; if supplied it becomes the section name (after charset / length / collision checks). Absent, the server emits the ULID.
 
-Since v4 (#321) there is no `managed` flag and no adopt flow: a section that pre-exists in `/etc/config/`, whether LuCI-named, hand-edited, or anonymous from prior tooling, is addressed by its name like any other, and `PUT`/`PATCH`/`DELETE` work on it directly. A `PUT` of the read keeps the name, which is what makes a client track the resource across applies.
+### Pre-existing anonymous sections
+
+The common starting state for a router under management is a mix of LuCI-named sections, hand-edited sections, and anonymous sections from prior tooling. Posture: **read-only by default, explicit adoption.**
+
+- `GET /<resource>` returns existing anonymous sections with a content-derived synthetic id and `managed: false`.
+- `PUT`/`PATCH`/`DELETE` on a `managed: false` section returns `409 unmanaged_resource`.
+- `POST /<resource>/<id>/adopt` on an **anonymous** section renames it under uapi's ULID scheme and flips it to `managed: true`. The section is writable like any other after that.
+- `POST /<resource>/<id>/adopt` on a **named** section is an idempotent acknowledgement: the section keeps its name and the response carries the existing view with `managed: true`. The 2.2.0 behavior change replaced the prior rename-to-ULID which broke uci cross-references where sections referenced this one by name (`firewall.zones.lan` → `firewall.rules.src_zone = "lan"`).
+
+Sections that already have a `.name` (e.g. LuCI-named `myrule`) are managed normally, using their existing `.name` as the id. uapi does not rewrite names it didn't author.
+
+`GET` on a collection includes both managed and unmanaged sections by default. Clients filter via `?managed=true` / `?managed=false` when they want one or the other.
 
 ## Generic raw passthrough
 

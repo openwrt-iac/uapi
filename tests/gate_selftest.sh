@@ -457,11 +457,11 @@ json.dump(d, open(p, 'w'))
 EOF
 }
 
-mut_runtime_writable() {
+mut_managed_writable() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-del d['components']['schemas']['FirewallRulesResponse']['properties']['runtime']['readOnly']
+del d['components']['schemas']['FirewallRulesResponse']['properties']['managed']['readOnly']
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -482,11 +482,11 @@ EOF
 
 # v3 removed every deprecated property, so this plants one rather than stripping the reason
 # off a real field. The rule guards the next deprecation, which is the only kind there is now.
-mut_request_regrows_runtime() {
+mut_request_regrows_managed() {
 	python3 - <<'EOF'
 import json
 p = 'build/openapi.json'; d = json.load(open(p))
-d['components']['schemas']['FirewallRulesRequest']['properties']['runtime'] = {'type': 'object'}
+d['components']['schemas']['FirewallRulesRequest']['properties']['managed'] = {'type': 'boolean'}
 json.dump(d, open(p, 'w'))
 EOF
 }
@@ -617,9 +617,9 @@ probe lint-openapi-shape "a source marker in the spec"         "must strip from 
 probe lint-openapi-shape "a transaction header without its set" "declares only"                    mut_kernel_header_unpaired
 probe lint-openapi-shape "a reload header on a raw write"      "never reaches attach_reload_headers" mut_reload_header_on_raw
 probe lint-openapi-shape "an ETag on a raw write"              "set_etag_header is never reached"  mut_etag_on_raw
-probe lint-openapi-shape "a writable runtime property"        "must be readOnly"                 mut_runtime_writable
+probe lint-openapi-shape "a writable managed property"        "must be readOnly"                 mut_managed_writable
 probe lint-openapi-shape "a deprecation with no reason"       "does not open with"               mut_deprecated_no_reason
-probe lint-openapi-shape "a derived field in a request schema"  "must not appear in a request schema" mut_request_regrows_runtime
+probe lint-openapi-shape "a derived field in a request schema"  "must not appear in a request schema" mut_request_regrows_managed
 probe lint-openapi-shape "a merge-patch body that requires a field" "refuses a partial body"       mut_merge_patch_requires
 probe lint-openapi-shape "a Patch that keeps a nested required" "with its \`required\` removed"    mut_merge_patch_nested_required
 probe lint-openapi-shape "a Patch field that refuses null"     "sends to remove the field"         mut_merge_patch_refuses_null
