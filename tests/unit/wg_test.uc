@@ -227,7 +227,8 @@ t.describe('wg.to_peer', () => {
 // testable off-device: reaching the command would fail on a box without wg and
 // surface as an error string rather than null.
 t.describe('wg.unclaimed against logging wg and ip', () => {
-	let unclaimed = (uci, outputs) => run_wg(uci, 'sprintf("%J", wg.unclaimed(c))', outputs);
+	let unclaimed = (uci, outputs) => run_wg(uci, 'sprintf("%J", wg.unclaimed(c).peers)', outputs);
+	let unread = (uci, outputs) => run_wg(uci, 'sprintf("%J", wg.unclaimed(c).unread)', outputs).result;
 	let dump_of = (entries) => ({ 'wg|show|wg1|dump': "priv\tpub\t51820\toff\n" + join("", entries) });
 	let line = (key, endpoint, ips, keepalive) =>
 		sprintf("%s\t(none)\t%s\t%s\t0\t0\t0\t%s\n", key, endpoint, ips, keepalive);
@@ -261,14 +262,18 @@ t.describe('wg.unclaimed against logging wg and ip', () => {
 		                  dump_of([ line(PK, '(none)', '10.0.0.2/32', 'off') ]));
 		t.assert_equal(r.result, '[ ]');
 	});
-	// A failed read never looks like an empty kernel: an interface netifd does not report up is
-	// not dumped at all, and a dump in another shape reads as none.
-	t.it('dumps no interface that is down, and reads a dump in another shape as none', () => {
-		let r = unclaimed({ network: { wg2: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' } } });
+	// A down interface holds no peer and is not dumped. A failed read never looks like an empty
+	// kernel: an up interface whose dump is in another shape lists nothing and is named as unread.
+	t.it('dumps no interface that is down, and names an up interface whose dump it cannot read', () => {
+		let down = { network: { wg2: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' } } };
+		let r = unclaimed(down);
 		t.assert_equal(r.result, '[ ]');
 		t.assert_deep_equal(r.commands, []);
-		r = unclaimed({ network: { wg1: WG1 } }, { 'wg|show|wg1|dump': "priv\tpub\t51820\toff\textra\n" });
-		t.assert_equal(r.result, '[ ]');
+		t.assert_equal(unread(down), '[ ]');
+		let odd = { 'wg|show|wg1|dump': "priv\tpub\t51820\toff\textra\n" };
+		t.assert_equal(unclaimed({ network: { wg1: WG1 } }, odd).result, '[ ]');
+		t.assert_equal(unread({ network: { wg1: WG1 } }, odd), '[ "wg1" ]');
+		t.assert_equal(unread({ network: { wg1: WG1 } }, dump_of([])), '[ ]');
 	});
 });
 

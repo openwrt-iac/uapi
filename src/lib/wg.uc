@@ -590,19 +590,22 @@ function runtime(conn, iface, public_key) {
 // One entry per peer that the kernel holds on an up interface with proto=wireguard and that no
 // section of that interface claims, keyed as wg reads the stored key, its later PublicKey lines
 // included. runtime() reports the kernel beside each section, so a peer with no section was the
-// only wireguard state that no read showed. A failed dump reads as none, as in runtime(), so a
-// down interface or a failing wg lists nothing rather than drift. The sections are walked as they
-// are, disabled ones included, because the runtime of a disabled section already reports a peer
-// that the kernel holds under its key.
+// only wireguard state that no read showed. A down interface holds no peer. An up interface whose
+// dump failed is named in `unread` and lists nothing, so that a failed read never reads as a kernel
+// that holds no drift. The sections are walked as they are, disabled ones included, because the
+// runtime of a disabled section already reports a peer that the kernel holds under its key.
 function unclaimed(conn) {
-	if (conn == null) return [];
-	let out = [];
+	let out = [], unread = [];
+	if (conn == null) return { peers: out, unread };
 	conn.uci_foreach('network', null, function(s) {
 		if (s['.type'] != "interface" || s.proto != "wireguard") return;
 		let iface = s['.name'];
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) return;
 		let held = kernel_dump(conn, iface);
-		if (held == null) return;
+		if (held == null) {
+			if (is_up(conn, iface)) push(unread, iface);
+			return;
+		}
 		let claimed = {};
 		conn.uci_foreach('network', null, function(p) {
 			if (p['.type'] != "wireguard_" + iface) return;
@@ -611,7 +614,7 @@ function unclaimed(conn) {
 		for (let key, v in held)
 			if (!claimed[key]) push(out, { interface: iface, public_key: key, ...v });
 	});
-	return out;
+	return { peers: out, unread };
 }
 
 // Bring the kernel in line with what uci now holds for these interfaces: drop

@@ -7742,6 +7742,14 @@
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"X-Kernel-Unread": {
+								"$ref": "#/components/headers/XKernelUnread"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -7750,11 +7758,6 @@
 										"$ref": "#/components/schemas/NetworkWireguardKernelPeersResponse"
 									}
 								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
 							}
 						}
 					},
@@ -7809,6 +7812,9 @@
 							}
 						},
 						"headers": {
+							"X-Kernel-Unread": {
+								"$ref": "#/components/headers/XKernelUnread"
+							},
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
 							}
@@ -39865,6 +39871,13 @@
 				"schema": {
 					"type": "string",
 					"example": "<?cursor=c_r_01HX&limit=100>; rel=\"next\""
+				}
+			},
+			"XKernelUnread": {
+				"description": "Comma-separated up interfaces with proto=wireguard whose kernel peers uapi could not read, because `wg show <interface> dump` failed or printed a shape that uapi does not read. The list holds no entry for them, so an absent header is what says that the list covers every up interface.",
+				"schema": {
+					"type": "string",
+					"example": "wg0"
 				}
 			},
 			"XNextCursor": {

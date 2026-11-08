@@ -1280,17 +1280,30 @@ function make_collection(resource) {
 		                            pkg, sec_type, method));
 	}
 
+	// A list_fn answers the items, or { items, headers } when the read has more to say than the
+	// items, such as the interfaces whose kernel it could not read.
+	function listed(conn, query) {
+		let r = resource.list_fn(conn, query);
+		return (type(r) == "object") ? r : { items: r, headers: {} };
+	}
+	function with_headers(resp, headers) {
+		for (let k, v in headers) resp.headers[k] = v;
+		return resp;
+	}
+
 	function list(conn, ctx, query) {
-		return paginate(ctx, resource.list_fn(conn, query), query, resource.cursor_field ?? resource.id_field);
+		let r = listed(conn, query);
+		return with_headers(paginate(ctx, r.items, query, resource.cursor_field ?? resource.id_field), r.headers);
 	}
 
 	function get_one(conn, ctx, id) {
 		if (resource.id_field == null)
 			return method_not_allowed(ctx, "individual lookup");
-		for (let item in resource.list_fn(conn))
-			if (item[resource.id_field] == id) return errors.ok(ctx, item);
-		return errors.error(ctx, "not_found",
-		                    sprintf("No %s with %s=%J", sec_type, resource.id_field, id));
+		let r = listed(conn);
+		for (let item in r.items)
+			if (item[resource.id_field] == id) return with_headers(errors.ok(ctx, item), r.headers);
+		return with_headers(errors.error(ctx, "not_found",
+		                                 sprintf("No %s with %s=%J", sec_type, resource.id_field, id)), r.headers);
 	}
 
 	return {
