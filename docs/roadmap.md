@@ -665,7 +665,6 @@ The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-
 - [Announce the v4 program in a final 3.x minor](https://github.com/openwrt-iac/uapi/issues/313): the deprecations log and the spec's "Upcoming in v4" block. The window runs from that release, not from v4.
 - [Group the special endpoints under `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and the scopes disagree today, breaking.
 - [Merge `dhcp/leases6` into `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint less, breaking.
-- [Drop `managed` and the adopt flow](https://github.com/openwrt-iac/uapi/issues/321): the envelope loses a field and a route, breaking.
 - [One documented runtime envelope on every resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources document their runtime today, breaking.
 - [Prune dead error codes from the enum](https://github.com/openwrt-iac/uapi/issues/323): `unsupported_media_type` is the documented-dead one, breaking for generated clients.
 - [Ship the standalone confirm arm `POST /confirm`](https://github.com/openwrt-iac/uapi/issues/324): the authz model is decided, additive.
@@ -679,6 +678,11 @@ The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-
 
 ## Out of scope by design
 
+- **Dropping `managed` and the adopt flow** ([#321](https://github.com/openwrt-iac/uapi/issues/321), withdrawn before v4).
+  libuci names an anonymous section at each load from its ordinal in the package and a hash of
+  its type, so the name moves to another section when an earlier one is deleted. A client that
+  stored such a name and wrote or deleted through it reached another section with a 2xx. `adopt`
+  is how a client gets a name that holds, and `managed` is how it knows that it needs one.
 - **Localization of error `message` strings.** English-only; codes are
   stable and translatable client-side.
 - **Async/parallel ubus.** `conn.call()` only, by design (see
