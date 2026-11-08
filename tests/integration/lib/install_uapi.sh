@@ -5,10 +5,12 @@ UAPI_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
 # cannot drift apart and start attesting to a different set of files than the
 # one actually installed. The spec goes over on its own, as the compact copy
 # that the release APK installs, so its source and the tool that compacts it
-# are named apart.
+# are named apart, and so is the package Makefile, whose DEPENDS the bootstrap
+# installs.
 PUSH_PATHS="src/main.uc src/raw.uc VERSION cli/uapi-token src/lib src/resources"
 SPEC_SOURCE=build/openapi.json
 SPEC_TOOL=tools/compact_json.py
+PKG_MAKEFILE=build/openwrt/uapi/Makefile
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -31,12 +33,25 @@ ensure_wireless_radio() {
 	return 0
 }
 
-# Content fingerprint of exactly what gets pushed. Paths are included so a
-# rename counts as a change, and mtimes are not, so an untouched tree keeps its
-# fingerprint across runs.
+# Content fingerprint of exactly what gets pushed, and of the DEPENDS that get
+# installed, so a change to DEPENDS alone is not a no-op on a standing box.
+# Paths are included so a rename counts as a change, and mtimes are not, so an
+# untouched tree keeps its fingerprint across runs.
 source_fingerprint() {
 	# shellcheck disable=SC2086
-	find $PUSH_PATHS $SPEC_SOURCE $SPEC_TOOL -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
+	find $PUSH_PATHS $SPEC_SOURCE $SPEC_TOOL $PKG_MAKEFILE -type f | sort | xargs md5sum | md5sum | cut -d' ' -f1
+}
+
+# The DEPENDS of the package is the one source of truth for what the handler
+# needs: the bootstrap installs exactly what `apk add uapi` would pull, so the
+# suite can never run against a module list the package does not ship. A
+# hand-kept list here once missed ucode-mod-log, which the stable image ships
+# and the main snapshot's bare image does not, and the handler then killed
+# uhttpd at its start on every request.
+package_depends() {
+	awk '/DEPENDS:=/ { f = 1; sub(/^.*DEPENDS:=/, "") }
+	     f { print; if (!/\\$/) f = 0 }' "$PKG_MAKEFILE" \
+		| tr ' \\' '  ' | tr -s ' ' '\n' | sed 's/^+//' | grep -v '^$' | tr '\n' ' '
 }
 
 # Bootstrap: install deps, push every source file in a single tar stream and
@@ -50,18 +65,6 @@ source_fingerprint() {
 # was already on the box instead of the working tree, and a run that passed
 # that way looked exactly like a real pass. Recording the fingerprint also
 # makes an edit-then-rerun cycle correct rather than merely fast.
-# The DEPENDS of the package is the one source of truth for what the handler
-# needs: the bootstrap installs exactly what `apk add uapi` would pull, so the
-# suite can never run against a module list the package does not ship. A
-# hand-kept list here once missed ucode-mod-log, which the stable image ships
-# and the main snapshot's bare image does not, and the handler then killed
-# uhttpd at its start on every request.
-package_depends() {
-	awk '/DEPENDS:=/ { f = 1; sub(/^.*DEPENDS:=/, "") }
-	     f { print; if (!/\\$/) f = 0 }' build/openwrt/uapi/Makefile \
-		| tr ' \\' '  ' | tr -s ' ' '\n' | sed 's/^+//' | grep -v '^$' | tr '\n' ' '
-}
-
 bootstrap_uapi() {
 	local want installed spec deps install_out
 	want=$(source_fingerprint)
@@ -71,8 +74,11 @@ bootstrap_uapi() {
 	fi
 
 	deps=$(package_depends)
-	[ -n "$deps" ] || fail "no DEPENDS parsed from build/openwrt/uapi/Makefile"
-	install_out=$($SSH "apk add $deps 2>&1")
+	[ -n "$deps" ] || fail "no DEPENDS parsed from $PKG_MAKEFILE"
+	if ! install_out=$($SSH "apk add $deps 2>&1"); then
+		printf '%s\n' "$install_out"
+		fail "apk add of the package DEPENDS failed on the test box"
+	fi
 	printf '%s\n' "$install_out" | tail -3
 	case "$install_out" in
 	*rpcd-mod-iwinfo*)
@@ -272,11 +278,6 @@ assert_dnsmasq_loads() {
 	[ -z "$err" ] || fail "dnsmasq would reject its own compiled config: $err"
 }
 
-# kmod-wireguard alone is not enough. netifd scans /lib/netifd/proto only when it
-# starts, so a proto handler installed underneath a running netifd stays invisible
-# and proto=wireguard never gets a netdev. The restart has to be detached, since
-# it drops the link this ssh session is riding on. Readiness is netifd actually
-# advertising the handler, not a fixed sleep.
 # lldpd and vnstat2 are outside the bare image, so their resources answered 503
 # init_script_missing and were never exercised against a real daemon. That is how
 # `vnstat/interfaces` shipped modelling a section type vnstat never reads.
@@ -284,13 +285,6 @@ assert_dnsmasq_loads() {
 # Installed here rather than inside a test, and guarded on its own rather than on the
 # bootstrap fingerprint, which covers the source tree and not this package list: adding
 # a package would otherwise be a no-op on any VM already carrying the current source.
-# lldpd and vnstat2 are outside the bare image, so their resources answered 503
-# init_script_missing and were never exercised against a real daemon. That is how
-# `vnstat/interfaces` shipped modelling a section type vnstat never reads.
-#
-# Installed here rather than inside a test, and guarded on its own rather than on
-# the bootstrap fingerprint, which covers the source tree and not this package list: adding a
-# package would otherwise be a no-op on any VM already carrying the current source.
 ensure_daemon_packages() {
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1' && return 0
 	$SSH 'apk add lldpd vnstat2 2>&1 | tail -3' || return 1
@@ -319,6 +313,11 @@ wg_ucode_platform() {
 	$SSH 'test -e /lib/netifd/proto/wireguard.uc'
 }
 
+# kmod-wireguard alone is not enough. netifd scans /lib/netifd/proto only when it
+# starts, so a proto handler installed underneath a running netifd stays invisible
+# and proto=wireguard never gets a netdev. The restart has to be detached, since
+# it drops the link this ssh session is riding on. Readiness is netifd actually
+# advertising the handler, not a fixed sleep.
 ensure_wireguard() {
 	$SSH 'apk info -e kmod-wireguard >/dev/null 2>&1 && apk info -e wireguard-tools >/dev/null 2>&1' && {
 		$SSH 'lsmod | grep -q "^wireguard " || modprobe wireguard 2>/dev/null

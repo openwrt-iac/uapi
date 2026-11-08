@@ -300,6 +300,9 @@ jobs:
             build-essential libncurses-dev libssl-dev python3 \
             unzip gawk gettext xsltproc rsync wget
 
+      # The pin check lives in tools/openwrt-sdk.sh: the stable series fails this step when
+      # build/sdk.sha256 does not pin the resolved tarball. The assignments carry that failure,
+      # where an echo of the command substitution would exit 0 and hand the cache an empty key.
       - name: Resolve the SDK tarball
         id: sdk
         run: |
@@ -319,9 +322,6 @@ jobs:
           # warm: uapi is arch-all, and an older SDK beats a download that the CDN cuts.
           restore-keys: ${{ steps.sdk.outputs.tarball }}-
 
-      # The pin check lives in tools/openwrt-sdk.sh: the stable series fails
-      # there when build/sdk.sha256 does not pin the resolved tarball, which is
-      # the same failure this step used to catch, one step earlier.
       - name: Download SDK if cache miss (verified by sha256)
         run: |
           if [ ! -d build/sdk/staging_dir ]; then
