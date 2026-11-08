@@ -53,7 +53,7 @@ Adding a non-uci resource means adding a row above. The bar is high: prefer driv
 - **Source of truth.** The `leasefile` of each `config odhcpd` section in `/etc/config/dhcp`, or `/tmp/odhcpd.leases` when no section sets one, as rpcd-mod-luci reads it for LuCI.
 - **Lock.** None; reads only.
 - **Format.** odhcpd writes one line for each lease: `# <device> <duid> <iaid> <hostname> <valid until> <id> <length> <address>/<length> [...]`, the same in 25.12 and on OpenWrt main. A length of 128 is an address (`IA_NA`), any other a delegated prefix (`IA_PD`). The read gives one entry for each address or prefix. It skips the line of a DHCPv4 lease that odhcpd serves, which has `ipv4` for the iaid, the hosts lines, and any line whose fields do not parse, as a client hostname can make them. `interface` is the device that odhcpd names, for example `br-lan`. `dhcp/servers` counts the leases of its interface, a lease of several addresses once, through the `l3_device` that netifd reports for it. Two uci interfaces on one device count each other's leases.
-- **Pagination.** The cursor of a page is the `ip` of its last entry, for the IPv4 leases too: dnsmasq can hold two leases for one MAC, and holds one lease for each address.
+- **Pagination.** The cursor of a page is the `ip` of its last entry, for the IPv4 leases too: dnsmasq can hold two leases for one MAC, and holds one lease for each address. The `Link` to the next page keeps the `family`.
 - **Why not uci.** Same as the IPv4 leases; runtime state.
 
 ### `network/wireguard_kernel_peers` (read-only)

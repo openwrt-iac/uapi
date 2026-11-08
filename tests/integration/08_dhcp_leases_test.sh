@@ -33,6 +33,16 @@ echo "--- GET /dhcp/leases/<unknown> returns 404 ---"
 missing=$(call "$URL/dhcp/leases/zz:zz:zz:zz:zz:zz")
 echo "$missing" | tail -1 | grep -q '^404$' || fail "unknown mac expected 404"
 
+echo "--- GET /dhcp/leases answers 400 to a family that is not v4 or v6 ---"
+r=$(call "$URL/dhcp/leases?family=v7")
+echo "$r" | tail -1 | grep -q '^400$' || fail "family=v7 expected 400: $r"
+r=$(call "$URL/dhcp/leases/aa:bb:cc:dd:ee:02?family=v7")
+echo "$r" | tail -1 | grep -q '^400$' || fail "family=v7 on a read by id expected 400: $r"
+
+echo "--- the link to the next page keeps the family ---"
+hdr=$(curl -sS -H "$ADMIN" -D - -o /dev/null "$URL/dhcp/leases?family=v4&limit=1" | tr -d '\r')
+echo "$hdr" | grep -qiF 'link: <?cursor=c_192.168.1.50&limit=1&family=v4>; rel="next"' || fail "next link drops the family: $hdr"
+
 echo "--- POST /dhcp/leases returns 405 ---"
 post=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/leases" -d '{}')
 echo "$post" | tail -1 | grep -q '^405$' || fail "POST expected 405"

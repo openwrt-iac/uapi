@@ -441,8 +441,8 @@ collections are excluded from batch (they have no `toUci`).
 ### Read-only runtime collections (`make_collection`)
 
 Non-uci runtime state exposed as a read-only collection follows one recipe;
-`dhcp/leases`, `dhcp/leases6` and `network/wireguard_kernel_peers` are the
-instances today. The module declares:
+`dhcp/leases` and `network/wireguard_kernel_peers` are the instances today.
+The module declares:
 
 - `package` / `type`: naming only, used in 404/405 messages.
 - `id_field`: the item field that `GET /<resource>/<id>` matches. Reads run
@@ -451,7 +451,9 @@ instances today. The module declares:
   that matches, so a value that two items share hides the second one from this
   read. `network/wireguard_kernel_peers` uses the first 12 hex characters of a
   sha256 of the interface and the public key, which no two peers share.
-  `dhcp/leases` uses the MAC, and dnsmasq can give one MAC two leases.
+  `id_field` can also be a function of the query: `dhcp/leases` uses the MAC
+  for the IPv4 leases, where dnsmasq can give one MAC two leases, and the IP with
+  `family=v6`.
 - `cursor_field` (optional): the item field that pagination puts in the cursor.
   The default is `id_field`. Every item must have it and no two items can share
   it, or the next page repeats or skips items. `dhcp/leases` pages on the IP
@@ -464,6 +466,11 @@ instances today. The module declares:
   name to its `$ref` under `#/components/headers/`, and the generator declares it
   on the 200 of both GETs. A new header also needs its entry in `components` and
   its row in `docs/errors.md`.
+- `query` (optional): the query parameters that select what `list_fn` reads,
+  as `{ <name>: { enum, description } }`. The handler refuses a value outside
+  the enum with 400 `bad_request`, keeps the parameter in the `Link` to the next
+  page, and the generator declares it on both GETs. `dhcp/leases` declares
+  `family`.
 - `schema_properties`: the item shape, published under `/schema/...`.
 
 Register with `handler.make_collection(load_resource(...))` like any other

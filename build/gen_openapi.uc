@@ -637,14 +637,17 @@ function build_singleton_paths(ep) {
 function build_collection_paths(ep) {
 	let schema_ref = response_name(ep);
 	let request_ref = request_name(ep);
-	let headers = load_resource(ep.file).openapi_headers;
+	let mod = load_resource(ep.file);
+	let headers = mod.openapi_headers;
 	let one = make_response(200, "OK", schema_ref);
 	if (headers != null) one.headers = { ...(one.headers ?? {}), ...headers };
+	let declared = map(keys(mod.query ?? {}), (k) => ({ "name": k, "in": "query", "required": false,
+		"description": mod.query[k].description, "schema": { "type": "string", "enum": mod.query[k].enum } }));
 	return {
 		[ep.path]: {
 			"get": {
 				"summary": sprintf("List %s (read-only)", ep.subresource),
-				"parameters": [ Q_LIMIT, Q_CURSOR ],
+				"parameters": [ Q_LIMIT, Q_CURSOR, ...declared ],
 				"responses": responses("get", {
 					"200": {
 						"description": "OK",
@@ -665,6 +668,7 @@ function build_collection_paths(ep) {
 			"parameters": [{ "name": "id", "in": "path", "required": true,
 			                 "schema": { "type": "string" } }],
 			"get": { "summary": sprintf("Get one %s by id", ep.subresource),
+			         ...(length(declared) > 0 ? { "parameters": declared } : {}),
 			         "responses": responses("get", { "200": one }) },
 		},
 	};
