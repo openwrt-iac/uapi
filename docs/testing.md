@@ -102,6 +102,7 @@ It found a real hole on its first complete run: `coverage`'s dead-export gate co
 `make lint` chains these sub-targets:
 
 - `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule, enforced).
+- `lint-conflict-markers`: forbids merge conflict markers in tracked files. Rebases of v4 onto main committed them into `CHANGELOG.md` and the migration guide, where no other gate looked.
 - `lint-syntax`: `ucode -c` on every `.uc` file in `src/`, `cli/`, `tests/`.
 - `lint-reserved`: fails on schema property names that collide with Terraform meta-arguments or HCL block keywords.
 - `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json` and fails on dangling targets.
