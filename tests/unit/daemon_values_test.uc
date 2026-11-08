@@ -245,6 +245,18 @@ const SHELL_BOOLS = [
 	[ "dropbear.instances.uc", "dropbear", "GatewayPorts", "gateway_ports", false ],
 ];
 
+// sqm-scripts 1.8.0 (77cf89e, src/run-openwrt.sh:47) runs a queue only for `-eq 1`.
+t.describe('sqm/queues.enabled reads true only where sqm-scripts starts the queue', () => {
+	let sqm = loadfile('src/resources/sqm.queues.uc')();
+	let read = (v) => sqm.fromUci({ '.name': 'q', '.type': 'queue', enabled: v }).enabled;
+	t.it('takes 1 alone, and reads an absent value and the other spellings as off', () => {
+		t.assert_deep_equal(map([ "1", "01", [ "1" ] ], read), [ true, true, true ]);
+		t.assert_deep_equal(map([ null, "0", "yes", "on", "true", "enabled", "2", "" ], read),
+		                    [ false, false, false, false, false, false, false, false ]);
+		t.assert_equal(sqm.schema_properties.enabled.default, false);
+	});
+});
+
 t.describe('booleans read as the init script of the daemon reads them', () => {
 	for (let row in SHELL_BOOLS) {
 		let file = row[0], type = row[1], option = row[2], field = row[3], absent = row[4];

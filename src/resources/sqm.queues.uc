@@ -1,5 +1,4 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
 const VALID_QDISCS  = { "cake": true, "fq_codel": true, "pie": true, "htb": true };
@@ -12,7 +11,9 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enabled: normalize_bool(section.enabled, true),
+		// sqm-scripts starts a queue only when `[ "$(config_get "$section" enabled)" -eq 1 ]`
+		// holds (src/run-openwrt.sh), so an absent value, or yes, on or true, leaves it off.
+		enabled: match(values.config_get(section.enabled) ?? "", /^0*1$/) != null,
 		interface: section.interface ?? null,
 		download: as_int(section.download),
 		upload: as_int(section.upload),
@@ -60,8 +61,8 @@ return {
 	id_prefix: "q",
 	openapi_required: ["interface"],
 	schema_properties: {
-		enabled:   { type: "boolean", default: true,
-		             description: "Whether SQM is active on this interface" },
+		enabled:   { type: "boolean", default: false,
+		             description: "Whether sqm-scripts starts SQM on this interface. It starts a queue only when `enabled` is 1, so an absent value, or a word such as `yes`, `on` or `true`, reads false." },
 		interface: { "x-uapi-read-nullable": true, type: "string",
 		             description: "Network interface name SQM applies to" },
 		qdisc:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_QDISCS) },
