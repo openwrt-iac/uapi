@@ -30215,7 +30215,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
 					},
 					"endpoint_host": {
 						"type": [
@@ -30245,12 +30245,12 @@
 					"route_allowed_ips": {
 						"type": "boolean",
 						"default": false,
-						"description": "Auto-install routes for allowed_ips"
+						"description": "Auto-install routes for allowed_ips. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`."
 					},
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Skip this peer when starting the tunnel"
+						"description": "Skip this peer when starting the tunnel. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`."
 					},
 					"runtime": {
 						"type": "object",
@@ -30258,7 +30258,7 @@
 						"properties": {
 							"in_kernel": {
 								"type": "boolean",
-								"description": "The kernel holds a peer under the key that wg reads from the stored `public_key`, which wireguard.sh gives wg through printf %b. false for a stored value that is not a key. The other fields are null when this is false. Two peers of an interface that store the same key share the one peer of the kernel, and both report it, a disabled one included."
+								"description": "The kernel holds a peer under the key that wg reads from the stored `public_key`, which wireguard.sh gives wg through printf %b, and the ucode proto handler of OpenWrt main as it is. false for a stored value that is not a key. The other fields are null when this is false. Two peers of an interface that store the same key share the one peer of the kernel, and both report it, a disabled one included."
 							},
 							"endpoint": {
 								"type": [
@@ -30361,7 +30361,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
 					},
 					"endpoint_host": {
 						"type": [
@@ -30391,12 +30391,12 @@
 					"route_allowed_ips": {
 						"type": "boolean",
 						"default": false,
-						"description": "Auto-install routes for allowed_ips"
+						"description": "Auto-install routes for allowed_ips. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`."
 					},
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Skip this peer when starting the tunnel"
+						"description": "Skip this peer when starting the tunnel. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`."
 					},
 					"preshared_key": {
 						"type": "string",

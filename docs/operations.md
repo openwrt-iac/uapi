@@ -119,7 +119,11 @@ A write to one package that fails and restores takes at most 20 s of reloads,
 2 s of the unbound watch and 10 s of `dnsmasq --test` per dnsmasq instance
 after the reloads of the write and again after those of the restore, and up to
 5 s of the restore waiting for libuci's flock: 49 s with one dnsmasq instance,
-inside uhttpd's default `script_timeout` of 60 s. A `POST /batch` restore adds
+inside uhttpd's default `script_timeout` of 60 s. On OpenWrt main, the kernel
+apply and the reconcile of the restore also wait for netifd
+to restart a wireguard interface, 8 s each: a write of the network package
+stays inside 60 s, and a batch that also writes dhcp, with every reload at its
+bound, can pass it. A `POST /batch` restore adds
 up to 5 s of flock wait for each further package that it writes back, and the
 `wg set` of a kernel apply or reconcile has no time bound. uapi does not read
 `script_timeout`. Set it lower, through `uhttpd/instances` or otherwise, and

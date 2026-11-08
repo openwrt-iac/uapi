@@ -39,6 +39,27 @@ function run(argv) {
 	return { ok: code == 0, code: code, output: trim(output) };
 }
 
+// netifd of OpenWrt main replaced wireguard.sh with a ucode proto handler. It gives wg each value as
+// uci holds it, with no printf %b, takes a list of allowed IPs as its entries and an option as its
+// words, routes each of them, leaves out a peer without a key with its routes, and reads disabled
+// and route_allowed_ips as on only when they hold "1". uapi reads, sets and routes a peer as the
+// handler that netifd runs.
+const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
+const SETTLE_S = 8;
+
+function ucode_handler() {
+	return fs.access(UCODE_HANDLER) === true;
+}
+
+function peer_flag(v) {
+	return ucode_handler() ? v === "1" : values.shell_bool(values.config_get(v), false);
+}
+
+function handler_entries(v) {
+	if (v == null || v == "") return null;
+	return (type(v) == "array") ? v : split(trim(v), /[[:space:]]+/);
+}
+
 const ESCAPES = { a: 7, b: 8, e: 27, f: 12, n: 10, r: 13, t: 9, v: 11, "\\": 92 };
 
 // printf_b() walks a value byte by byte under the lock of `network`. A key line that escapes each of
@@ -83,14 +104,16 @@ function printf_b(s) {
 	return { text: join("", out), stopped: false };
 }
 
-// The lines that wg reads for a stored value from the config of wireguard.sh, which joins a list
-// with spaces, each cut at `#` and without whitespace. wg_line() also ends a line at a NUL byte, as
-// wg's parser does, because ucode's regex functions stop there. `stopped` when `\c` ended the
-// config in the value. null for a value that is not expanded.
+// The lines that wg reads for a stored value from the config of the handler, each cut at `#` and
+// without whitespace: wireguard.sh joins a list with spaces and expands the escapes, and the ucode
+// handler expands none. wg_line() also ends a line at a NUL byte, as wg's parser does, because
+// ucode's regex functions stop there. `stopped` when `\c` ended the config in the value. null for a
+// value that is not expanded.
 function config_lines(v) {
 	let s = values.config_get(v);
 	if (type(s) != "string") return { lines: [], stopped: false };
-	let x = (index(s, "\\") < 0) ? { text: s, stopped: false } : (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
+	let x = (index(s, "\\") < 0 || ucode_handler()) ? { text: s, stopped: false }
+		: (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
 	if (x == null) return null;
 	return { lines: map(split(x.text, "\n"), (l) => values.wg_line(l)), stopped: x.stopped };
 }
@@ -130,8 +153,13 @@ function kernel_keys(v) {
 // is left of it, so that reads as one empty entry, which a write refuses too. A value that the
 // expansion would give a second line, the end of the config or a byte that is not printable ASCII,
 // none of which an address holds, or that is too long to expand, reads unexpanded, so that its
-// backslash shows in an entry and the response stays valid UTF-8.
+// backslash shows in an entry and the response stays valid UTF-8. The ucode handler joins its
+// entries with commas and expands nothing, so a list entry that holds a space is one entry.
 function allowed_ips(v) {
+	if (ucode_handler()) {
+		let e = handler_entries(v);
+		return (e == null) ? null : split(split(join(",", e), "#")[0], ",");
+	}
 	let s = values.config_get(v);
 	if (type(s) != "string" || s == "") return null;
 	s = replace(s, " ", ",");
@@ -160,7 +188,7 @@ function peer_sections(conn, iface) {
 		if (s['.type'] != want) return;
 		// A disabled peer is one netifd omits when it builds the config, so the
 		// kernel should not carry it either.
-		if (values.shell_bool(values.config_get(s.disabled), false)) return;
+		if (peer_flag(s.disabled)) return;
 		push(out, s);
 	});
 	return out;
@@ -324,20 +352,35 @@ function word_route(w) {
 	return (r?.v6 === v6) ? r : null;
 }
 
-function routes_from(words, enabled) {
+// The ucode handler routes an entry as IPv6 when it holds a colon anywhere, with the address before
+// the first `/` and the length that ucode's int() reads from what follows it, its leading decimal
+// digits, so `/0x10` routes /0 and `/24#x` routes /24.
+function entry_route(e) {
+	let v6 = index(e, ":") >= 0, parts = split(e, "/");
+	let r = route_prefix(parts[0] + "/" + ((length(parts) > 1) ? int(parts[1]) : v6 ? 128 : 32));
+	return (r?.v6 === v6) ? r : null;
+}
+
+function routes_from(entries, enabled) {
 	if (!enabled) return [];
+	let route = ucode_handler() ? entry_route : word_route;
 	let out = [];
-	for (let w in (type(words) == "array" ? words : [])) {
-		let r = word_route(w);
+	for (let e in (type(entries) == "array" ? entries : [])) {
+		let r = route(e);
 		if (r != null) push(out, r);
 	}
 	return out;
 }
 
-// wireguard.sh installs a route for each word of `for allowed_ip in $peer_a_ips`.
+// What the handler routes from a stored allowed_ips: wireguard.sh each word of
+// `for allowed_ip in $peer_a_ips`, the ucode handler each entry.
+function route_entries(v) {
+	return ucode_handler() ? handler_entries(v) : values.config_get_words(v);
+}
+
 function peer_routes(section) {
-	return routes_from(values.config_get_words(section.allowed_ips) ?? [],
-	                   values.shell_bool(values.config_get(section.route_allowed_ips), false));
+	if (ucode_handler() && !section.public_key) return [];
+	return routes_from(route_entries(section.allowed_ips) ?? [], peer_flag(section.route_allowed_ips));
 }
 
 // netifd puts an interface's routes in ip4table / ip6table when those are set,
@@ -383,8 +426,11 @@ function route_still_wanted(conn, iface, r) {
 
 // Only `proto static` routes on this device are considered, which is how netifd
 // spells the ones it installs for route_allowed_ips; the interface's own on-link
-// prefix is `proto kernel` and so is never a candidate. Used on the reconcile
-// path, where the set of previously-wanted prefixes is not known from the request.
+// prefix is `proto kernel` and so is never a candidate. The busybox applet, the
+// only ip of an OpenWrt main image, ignores the proto filter and lists every
+// route of the device, but each delete names `proto static`, which the kernel
+// matches, so the connected route stays. Used on the reconcile path, where the
+// set of previously-wanted prefixes is not known from the request.
 function installed_routes(conn, iface) {
 	let out = [];
 	for (let v6 in [false, true]) {
@@ -468,14 +514,50 @@ function apply_peer(iface, peer) {
 // A down interface holds no peer state, and ifup reads the peers from uci, so
 // there is nothing to apply. An interface netifd does not know is the same case:
 // it is how a peer orphaned by deleting its parent is still deletable.
-function is_up(conn, iface) {
-	let status = null;
+function iface_status(conn, iface) {
 	try {
-		status = conn.call("network.interface." + iface, "status", {});
+		let status = conn.call("network.interface." + iface, "status", {});
+		return (type(status) == "object") ? status : null;
 	} catch (e) {
-		return false;
+		return null;
 	}
-	return type(status) == "object" && status.up === true;
+}
+
+function is_up(conn, iface) {
+	return iface_status(conn, iface)?.up === true;
+}
+
+// The ucode handler of OpenWrt main restarts a wireguard interface on every peer
+// change, and the kernel apply runs right after the write's reload, so the
+// interface can be mid-cycle here. A one-shot up check would skip the apply and
+// leave netifd to re-apply the peers from uci, which turns a peer that wg refuses
+// into a committed section and a setup_failed interface instead of this
+// transaction's 500. A setup that never settles reads null. wireguard.sh restarts
+// nothing on a peer change, and its failed setup retries with pending set for as
+// long as the stored config stays refused, so there the one-shot check stays.
+// `until` is shared by the interfaces of one apply or one reconcile, so their
+// waits do not add up with the number of interfaces.
+function settled_up(conn, iface, until) {
+	if (!ucode_handler()) return is_up(conn, iface);
+	let quiet = 0;
+	for (;;) {
+		let status = iface_status(conn, iface);
+		if (status == null)
+			return false;
+		if (status.up === true && status.pending !== true)
+			return true;
+		// Between the teardown and the setup of one of netifd's restarts the
+		// interface reads down with no setup pending, so a single quiet
+		// reading settles nothing: the second, half a second later, is a
+		// down interface that no restart is walking to its feet.
+		if (status.pending === true)
+			quiet = 0;
+		else if (++quiet >= 2)
+			return false;
+		if (time() >= until)
+			return status.pending === true ? null : false;
+		sleep(500);
+	}
 }
 
 const NOT_HELD = { endpoint: null, allowed_ips: null, persistent_keepalive: null, latest_handshake: null,
@@ -538,7 +620,7 @@ function unclaimed(conn) {
 // so replaying the request's own operations would not undo the applied ones.
 // `ops` are those operations, which name the peers that the request may have changed in the kernel.
 function reconcile(conn, interfaces, ops) {
-	let seen = {}, missing = null, named = {};
+	let seen = {}, missing = null, named = {}, until = time() + SETTLE_S;
 	for (let op in ops ?? [])
 		for (let k in ((op.action == "remove") ? kernel_keys(op.public_key) : [ kernel_key(op.public_key) ]) || [])
 			if (k) named[op.iface + "|" + k] = true;
@@ -546,7 +628,7 @@ function reconcile(conn, interfaces, ops) {
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) continue;
 		if (seen[iface]) continue;
 		seen[iface] = true;
-		if (!is_up(conn, iface)) continue;
+		if (!settled_up(conn, iface, until)) continue;
 
 		let sections = peer_sections(conn, iface);
 		let wanted = {};
@@ -609,13 +691,16 @@ function reconcile(conn, interfaces, ops) {
 // normal rather than a failure, and without this the caller cannot tell a write
 // that landed in the kernel from one that only landed in uci.
 function apply(conn, ops, applied) {
-	let up = {};
+	let up = {}, until = time() + SETTLE_S;
 	for (let op in ops) {
 		let iface = op.iface;
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE))
 			return sprintf("refusing to apply to interface %J", iface);
 		if (up[iface] == null) {
-			up[iface] = is_up(conn, iface);
+			let settled = settled_up(conn, iface, until);
+			if (settled === null)
+				return sprintf("interface %s holds a setup pending that never ended after the reload, so its peers cannot be applied", iface);
+			up[iface] = settled;
 			if (up[iface] && type(applied) == "array")
 				push(applied, iface);
 		}
@@ -667,5 +752,5 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, runtime, interfaces_of, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
+return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
+         peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
