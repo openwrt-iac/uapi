@@ -91,6 +91,39 @@ t.describe('handler.make_collection, list', () => {
 	});
 });
 
+// An unknown family listed the v4 leases with a 200, and the link to the next page dropped the
+// family, so the second page of the v6 leases was v4 ones or a 400.
+t.describe('dhcp/leases ?family', () => {
+	let h = handler.make_collection({ ...leases_mod,
+		list_fn: (conn, q) => (q?.family == "v6") ? [ { ip: "fd99::1" }, { ip: "fd99::2" } ] : [ { mac: "aa", ip: "192.168.1.10" } ] });
+	let spec = json(require('fs').readfile("build/openapi.json")).paths;
+
+	t.it('answers 400 to a family that is not v4 or v6, on the list and on a read by id', () => {
+		let r = h.list(bus.stub(), ctx(), { family: "v7" });
+		t.assert_deep_equal([ r.status, r.body.code ], [ 400, "bad_request" ]);
+		t.assert_equal(h.get_one(bus.stub(), ctx(), "aa", { family: "V6" }).status, 400);
+		t.assert_equal(h.get_one(bus.stub(), ctx(), "aa", { family: "v4" }).status, 200);
+	});
+
+	t.it('keeps the family in the link to the next page', () => {
+		let r = h.list(bus.stub(), ctx(), { family: "v6", limit: "1" });
+		t.assert_equal(r.headers["Link"], '<?cursor=c_fd99::1&limit=1&family=v6>; rel="next"');
+		let next = {};
+		for (let kv in split(match(r.headers["Link"], /^<\?([^>]*)>/)[1], "&")) {
+			let p = split(kv, "=", 2);
+			next[p[0]] = p[1];
+		}
+		t.assert_deep_equal(h.list(bus.stub(), ctx(), next).body, [ { ip: "fd99::2" } ]);
+	});
+
+	t.it('is declared in the spec with limit and cursor, on the list and on a read by id', () => {
+		let names = (op) => map(op.parameters ?? [], (p) => p.name);
+		t.assert_deep_equal(names(spec["/dhcp/leases"].get), [ "limit", "cursor", "family" ]);
+		t.assert_deep_equal(names(spec["/dhcp/leases/{id}"].get), [ "family" ]);
+		t.assert_deep_equal(spec["/dhcp/leases"].get.parameters[2].schema.enum, [ "v4", "v6" ]);
+	});
+});
+
 // network/wireguard_kernel_peers names the interfaces whose kernel it could not read, so that an
 // empty list is not taken for a kernel that holds no drift.
 t.describe('handler.make_collection, headers that a list_fn answers', () => {
