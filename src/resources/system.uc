@@ -1,5 +1,5 @@
 let values = require('values');
-let platform_bool = values.platform_bool;
+let shell_bool = values.shell_bool;
 let as_int = values.as_int;
 
 function fromUci(section) {
@@ -14,7 +14,9 @@ function fromUci(section) {
 		log_size: as_int(section.log_size),
 		log_ip: section.log_ip ?? null,
 		log_proto: section.log_proto ?? null,
-		log_remote: platform_bool(section.log_remote, false),
+		// log.init reads it through libvalidate as `log_remote:bool:1`: absent means remote
+		// logging runs as soon as log_ip is set, which is how LuCI sets it up.
+		log_remote: shell_bool(section.log_remote, true),
 		urandom_seed: section.urandom_seed ?? null,
 		runtime: {},
 	};
@@ -68,7 +70,7 @@ return {
 		                description: "Remote syslog collector IP address" },
 		log_proto:    { type: ["string", "null"],
 		                description: "Remote syslog transport (udp or tcp)" },
-		log_remote:   { type: "boolean", default: false },
+		log_remote:   { type: "boolean", default: true },
 		// A path, not a flag: /sbin/urandom_seed tests `[ "${SEED:0:1}" = "/" ]` and
 		// saves the seed there. It was typed boolean, so any write put "1" or "0" in
 		// place of the operator's path and silently turned the feature off.

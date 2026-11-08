@@ -1,5 +1,5 @@
 let values = require('values');
-let platform_bool = values.platform_bool;
+let shell_bool = values.shell_bool;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
@@ -8,11 +8,12 @@ function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		enabled: platform_bool(section.enabled, true),
-		enable_server: platform_bool(section.enable_server, false),
+		// sysntpd reads these through libvalidate `:bool:`.
+		enabled: shell_bool(section.enabled, true),
+		enable_server: shell_bool(section.enable_server, false),
 		interface: section.interface ?? null,
 		server: as_list_or_null(section.server),
-		use_dhcp: platform_bool(section.use_dhcp, true),
+		use_dhcp: shell_bool(section.use_dhcp, true),
 		runtime: {},
 	};
 }
