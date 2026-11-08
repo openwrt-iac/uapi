@@ -148,7 +148,9 @@ echo "=== wireless: masked key, excluded from the stock-config round trip ==="
 ensure_wireless_radio || fail "could not bring up a simulated radio via mac80211_hwsim"
 wid=$(curl -sS -H "$ADMIN" "$URL/wireless/interfaces" | jq -r '.[0].id // empty')
 [ -n "$wid" ] || fail "no wifi-iface section to round-trip"
-# v4 (#321): no managed field, no adopt step; the id is the section name.
+if [ "$(curl -sS -H "$ADMIN" "$URL/wireless/interfaces/$wid" | jq -r '.managed')" = "false" ]; then
+	wid=$(curl -sS -H "$ADMIN" -X POST "$URL/wireless/interfaces/$wid/adopt" | jq -r '.id')
+fi
 $SSH "uci set wireless.$wid.encryption=psk2
       uci set wireless.$wid.key=correcthorsebatterystaple
       uci commit wireless" >/dev/null
