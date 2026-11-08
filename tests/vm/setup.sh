@@ -2,23 +2,33 @@
 set -eu
 cd "$(dirname "$0")"
 
-# The stable series boots the current release. The main series (the v4 line)
-# boots the daily snapshot, whose filename is fixed while its content is not.
-if [ "${OPENWRT_SERIES:-stable}" = main ]; then
+# The stable series boots the release that CI names in OPENWRT_VERSION, or else the one that
+# build/sdk.sha256 pins. The main series (the v4 line) boots the daily snapshot, whose filename
+# is fixed while its content is not. Each series keeps its own image and marker: with one
+# shared pair, a stable run after a main run found both up to date and booted the snapshot.
+SERIES=${OPENWRT_SERIES:-stable}
+if [ "$SERIES" = main ]; then
 	IMAGE_URL=https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
 	IMAGE_GZ=openwrt-main.img.gz
 else
-	IMAGE_URL=https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-25.12.6-x86-64-generic-ext4-combined.img.gz
-	IMAGE_GZ=openwrt-25.12.6.img.gz
+	VERSION=${OPENWRT_VERSION:-$(sed -n 's/^[0-9a-f]*  openwrt-sdk-\(.*\)-x86-64_gcc-.*/\1/p' ../../build/sdk.sha256)}
+	IMAGE_URL=https://downloads.openwrt.org/releases/$VERSION/targets/x86/64/openwrt-$VERSION-x86-64-generic-ext4-combined.img.gz
+	IMAGE_GZ=openwrt-$VERSION.img.gz
 fi
-IMAGE=openwrt.img
+IMAGE=openwrt-$SERIES.img
+MARKER=.injected-$SERIES
 KEY=id_ed25519
 
-if [ ! -f "$IMAGE_GZ" ]; then
+# -z asks again for the snapshot and leaves the archive alone when the server holds no newer
+# one. curl writes no file on that 304, so a leftover partial file must not be moved in.
+if [ "$SERIES" = main ] || [ ! -f "$IMAGE_GZ" ]; then
 	echo "Downloading $IMAGE_URL"
+	rm -f "$IMAGE_GZ.tmp"
+	set --
+	[ ! -f "$IMAGE_GZ" ] || set -- -z "$IMAGE_GZ"
 	# The CDN cuts HTTP/2 streams of the snapshot image (curl 92), which killed the package job.
-	curl -fsSL --http1.1 --retry 5 --retry-all-errors -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
-	mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
+	curl -fsSL --http1.1 --retry 5 --retry-all-errors "$@" -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
+	[ ! -f "$IMAGE_GZ.tmp" ] || mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
 fi
 
 # A re-download replaces the archive, so decompress and inject again: the
@@ -34,7 +44,7 @@ if [ ! -f "$KEY" ]; then
 	ssh-keygen -t ed25519 -N '' -f "$KEY" -C uapi-ci -q
 fi
 
-if [ -f .injected ] && [ .injected -nt "$KEY.pub" ] && [ .injected -nt "$IMAGE_GZ" ]; then
+if [ -f "$MARKER" ] && [ "$MARKER" -nt "$KEY.pub" ] && [ "$MARKER" -nt "$IMAGE_GZ" ]; then
 	echo "SSH key already injected"
 	exit 0
 fi
@@ -99,5 +109,5 @@ FWINIT
 sudo chmod 755 "$MNT/etc/init.d/firewall"
 sudo chown 0:0 "$MNT/etc/init.d/firewall"
 
-touch .injected
+touch "$MARKER"
 echo "Image ready"

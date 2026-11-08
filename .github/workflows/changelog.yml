@@ -28,10 +28,15 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # A read that fails stops here: falling through to the entry check reported a labelled PR
+        # as missing its entry.
         run: |
-          if curl -sf -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
-              | jq -e 'any(.labels[].name; . == "changelog-not-needed")' > /dev/null; then
+          pr=$(curl -sSf --retry 3 --retry-all-errors -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER") || {
+            echo "::error::could not read the labels of the PR"
+            exit 1
+          }
+          if printf '%s' "$pr" | jq -e 'any(.labels[].name; . == "changelog-not-needed")' > /dev/null; then
             echo "changelog-not-needed label present, no entry required."
             exit 0
           fi
