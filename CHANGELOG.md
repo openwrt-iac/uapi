@@ -15,6 +15,10 @@ All notable changes to this project will be documented in this file. Format foll
 
 - **On OpenWrt main, a wireguard peer write waits for netifd to restart the interface.** The ucode proto handler of OpenWrt main restarts a wireguard interface on every peer change, and the kernel apply ran during that restart, so it skipped the interface: a peer that wg refuses was committed with a 200, and the interface stayed down. The apply now waits up to 8 s for the restart to end, and a restart that does not end fails the write with 500 `reload_failed_restored` and a restore. The handler sets all the peers of an interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down. OpenWrt 25.12 is unchanged. (#366)
 
+### Deprecated
+
+- **The v4 boolean change names the reader of each option and the three defaults that move with it.** The announcement of #310 said that every boolean field would follow the uci blob converter. In v4 each option reads as the daemon that consumes it reads it, an absent `system.log_remote` reads true and an absent `usteer/config.syslog` false, as logd and usteer read them, and `sqm/queues.enabled` reads true only for a value that sqm-scripts takes as 1. `docs/deprecations.md` and the "Upcoming in v4" block of the spec now say so. (#369)
+
 ### Fixed
 
 - **`network/wireguard_peers` reads, routes and restores peers as the ucode proto handler of OpenWrt main does.** Where netifd has `/lib/netifd/proto/wireguard.uc`, uapi modeled the shell handler of 25.12 and reported keys and prefixes that the platform refused. It now follows that handler: no `printf %b` expansion of a stored value, one entry per list item, one route per entry with the prefix length that `int()` reads, no route for a peer without a key, and `disabled` and `route_allowed_ips` on only for `1`. A prefix length with a leading zero is refused under the shell handler only, where netifd reads it as octal. OpenWrt 25.12 is unchanged. (#366)
