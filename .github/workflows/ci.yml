@@ -41,8 +41,9 @@ permissions:
 # verify-arch-build 9.6m), with extra room for a cold SDK cache. Integration on the
 # OpenWrt main snapshot of v4 takes about 30m: every peer write restarts the
 # wireguard interface there, and the wireguard tests wait each restart out. Package
-# there takes about 60m: no cache holds the snapshot SDK, whose download alone took
-# 27m, and the build of the dependencies about 30m.
+# there takes about 60m on a cold cache: the snapshot SDK download alone took 27m,
+# and the build of the dependencies about 30m. A PR to v4 restores the SDK that the
+# last push to v4 cached.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: >-
@@ -206,23 +207,28 @@ jobs:
   warm-sdk-cache:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
+    # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
     steps:
       - uses: actions/checkout@v7
 
       - name: Resolve the SDK tarball
         id: sdk
-        run: echo "tarball=$(tools/openwrt-sdk.sh name x86/64)" >> "$GITHUB_OUTPUT"
+        run: |
+          t=$(tools/openwrt-sdk.sh name x86/64)
+          k=$(tools/openwrt-sdk.sh key x86/64)
+          echo "tarball=$t" >> "$GITHUB_OUTPUT"
+          echo "key=$k" >> "$GITHUB_OUTPUT"
 
       - name: Restore or claim the SDK cache
         id: sdkcache
         uses: actions/cache@v6
         with:
           path: build/sdk
-          # The resolved tarball name is the key: a stable version bump or a
-          # snapshot toolchain bump changes it, which rotates the entry instead
-          # of serving a warm cache of the previous SDK.
-          key: ${{ steps.sdk.outputs.tarball }}
+          # The tarball name and the start of its sha256: a stable bump, a snapshot toolchain
+          # bump and a daily snapshot rebuild each rotate the entry.
+          key: ${{ steps.sdk.outputs.key }}
 
       - name: Install tooling
         if: steps.sdkcache.outputs.cache-hit != 'true'
@@ -294,7 +300,11 @@ jobs:
 
       - name: Resolve the SDK tarball
         id: sdk
-        run: echo "tarball=$(tools/openwrt-sdk.sh name x86/64)" >> "$GITHUB_OUTPUT"
+        run: |
+          t=$(tools/openwrt-sdk.sh name x86/64)
+          k=$(tools/openwrt-sdk.sh key x86/64)
+          echo "tarball=$t" >> "$GITHUB_OUTPUT"
+          echo "key=$k" >> "$GITHUB_OUTPUT"
 
       # Restore only, warm-sdk-cache being the one writer: an entry saved here is readable from
       # this pull request or tag ref alone, and each takes 2 GiB of the repository's 10 GB.
@@ -302,7 +312,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/sdk
-          key: ${{ steps.sdk.outputs.tarball }}
+          key: ${{ steps.sdk.outputs.key }}
+          # An older build of the same snapshot SDK, when the snapshot was rebuilt after the last
+          # warm: uapi is arch-all, and an older SDK beats a download that the CDN cuts.
+          restore-keys: ${{ steps.sdk.outputs.tarball }}-
 
       # The pin check lives in tools/openwrt-sdk.sh: the stable series fails
       # there when build/sdk.sha256 does not pin the resolved tarball, which is
@@ -511,13 +524,17 @@ jobs:
 
       - name: Resolve the SDK tarball
         id: sdk
-        run: echo "tarball=$(tools/openwrt-sdk.sh name ${{ matrix.target }})" >> "$GITHUB_OUTPUT"
+        run: |
+          t=$(tools/openwrt-sdk.sh name ${{ matrix.target }})
+          k=$(tools/openwrt-sdk.sh key ${{ matrix.target }})
+          echo "tarball=$t" >> "$GITHUB_OUTPUT"
+          echo "key=$k" >> "$GITHUB_OUTPUT"
 
       - name: Cache OpenWrt SDK (${{ matrix.arch }})
         uses: actions/cache@v6
         with:
           path: build/sdk-${{ matrix.arch }}
-          key: ${{ steps.sdk.outputs.tarball }}
+          key: ${{ steps.sdk.outputs.key }}
 
       - name: Download SDK if cache miss
         run: |

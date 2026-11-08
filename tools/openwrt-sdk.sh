@@ -3,6 +3,7 @@
 #
 # Usage:
 #   tools/openwrt-sdk.sh name <target>           print the tarball filename
+#   tools/openwrt-sdk.sh key <target>            print the cache key: the filename and the start of its sha256
 #   tools/openwrt-sdk.sh fetch <target> [dest]   download, verify, extract into dest
 #
 # target is an OpenWrt target path, e.g. x86/64 or armsr/armv8. The series comes
@@ -15,8 +16,8 @@
 # beside the tarball are the pin there.
 set -eu
 
-cmd=${1:?usage: openwrt-sdk.sh name|fetch <target> [dest]}
-target=${2:?usage: openwrt-sdk.sh name|fetch <target> [dest]}
+cmd=${1:?usage: openwrt-sdk.sh name|key|fetch <target> [dest]}
+target=${2:?usage: openwrt-sdk.sh name|key|fetch <target> [dest]}
 dest=${3:-build/sdk}
 series=${OPENWRT_SERIES:-stable}
 version=${OPENWRT_VERSION:-25.12.6}
@@ -49,6 +50,12 @@ if [ "$cmd" = name ]; then
 	echo "$tarball"
 	exit 0
 fi
+# A snapshot SDK keeps its filename across the daily rebuilds, so the name alone kept serving the
+# SDK of the first run.
+if [ "$cmd" = key ]; then
+	echo "$tarball-$(printf '%s' "${line%% *}" | cut -c1-16)"
+	exit 0
+fi
 if [ "$cmd" != fetch ]; then
 	echo "unknown command: $cmd" >&2
 	exit 2
@@ -57,12 +64,16 @@ fi
 mkdir -p "$dest"
 # The CDN cuts long transfers, and curl's own --retry starts the file over even with -C -, so each
 # attempt is a new curl that resumes from the partial file. A partial file left by an earlier run
-# would be resumed too.
+# would be resumed too. A fixed count of attempts ran out 38 MB short of a 300 MB snapshot SDK, so
+# only attempts that add nothing count against the limit.
 rm -f "/tmp/$tarball"
-n=0
+got=0
+stalled=0
 until curl -fsSL --http1.1 -C - -o "/tmp/$tarball" "$base/$tarball"; do
-	n=$((n + 1))
-	[ $n -lt 10 ] || exit 1
+	now=$(wc -c < "/tmp/$tarball" 2>/dev/null || echo 0)
+	if [ "$now" -gt "$got" ]; then stalled=0; else stalled=$((stalled + 1)); fi
+	got=$now
+	[ $stalled -lt 5 ] || exit 1
 	sleep 5
 done
 if [ "$series" = main ]; then
