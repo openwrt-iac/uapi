@@ -476,9 +476,9 @@ function apply_peer(iface, peer) {
 	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
 	// what the peer already holds, or refuses the command for one marked -. Stored values reach
 	// here with no validate() in front of them: the restore, and the peer sections that a remove
-	// sets again.
+	// sets again. `wg set` drops every space of the list before it reads a marker.
 	for (let ip in peer.allowed_ips)
-		if (match(ip, /^[+-]/))
+		if (match(ip, /^[[:space:]]*[+-]/))
 			return sprintf("refusing to apply a peer with an allowed_ips entry marked + or - on %s", iface);
 	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
@@ -642,7 +642,7 @@ function reconcile(conn, interfaces, ops) {
 				return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
 			if (key && kernel_key(s.preshared_key) === false)
 				return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
-			if (key && length(filter(allowed_ips(s.allowed_ips) ?? [], (ip) => match(ip, /^[+-]/))) > 0)
+			if (key && length(filter(allowed_ips(s.allowed_ips) ?? [], (ip) => match(ip, /^[[:space:]]*[+-]/))) > 0)
 				return sprintf("refusing to apply a peer with an allowed_ips entry marked + or - on %s", iface);
 			if (key) wanted[key] = true;
 		}

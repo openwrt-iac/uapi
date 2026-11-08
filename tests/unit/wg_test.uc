@@ -417,7 +417,7 @@ t.describe('wg.apply against logging wg and ip', () => {
 	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
 	// what the peer already holds, or refuses the command.
 	t.it('refuses a peer with an allowed_ips entry marked + or -, and runs nothing', () => {
-		for (let ips in [ [ '+10.0.0.0/8' ], [ '-fd00::/64' ], [ '10.0.0.5/32', '-10.0.0.6/32' ] ]) {
+		for (let ips in [ [ '+10.0.0.0/8' ], [ '-fd00::/64' ], [ '10.0.0.5/32', '-10.0.0.6/32' ], [ ' +10.0.0.0/8' ], [ '10.0.0.5/32', '\t-10.0.0.6/32' ] ]) {
 			let r = apply({ network: { wg1: WG1 } },
 			              [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: ips } ]);
 			t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1', ips);
@@ -655,7 +655,7 @@ t.describe('wg.reconcile against logging wg and ip', () => {
 	// The restore refuses such a peer before anything changes in the kernel: wg would add the
 	// prefixes to what the peer already holds instead of replacing them, or refuse the command.
 	t.it('refuses a peer with an allowed_ips entry marked + or -, and runs nothing', () => {
-		for (let v in [ '+10.0.0.0/8', '-fd00::/64', '\\05310.0.0.0/8' ]) {
+		for (let v in [ '+10.0.0.0/8', '-fd00::/64', '\\05310.0.0.0/8', '\t+10.0.0.0/8' ]) {
 			let r = reconcile({ network: { wg1: WG1,
 			                               a: peer({ public_key: PK, allowed_ips: v }),
 			                               b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } });
@@ -1005,6 +1005,12 @@ t.describe('wg under the ucode handler', () => {
 		let del = (r) => filter(r.commands, (l) => match(l, /^ip\|route\|del/));
 		t.assert_deep_equal(del(run_wg(uci, ops, null, null, UCODE_WG)), [ 'ip|route|del|10.0.0.0/24|dev|wg1|proto|static|scope|link' ]);
 		t.assert_deep_equal(del(run_wg(uci, ops)), []);
+	});
+	t.it('refuses a list entry whose marker follows a space, and sets nothing', () => {
+		let uci = { network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: [ ' +10.0.0.0/8' ] }) } };
+		let r = run_wg(uci, "wg.reconcile(c, [ 'wg1' ])", null, null, UCODE_WG);
+		t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0), []);
 	});
 	t.it('restores a peer whose disabled holds true', () => {
 		let uci = { network: { wg1: WG1, a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', disabled: 'true' }) } };
