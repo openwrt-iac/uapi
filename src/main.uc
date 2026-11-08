@@ -1152,16 +1152,18 @@ function dispatch(env, start) {
 			                            "Idempotency-Key was previously used with a different body") };
 	}
 
+	// The method first, as before the route table: a POST to /metrics from a token without the
+	// scope answers 405, not 403.
 	for (let r in AUTH_EXACT_ROUTES) {
 		if (path != r.path) continue;
+		if (r.methods != null && index(r.methods, method) < 0)
+			return { ctx, token,
+			         resp: errors.error(ctx, "method_not_allowed", r.not_allowed) };
 		if (r.scope != null) {
 			let denied = scope.require_or_deny(errors, ctx, token.scopes, r.scope, r.verb,
 				r.scope_what);
 			if (denied != null) return { ctx, token, resp: denied };
 		}
-		if (r.methods != null && index(r.methods, method) < 0)
-			return { ctx, token,
-			         resp: errors.error(ctx, "method_not_allowed", r.not_allowed) };
 		return { ctx, token, resp: r.fn(conn, ctx, token, parts, method, body, query, env) };
 	}
 
