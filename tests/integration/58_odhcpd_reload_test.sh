@@ -194,7 +194,12 @@ await_ndp "the network batch" "$services"
 
 echo "--- with dnsmasq stopped, a dhcp or system write reloads odhcpd and leaves dnsmasq stopped ---"
 $SSH '/etc/init.d/dnsmasq stop'
-dnsmasq_listed && fail "procd still lists dnsmasq after its stop, so the case below proves nothing"
+# procd can still list the instance for a moment after the stop returns.
+n=0
+while dnsmasq_listed; do
+	n=$((n + 1)); [ $n -lt 10 ] || fail "procd still lists dnsmasq after its stop, so the case below proves nothing"
+	sleep 1
+done
 mark stopped
 hdrs=$(mktemp)
 r=$(curl -sS -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \

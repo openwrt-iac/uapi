@@ -16,7 +16,8 @@ KEY=id_ed25519
 
 if [ ! -f "$IMAGE_GZ" ]; then
 	echo "Downloading $IMAGE_URL"
-	curl -fsSL --retry 3 --retry-all-errors -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
+	# The CDN cuts HTTP/2 streams of the snapshot image (curl 92), which killed the package job.
+	curl -fsSL --http1.1 --retry 5 --retry-all-errors -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
 	mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
 fi
 
