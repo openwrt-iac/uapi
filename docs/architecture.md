@@ -790,7 +790,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Metrics counters             | `/var/run/uapi-metrics/`                    | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
 | Recent errors                | `/var/run/uapi-error-ring/`                 | The last 20, until reboot |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
-| Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is removed when its write ends; a record whose request process is gone was left by a killed request and `/diagnostics` reports it under `interrupted_writes` |
+| Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is named by the pid and the start time of its request process, and removed when its write returns. A write that throws or is killed keeps it, because its commit may have landed. A record whose process is gone, or whose pid another process now holds, is reported by `/diagnostics` under `interrupted_writes` |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |

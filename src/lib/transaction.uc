@@ -567,9 +567,9 @@ function transaction(conn, params) {
 	} catch (e) {
 		caught = e;
 	}
-	// Every path the request can still reach ends here, under the lock. A kill or a throw after
-	// the commit skips this, which is exactly what leaves the record behind.
-	write_journal.clear();
+	// Every path the request can still reach ends here, under the lock. A throw keeps the record,
+	// as a kill does, because the commit may have landed.
+	if (caught == null) write_journal.clear();
 	release(lock);
 	if (caught != null) die(caught);
 	return with_unverified(result, watch);
@@ -739,7 +739,7 @@ function multi_transaction(conn, params) {
 		}
 	} catch (e) { caught = e; }
 
-	write_journal.clear();
+	if (caught == null) write_journal.clear();
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
 	if (caught != null) die(caught);
@@ -762,7 +762,7 @@ function with_lock(params) {
 	let caught = null;
 	try { result = fn(); }
 	catch (e) { caught = e; }
-	write_journal.clear();
+	if (caught == null) write_journal.clear();
 	release(lock);
 	if (caught != null) die(caught);
 	return result ?? { ok: true };
