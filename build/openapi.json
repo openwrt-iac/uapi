@@ -32447,7 +32447,7 @@
 							"hybrid",
 							null
 						],
-						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`. dnsmasq serves on every value but `disabled`. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
+						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
 					},
 					"ra_flags": {
 						"type": [
@@ -32606,7 +32606,7 @@
 							"hybrid",
 							null
 						],
-						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`. dnsmasq serves on every value but `disabled`. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
+						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
 					},
 					"ra_flags": {
 						"type": [
