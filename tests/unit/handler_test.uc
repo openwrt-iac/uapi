@@ -122,6 +122,31 @@ t.describe('handler.list pagination', () => {
 		t.assert_equal(rules.list(c, ctx(), { limit: "0" }).status, 400);
 		t.assert_equal(rules.list(c, ctx(), { limit: "501" }).status, 400);
 	});
+
+	// No list declared limit and cursor, the read-only lists did not declare Link and X-Next-Cursor,
+	// and the pattern of X-Next-Cursor refused the cursor of a lease.
+	t.it('declares limit, cursor and the paging headers on each list that pages', () => {
+		let spec = json(require('fs').readfile("build/openapi.json"));
+		let paged = [];
+		for (let path, item in spec.paths) {
+			let ok = item.get?.responses?.["200"];
+			if (ok?.content?.["application/json"]?.schema?.type != "array") continue;
+			let names = map(item.get.parameters ?? [], (p) => p.name);
+			let declared = [ index(names, "limit") >= 0, index(names, "cursor") >= 0,
+			                 ok.headers?.Link != null, ok.headers?.["X-Next-Cursor"] != null ];
+			t.assert_true(length(uniq(declared)) == 1, path);
+			if (!declared[0]) continue;
+			push(paged, path);
+			let limit = filter(item.get.parameters, (p) => p.name == "limit")[0].schema;
+			let cursor = filter(item.get.parameters, (p) => p.name == "cursor")[0].schema;
+			t.assert_deep_equal([ limit.minimum, limit.maximum, cursor.pattern ],
+			                    [ 1, 500, spec.components.headers.XNextCursor.schema.pattern ], path);
+		}
+		for (let p in [ "/firewall/rules", "/dhcp/leases", "/dhcp/leases6", "/network/wireguard_kernel_peers" ])
+			t.assert_true(index(paged, p) >= 0, p);
+		let re = regexp(spec.components.headers.XNextCursor.schema.pattern);
+		t.assert_true(match("c_192.168.1.10", re) && match("c_fd99::1", re) && match("c_01hx0000000000000000000000", re));
+	});
 });
 
 t.describe('handler.get_one', () => {
