@@ -33,6 +33,12 @@ status=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH -H "Authorization: Bea
 	-H 'Content-Type: application/json' "$URL/system" -d '{"hostname":"nope"}')
 [ "$status" = "403" ] || fail "PATCH /system with ro bearer expected 403, got $status"
 
+echo "--- a method that /metrics and /diagnostics do not take answers 405 before the scope check ---"
+for p in metrics diagnostics; do
+	status=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer $bearer" "$URL/$p")
+	[ "$status" = "405" ] || fail "POST /$p with a system:ro bearer expected 405, got $status"
+done
+
 echo "--- creating a token with an existing name fails ---"
 if $SSH "uapi-token create --name lifecycle_test --scope 'system:ro' 2>&1" | grep -q 'already exists'; then
 	echo "  duplicate name rejected"
