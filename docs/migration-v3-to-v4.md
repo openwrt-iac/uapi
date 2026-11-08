@@ -61,15 +61,19 @@ disabled; now the fix comes first, or goes through `/raw`. On 3.x, `GET /diagnos
 already lists these stored errors, which makes it the pre-flight check before the upgrade. In v4
 the same sweep is `GET /uapi/diagnostics?validate=1`.
 
-## Boolean reads follow the platform's reader
+## Boolean reads follow the reader of their daemon
 
-The remaining readers that used `normalize_bool` now use `platform_bool` (announced in 3.4.0,
-#310): `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`) and the
-`usteer/config` booleans. The uci blob converter takes only `1`/`true` and `0`/`false`, so the
-word spellings `on`/`yes`/`enabled` now read `false` there instead of `true`. Fields whose daemon
-really takes the wider set keep it: fw4's `parse_bool` and libvalidate's `:bool:` (dropbear's auth
-flags) still accept the ten spellings, and those reads are unchanged. Evidence: libuci `66127cd`
-and ubox `6f78fa4`, pinned in `docs/ucode-quirks.md` (#312).
+The readers whose daemon goes through libvalidate's `:bool:` or `config_get_bool` now read the
+ten spellings of that reader (announced in 3.4.0, #310): `system.log_remote`,
+`system/timeservers` (`enabled`, `enable_server`, `use_dhcp`), the `usteer/config` booleans
+(`syslog`, `ipv6`, `assoc_steering`) and the `dropbear/instances` flags (`password_auth`,
+`root_password_auth`, `root_login`, `gateway_ports`). `enabled` now reads `true` and `disabled`
+reads `false` there, where v3 answered the default. Two defaults follow the daemon too: an absent
+`log_remote` reads `true`, as log.init takes it (`log_remote:bool:1`), and an absent usteer
+`syslog` reads `false`, as usteer's `set_config` resets it. A section whose read changes gets a new
+ETag once at the upgrade, so a write that sends an `If-Match` from before it answers 412: read the
+section again first. fw4's `parse_bool` keeps its eight spellings. Evidence: ubox `6f78fa4`,
+pinned in `docs/ucode-quirks.md` (#312).
 
 ## A `wireless/interfaces` section with no `mode` reads `null`
 

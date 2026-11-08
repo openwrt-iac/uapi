@@ -195,12 +195,11 @@ The uci blob converter is narrower: `uci_attr_to_blob()` in `blob.c` of libuci
 `strcmp`. For anything else it adds no attribute, so the option is dropped, not the
 section.
 
-`dropbear/instances.enable` reads with `shell_bool`. `system.log_remote` and
-`system/timeservers` read with `platform_bool` since v4 (#310), which changes what the
-word spellings `on`/`yes` read as: the blob converter does not take them, so they
-read false. dropbear's auth flags keep `normalize_bool`, because dropbear.init reads
-them through libvalidate, which takes all ten spellings. The v4 announcement in
-`docs/deprecations.md` cites these two pins as the evidence.
+Since v4 (#310), `system.log_remote`, `system/timeservers` and dropbear's flags read
+with `shell_bool`, as `dropbear/instances.enable` already did, and so do the
+`usteer/config` booleans, which usteer.init reads with `config_get_bool`. Before, they
+read with `normalize_bool`, which misses `enabled` and `disabled`. The v4 announcement
+in `docs/deprecations.md` cites these two pins as the evidence.
 
 Writes still emit `"1"` / `"0"`, which every reader above accepts.
 
