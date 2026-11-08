@@ -32311,7 +32311,7 @@
 					},
 					"interface": {
 						"type": "string",
-						"description": "Server-side interface that issued the lease"
+						"description": "Network device that odhcpd served the lease on, as odhcpd names it (for example `br-lan`), not the uci interface"
 					},
 					"ia_type": {
 						"type": "string",
@@ -32338,7 +32338,7 @@
 							"integer",
 							"null"
 						],
-						"description": "Unix epoch seconds when the lease expires; null for non-numeric values like 'forever'"
+						"description": "Unix epoch seconds when the lease expires; null for one that does not expire"
 					}
 				}
 			},

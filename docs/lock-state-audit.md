@@ -30,7 +30,7 @@ The pattern leaves out three things on purpose. `fs.readfile` and `fs.lsdir` ret
 
 ## Summary
 
-**This audit covers all 61 sites that the command finds.** It used to cover 16 of the 36 lines that the earlier command found, and nine modules were absent from it: `error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6` and `dhcp.servers`.
+**This audit covers all 60 sites that the command finds.** It used to cover 16 of the 36 lines that the earlier command found, and nine modules were absent from it: `error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6` and `dhcp.servers`.
 
 Every descriptor, pipe and lock below is released on every in-request exit path. What the audit did find is listed under [Open findings](#open-findings): a request that uhttpd kills can stop between its commit and its reload.
 
@@ -77,7 +77,6 @@ Every descriptor, pipe and lock below is released on every in-request exit path.
 | `src/lib/wg.uc` | 34-40 | pipe, `wg` and `ip` commands | A failed popen returns an error result. Otherwise `p.close()` always runs after the read. Runs under the transaction's lock for `network`, apart from the `wg show <iface> dump` that a GET of `network/wireguard_peers` runs for its `runtime` and that a GET of `network/wireguard_kernel_peers` runs for its entries. That read takes no lock: a GET in a `/batch` that writes, which runs under the locks of the batch, answers `{}` and reads nothing, and no write reads it. |
 | `src/lib/wg.uc` | 206-222 | fd and file, `/var/run/uapi.wg.psk` | See [the wireguard peer apply](#the-wireguard-peer-apply). The fd is closed before the write is judged. A size on disk short of the key line unlinks the file and returns null, and `apply_peer()` then fails before it changes anything in the kernel. Otherwise `apply_peer()` unlinks the file once `wg` returns. |
 | `src/resources/dhcp.leases.uc` | 24-30 | fd, `/tmp/dhcp.leases` | A failed open reads as no leases. Otherwise the fd is closed before the parse. No lock. |
-| `src/resources/dhcp.leases6.uc` | 59-65 | fd, the odhcpd lease file | A failed open returns null, and the caller tries the other path. Otherwise the fd is closed before the parse. No lock. |
 | `src/resources/dhcp.servers.uc` | 10-16 | fd, a lease file | A failed open reads as empty. Otherwise the fd is closed before the count. No lock. |
 | `cli/uapi-token` | 22-31 | fd, `/dev/urandom` | A failed open dies before any fd exists. Otherwise the fd is closed right after the read. |
 | `cli/uapi-token` | 96-108 | global SH and EX of `uapi`, `with_uapi_lock()` | Takes the locks that an HTTP write of the `uapi` package takes, through `acquire_pkg_waiting()`, waiting up to 10 s. A file that cannot be opened dies, holding nothing. Locks still held after 10 s print which one and exit 75, holding nothing. Otherwise `fn` runs and `default_release_pkg()` releases them. A `die()` inside `fn` ends the process, and the exit releases them, because no child holds a copy. |

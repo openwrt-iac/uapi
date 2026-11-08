@@ -41,9 +41,11 @@ function compute_etag(body) {
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
-const CURSOR_RE = /^c_[A-Za-z0-9_-]+$/;
+// A lease is paged by its IP, so a cursor takes `.` and `:` too.
+const CURSOR_RE = /^c_[A-Za-z0-9_.:-]+$/;
 
-function paginate(ctx, items, query) {
+function paginate(ctx, items, query, id_field) {
+	let key = id_field ?? "id";
 	let limit = DEFAULT_LIMIT;
 	if (query != null && query.limit != null) {
 		// Force int conversion: `+s` accepts trailing junk and returns NaN
@@ -64,7 +66,7 @@ function paginate(ctx, items, query) {
 		let after_id = substr(query.cursor, 2);
 		let found = false;
 		for (let i = 0; i < length(items); i++) {
-			if (items[i].id == after_id) { start = i + 1; found = true; break; }
+			if (items[i][key] == after_id) { start = i + 1; found = true; break; }
 		}
 		if (!found)
 			return errors.error(ctx, "invalid_cursor", "cursor refers to no current item");
@@ -73,7 +75,7 @@ function paginate(ctx, items, query) {
 	let page = slice(items, start, end);
 	let resp = errors.ok(ctx, page);
 	if (end < length(items) && length(page) > 0) {
-		let next = "c_" + page[length(page) - 1].id;
+		let next = "c_" + page[length(page) - 1][key];
 		resp.headers["Link"] = sprintf("<?cursor=%s&limit=%d>; rel=\"next\"", next, limit);
 		resp.headers["X-Next-Cursor"] = next;
 	}
@@ -1279,7 +1281,7 @@ function make_collection(resource) {
 	}
 
 	function list(conn, ctx, query) {
-		return paginate(ctx, resource.list_fn(conn, query), query);
+		return paginate(ctx, resource.list_fn(conn, query), query, resource.cursor_field ?? resource.id_field);
 	}
 
 	function get_one(conn, ctx, id) {

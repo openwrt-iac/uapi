@@ -3,9 +3,9 @@ let shell_bool = values.shell_bool;
 let platform_bool = values.platform_bool;
 let as_int = values.as_int;
 let fs = require('fs');
+let odhcpd_leases = require('odhcpd_leases');
 
 const LEASES4_PATH = "/tmp/dhcp.leases";
-const LEASES6_PATHS = ["/tmp/hosts/odhcpd", "/tmp/odhcpd.leases"];
 
 function read_file_or_empty(path) {
 	let f = fs.open(path, "r");
@@ -15,14 +15,12 @@ function read_file_or_empty(path) {
 	return c;
 }
 
-// Lightweight counters; deliberately not reusing dhcp.leases*.uc modules to
-// avoid an inter-module loadfile dependency that breaks unit-test isolation.
-//
 // active_leases_v4 is a box-total: dnsmasq's /tmp/dhcp.leases does not reliably
 // tag leases by serving interface, so per-interface counts are not available.
-// active_leases_v6_iface is per-interface: odhcpd writes the interface name
-// into each lease line and we filter on it. The asymmetry is named in the
-// field set so a client comparing the two doesn't conflate them.
+// active_leases_v6_iface is per-interface: odhcpd writes the device of the
+// interface into each lease line, which netifd reports as its l3_device. The
+// asymmetry is named in the field set so a client comparing the two doesn't
+// conflate them.
 function count_v4_leases_total() {
 	let n = 0;
 	for (let line in split(read_file_or_empty(LEASES4_PATH), "\n")) {
@@ -36,31 +34,21 @@ function count_v4_leases_total() {
 	return n;
 }
 
-function count_v6_leases_for(iface) {
-	let content = "";
-	for (let p in LEASES6_PATHS) {
-		content = read_file_or_empty(p);
-		if (content != "") break;
-	}
-	let n = 0;
-	for (let line in split(content, "\n")) {
-		let t = trim(line);
-		if (t == "" || substr(t, 0, 1) == "#") continue;
-		// Split on whitespace (space OR tab) so trailing tabs don't shift columns.
-		let parts = split(t, /[ \t]+/);
-		if (length(parts) < 7) continue;
-		if (parts[4] != iface) continue;
-		// One v6 lease line can carry multiple addresses (slots 6..end).
-		for (let i = 6; i < length(parts); i++)
-			if (parts[i] != "" && parts[i] != "-") n++;
-	}
-	return n;
+// A lease of several addresses or prefixes counts once. Two uci interfaces on one device count each
+// other's leases, because the lease file names only the device.
+function count_v6_leases_for(conn, iface) {
+	let dev = null;
+	try { dev = conn.call("network.interface." + iface, "status", {})?.l3_device; } catch (e) {}
+	let seen = {};
+	for (let l in odhcpd_leases.read(conn))
+		if (l.interface == dev) seen[l.duid + " " + l.iaid + " " + l.ia_type] = true;
+	return length(keys(seen));
 }
 
-function lease_counts_for_interface(iface) {
+function lease_counts_for_interface(conn, iface) {
 	return {
 		active_leases_v4_box_total:   count_v4_leases_total(),
-		active_leases_v6_iface:   count_v6_leases_for(iface),
+		active_leases_v6_iface:   count_v6_leases_for(conn, iface),
 	};
 }
 const VALID_RA = {
@@ -86,7 +74,7 @@ function fromUci(section, conn) {
 	let iface = section.interface ?? null;
 	let runtime = {};
 	if (iface != null && iface != "") {
-		try { runtime = lease_counts_for_interface(iface); }
+		try { runtime = lease_counts_for_interface(conn, iface); }
 		catch (e) { runtime = {}; }
 	}
 	return {

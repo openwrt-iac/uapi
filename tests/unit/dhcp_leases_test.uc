@@ -68,6 +68,27 @@ t.describe('handler.make_collection, list', () => {
 		let r = h.list(bus.stub(), ctx(), {});
 		t.assert_deep_equal(r.body, []);
 	});
+
+	// Lease entries carry no `id`, so the cursor read c_null and its next page answered 400.
+	t.it('pages on the ip of a lease, also when two leases share a MAC', () => {
+		let pages = (mod, items) => {
+			let h = handler.make_collection({ ...mod, list_fn: () => items });
+			let out = [], cursor = null;
+			for (let n = 0; n < 5; n++) {
+				let r = h.list(bus.stub(), ctx(), { limit: "1", cursor });
+				t.assert_equal(r.status, 200);
+				push(out, map(r.body, (e) => e.ip));
+				cursor = r.headers["X-Next-Cursor"];
+				if (cursor == null) break;
+			}
+			return out;
+		};
+		let v4 = [ { mac: "aa:bb:cc:00:00:01", ip: "192.168.1.10" }, { mac: "aa:bb:cc:00:00:01", ip: "192.168.1.11" },
+		           { mac: "aa:bb:cc:00:00:02", ip: "192.168.1.12" } ];
+		t.assert_deep_equal(pages(leases_mod, v4), [ [ "192.168.1.10" ], [ "192.168.1.11" ], [ "192.168.1.12" ] ]);
+		t.assert_deep_equal(pages(loadfile('src/resources/dhcp.leases6.uc')(), [ { ip: "fd99:6::b" }, { ip: "fd99:6::c" } ]),
+		                    [ [ "fd99:6::b" ], [ "fd99:6::c" ] ]);
+	});
 });
 
 t.describe('handler.make_collection, get_one', () => {
