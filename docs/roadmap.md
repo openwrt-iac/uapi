@@ -255,9 +255,10 @@ record; this is the engineering one.
 **Additive, and the one item that was never announced because it did not need to be:**
 
 - `POST /batch` reports its transaction outcome on the 207, aggregated over the sub-writes.
-  It cannot be per-operation: the results array carries `{status, body}` and drops
-  sub-response headers, which is the same reason the management-path guard is inert inside a
-  batch.
+  It cannot be per-operation, because the batch commits and reloads once for the whole set.
+  Since [#325](https://github.com/openwrt-iac/uapi/issues/325) each result also carries the
+  headers of its own sub-response, such as its `ETag`, but none of the transaction headers. The
+  management-path guard is inert inside a batch, because a sub-request has no caller address.
 
 **Simplification the removals unlocked**, all dead code once the mirrored names were gone:
 `merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and `network/interfaces`,
@@ -354,6 +355,32 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 - **The state that uapi keeps in tmpfs is private.** The idempotency cache, the metrics, the
   rate-limit buckets, the error ring and the last-used markers of the tokens keep their files
   under `/var/run`, in directories of mode 0700 with files of mode 0600 (#266, #270).
+
+## Shipped on main, unreleased
+
+- **`GET /diagnostics` reports a write that uhttpd killed after its commit.** Each write records
+  itself in `/var/run/uapi-interrupted-writes/` before its commit, under its lock, and removes the
+  record when the recipe returns. A record whose process is gone is listed under
+  `interrupted_writes`, with the packages, the request id and whether the reload had started.
+  `transaction()`, `multi_transaction()` and the non-uci writes of `with_lock()` all write one.
+  uapi reports the write and corrects nothing
+  ([#309](https://github.com/openwrt-iac/uapi/issues/309)). A record also survives a throw after
+  the commit and the reuse of its pid by another process (#384). The rest of the gap stays under
+  Hardening.
+- **Each result of a `POST /batch` carries the headers of its own sub-request**, such as its
+  `ETag`. The transaction headers stay on the 207, which reports one outcome for the whole batch
+  ([#325](https://github.com/openwrt-iac/uapi/issues/325)).
+- **The request bounds are options of `config limits` in `/etc/config/uapi`**, with the compiled
+  values as defaults, and `GET /diagnostics` reports the values in effect under `limits`
+  ([#326](https://github.com/openwrt-iac/uapi/issues/326)).
+- **Internal.** The non-uci endpoints are served by `handler.make_nonuci` and one route, not by
+  two hand-written verb ladders ([#328](https://github.com/openwrt-iac/uapi/issues/328)). The
+  read-only runtime collection recipe
+  ([#327](https://github.com/openwrt-iac/uapi/issues/327)) and the dynamic-type and kernel-ops
+  hooks of `network/wireguard_peers`
+  ([#330](https://github.com/openwrt-iac/uapi/issues/330)) are documented in
+  `docs/adding-a-resource.md`. The kernel-ops hooks stay specific to that resource until a second
+  resource needs them.
 
 ## Shipped in 3.4.0
 
@@ -554,7 +581,7 @@ is unresolvable.
   release time. Deciding needs a few runs' worth of variance data across runners,
   which nobody has gathered. Until then the tree says measurement, not gate.
 
-- **A request that uhttpd kills after its commit leaves the write half done.** uhttpd
+- **A request that uhttpd kills after its commit still leaves the write half done.** uhttpd
   sends `SIGKILL` to the request process, and to no other, when the client closes the
   connection before the response and when `script_timeout` runs out (60 s unless set). A
   Terraform interrupt or a client-side timeout does the first. No ucode code runs after a
@@ -567,12 +594,11 @@ is unresolvable.
   shape. The steps after the commit are not short: the reloads, which uapi waits for up to
   20 s in all, the stay-up watch, which waits up to 2 s and again on a restore, and the kernel
   apply.
-  Nothing inside the request can close this, so it needs a design change. The shapes seen
-  so far, none chosen:
-  - A record of the write in flight, written before the commit and removed when the
-    recipe ends, which the next request that takes the lock of the package finds. It could
-    report the interrupted write, which adds wire surface, or finish it, which needs a
-    decision on whether one request may restore a write that is not its own.
+  The write journal now reports such a write in `GET /diagnostics` (see "Shipped on main,
+  unreleased"). It does not finish or restore the write: one request may not undo a write
+  that is not its own, because the scopes of the request that started the write are the only
+  authority over what its revert may touch. Nothing inside the request can close the rest, so
+  it needs a design change. The shapes left, none chosen:
   - The steps after the commit in a process that uhttpd does not kill. That is work that
     outlives the request, which `docs/concurrency.md` rules out, and the client still gets
     no answer.
@@ -650,7 +676,15 @@ stale enough to be misleading:
 
 ## Objectives for the next major
 
-The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-iac/uapi/milestone/1). At v4 planning, read it top to bottom: every line must resolve to an open issue in the milestone, or be explicitly descoped in the release PR with the reason. The mechanisms, the evidence and the open questions live in the issues.
+The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-iac/uapi/milestone/1). At v4 planning, read it top to bottom: every line must resolve to an issue in the milestone, or be explicitly descoped in the release PR with the reason. An issue is closed when its work merges into the `v4` branch, and that work ships with v4. The mechanisms, the evidence and the open questions live in the issues.
+
+**Open:**
+
+- [Widen `network/interfaces.disabled` to the platform boolean](https://github.com/openwrt-iac/uapi/issues/311): conditional on the OpenWrt branch carrying netifd `e97e36f` at v4 time. The unit test that pins the per-type difference says when.
+- [Ship the standalone confirm arm `POST /confirm`](https://github.com/openwrt-iac/uapi/issues/324): the authz model is decided, additive.
+- The mount moves to `/api/v4` and the install hook strips every older prefix, as each major moved it before. The v3-to-v4 migration document rides the release.
+
+**Merged into the `v4` branch, and closed:**
 
 - [Routes `table` and rules `lookup` accept table names on write](https://github.com/openwrt-iac/uapi/issues/240): the type becomes a string or a union, breaking.
 - [`network/interfaces.ip6prefix` stops taking a string on write](https://github.com/openwrt-iac/uapi/issues/241): announced since 3.2.0, the only open deprecation window.
@@ -658,23 +692,13 @@ The sweep list for v4, tracked in the [v4 milestone](https://github.com/openwrt-
 - [`mwan3/interfaces.family` is required, or an unset one reads `ipv4`](https://github.com/openwrt-iac/uapi/issues/306): either way breaking.
 - [A `wireless/interfaces` section with no `mode` reads null instead of `ap`](https://github.com/openwrt-iac/uapi/issues/307): a read today reports an access point that does not exist.
 - [Refuse a write for any stored error the section holds, as LuCI does](https://github.com/openwrt-iac/uapi/issues/308): the `new_errors()` model changes.
-- [Record and report interrupted writes](https://github.com/openwrt-iac/uapi/issues/309): the write journal, the report half only. The only open finding of the lock-state audit, and the only hole left in the transaction contract.
-- [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), in a 3.x.
-- [Widen `network/interfaces.disabled` to the platform boolean](https://github.com/openwrt-iac/uapi/issues/311): conditional on the OpenWrt branch carrying netifd `e97e36f` at v4 time. The unit test that pins the per-type difference says when.
-- [Announce the v4 program in a final 3.x minor](https://github.com/openwrt-iac/uapi/issues/313): the deprecations log and the spec's "Upcoming in v4" block. The window runs from that release, not from v4.
+- [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), shipped in 3.4.0.
 - [Group the special endpoints under `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and the scopes disagree today, breaking.
 - [Merge `dhcp/leases6` into `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint less, breaking.
-- [Drop `managed` and the adopt flow](https://github.com/openwrt-iac/uapi/issues/321): the envelope loses a field and a route, breaking.
+- [Drop `managed` and the adopt flow](https://github.com/openwrt-iac/uapi/issues/321): the envelope loses a field and a route, breaking. The `v4` branch then reverted it and keeps both, because libuci names an anonymous section by its position, so its name moves when an earlier section is deleted.
 - [One documented runtime envelope on every resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources document their runtime today, breaking.
 - [Prune dead error codes from the enum](https://github.com/openwrt-iac/uapi/issues/323): `unsupported_media_type` is the documented-dead one, breaking for generated clients.
-- [Ship the standalone confirm arm `POST /confirm`](https://github.com/openwrt-iac/uapi/issues/324): the authz model is decided, additive.
-- [Per-operation headers in the batch 207 results](https://github.com/openwrt-iac/uapi/issues/325): the batch stops throwing away what a single request says, additive.
-- [Configurable limits from `/etc/config/uapi`](https://github.com/openwrt-iac/uapi/issues/326): the compile-time bounds become options, additive.
-- [Generalize read-only runtime collections](https://github.com/openwrt-iac/uapi/issues/327): the recipe behind leases and kernel peers, applied to more state, additive.
-- [Route table in dispatch, unify the special non-uci resources](https://github.com/openwrt-iac/uapi/issues/328): ~400 lines of hand-coded verb ladders, internal.
 - [Consolidate the `x-uapi-*` marker namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor markers, one of which dies with #241, internal.
-- [Generalize or document the wireguard dynamic-type and kernel-ops machinery](https://github.com/openwrt-iac/uapi/issues/330): six hooks exercised by one resource, internal.
-- The mount moves to `/api/v4` and the install hook strips every older prefix, as each major moved it before. The v3-to-v4 migration document rides the release.
 
 ## Out of scope by design
 

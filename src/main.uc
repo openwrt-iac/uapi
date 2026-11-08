@@ -676,8 +676,8 @@ function batch_dispatch(conn, ctx, token, method, body) {
 
 	// The transaction headers, aggregated over the sub-writes. A batch commits and reloads
 	// once for the whole set, so there is one reload outcome to report, not one per
-	// operation, and reporting it here is the only way it can be reported at all: the
-	// results array carries `{status, body}` and drops sub-response headers.
+	// operation, and this is the only place it can be reported: the headers of each result
+	// come from a bare sub-request, which runs no commit and no reload of its own.
 	//
 	// A pure-read batch takes no lock and runs no transaction, so `r` carries nothing and
 	// no header is emitted, which matches a read on any other endpoint.

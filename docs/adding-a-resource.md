@@ -291,14 +291,18 @@ with `/batch`, so sub-requests accumulate into one ordered apply), and the
 transaction applies the ops after the commit and reports the outcome in
 `X-Kernel-Status` / `X-Kernel-Applied`. `opts` is the `toUci` output, `existing`
 the raw section before the write, `staged` the section as the write leaves it,
-`kind` is create/replace/patch/remove. `read_runtime` pairs with it for the
-runtime a GET alone reads (above), and `merge_for_patch` overrides the merge
-semantics of a PATCH when the default is wrong.
+and `kind` is `create`, `update` (for a PUT and a PATCH alike) or `remove`.
+`read_runtime` pairs with it for the runtime a GET alone reads (above), and
+`merge_for_patch` overrides the merge semantics of a PATCH when the default is
+wrong.
 
-Today exactly one resource exercises this machinery: `network/wireguard_peers`.
-Do not generalize it further without a second consumer. This section is the
-recipe; `src/resources/network.wireguard_peers.uc` is the reference
-implementation.
+Today only `network/wireguard_peers` declares `type_predicate`, `create_type`,
+`kernel_ops` and `read_runtime`. Do not generalize them further without a second
+consumer. The other hooks have more users: `openvpn/instances` declares
+`merge_for_patch` too, eight other resources declare `id_prefix`, and only
+`network/interfaces` declares `id_for_create`, which names a wireguard interface
+`wg_<rand>` to fit IFNAMSIZ. This section is the recipe, and
+`src/resources/network.wireguard_peers.uc` is the reference implementation.
 
 ## 3. JSON conventions
 
@@ -441,18 +445,33 @@ Non-uci runtime state exposed as a read-only collection follows one recipe;
 instances today. The module declares:
 
 - `package` / `type`: naming only, used in 404/405 messages.
-- `id_field`: the item field that `GET /<resource>/<id>` matches.
-- `list_fn(conn, query)`: returns the items array. Reads run without the uapi
-  lock and return no ETag, so the id must be a stable content id (for example
-  a truncated sha256 of the item's identifying fields), never a row position.
+- `id_field`: the item field that `GET /<resource>/<id>` matches. Reads run
+  without the uapi lock and return no ETag, so the id must come from the content
+  of the item, never from its row position. The handler answers the first item
+  that matches, so a value that two items share hides the second one from this
+  read. `network/wireguard_kernel_peers` uses the first 12 hex characters of a
+  sha256 of the interface and the public key, which no two peers share.
+  `dhcp/leases` uses the MAC, and dnsmasq can give one MAC two leases.
+- `cursor_field` (optional): the item field that pagination puts in the cursor.
+  The default is `id_field`. Every item must have it and no two items can share
+  it, or the next page repeats or skips items. `dhcp/leases` pages on the IP
+  for this reason.
+- `list_fn(conn, query)`: returns the items array, or `{ items, headers }` when
+  the read has more to say than the items. The handler adds `headers` to the list
+  and to the read of one item. `network/wireguard_kernel_peers` sends
+  `X-Kernel-Unread` this way.
+- `openapi_headers`: needed when `list_fn` returns headers. It maps each header
+  name to its `$ref` under `#/components/headers/`, and the generator declares it
+  on the 200 of both GETs. A new header also needs its entry in `components` and
+  its row in `docs/errors.md`.
 - `schema_properties`: the item shape, published under `/schema/...`.
 
 Register with `handler.make_collection(load_resource(...))` like any other
 resource. The handler answers GET list (paginated) and GET one, and 405
 everything else. `build/gen_openapi.uc` needs `kind: "collection"` in
 `ENDPOINTS` so the spec publishes only the two GETs. Unit-test the parser and
-the handler contract (see `tests/unit/dhcp_leases_test.uc`), and cover
-list/get/404/405 in an integration test.
+the handler contract (see `tests/unit/dhcp_leases_test.uc`, which also reads
+every page), and cover list/get/404/405 in an integration test.
 
 ## 6. Add an integration test
 

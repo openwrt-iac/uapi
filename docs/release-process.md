@@ -101,14 +101,17 @@ A major's breaking work lands on a preparation branch cut from `main` (today
 branch. Additive and internal PRs keep targeting `main` and can ship in
 minors while the major is in flight.
 
-- The preparation branch carries the same ruleset as `main`: required checks
-  `unit`, `lint`, `integration`, `entry`, `package`, strict. Create the
-  ruleset when the branch is created, by copying the `main` ruleset and
-  setting its name to `<branch>: required checks` and its
-  `conditions.ref_name.include` to `["refs/heads/<branch>"]`. Every future
-  major preparation branch gets the same ruleset. Add the organization
-  admins to `bypass_actors` with `bypass_mode: "always"`: the checks stay
-  required on pull requests to the branch, and admins can push the branch
+- The preparation branch carries the same required checks as `main`: `unit`,
+  `lint`, `integration`, `entry` and `package`, with the branch up to date
+  before the merge (strict). Create the ruleset when the branch is created,
+  by copying the `main` ruleset and setting its name to
+  `<branch>: required checks` and its `conditions.ref_name.include` to
+  `["refs/heads/<branch>"]`. Every future major preparation branch gets the
+  same ruleset. The two rulesets differ in one thing: the `main` ruleset has
+  no bypass actor, so nobody can bypass it, and the preparation branch
+  ruleset lets the repository admin role bypass it (`actor_type:
+  "RepositoryRole"`, `actor_id: 5`, `bypass_mode: "always"`). The checks stay
+  required on pull requests to the branch, and an admin can push the branch
   directly for the rebases below (without the bypass, a ruleset on a branch
   rejects direct pushes).
 - Rebase the preparation branch onto `main` after every merge into `main`,
@@ -167,9 +170,9 @@ Per-release steps (operator does these in order):
 5. **Open PR, get CI green**: lint + unit + coverage gate + integration +
    soak (RSS/fd growth thresholds) + bench, and the `package` job, which the
    change of `VERSION` triggers, so the APK and the upgrades from 3.2.0 are
-   tested before the tag exists. `package` is not a required check yet, so
-   a red `package` does not block the merge: read its result. The bench
-   measures and reports per-endpoint p99; it does not gate, because no
+   tested before the tag exists. `package` is a required check, so a red
+   `package` blocks the merge. The bench measures and reports per-endpoint
+   p99; it does not gate, because no
    baseline is committed. Read the numbers in the run log or the `bench-run`
    artifact if a release is expected to move latency.
 6. **Merge to main**.
@@ -257,9 +260,9 @@ and fails the PR when no entry under `## [Unreleased]` carries its number.
 
 **An entry is needed for every change that someone outside the repo can see:** the wire
 surface, the behavior on the router, the package, or the release artifacts (APK, SBOM, GitHub
-Release). A PR that changes none of these takes the `changelog-not-needed` label instead, and
-the check skips it. That covers docs, tests, CI that changes no artifact, refactors, and release
-PRs.
+Release). A PR that changes none of these takes the `changelog-not-needed` label instead. The
+`entry` job still runs on that PR, reads the label from the API and passes. That covers docs,
+tests, CI that changes no artifact, refactors, and release PRs.
 
 **The entry says why, not only what.** It names the defect or the need, what changed on the
 wire, and what a client must do, if anything. A breaking change opens with `BREAKING:`. A

@@ -49,10 +49,11 @@ t.describe('values.platform_bool', () => {
 });
 
 // The libvalidate `:bool:` set, read in ubox 6f78fa4 (2025-10-30, the 25.12.5 SDK):
-// dt_type_bool() in validate/validate.c takes ten spellings, case-insensitively,
-// and a value it rejects drops the whole section. shell_bool accepts exactly those
-// ten in their canonical case, so it is the helper for fields a validate_data schema
-// checks. The ucode helpers stay case-sensitive, unlike libvalidate itself.
+// dt_type_bool() in validate/validate.c checks ten spellings case-insensitively, and a
+// value it rejects drops the whole section. bool_to_num() in validate/cli.c then gives
+// the script 1 or 0 for those ten in their canonical case only, and an empty value for
+// `ON`. shell_bool takes exactly the ten that give 1 or 0. docs/ucode-quirks.md says
+// which fields read with it and which still read with normalize_bool.
 t.describe('values.shell_bool vs the verified libvalidate :bool: set', () => {
 	t.it('accepts exactly the ten spellings libvalidate takes, on the documented side', () => {
 		for (let s in [true, "1", "on", "true", "yes", "enabled"])
