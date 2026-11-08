@@ -228,3 +228,39 @@ t.describe('lldpd/config interface of several words in one value', () => {
 		t.assert_deep_equal(c._state.uci.lldpd.config.interface, [ 'loopback', 'lan', 'wan' ]);
 	});
 });
+
+// Each row is an option that an init script reads with config_get_bool or a libvalidate `:bool:`,
+// and the value that the daemon takes when the option is absent.
+const SHELL_BOOLS = [
+	[ "system.uc", "system", "log_remote", "log_remote", true ],
+	[ "system.timeservers.uc", "timeserver", "enabled", "enabled", true ],
+	[ "system.timeservers.uc", "timeserver", "enable_server", "enable_server", false ],
+	[ "system.timeservers.uc", "timeserver", "use_dhcp", "use_dhcp", true ],
+	[ "usteer.config.uc", "usteer", "syslog", "syslog", false ],
+	[ "usteer.config.uc", "usteer", "ipv6", "ipv6", false ],
+	[ "usteer.config.uc", "usteer", "assoc_steering", "assoc_steering", false ],
+	[ "dropbear.instances.uc", "dropbear", "PasswordAuth", "password_auth", true ],
+	[ "dropbear.instances.uc", "dropbear", "RootPasswordAuth", "root_password_auth", true ],
+	[ "dropbear.instances.uc", "dropbear", "RootLogin", "root_login", true ],
+	[ "dropbear.instances.uc", "dropbear", "GatewayPorts", "gateway_ports", false ],
+];
+
+t.describe('booleans read as the init script of the daemon reads them', () => {
+	for (let row in SHELL_BOOLS) {
+		let file = row[0], type = row[1], option = row[2], field = row[3], absent = row[4];
+		t.it(sprintf("%s %s", file, field), () => {
+			let r = loadfile(`src/resources/${file}`)();
+			let read = (v) => {
+				let s = { '.name': 'x', '.type': type };
+				s[option] = v;
+				return r.fromUci(s)[field];
+			};
+			for (let v in [ "1", "on", "true", "yes", "enabled" ])
+				t.assert_equal(read(v), true, v);
+			for (let v in [ "0", "off", "false", "no", "disabled" ])
+				t.assert_equal(read(v), false, v);
+			t.assert_equal(read(null), absent, "absent");
+			t.assert_equal(r.schema_properties[field].default, absent, "schema default");
+		});
+	}
+});

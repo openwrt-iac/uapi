@@ -30522,7 +30522,7 @@
 					},
 					"log_remote": {
 						"type": "boolean",
-						"default": false
+						"default": true
 					},
 					"urandom_seed": {
 						"type": [
@@ -30611,7 +30611,7 @@
 					},
 					"log_remote": {
 						"type": "boolean",
-						"default": false
+						"default": true
 					},
 					"urandom_seed": {
 						"type": [
@@ -35175,7 +35175,7 @@
 					},
 					"syslog": {
 						"type": "boolean",
-						"default": true
+						"default": false
 					},
 					"debug_level": {
 						"type": [
@@ -35409,7 +35409,7 @@
 					},
 					"syslog": {
 						"type": "boolean",
-						"default": true
+						"default": false
 					},
 					"debug_level": {
 						"type": [
