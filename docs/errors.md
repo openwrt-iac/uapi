@@ -156,8 +156,15 @@ generated from the spec was told to expect a header that was never going to arri
 `POST /batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
 carries the same four headers from the batch handler's own aggregation: a batch commits
 and reloads once for the whole set, so there is one outcome to report rather than one per
-sub-request, and the results array carries `{status, body}` with no room for sub-response
-headers. A pure-read batch runs no transaction and carries none of them.
+sub-request. A pure-read batch runs no transaction and carries none of them.
+
+Each entry of the batch `results` array also has a `headers` object, with the headers of the
+response of its own sub-request. It always holds `X-Request-Id`, as `<request_id>.<index>`.
+On a 200 it also holds `Content-Type`, the four security headers below and the `ETag` of the
+body, and on a GET of a collection that has more than 100 items, `Link` and `X-Next-Cursor`. It
+never holds the four transaction headers, because a sub-request runs no commit and no reload of
+its own. It never holds `X-Mgmt-Path-Warning` either: a sub-request has no `remote_addr`, so the
+guard finds no management path, and a batch cannot warn that it moved the caller's own path.
 
 The four security headers (`Strict-Transport-Security`, `X-Content-Type-Options`,
 `Referrer-Policy`, `Cache-Control`) come from the shared envelope builder, so they ride

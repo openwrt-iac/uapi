@@ -438,8 +438,8 @@ const SUCCESS_HEADERS_UNIVERSAL = {
 // write returns the reload pair on POST, PUT, PATCH and DELETE 204, while raw (all four
 // verbs), packages, tokens and authorized_keys return none of them. A batch commits and
 // reloads once for the whole set, so its 207 reports one outcome for the set rather than one
-// per sub-write, which is the only place it can be reported: the results array carries
-// `{status, body}` and drops sub-response headers.
+// per sub-write, which is the only place it can be reported: the `headers` of each result
+// come from a bare sub-request, which runs no commit and no reload of its own.
 const SUCCESS_HEADERS_UCI_TX = {
 	"X-Reload-Status":   { "$ref": "#/components/headers/XReloadStatus" },
 	"X-Reload-Services": { "$ref": "#/components/headers/XReloadServices" },
@@ -1393,8 +1393,7 @@ function build_schemas() {
 		},
 		"DiagnosticsResponse": {
 			"type": "object",
-			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "limits", "request_id"],
-			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "interrupted_writes", "request_id"],
+			"required": ["version", "uptime_seconds", "resources_loaded", "lock_state", "state_dirs", "limits", "interrupted_writes", "request_id"],
 			"properties": {
 				"version":          { "type": "string" },
 				"uptime_seconds":   { "type": "integer" },
@@ -1529,7 +1528,7 @@ function build_schemas() {
 				                        "properties": {
 				                          "status": { "type": "integer" },
 				                          "headers": { "type": "object",
-				                                       "description": "The headers the sub-request's own response carried: ETag, X-Reload-Status, X-Kernel-Status, X-Kernel-Applied, X-Mgmt-Path-Warning and the sub-request's X-Request-Id, exactly as N separate requests would have answered." },
+				                                       "description": "The headers of the sub-request's own response: always its X-Request-Id, `<request_id>.<index>`, and on a 200 also Content-Type, the security headers and the ETag of the body. Never the transaction headers (X-Reload-Status, X-Reload-Services, X-Kernel-Status, X-Kernel-Applied), which the 207 itself carries for the whole batch, and never X-Mgmt-Path-Warning, because a sub-request has no caller address." },
 				                          "body": {},
 				                        } } },
 				"request_id": { "type": "string" },
