@@ -14,6 +14,9 @@ curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag0.json
 grep -q '"max_body_bytes": 262144' /tmp/uapi_diag0.json || fail "default max_body_bytes not reported: $(cat /tmp/uapi_diag0.json)"
 grep -q '"reload_budget_s": 20' /tmp/uapi_diag0.json || fail "default reload_budget_s not reported"
 
+# A section left behind with max_body_bytes 4096 fails every later suite that sends a larger body.
+trap "$SSH 'while uci -q delete uapi.@limits[0]; do :; done; uci -q commit uapi'" EXIT INT TERM
+
 echo "--- a configured limit is reported and enforced ---"
 $SSH 'uci -q add uapi limits && uci -q set uapi.@limits[-1].max_body_bytes=4096 && uci -q commit uapi'
 curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag1.json
@@ -27,6 +30,12 @@ echo "--- an out-of-bounds value falls back to the default ---"
 $SSH 'uci -q set uapi.@limits[-1].max_body_bytes=10 && uci -q commit uapi'
 curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag2.json
 grep -q '"max_body_bytes": 262144' /tmp/uapi_diag2.json || fail "out-of-bounds value not ignored: $(cat /tmp/uapi_diag2.json)"
+
+echo "--- a value above the default is ignored, because the body is parsed before the bearer check ---"
+$SSH 'uci -q set uapi.@limits[-1].max_body_bytes=1048576 && uci -q set uapi.@limits[-1].reload_budget_s=60 && uci -q commit uapi'
+curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag4.json
+grep -q '"max_body_bytes": 262144' /tmp/uapi_diag4.json || fail "a raised max_body_bytes was taken: $(cat /tmp/uapi_diag4.json)"
+grep -q '"reload_budget_s": 20' /tmp/uapi_diag4.json || fail "a raised reload_budget_s was taken: $(cat /tmp/uapi_diag4.json)"
 
 $SSH 'uci -q delete uapi.@limits[-1] && uci -q commit uapi'
 curl -sS -H "$ADMIN" "$URL/diagnostics" -o /tmp/uapi_diag3.json

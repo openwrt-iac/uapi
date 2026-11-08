@@ -182,8 +182,8 @@ function send(resp) {
 // array and about 80 bytes for any other value, so 1 MiB of `[{},{},...]` took 560 MB. The
 // max_body_bytes and max_body_containers bounds keep the parse of any body under about 13 MB,
 // measured with ucode 2026.01.16 on x86_64. Both are options of `config limits` in
-// /etc/config/uapi (src/lib/limits.uc), read per request; the values in limits.DEFAULTS are
-// the fallbacks.
+// /etc/config/uapi (src/lib/limits.uc), read per request, which can lower them and not raise
+// them above limits.DEFAULTS.
 
 // A client that declared a body and stopped sending held its request process, and one of the
 // requests that uhttpd runs at a time with LuCI, 3 by default, until the script timeout of uhttpd,

@@ -188,11 +188,12 @@ function crond_running(conn) {
 
 // Same recipe as a curated write: when the reload fails, put the old file back and
 // reload again, so the failed request leaves crond with the table it had. A reload
-// still running when the budget ran out is no failure.
-function apply(before, after) {
+// still running when the budget ran out is no failure. The budget is the one that `config limits`
+// sets for every write.
+function apply(ctx, before, after) {
 	if (!non_uci.replace_private_file(CRONTAB_PATH, after))
 		return { ok: false, kind: "io_error" };
-	let budget = {};
+	let budget = (ctx.limits != null) ? { ms: ctx.limits.reload_budget_s * 1000 } : {};
 	let reload_error = transaction.default_reload(RELOAD, budget);
 	if (type(reload_error) == "object")
 		return { ok: true, reload_status: "unverified", unverified: reload_error.unverified };
@@ -259,7 +260,7 @@ function add_entry(ctx, conn, body) {
 		let before = read_content();
 		for (let e in entries_of(before))
 			if (e.id == entry.id) return { ok: false, kind: "conflict" };
-		return apply(before, with_entry(before, entry));
+		return apply(ctx, before, with_entry(before, entry));
 	}, {
 		conflict: sprintf("cron job %s already present", entry.id),
 		io_error: sprintf("could not write %s", CRONTAB_PATH),
@@ -282,7 +283,7 @@ function remove_entry(ctx, conn, id) {
 		let before = read_content();
 		removed = filter(entries_of(before), e => e.id == id)[0];
 		if (removed == null) return { ok: false, kind: "not_found" };
-		return apply(before, without_entry(before, id));
+		return apply(ctx, before, without_entry(before, id));
 	}, {
 		not_found: sprintf("no cron job with id %J", id),
 		io_error:  sprintf("could not write %s", CRONTAB_PATH),

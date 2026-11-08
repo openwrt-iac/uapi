@@ -394,8 +394,11 @@ source-IP enforcement.
 ## Request limits
 
 The request bounds are read per request from `config limits` in
-`/etc/config/uapi`; no reload is needed. The defaults below are also the
-fallback when an option is absent or outside its accepted range:
+`/etc/config/uapi`; no reload is needed. An option can lower a bound, not raise
+it: the body is parsed before the bearer check, so a raised body bound would let a
+request without a token make the parse take hundreds of MB, and the time bounds at
+their defaults already fill uhttpd's 60 s. The defaults below are the highest
+accepted values, and the fallback when an option is absent or outside its range:
 
 ```
 config limits
@@ -405,13 +408,13 @@ config limits
     option reload_budget_s '20'
 ```
 
-- `max_body_bytes` (4096..16777216): largest request body accepted. A larger
+- `max_body_bytes` (4096..262144): largest request body accepted. A larger
   `Content-Length` answers 413 before any read.
-- `max_body_containers` (16..65536): largest number of `{` and `[` characters
+- `max_body_containers` (16..2000): largest number of `{` and `[` characters
   in a body, which bounds the `json()` parse.
-- `body_read_s` (1..60): deadline for a body to arrive in full, and for the
+- `body_read_s` (1..10): deadline for a body to arrive in full, and for the
   drain of a body no handler read.
-- `reload_budget_s` (1..120): total time a write waits for its daemon reloads,
+- `reload_budget_s` (1..20): total time a write waits for its daemon reloads,
   after which the write answers `X-Reload-Status: unverified` instead of
   waiting longer.
 

@@ -183,13 +183,13 @@ t.describe('crontab handlers refuse before any I/O', () => {
 t.describe('crontab writes and a reload still running', () => {
 	const NOTE = "cron reload was still running when the 20 s that uapi waits for the reloads of a request ran out, so its result is unknown";
 	let real = { non_uci: require('non_uci'), transaction: require('transaction') };
-	let content = "", logged = [], answers = [];
+	let content = "", logged = [], answers = [], budgets = [];
 	global.modules.non_uci = { ...real.non_uci,
 		read_file_if_present: () => content, replace_private_file: (p, c) => { content = c; return true; },
 		with_lock_translated: (c, fn) => ({ result: fn() }), audit_notice: () => null,
 		audit_warning: (c, action, fields) => push(logged, [ action, fields ]) };
 	global.modules.transaction = { ...real.transaction, default_check_services: () => null,
-		default_reload: () => shift(answers) };
+		default_reload: (services, budget) => { push(budgets, budget); return shift(answers); } };
 	let ct2 = loadfile('src/lib/crontab.uc')();
 	global.modules.non_uci = real.non_uci;
 	global.modules.transaction = real.transaction;
@@ -209,5 +209,13 @@ t.describe('crontab writes and a reload still running', () => {
 		logged = [];
 		let r = ct2.add_entry(ctx(), null, { schedule: "1 2 3 4 6", command: "true" });
 		t.assert_deep_equal([ r.status, r.headers["X-Reload-Status"], logged ], [ 200, null, [] ]);
+	});
+
+	t.it('waits for the reload as long as config limits says, as a curated write does', () => {
+		answers = [ null, null ];
+		budgets = [];
+		let a = ct2.add_entry({ ...ctx(), limits: { reload_budget_s: 5 } }, null, { schedule: "1 2 3 4 1", command: "true" });
+		let b = ct2.add_entry(ctx(), null, { schedule: "1 2 3 5 1", command: "true" });
+		t.assert_deep_equal([ a.status, b.status, budgets ], [ 200, 200, [ { ms: 5000 }, {} ] ]);
 	});
 });
