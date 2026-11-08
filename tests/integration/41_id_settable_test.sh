@@ -64,7 +64,11 @@ body=$(echo "$resp" | sed '$d')
 ulid_id=$(echo "$body" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
 echo "$ulid_id" | grep -qE '^r_[0-9a-z]{26}$' || fail "expected r_<ulid>, got $ulid_id"
 
-echo "--- v4 (#321): adopt is gone; a uci-set out-of-band zone is addressable by name directly ---"
+echo "--- adopt a uci-set out-of-band zone keeps its name (the real field scenario) ---"
+# This is the case the field reporter actually hit: a zone that uapi did
+# NOT create (set out-of-band via uci) gets adopted, the name must be
+# preserved so cross-references (firewall.rules.src_zone = "preexisting")
+# keep resolving.
 $SSH "uci set firewall.preexisting=zone
       uci set firewall.preexisting.name=preexisting
       uci set firewall.preexisting.input=ACCEPT
@@ -75,14 +79,27 @@ preexisting_created=1
 
 resp=$(call -X POST "$URL/firewall/zones/preexisting/adopt")
 status=$(echo "$resp" | tail -1)
-[ "$status" = "404" ] || fail "adopt expected 404 on v4, got $status: $resp"
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "200" ] || fail "adopt preexisting expected 200, got $status: $body"
+echo "$body" | grep -q '"id": "preexisting"' || fail "expected id=preexisting (not renamed to ULID)"
+$SSH "uci get firewall.preexisting" >/dev/null || fail "uci section preexisting lost after adopt"
 
-got=$(call "$URL/firewall/zones/preexisting")
-status=$(echo "$got" | tail -1)
-body=$(echo "$got" | sed '$d')
-[ "$status" = "200" ] || fail "GET preexisting zone by name expected 200: $got"
-echo "$body" | grep -q '"id": "preexisting"' || fail "expected id=preexisting without any adopt"
-echo "$body" | grep -q '"managed"' && fail "managed must be gone from the response"
+echo "--- named-section adopt doesn't fire X-Reload-Status: ok (no spurious reload) ---"
+hdr=$(curl -sS -D - -o /dev/null -H "$ADMIN" -X POST "$URL/firewall/zones/preexisting/adopt")
+# Should be missing or 'no_reload'; the buggy old path returned 'ok'
+# because reload(services) fired on the success path. Either no header
+# or 'no_reload' is acceptable here.
+if echo "$hdr" | grep -i '^X-Reload-Status:' | grep -qi 'ok'; then
+	echo "$hdr" | grep -i '^X-Reload-Status:' >&2
+	fail "named-section adopt fired a reload (regression of S1 fix)"
+fi
+
+echo "--- ztest zone (uapi-created, named) adopt is also a no-op ---"
+resp=$(call -X POST "$URL/firewall/zones/ztest/adopt")
+status=$(echo "$resp" | tail -1)
+body=$(echo "$resp" | sed '$d')
+[ "$status" = "200" ] || fail "adopt ztest expected 200, got $status: $body"
+echo "$body" | grep -q '"id": "ztest"' || fail "expected id=ztest after adopt"
 
 echo "--- network/interfaces accepts id as alias for name (deprecated) ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \

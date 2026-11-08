@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "3.4.1",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) at the top level. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/auth/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or `?if_match=<etag>` query param for clients behind uhttpd's strict CGI env, which drops the header). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nuhttpd's CGI env forwards a fixed allowlist of headers and `Idempotency-Key` is not on it, so a client reaching uapi directly through uhttpd must pass `?idempotency_key=` instead; the header only survives behind a reverse proxy that re-adds it. The same applies to `If-Match` and `If-None-Match`, hence `?if_match=` and `?if_none_match=`. All three are declared as query parameters on the operations that honour them.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Upcoming in v4\n\nThis major accepts both forms for everything below, and v4 removes the old one. The canonical list with migration notes is `docs/deprecations.md`.\n\n- **`network/interfaces.ip6prefix` will stop accepting a space-separated string on write.** Responses are always an array, the list that netifd reads and that LuCI writes for wireguard and 6in4. The string remains valid in a request because the 3.1 spec declared one. v4 drops it and the field becomes array-only in both directions.\n- **`network/routes.table` and `network/rules.lookup` will accept a table name on write in v4** (the request type becomes a union, breaking). (#240)\n- **Curated string fields will refuse a newline and a carriage return by default in v4**, with an opt-out for `system.notes`. (#276)\n- **`mwan3/interfaces.family` will be required in v4, or an unset one will read as `ipv4`.** (#306)\n- **A `wireless/interfaces` section with no `mode` will read as null in v4** instead of `ap`. (#307)\n- **A write will be refused for any stored error the section holds in v4**, as LuCI does. (#308)\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/openwrt-iac/uapi"
@@ -379,6 +379,19 @@
 				"summary": "List rules",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -559,7 +572,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -929,10 +942,125 @@
 				]
 			}
 		},
+		"/firewall/rules/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous firewall rule",
+				"description": "Adopt an anonymous firewall rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallRulesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Firewall / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/firewall/zones": {
 			"get": {
 				"summary": "List zones",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -1114,7 +1242,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -1484,10 +1612,125 @@
 				]
 			}
 		},
+		"/firewall/zones/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous firewall zone",
+				"description": "Adopt an anonymous firewall zone into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallZonesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Firewall / Zones"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/firewall/redirects": {
 			"get": {
 				"summary": "List redirects",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -1669,7 +1912,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -2039,10 +2282,125 @@
 				]
 			}
 		},
+		"/firewall/redirects/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous firewall redirect",
+				"description": "Adopt an anonymous firewall redirect into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallRedirectsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Firewall / Redirects"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/firewall/nat": {
 			"get": {
 				"summary": "List nat",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -2224,7 +2582,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -2594,10 +2952,125 @@
 				]
 			}
 		},
+		"/firewall/nat/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous firewall NAT rule",
+				"description": "Adopt an anonymous firewall NAT rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallNatResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Firewall / Nat"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/firewall/forwardings": {
 			"get": {
 				"summary": "List forwardings",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -2779,7 +3252,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -3149,6 +3622,108 @@
 				]
 			}
 		},
+		"/firewall/forwardings/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous firewall forwarding",
+				"description": "Adopt an anonymous firewall forwarding into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FirewallForwardingsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Firewall / Forwardings"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/firewall/defaults": {
 			"get": {
 				"summary": "Get the firewall singleton",
@@ -3336,6 +3911,19 @@
 				"summary": "List interfaces",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -3519,7 +4107,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -3898,10 +4486,125 @@
 				]
 			}
 		},
+		"/network/interfaces/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous network interface",
+				"description": "Adopt an anonymous network interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkInterfacesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/devices": {
 			"get": {
 				"summary": "List devices",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -4086,7 +4789,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -4465,10 +5168,125 @@
 				]
 			}
 		},
+		"/network/devices/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous network device",
+				"description": "Adopt an anonymous network device into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkDevicesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Devices"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/routes": {
 			"get": {
 				"summary": "List routes",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -4650,7 +5468,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -5020,10 +5838,125 @@
 				]
 			}
 		},
+		"/network/routes/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous network route",
+				"description": "Adopt an anonymous network route into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkRoutesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Routes"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/rules": {
 			"get": {
 				"summary": "List rules",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -5205,7 +6138,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -5575,10 +6508,125 @@
 				]
 			}
 		},
+		"/network/rules/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous network policy rule",
+				"description": "Adopt an anonymous network policy rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkRulesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/bridge_vlans": {
 			"get": {
 				"summary": "List bridge_vlans",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -5763,7 +6811,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -6142,10 +7190,125 @@
 				]
 			}
 		},
+		"/network/bridge_vlans/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous bridge VLAN",
+				"description": "Adopt an anonymous bridge VLAN into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkBridgeVlansResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Bridge Vlans"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/wireguard_peers": {
 			"get": {
 				"summary": "List wireguard_peers",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -6327,7 +7490,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -6697,6 +7860,108 @@
 				]
 			}
 		},
+		"/network/wireguard_peers/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous wireguard peer",
+				"description": "Adopt an anonymous wireguard peer into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NetworkWireguardPeersResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Network / Wireguard Peers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/network/wireguard_kernel_peers": {
 			"get": {
 				"summary": "List wireguard_kernel_peers (read-only)",
@@ -6841,6 +8106,19 @@
 			"get": {
 				"summary": "List devices",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -7022,7 +8300,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -7392,10 +8670,125 @@
 				]
 			}
 		},
+		"/wireless/devices/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous wireless device",
+				"description": "Adopt an anonymous wireless device into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WirelessDevicesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Wireless / Devices"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/wireless/interfaces": {
 			"get": {
 				"summary": "List interfaces",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -7577,7 +8970,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -7947,10 +9340,125 @@
 				]
 			}
 		},
+		"/wireless/interfaces/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous wireless interface",
+				"description": "Adopt an anonymous wireless interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WirelessInterfacesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Wireless / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/dhcp/hosts": {
 			"get": {
 				"summary": "List hosts",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -8132,7 +9640,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -8502,6 +10010,108 @@
 				]
 			}
 		},
+		"/dhcp/hosts/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous DHCP host",
+				"description": "Adopt an anonymous DHCP host into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpHostsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Hosts"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/dhcp/leases": {
 			"get": {
 				"summary": "List leases (read-only)",
@@ -8640,6 +10250,19 @@
 			"get": {
 				"summary": "List servers",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -8821,7 +10444,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -9188,6 +10811,108 @@
 				},
 				"tags": [
 					"Dhcp / Servers"
+				]
+			}
+		},
+		"/dhcp/servers/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous DHCP server",
+				"description": "Adopt an anonymous DHCP server into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpServersResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Servers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -9742,6 +11467,19 @@
 				"summary": "List timeservers",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -9922,7 +11660,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -10292,10 +12030,125 @@
 				]
 			}
 		},
+		"/system/timeservers/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous timeserver",
+				"description": "Adopt an anonymous timeserver into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SystemTimeserversResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"System / Timeservers"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/dropbear/instances": {
 			"get": {
 				"summary": "List instances",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -10477,7 +12330,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -10847,10 +12700,125 @@
 				]
 			}
 		},
+		"/dropbear/instances/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous dropbear instance",
+				"description": "Adopt an anonymous dropbear instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DropbearInstancesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dropbear / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/uhttpd/instances": {
 			"get": {
 				"summary": "List instances",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -11032,7 +13000,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -11402,10 +13370,125 @@
 				]
 			}
 		},
+		"/uhttpd/instances/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous uhttpd instance",
+				"description": "Adopt an anonymous uhttpd instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UhttpdInstancesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Uhttpd / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/uhttpd/certs": {
 			"get": {
 				"summary": "List certs",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -11587,7 +13670,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -11954,6 +14037,108 @@
 				},
 				"tags": [
 					"Uhttpd / Certs"
+				]
+			}
+		},
+		"/uhttpd/certs/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous uhttpd certificate",
+				"description": "Adopt an anonymous uhttpd certificate into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UhttpdCertsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Uhttpd / Certs"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -12508,6 +14693,19 @@
 				"summary": "List queues",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -12688,7 +14886,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -13058,10 +15256,125 @@
 				]
 			}
 		},
+		"/sqm/queues/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous SQM queue",
+				"description": "Adopt an anonymous SQM queue into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SqmQueuesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Sqm / Queues"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/snmpd/agents": {
 			"get": {
 				"summary": "List agents",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -13243,7 +15556,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -13613,10 +15926,125 @@
 				]
 			}
 		},
+		"/snmpd/agents/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous SNMP agent",
+				"description": "Adopt an anonymous SNMP agent into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAgentsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Snmpd / Agents"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/snmpd/com2secs": {
 			"get": {
 				"summary": "List com2secs",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -13798,7 +16226,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -14168,10 +16596,125 @@
 				]
 			}
 		},
+		"/snmpd/com2secs/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous SNMP community-to-security mapping",
+				"description": "Adopt an anonymous SNMP community-to-security mapping into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdCom2secsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Snmpd / Com2secs"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/snmpd/groups": {
 			"get": {
 				"summary": "List groups",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -14353,7 +16896,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -14723,10 +17266,125 @@
 				]
 			}
 		},
+		"/snmpd/groups/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous SNMP group",
+				"description": "Adopt an anonymous SNMP group into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdGroupsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Snmpd / Groups"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/snmpd/accesses": {
 			"get": {
 				"summary": "List accesses",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -14908,7 +17566,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -15275,6 +17933,108 @@
 				},
 				"tags": [
 					"Snmpd / Accesses"
+				]
+			}
+		},
+		"/snmpd/accesses/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous SNMP access ACL",
+				"description": "Adopt an anonymous SNMP access ACL into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SnmpdAccessesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Snmpd / Accesses"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -16193,6 +18953,19 @@
 				"summary": "List interfaces",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -16373,7 +19146,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -16743,10 +19516,125 @@
 				]
 			}
 		},
+		"/mwan3/interfaces/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous mwan3 interface",
+				"description": "Adopt an anonymous mwan3 interface into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3InterfacesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Mwan3 / Interfaces"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/mwan3/members": {
 			"get": {
 				"summary": "List members",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -16928,7 +19816,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -17298,10 +20186,125 @@
 				]
 			}
 		},
+		"/mwan3/members/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous mwan3 member",
+				"description": "Adopt an anonymous mwan3 member into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3MembersResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Mwan3 / Members"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/mwan3/policies": {
 			"get": {
 				"summary": "List policies",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -17483,7 +20486,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -17853,10 +20856,125 @@
 				]
 			}
 		},
+		"/mwan3/policies/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous mwan3 policy",
+				"description": "Adopt an anonymous mwan3 policy into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3PoliciesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Mwan3 / Policies"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/mwan3/rules": {
 			"get": {
 				"summary": "List rules",
 				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
 					{
 						"name": "limit",
 						"in": "query",
@@ -18038,7 +21156,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -18408,6 +21526,108 @@
 				]
 			}
 		},
+		"/mwan3/rules/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous mwan3 rule",
+				"description": "Adopt an anonymous mwan3 rule into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Mwan3RulesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Mwan3 / Rules"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
+				]
+			}
+		},
 		"/usteer/config": {
 			"get": {
 				"summary": "Get the usteer singleton",
@@ -18595,6 +21815,19 @@
 				"summary": "List instances",
 				"parameters": [
 					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag"
+					},
+					{
 						"name": "limit",
 						"in": "query",
 						"required": false,
@@ -18775,7 +22008,7 @@
 					"schema": {
 						"type": "string"
 					},
-					"description": "Section identifier (the uci section name)"
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
 				}
 			],
 			"get": {
@@ -19142,6 +22375,108 @@
 				},
 				"tags": [
 					"Openvpn / Instances"
+				]
+			}
+		},
+		"/openvpn/instances/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous openvpn instance",
+				"description": "Adopt an anonymous openvpn instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Openvpn / Instances"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which uhttpd's CGI env strips. Replays the cached response for 24 h; the same key with a different body gives 409."
+					}
 				]
 			}
 		},
@@ -21341,6 +24676,7 @@
 							"not_found",
 							"method_not_allowed",
 							"conflict",
+							"unmanaged_resource",
 							"idempotency_key_conflict",
 							"precondition_failed",
 							"payload_too_large",
@@ -21435,6 +24771,10 @@
 					},
 					".type": {
 						"type": "string"
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					}
 				},
 				"additionalProperties": true
@@ -21513,6 +24853,10 @@
 						"type": "string",
 						"description": "Package name (same as name)"
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": "string"
 					},
@@ -21553,6 +24897,10 @@
 				"properties": {
 					"id": {
 						"type": "string"
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"name": {
 						"type": "string"
@@ -22427,6 +25775,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": [
 							"string",
@@ -23029,6 +26381,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": [
 							"string",
@@ -23275,6 +26631,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"name": {
 						"type": [
@@ -23827,6 +27187,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": [
 							"string",
@@ -24266,6 +27630,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"src": {
 						"type": [
 							"string",
@@ -24397,6 +27765,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"input": {
 						"type": [
@@ -24678,6 +28050,10 @@
 					"id": {
 						"type": "string",
 						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"device": {
 						"type": [
@@ -26175,6 +29551,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": [
 							"string",
@@ -26462,6 +29842,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"interface": {
 						"type": [
 							"string",
@@ -26740,6 +30124,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"in": {
 						"type": [
@@ -27273,6 +30661,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"device": {
 						"type": [
 							"string",
@@ -27393,6 +30785,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"interface": {
 						"type": "string",
@@ -27756,6 +31152,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"type": {
 						"type": [
 							"string",
@@ -28100,6 +31500,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"device": {
 						"type": [
@@ -29173,6 +32577,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"name": {
 						"type": [
 							"string",
@@ -29518,6 +32926,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"interface": {
 						"type": [
@@ -29966,6 +33378,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"domain": {
 						"type": [
 							"string",
@@ -30329,6 +33745,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"maindhcp": {
 						"type": "boolean",
 						"default": false,
@@ -30455,6 +33875,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"hostname": {
 						"type": [
@@ -30696,6 +34120,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"enabled": {
 						"type": "boolean",
 						"default": true,
@@ -30868,6 +34296,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enable": {
 						"type": "boolean",
@@ -31042,6 +34474,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"listen_http": {
 						"type": [
@@ -31496,6 +34932,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"days": {
 						"type": [
 							"integer",
@@ -31692,6 +35132,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"listen_port": {
 						"type": [
@@ -32267,6 +35711,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"enabled": {
 						"type": "boolean",
 						"default": false
@@ -32439,6 +35887,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"enabled": {
 						"type": "boolean",
 						"default": false
@@ -32526,6 +35978,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enabled": {
 						"type": "boolean",
@@ -32783,6 +36239,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"agentaddress": {
 						"type": [
 							"array",
@@ -32851,6 +36311,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"secname": {
 						"type": [
@@ -32965,6 +36429,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"group": {
 						"type": [
@@ -33089,6 +36557,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"group": {
 						"type": [
@@ -33354,6 +36826,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"sys_location": {
 						"type": [
 							"string",
@@ -33534,6 +37010,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enable_cdp": {
 						"type": "boolean",
@@ -33757,6 +37237,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"listen_interface": {
 						"type": [
 							"string",
@@ -33848,6 +37332,10 @@
 							"null"
 						]
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"interfaces": {
 						"type": [
 							"array",
@@ -33921,6 +37409,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"mmx_mask": {
 						"type": [
@@ -34055,6 +37547,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enabled": {
 						"type": "boolean",
@@ -34629,6 +38125,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"interface": {
 						"type": [
 							"string",
@@ -34745,6 +38245,10 @@
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
 					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
 					"last_resort": {
 						"type": [
 							"string",
@@ -34855,6 +38359,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"family": {
 						"type": [
@@ -35153,6 +38661,10 @@
 							"string",
 							"null"
 						]
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enabled": {
 						"type": "boolean",
@@ -35837,6 +39349,10 @@
 					"id": {
 						"type": "string",
 						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
 					},
 					"enabled": {
 						"type": "boolean",
