@@ -42,7 +42,9 @@ function platform_bool(v, default_val) {
 // script or proto handler goes through. Its set is normalize_bool's plus
 // `enabled`/`disabled`, and the two extra spellings are the whole reason this
 // exists: reading `option disabled 'enabled'` with the narrower helper reports
-// the opposite of what the shell will do.
+// the opposite of what the shell will do. A libvalidate `:bool:` reaches its
+// script through the same ten spellings: validate_data's bool_to_num turns
+// them, and only them, into 1/0.
 function shell_bool(v, default_val) {
 	if (v === true || v === "1" || v === "on" || v === "true" || v === "yes"
 	    || v === "enabled")

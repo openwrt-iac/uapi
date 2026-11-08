@@ -276,7 +276,7 @@ const CASES = [
 		file: "system.uc", id: "cfg1", pkg: "system",
 		singleton: true,
 		modify: { key: "hostname", value: "router2" },
-		section: { log_remote: '1', urandom_seed: '1', '.type': 'system', hostname: 'router', timezone: 'UTC', description: 'probe' },
+		section: { log_remote: '0', urandom_seed: '1', '.type': 'system', hostname: 'router', timezone: 'UTC', description: 'probe' },
 	},
 	{
 		file: "system.timeservers.uc", id: "ntp", pkg: "system",
@@ -375,7 +375,7 @@ const CASES = [
 	{
 		file: "usteer.config.uc", id: "cfg", pkg: "usteer",
 		singleton: true,
-		section: { enabled: '0', ipv6: '1', assoc_steering: '1', '.type': 'usteer', network: 'default', syslog: '0' },
+		section: { enabled: '0', ipv6: '1', assoc_steering: '1', '.type': 'usteer', network: 'default', syslog: '1' },
 	},
 	{
 		file: "openvpn.instances.uc", id: "vpn0", pkg: "openvpn",
