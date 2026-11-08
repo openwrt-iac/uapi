@@ -45,14 +45,22 @@ t.describe('handler.list', () => {
 		t.assert_equal(r.body[0].target, 'ACCEPT');
 	});
 
-	// v4 (#321): managed is gone, so the ?managed= filter is gone too and every section lists.
-	t.it('lists anonymous and named sections alike', () => {
+	t.it('filters by managed=true', () => {
 		let c = with_zones();
 		c._state.uci.firewall.cfg9 = { '.type': 'rule', '.anonymous': true, target: 'DROP', src: 'wan' };
 		c._state.uci.firewall.r1   = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
-		let r = rules.list(c, ctx(), {});
-		t.assert_equal(length(r.body), 2);
-		t.assert_equal(r.body[0].managed, null);
+		let r = rules.list(c, ctx(), { managed: "true" });
+		t.assert_equal(length(r.body), 1);
+		t.assert_true(r.body[0].managed);
+	});
+
+	t.it('filters by managed=false', () => {
+		let c = with_zones();
+		c._state.uci.firewall.cfg9 = { '.type': 'rule', '.anonymous': true, target: 'DROP', src: 'wan' };
+		c._state.uci.firewall.r1   = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
+		let r = rules.list(c, ctx(), { managed: "false" });
+		t.assert_equal(length(r.body), 1);
+		t.assert_false(r.body[0].managed);
 	});
 });
 
@@ -183,7 +191,7 @@ t.describe('handler.create', () => {
 			match: { src_zone: 'wan', dest_port: ['22'], proto: ['tcp'] },
 		});
 		t.assert_equal(r.status, 200);
-		t.assert_equal(r.body.managed, null);
+		t.assert_true(r.body.managed);
 		t.assert_match(r.body.id, /^r_[0-9a-z]{26}$/);
 		t.assert_equal(r.body.target, 'ACCEPT');
 		t.assert_deep_equal(r.body.match.dest_port, ['22']);
@@ -369,11 +377,11 @@ t.describe('handler.replace', () => {
 		t.assert_equal(r.status, 404);
 	});
 
-	// v4 (#321): managed is gone, so an anonymous section is writable by its name as-is.
-	t.it('writes an anonymous section by name', () => {
+	t.it('returns 409 unmanaged_resource for anonymous sections', () => {
 		let c = with_existing();
 		let r = rules.replace(c, ctx(), 'cfg_anon', { target: 'DROP', match: { src_zone: 'wan' } });
-		t.assert_equal(r.status, 200);
+		t.assert_equal(r.status, 409);
+		t.assert_equal(r.body.code, 'unmanaged_resource');
 	});
 
 	t.it('returns 422 on validation failure', () => {
@@ -749,22 +757,59 @@ t.describe('handler.patch JSON Patch write-only secret carry-forward', () => {
 	});
 });
 
-// v4 (#321): the adopt route is gone; POST /<resource>/<id>/adopt answers 404 like any
-// unknown sub-path, and sections pre-existing in /etc/config/ are addressed by name.
-t.describe('handler.adopt is gone (v4)', () => {
+t.describe('handler.adopt', () => {
 	function with_anon() {
 		let c = with_zones();
 		c._state.uci.firewall.cfg_anon = {
 			'.type': 'rule', '.anonymous': true,
 			target: 'DROP', src: 'wan', dest_port: ['22'],
 		};
+		c._state.uci.firewall.r_named = {
+			'.type': 'rule', '.anonymous': false,
+			target: 'ACCEPT', src: 'lan',
+		};
 		return c;
 	}
 
-	t.it('has no adopt handler', () => {
+	t.it('returns 404 for unknown id', () => {
 		let c = with_anon();
-		t.assert_equal(rules.adopt, null);
-		t.assert_equal(c._state.uci.firewall.cfg_anon.target, 'DROP');
+		let r = rules.adopt(c, ctx(), 'cfg_nope');
+		t.assert_equal(r.status, 404);
+	});
+
+	t.it('is idempotent on already-named sections (keeps the name, 200)', () => {
+		// 2.2.0 behavior change: adopt no longer 409s on a named section.
+		// The previous rename-to-ULID would have broken uci cross-refs
+		// where other sections reference this one by name (e.g. a default
+		// `lan` zone referenced as firewall.rules.src_zone = "lan").
+		let c = with_anon();
+		let r = rules.adopt(c, ctx(), 'r_named');
+		t.assert_equal(r.status, 200);
+		t.assert_equal(r.body.id, 'r_named');
+		t.assert_true(r.body.managed);
+		t.assert_equal(r.body.target, 'ACCEPT');
+	});
+
+	t.it('named-section adopt does NOT trigger a reload', () => {
+		// Regression guard for the S1 review finding: the previous
+		// transactional path called reload() unconditionally on success,
+		// so N adopts during a Terraform import fired N firewall reloads
+		// with brief visible glitches each. Named adopt now short-circuits
+		// before the transaction.
+		let c = with_anon();
+		let before = length(reload_calls);
+		rules.adopt(c, ctx(), 'r_named');
+		t.assert_equal(length(reload_calls), before);
+	});
+
+	t.it('renames the anonymous section to a ULID id and flips managed=true', () => {
+		let c = with_anon();
+		let r = rules.adopt(c, ctx(), 'cfg_anon');
+		t.assert_equal(r.status, 200);
+		t.assert_match(r.body.id, /^r_[0-9a-z]{26}$/);
+		t.assert_true(r.body.managed);
+		t.assert_equal(r.body.target, 'DROP');
+		t.assert_equal(c._state.uci.firewall.cfg_anon, null);
 	});
 });
 
@@ -796,11 +841,11 @@ t.describe('handler.remove', () => {
 		t.assert_equal(r.status, 404);
 	});
 
-	// v4 (#321): managed is gone, so an anonymous section is removable by its name as-is.
-	t.it('removes an anonymous section by name', () => {
+	t.it('returns 409 unmanaged_resource for anonymous sections', () => {
 		let c = with_existing();
 		let r = rules.remove(c, ctx(), 'cfg_anon');
-		t.assert_equal(r.status, 204);
+		t.assert_equal(r.status, 409);
+		t.assert_equal(r.body.code, 'unmanaged_resource');
 	});
 });
 
