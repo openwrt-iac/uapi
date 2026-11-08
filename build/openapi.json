@@ -395,6 +395,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -1044,6 +1065,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -1693,6 +1735,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -2342,6 +2405,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -2991,6 +3075,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -3822,6 +3927,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -4483,6 +4609,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -5144,6 +5291,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -5793,6 +5961,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -6442,6 +6631,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -7103,6 +7313,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -7739,10 +7970,39 @@
 		"/network/wireguard_kernel_peers": {
 			"get": {
 				"summary": "List wireguard_kernel_peers (read-only)",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
 						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
 							"X-Kernel-Unread": {
 								"$ref": "#/components/headers/XKernelUnread"
 							},
@@ -7863,6 +8123,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -8512,6 +8793,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -9161,6 +9463,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -9797,9 +10120,43 @@
 		"/dhcp/leases": {
 			"get": {
 				"summary": "List leases (read-only)",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -9808,11 +10165,6 @@
 										"$ref": "#/components/schemas/DhcpLeasesResponse"
 									}
 								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
 							}
 						}
 					},
@@ -9902,9 +10254,43 @@
 		"/dhcp/leases6": {
 			"get": {
 				"summary": "List leases6 (read-only)",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -9913,11 +10299,6 @@
 										"$ref": "#/components/schemas/DhcpLeases6Response"
 									}
 								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
 							}
 						}
 					},
@@ -10020,6 +10401,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -11215,6 +11617,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -11864,6 +12287,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -12513,6 +12957,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -13162,6 +13627,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -14357,6 +14843,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -15006,6 +15513,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -15655,6 +16183,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -16304,6 +16853,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -16953,6 +17523,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -18512,6 +19103,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -19161,6 +19773,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -19810,6 +20443,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -20459,6 +21113,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -21290,6 +21965,27 @@
 							]
 						},
 						"description": "Filter by managed flag"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -39884,7 +40580,7 @@
 				"description": "Convenience companion to Link rel=next: the bare next-cursor token.",
 				"schema": {
 					"type": "string",
-					"pattern": "^c_[A-Za-z0-9_-]+$"
+					"pattern": "^c_[A-Za-z0-9_.:-]+$"
 				}
 			},
 			"IdempotentReplayed": {

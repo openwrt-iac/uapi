@@ -352,6 +352,18 @@ const Q_IF_NONE_MATCH = {
 	"schema": { "type": "string" },
 	"description": "Equivalent to the `If-None-Match` header, which uhttpd's CGI env strips. `*` matches any existing resource.",
 };
+// CURSOR_RE of src/lib/handler.uc.
+const CURSOR_PATTERN = "^c_[A-Za-z0-9_.:-]+$";
+const Q_LIMIT = {
+	"name": "limit", "in": "query", "required": false,
+	"schema": { "type": "integer", "minimum": 1, "maximum": 500 },
+	"description": "Items on a page, 100 by default.",
+};
+const Q_CURSOR = {
+	"name": "cursor", "in": "query", "required": false,
+	"schema": { "type": "string", "pattern": CURSOR_PATTERN },
+	"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`.",
+};
 const Q_IDEMPOTENCY_KEY = {
 	"name": "idempotency_key", "in": "query", "required": false,
 	"schema": { "type": "string" },
@@ -518,6 +530,7 @@ function build_crud_paths(ep) {
 				{ "name": "managed", "in": "query", "required": false,
 				  "schema": { "type": "string", "enum": ["true", "false"] },
 				  "description": "Filter by managed flag" },
+				Q_LIMIT, Q_CURSOR,
 			],
 			"responses": responses("get", {
 				"200": {
@@ -633,10 +646,15 @@ function build_collection_paths(ep) {
 		[ep.path]: {
 			"get": {
 				"summary": sprintf("List %s (read-only)", ep.subresource),
+				"parameters": [ Q_LIMIT, Q_CURSOR ],
 				"responses": responses("get", {
 					"200": {
 						"description": "OK",
-						...(headers != null ? { "headers": headers } : {}),
+						"headers": {
+							"Link":          { "$ref": "#/components/headers/Link" },
+							"X-Next-Cursor": { "$ref": "#/components/headers/XNextCursor" },
+							...(headers ?? {}),
+						},
 						"content": { "application/json": {
 							"schema": { "type": "array",
 							            "items": { "$ref": "#/components/schemas/" + schema_ref } }
@@ -1738,7 +1756,7 @@ function build_doc() {
 				},
 				"XNextCursor": {
 					"description": "Convenience companion to Link rel=next: the bare next-cursor token.",
-					"schema": { "type": "string", "pattern": "^c_[A-Za-z0-9_-]+$" },
+					"schema": { "type": "string", "pattern": CURSOR_PATTERN },
 				},
 				"IdempotentReplayed": {
 					"description": "Set to true when a POST response was served from the Idempotency-Key cache instead of being re-applied.",
