@@ -268,9 +268,8 @@ record; this is the engineering one.
 
 **Partly done in v4 (#310):** the readers of sysntpd, logd, usteer and dropbear moved to the
 helper of their reader, after #312 read libvalidate's set out of ubox. fw4's `parse_bool` keeps
-`normalize_bool`, which matches it. Two readers still use `normalize_bool` without that reason:
-`sqm/queues.enabled`, which sqm-scripts takes as on only for `1` (#372), and `unbound/servers`,
-whose consumer has not been read yet. See `docs/ucode-quirks.md`.
+`normalize_bool`, which matches it. `sqm/queues.enabled` reads as sqm-scripts does, on only for
+`1` (#372). `unbound/servers` still uses `normalize_bool`, and its consumer has not been read yet. See `docs/ucode-quirks.md`.
 
 ## Shipped in 3.1.0
 
