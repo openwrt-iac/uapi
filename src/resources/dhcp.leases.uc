@@ -37,6 +37,9 @@ return {
 	package: "dhcp",
 	type: "lease",
 	id_field: "mac",
+	// dnsmasq keys a lease by client id, so one MAC can hold two leases, and a cursor on the MAC
+	// repeated the page that ends on the second. It holds one lease per address.
+	cursor_field: "ip",
 	list_fn: list_fn,
 	parse_leases: parse_leases,
 	schema_properties: {

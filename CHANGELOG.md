@@ -13,6 +13,11 @@ All notable changes to this project will be documented in this file. Format foll
 - **Request bounds are configurable from `config limits` in `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers` (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time constants; they are now read per request, with the compiled values as defaults and accepted ranges that ignore out-of-bounds values. `GET /diagnostics` reports the effective values under `limits`. Additive. (#339)
 - **`POST /batch` results carry per-operation headers.** Each entry of the 207 `results` array now has a `headers` object holding the headers the sub-request's own response carried (ETag, X-Reload-Status, X-Kernel-Status, X-Mgmt-Path-Warning, the sub-request's own `X-Request-Id`), so a client composing a batch reads the same per-operation outcome it would get from N separate requests. Additive. (#338)
 
+### Fixed
+
+- **`dhcp/leases6` lists the leases of odhcpd, and `dhcp/servers` counts them.** odhcpd writes each lease on a line that starts with `#`, which the reader skipped, so the list was always empty and `runtime.active_leases_v6_iface` was always 0. The reader now takes those lines, as rpcd-mod-luci does for LuCI, from the `leasefile` of the odhcpd section, and skips a line whose fields do not parse. `interface` is the device that odhcpd names, for example `br-lan`. `dhcp/servers` matches it to the `l3_device` of its interface, and counts a lease of several addresses once. (#367)
+- **The next page of `dhcp/leases` and `dhcp/leases6` loads.** A lease has no `id`, so the cursor read `c_null`, and following it answered 400 `invalid_cursor` after the first page of 100 leases. The cursor is now the `ip` of the last entry of the page. (#367)
+
 ## [3.4.1] - 2026-11-05
 
 ### Deprecated

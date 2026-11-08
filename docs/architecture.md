@@ -754,7 +754,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | uci configuration            | `/etc/config/<package>`                     | Indefinite        |
 | Authorized SSH keys          | `/etc/dropbear/authorized_keys`             | Indefinite        |
 | Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
-| DHCP leases                  | `/tmp/dhcp.leases`, `/tmp/(hosts/odhcpd|odhcpd.leases)` | Daemon-managed |
+| DHCP leases                  | `/tmp/dhcp.leases`, the `leasefile` of odhcpd (`/tmp/odhcpd.leases` by default) | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
 | Rate-limit buckets           | `/var/run/uapi-ratelimit/`                  | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
