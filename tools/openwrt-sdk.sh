@@ -30,7 +30,7 @@ segment=$(printf '%s' "$target" | tr / -)
 if [ "$series" = main ]; then
 	base=https://downloads.openwrt.org/snapshots/targets/$target
 	sums=$(mktemp)
-	curl -fsSL "$base/sha256sums" -o "$sums"
+	curl -fsSL --http1.1 --retry 3 --retry-all-errors "$base/sha256sums" -o "$sums"
 	line=$(grep -m1 "openwrt-sdk-${segment}_gcc-.*Linux-x86_64\.tar\.zst" "$sums")
 else
 	base=https://downloads.openwrt.org/releases/$version/targets/$target
@@ -55,7 +55,16 @@ if [ "$cmd" != fetch ]; then
 fi
 
 mkdir -p "$dest"
-curl -fsSL -o "/tmp/$tarball" "$base/$tarball"
+# The CDN cuts long transfers, and curl's own --retry starts the file over even with -C -, so each
+# attempt is a new curl that resumes from the partial file. A partial file left by an earlier run
+# would be resumed too.
+rm -f "/tmp/$tarball"
+n=0
+until curl -fsSL --http1.1 -C - -o "/tmp/$tarball" "$base/$tarball"; do
+	n=$((n + 1))
+	[ $n -lt 10 ] || exit 1
+	sleep 5
+done
 if [ "$series" = main ]; then
 	printf '%s\n' "$line" > /tmp/openwrt-sdk-sums.one
 	( cd /tmp && sha256sum -c openwrt-sdk-sums.one )
