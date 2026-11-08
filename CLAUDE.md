@@ -19,6 +19,19 @@ Before adopting any library, daemon, persistence layer, or abstraction, check it
 
 **Design reference: LuCI.** When a design choice is non-obvious (should this field be required? what should happen on a proto switch? how is this option meant to interact with that one?), read LuCI's source for the same surface before deciding. The OpenWrt SDK feeds carry it at `build/sdk/feeds/luci/`; the form/view code under `modules/luci-mod-*/htdocs/luci-static/resources/view/` and the platform abstractions under `modules/luci-base/htdocs/luci-static/resources/` are the two main entry points. LuCI is the long-baked baseline every OpenWrt operator already lives with; matching its behavior is the safe default. *Deliberately* diverging from it is fine when the divergence is a documented improvement; *accidentally* diverging because we didn't check is the failure mode to avoid.
 
+## API contract (non-negotiable)
+
+The wire surface is what clients build on. `docs/versioning.md` decides the semver impact of a change. These rules decide what the change must carry.
+
+- **A wire change** is any change to a path, method, field, type, default, status, error code, header, scope, ETag, or the spellings that a value accepts.
+- **A breaking change goes to the major preparation branch only** (today `v4`). It needs its issue, an announcement in a released 3.x (`docs/deprecations.md` and the "Upcoming" block of the spec), a section in the migration doc of the major, and a CHANGELOG entry that starts with `BREAKING:`.
+- **The commit that changes the wire carries the whole change.** It also updates the resource schema and its descriptions, `build/openapi.json` (`make openapi`), `docs/errors.md` for codes and headers, `docs/resources.md`, and the migration doc for a breaking change.
+- **Schema and response match.** Each field that a response holds is in the schema, and each field of the schema is in the response. Each query parameter is declared in the spec and validated, and a value that the endpoint does not know is refused.
+- **A removal or a rename is a sweep.** Before a path, field, code, header, scope or flag goes, search for every spelling of it in `src/`, `build/`, `cli/`, `docs/`, `tests/`, `examples/`, `README.md` and `CHANGELOG.md`. The gate self-test, the lint scripts and the OpenAPI generator are part of the search. Fix or remove each hit, and list in the PR each hit that stays, with the reason. Write in the migration doc what an upgraded router sees change: ETags, stored tokens and their scopes, defaults, ids. Open an issue on each downstream consumer that uses the name (`terraform-provider-uapi`, `uapi-mcp`, the Pulumi provider, the org site), and change none of their code.
+- **A pagination cursor uses a key that every item has and no two items share.** A test reads the second page.
+- **An anonymous uci section has a positional name.** libuci names it at each load from its ordinal in the package and a hash of its type, so the name moves to another section when an earlier one is deleted. Never use it as an id across requests.
+- **A new package dependency needs a failure reproduced without it**, and the PR states its installed size (principle 2).
+
 ---
 
 ## Code and documentation style
@@ -61,7 +74,7 @@ Applies to every repo under the `openwrt-iac` org, not just uapi.
 
 There is no PR template file: PRs here are opened with `gh pr create --body`, which never reads one.
 
-**Every PR records its changelog entry.** It adds an entry under `## [Unreleased]` in `CHANGELOG.md` that ends with `(#<PR>)`, or it carries the `changelog-not-needed` label when nothing outside the repo changes. CI fails the PR otherwise. The rules are in `docs/release-process.md`, section Changelog.
+**Every PR records its changelog entry.** It adds an entry under `## [Unreleased]` in `CHANGELOG.md` that ends with `(#<PR>)`, or it carries the `changelog-not-needed` label when nothing outside the repo changes. CI fails the PR otherwise. A released section is never edited. The rules are in `docs/release-process.md`, section Changelog.
 
 ---
 
