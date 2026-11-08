@@ -281,8 +281,24 @@ without uci state change.
    its size, and again on a restore.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
-   matching `wg set`. Runs only after the reload returned zero, and reports the
-   same way, so a failure here follows the recipe below. The interfaces actually
+   matching `wg set`. The ucode handler of OpenWrt main restarts a wireguard
+   interface on every peer change, so there the check first waits for a setup
+   that is in flight to finish: without the wait the write's own reload would
+   leave the interface mid-cycle, the apply would skip, and netifd would
+   re-apply the peers from uci, which turns a peer that wg refuses into a
+   committed section and a `setup_failed` interface instead of the 500 below.
+   The waits of an apply end at one deadline 8 s after it starts, whatever the
+   number of interfaces, and those of the reconcile of its restore at another.
+   An interface that reads down with no setup pending twice, half a second
+   apart, skips. A setup that never settles fails the write with a restore, so
+   the caller gets the 500 for a peer that the platform refuses. The same 500
+   answers a write to an interface that another stored peer already keeps
+   from settling (openwrt/openwrt#24511): the platform sets all the peers or
+   none, and uapi cannot tell the two cases apart. wireguard.sh restarts
+   nothing on a peer change, and its failed setup reads pending until the
+   stored config changes, so on 25.12 the check reads the status once. Runs
+   only after the reload returned zero, and reports the same way, so a failure
+   here follows the recipe below. The interfaces actually
    applied are recorded and reported on the response as `X-Kernel-Status` and
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
    leaves the peer in uci alone and a caller otherwise cannot tell that from a
@@ -426,6 +442,18 @@ remaining peer and no `config route` section still wants it, because two peers
 can carry overlapping `allowed_ips`. The kernel is never scanned for strays on the request path, only
 on the reconcile that follows a rollback, so a route uapi did not install is not
 at risk.
+
+OpenWrt main replaced `wireguard.sh` with a ucode proto handler,
+`/lib/netifd/proto/wireguard.uc`. `wg.uc` follows the handler that netifd
+runs, and it finds which one by the presence of that file. The ucode handler
+gives wg each value as uci holds it, with no printf %b. It takes a list of
+allowed IPs as its entries and an option as its words, and it routes each of
+them. A route takes the address before the first `/` and the length that
+ucode's `int()` reads after it. The handler leaves out a peer without a key,
+with its routes, and takes `disabled` and `route_allowed_ips` as on only when
+they hold `1`. The read, the kernel apply, the routes and the reconcile take
+these rules from `wg.uc`. So on main a GET reports an entry that wg refuses
+as that one entry, not as the prefixes that `wireguard.sh` made of it.
 
 One consequence to know: netifd reports the routes it installs in
 `network.interface.<name> status`, and routes installed here are not in that

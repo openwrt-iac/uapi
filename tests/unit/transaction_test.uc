@@ -576,10 +576,11 @@ t.describe('transaction, the time that uapi waits for the reloads of a request',
 		for (let svc in [ "w", "fds" ]) fs.chmod(dir + "/" + svc, 0755);
 	}
 	function ran() { return trim(fs.readfile(dir + "/ran") ?? ""); }
-	function write(batch, services, budget_ms) {
+	function write(batch, services, budget_ms, extra) {
 		let conn = ubus.stub({ uci: { fw: { r1: { '.type': 'rule', target: 'ACCEPT' } } } });
-		let budget = { ms: budget_ms ?? 300 };
-		let p = { check_services: noop_check, reload: (s) => tx.default_reload(s, budget, dir) };
+		// The budget is the one that the transaction hands each reload, with a shorter time.
+		let reload = (s, budget) => { budget.ms = budget_ms ?? 300; return tx.default_reload(s, budget, dir); };
+		let p = { check_services: noop_check, reload, ...(extra ?? {}) };
 		let start = clock(true);
 		let r = batch
 			? tx.multi_transaction(conn, { ...p, packages: [ "fw" ], reload_services: { fw: services ?? [ "firewall" ] },
@@ -624,6 +625,16 @@ t.describe('transaction, the time that uapi waits for the reloads of a request',
 		w = write(false, [ "a", "b" ], 100);
 		sleep(500);
 		t.assert_deep_equal([ w.r.reload_status, ran() ], [ "unverified", "a" ]);
+	});
+
+	// On OpenWrt main the wireguard apply waits for netifd's restart. On the clock of the reloads,
+	// that wait left the restore of a failed apply no time for its own reload.
+	t.it('leaves the time of the kernel apply out of the time for the reloads', () => {
+		for (let batch in [ false, true ]) {
+			scripts([ "slow", "slow" ]);
+			let w = write(batch, null, 800, { wg_apply: () => { sleep(400); return "the apply failed"; } });
+			t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.target ], [ "reload_failed_restored", "the apply failed", "ACCEPT" ]);
+		}
 	});
 
 	t.it('restores after a reload that fails within the time, and the reload of the restore shares it', () => {
