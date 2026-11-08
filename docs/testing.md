@@ -340,13 +340,8 @@ dead export is now reported, and all 135 real exports still pass.
 
 `make lint` chains these sub-targets:
 
-- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule,
-  enforced).
-- `lint-md-lines`: fails on a prose line over 80 columns in a tracked Markdown
-  file, the markdownlint MD013 limit a reviewer's editor flags. Code blocks,
-  tables, headings, link definitions and single-token lines (long URLs) are
-  exempt, and `CHANGELOG.md` is checked only above its first released section,
-  which a release never edits.
+- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule, enforced).
+- `lint-conflict-markers`: forbids merge conflict markers in tracked files. Rebases of v4 onto main committed them into `CHANGELOG.md` and the migration guide, where no other gate looked.
 - `lint-syntax`: `ucode -c` on every `.uc` file in `src/`, `cli/`, `tests/`.
 - `lint-reserved`: fails on schema property names that collide with Terraform meta-arguments or HCL block keywords.
 - `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json` and fails on dangling targets.
