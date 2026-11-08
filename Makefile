@@ -1,4 +1,4 @@
-.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs lint-lock-audit gate-selftest
+.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-conflict-markers tracked-files lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs lint-lock-audit gate-selftest
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -14,6 +14,7 @@ help:
 	@echo "  soak               long-duration read-only load test (UAPI_BASE + UAPI_TOKEN required)"
 	@echo "  lint               em-dash check + ucode syntax check"
 	@echo "  lint-emdash        forbid em-dashes in tracked sources"
+	@echo "  lint-conflict-markers  forbid merge conflict markers in tracked files"
 	@echo "  lint-syntax        ucode -c on all .uc files"
 	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
@@ -125,7 +126,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability lint-lock-audit
+lint: lint-emdash lint-conflict-markers lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability lint-lock-audit
 
 # Tracked files only, via git rather than a hand-kept directory list. The list had
 # gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
@@ -134,23 +135,35 @@ lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-de
 #
 # The two guards exist because the git form had its own silent-pass hole: the CI lint
 # container installed no git, so `git ls-files` printed nothing, `hits` came back empty
-# and the check reported success without reading a file. It had never run in CI. git is
-# installed there now, and these guards mean the next container change fails the build
-# instead of quietly disabling the rule.
-lint-emdash:
+# and lint-emdash reported success without reading a file. It had never run in CI. git
+# is installed there now, and these guards mean the next container change fails the
+# build instead of quietly disabling the rules that scan tracked files.
+tracked-files:
 	@command -v git >/dev/null 2>&1 || { \
-		echo "lint-emdash needs git to list tracked files; without it this check passes without scanning anything"; \
+		echo "the tracked-file lints need git to list tracked files; without it they pass without scanning anything"; \
 		exit 1; }
-	@git rev-parse --git-dir >/dev/null 2>/tmp/uapi-emdash-git.err || { \
-		echo "lint-emdash cannot use this checkout, so the scan would be empty. git said:"; \
-		sed 's/^/  /' /tmp/uapi-emdash-git.err; \
+	@git rev-parse --git-dir >/dev/null 2>/tmp/uapi-tracked-git.err || { \
+		echo "the tracked-file lints cannot use this checkout, so the scan would be empty. git said:"; \
+		sed 's/^/  /' /tmp/uapi-tracked-git.err; \
 		echo "  (a tarball export has no tracked-file list; a container checkout needs"; \
 		echo "   git config --global --add safe.directory \"\$$GITHUB_WORKSPACE\")"; \
 		exit 1; }
+
+lint-emdash: tracked-files
 	@hits=$$(git ls-files -z | xargs -0 grep -In $$'\xe2\x80\x94' 2>/dev/null || true); \
 	if [ -n "$$hits" ]; then \
 		echo "$$hits"; \
 		echo ""; echo "em-dash found in tracked files (forbidden per CLAUDE.md style)"; exit 1; \
+	fi
+
+# The rebases of v4 onto main committed conflict markers into CHANGELOG.md and the
+# migration guide, and every other gate passed over them. A bare `=======` line is
+# also a setext heading underline, so such a heading must use `#` instead.
+lint-conflict-markers: tracked-files
+	@hits=$$(git ls-files -z | xargs -0 grep -InE '^(<<<<<<< |\|\|\|\|\|\|\| |>>>>>>> |=======$$)' 2>/dev/null || true); \
+	if [ -n "$$hits" ]; then \
+		echo "$$hits"; \
+		echo ""; echo "merge conflict marker found in tracked files"; exit 1; \
 	fi
 
 lint-syntax:
