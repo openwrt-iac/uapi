@@ -66,6 +66,13 @@ ETag once at the upgrade, so a write that sends an `If-Match` from before it ans
 section again first. fw4's `parse_bool` keeps its eight spellings. Evidence: ubox `6f78fa4`,
 pinned in `docs/ucode-quirks.md` (#312).
 
+`sqm/queues.enabled` reads `true` only for a value that sqm-scripts takes as on: its
+`run-openwrt.sh` starts a queue only when `[ "$(config_get "$section" enabled)" -eq 1 ]`
+holds. An absent `enabled`, or `yes`, `on` or `true` written by hand, read `true` in v3 for a
+queue that sqm left off, and now reads `false` (announced in 3.x, #372). A queue that LuCI made
+holds `1` or `0` and reads the same. A plan that sets `enabled = true` on such a queue now writes
+`1`, which starts SQM there.
+
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips an absent mode as

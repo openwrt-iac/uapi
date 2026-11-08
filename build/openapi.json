@@ -35311,8 +35311,8 @@
 					},
 					"enabled": {
 						"type": "boolean",
-						"default": true,
-						"description": "Whether SQM is active on this interface"
+						"default": false,
+						"description": "Whether sqm-scripts starts SQM on this interface. It starts a queue only when `enabled` is 1, so an absent value, or a word such as `yes`, `on` or `true`, reads false."
 					},
 					"interface": {
 						"type": [
@@ -35403,8 +35403,8 @@
 					},
 					"enabled": {
 						"type": "boolean",
-						"default": true,
-						"description": "Whether SQM is active on this interface"
+						"default": false,
+						"description": "Whether sqm-scripts starts SQM on this interface. It starts a queue only when `enabled` is 1, so an absent value, or a word such as `yes`, `on` or `true`, reads false."
 					},
 					"interface": {
 						"type": [
