@@ -56,6 +56,12 @@ done
 
 # One function per mutation, so quoting stays one level deep.
 mut_emdash() { printf '\nplanted \342\200\224 here\n' >> docs/testing.md; }
+# One marker at a time: the v4 CHANGELOG kept a lone `<<<<<<< HEAD` and a lone `>>>>>>> <sha> (...)`
+# after the rest of their blocks went, and a pattern can miss the separator by taking it for a
+# heading underline.
+mut_conflict_open() { printf '\n<<<<<<< HEAD\nours\n' >> CHANGELOG.md; }
+mut_conflict_separator() { printf '\nours\n=======\ntheirs\n' >> CHANGELOG.md; }
+mut_conflict_close() { printf '\ntheirs\n>>>>>>> 62ca2ef (test: a commit subject)\n' >> CHANGELOG.md; }
 
 mut_syntax() { printf 'function (((\n' >> src/lib/values.uc; }
 
@@ -435,6 +441,9 @@ accept() {
 
 echo "=== each gate, broken on purpose ==="
 probe lint-emdash        "em-dash in a tracked file"           "em-dash found in tracked files"    mut_emdash
+probe lint-conflict-markers "an opening conflict marker"        "merge conflict marker found"       mut_conflict_open
+probe lint-conflict-markers "a conflict separator left behind"  "merge conflict marker found"       mut_conflict_separator
+probe lint-conflict-markers "a closing conflict marker"         "merge conflict marker found"       mut_conflict_close
 probe lint-syntax        "ucode that does not parse"           "Syntax error"                      mut_syntax
 probe lint-reserved      "a Terraform-reserved property name"  "Terraform meta-arguments"          mut_reserved
 probe lint-refs          "a dangling ref"                      "dangling"                          mut_dangling_ref
