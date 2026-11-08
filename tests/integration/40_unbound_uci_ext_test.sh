@@ -57,6 +57,7 @@ status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
 [ "$status" = "200" ] || fail "GET /unbound/srv expected 200, got $status: $body"
 echo "$body" | grep -q '"id": "main"' || fail "expected id=main"
+echo "$body" | grep -q '"managed": true' || fail "expected managed=true"
 
 echo "--- PATCH /unbound/srv enables bind + ip_transparent + srv_line ---"
 resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/srv" -d '{

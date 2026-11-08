@@ -29,14 +29,6 @@ statefile. The entry id is the MAC for v4 entries and the IP for v6 ones, so
 `GET /dhcp/leases/<ip>?family=v6` looks a v6 entry up. The `dhcp:leases6` scope is gone with the
 endpoint.
 
-## `managed` and the adopt flow are removed
-
-Every curated response envelope was `{id, managed, runtime, fields}`; it is now `{id, runtime,
-fields}` (announced in 3.4.1, #321). `POST /<resource>/<id>/adopt` is gone (it answers 404), the
-`?managed=` query filter is gone, and the `unmanaged_resource` (409) error code left the enum with
-them. A section pre-existing in `/etc/config/`, named or anonymous, is addressed by its name like
-any other and is writable directly.
-
 ## One documented `runtime` envelope on every resource
 
 `runtime` is now always present in a resource response and declared in every response schema:
@@ -45,12 +37,11 @@ documents the block (the four resources that had a hand-written `openapi_runtime
 get the documented empty-object shape). Read-only collections (item lists like `dhcp/leases`) have
 no envelope and are unchanged (announced in 3.4.1, #322).
 
-## `unsupported_media_type` and `unmanaged_resource` leave the error enum
+## `unsupported_media_type` leaves the error enum
 
-The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415) or
-`unmanaged_resource` (409), both dead (announced in 3.4.1, #323 and #321). The first was reserved
-and never emitted (uapi never rejects a body on `Content-Type`); the second left with the
-`managed` field and the adopt flow. Clients branching on either code must drop that branch.
+The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415), which was reserved
+and never emitted: uapi never rejects a body on `Content-Type` (announced in 3.4.1, #323). Clients
+branching on it must drop that branch.
 
 ## A write is refused for any stored error the section holds
 
