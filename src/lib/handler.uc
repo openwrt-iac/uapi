@@ -1286,9 +1286,24 @@ function make_collection(resource) {
 		return resp;
 	}
 
+	// The link to the next page keeps the declared query, or its page lists the other family.
+	function declared_query(ctx, query) {
+		let carry = "";
+		for (let k, p in resource.query ?? {}) {
+			let v = query?.[k];
+			if (v == null) continue;
+			if (index(p.enum, v) < 0)
+				return { error: errors.error(ctx, "bad_request", sprintf("%s must be one of %s", k, join(", ", p.enum))) };
+			carry += sprintf("&%s=%s", k, v);
+		}
+		return { carry };
+	}
+
 	function list(conn, ctx, query) {
+		let q = declared_query(ctx, query);
+		if (q.error) return q.error;
 		let r = listed(conn, query);
-		return with_headers(paginate(ctx, r.items, query, resource.cursor_field ?? resource.id_field), r.headers);
+		return with_headers(paginate(ctx, r.items, query, resource.cursor_field ?? resource.id_field, q.carry), r.headers);
 	}
 
 	function get_one(conn, ctx, id, query) {
@@ -1296,6 +1311,8 @@ function make_collection(resource) {
 		let idf = (type(resource.id_field) == "function") ? resource.id_field(query) : resource.id_field;
 		if (idf == null)
 			return method_not_allowed(ctx, "individual lookup");
+		let q = declared_query(ctx, query);
+		if (q.error) return q.error;
 		let r = listed(conn, query);
 		for (let item in r.items)
 			if (item[idf] == id) return with_headers(errors.ok(ctx, item), r.headers);
