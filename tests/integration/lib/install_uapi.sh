@@ -20,7 +20,9 @@ ensure_wireless_radio() {
 	if $SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .'; then return 0; fi
 	$SSH 'apk add kmod-mac80211-hwsim 2>&1 | tail -3' >/dev/null 2>&1 || return 1
 	$SSH 'modprobe mac80211_hwsim radios=1' || return 1
-	for i in 1 2 3 4 5; do
+	# The module registers its radios through netlink, which a snapshot image
+	# has taken 10 s and more to finish: too short a wait reads as no radio.
+	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
 		$SSH 'ls /sys/class/ieee80211/ 2>/dev/null | grep -q .' && break
 		sleep 1
 	done
@@ -293,6 +295,28 @@ ensure_daemon_packages() {
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1' && return 0
 	$SSH 'apk add lldpd vnstat2 2>&1 | tail -3' || return 1
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1'
+}
+
+# netifd of OpenWrt main restarts a wireguard interface on every peer change
+# (its ucode proto handler reads the peer sections as part of the interface
+# config), so the kernel state of a write lands seconds after the write
+# returned, and a check that runs at once can see the interface mid-cycle.
+# 25.12 runs no such cycle: the settle passes on its first check there.
+wait_iface_settled() {
+	n=0
+	while [ $n -lt 20 ]; do
+		st=$($SSH "ubus call network.interface.$1 status 2>/dev/null" || true)
+		printf '%s' "$st" | grep -q '"up": *true' \
+			&& printf '%s' "$st" | grep -q '"pending": *false' && return 0
+		n=$((n + 1)); sleep 1
+	done
+	return 1
+}
+
+# The ucode proto handler of OpenWrt main replaced the shell handler of 25.12;
+# the tests branch their platform-dependent expectations on which one runs.
+wg_ucode_platform() {
+	$SSH 'test -e /lib/netifd/proto/wireguard.uc'
 }
 
 ensure_wireguard() {

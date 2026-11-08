@@ -127,6 +127,7 @@ echo "=== the modified address list reached the kernel, not just uci ==="
 # The write path reports X-Kernel-Status, but only the netdev can confirm the v6
 # addresses actually landed: this list was rejected outright before 2.5.0.
 $SSH 'ifup uapiwg' >/dev/null 2>&1 || true
+wait_iface_settled uapiwg || true
 n=0
 while [ $n -lt 10 ]; do
 	# grep -c prints 0 and exits 1 when nothing matches, so without the inner `|| true` the
