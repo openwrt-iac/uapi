@@ -27,7 +27,8 @@ The `/dhcp/leases6` endpoint is removed (announced in 3.4.1, #320). `GET /dhcp/l
 returns the IPv4 leases, and `GET /dhcp/leases?family=v6` returns the IPv6 ones from odhcpd's
 statefile. The entry id is the MAC for v4 entries and the IP for v6 ones, so
 `GET /dhcp/leases/<ip>?family=v6` looks a v6 entry up. The `dhcp:leases6` scope is gone with the
-endpoint.
+endpoint. 3.x ignored `family`, so any value listed the IPv4 leases. Now a value other than `v4`
+or `v6` answers 400 `bad_request`.
 
 ## One documented `runtime` envelope on every resource
 
