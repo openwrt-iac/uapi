@@ -206,7 +206,9 @@ jobs:
   # GitHub's 7-day eviction.
   warm-sdk-cache:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # On v4 the snapshot SDK download took 46m with the CDN cutting it, and the dependency
+    # build ran past 60m before the cache was saved.
+    timeout-minutes: 120
     # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
     # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
