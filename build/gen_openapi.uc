@@ -626,6 +626,9 @@ function build_singleton_paths(ep) {
 function build_collection_paths(ep) {
 	let schema_ref = response_name(ep);
 	let request_ref = request_name(ep);
+	let headers = load_resource(ep.file).openapi_headers;
+	let one = make_response(200, "OK", schema_ref);
+	if (headers != null) one.headers = { ...(one.headers ?? {}), ...headers };
 	return {
 		[ep.path]: {
 			"get": {
@@ -633,6 +636,7 @@ function build_collection_paths(ep) {
 				"responses": responses("get", {
 					"200": {
 						"description": "OK",
+						...(headers != null ? { "headers": headers } : {}),
 						"content": { "application/json": {
 							"schema": { "type": "array",
 							            "items": { "$ref": "#/components/schemas/" + schema_ref } }
@@ -645,7 +649,7 @@ function build_collection_paths(ep) {
 			"parameters": [{ "name": "id", "in": "path", "required": true,
 			                 "schema": { "type": "string" } }],
 			"get": { "summary": sprintf("Get one %s by id", ep.subresource),
-			         "responses": responses("get", { "200": make_response(200, "OK", schema_ref) }) },
+			         "responses": responses("get", { "200": one }) },
 		},
 	};
 }
@@ -1727,6 +1731,10 @@ function build_doc() {
 				"Link": {
 					"description": "RFC 8288 link relations; rel=\"next\" present when more paginated items exist.",
 					"schema": { "type": "string", "example": "<?cursor=c_r_01HX&limit=100>; rel=\"next\"" },
+				},
+				"XKernelUnread": {
+					"description": "Comma-separated up interfaces with proto=wireguard whose kernel peers uapi could not read, because `wg show <interface> dump` failed or printed a shape that uapi does not read. The list holds no entry for them, so an absent header is what says that the list covers every up interface.",
+					"schema": { "type": "string", "example": "wg0" },
 				},
 				"XNextCursor": {
 					"description": "Convenience companion to Link rel=next: the bare next-cursor token.",

@@ -3,10 +3,11 @@ let values = require('values');
 let wg = require('wg');
 
 function list_fn(conn) {
-	let out = [];
-	for (let p in wg.unclaimed(conn))
-		push(out, { id: ids.content_id(p.interface + " " + p.public_key), ...p });
-	return out;
+	let u = wg.unclaimed(conn);
+	return {
+		items: map(u.peers, (p) => ({ id: ids.content_id(p.interface + " " + p.public_key), ...p })),
+		headers: (length(u.unread) > 0) ? { "X-Kernel-Unread": join(",", u.unread) } : {},
+	};
 }
 
 return {
@@ -14,6 +15,7 @@ return {
 	type: "wireguard_kernel_peer",
 	id_field: "id",
 	list_fn: list_fn,
+	openapi_headers: { "X-Kernel-Unread": { "$ref": "#/components/headers/XKernelUnread" } },
 	schema_properties: {
 		id:                   { type: "string", pattern: "^[a-f0-9]{12}$",
 		                        description: "Stable id of the peer on its interface: the first 12 hex characters of the sha256 of the interface name and the public key, so a client tells one entry from another across reads" },

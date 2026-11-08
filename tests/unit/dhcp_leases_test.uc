@@ -91,6 +91,21 @@ t.describe('handler.make_collection, list', () => {
 	});
 });
 
+// network/wireguard_kernel_peers names the interfaces whose kernel it could not read, so that an
+// empty list is not taken for a kernel that holds no drift.
+t.describe('handler.make_collection, headers that a list_fn answers', () => {
+	let h = handler.make_collection({ package: "network", type: "wireguard_kernel_peer", id_field: "id",
+		list_fn: () => ({ items: [ { id: "a" } ], headers: { "X-Kernel-Unread": "wg1" } }) });
+	t.it('go on the list, and on a read by id that finds the item or not', () => {
+		let r = h.list(bus.stub(), ctx(), {});
+		t.assert_deep_equal([ r.status, r.body, r.headers["X-Kernel-Unread"] ], [ 200, [ { id: "a" } ], "wg1" ]);
+		r = h.get_one(bus.stub(), ctx(), "a");
+		t.assert_deep_equal([ r.status, r.headers["X-Kernel-Unread"] ], [ 200, "wg1" ]);
+		r = h.get_one(bus.stub(), ctx(), "b");
+		t.assert_deep_equal([ r.status, r.headers["X-Kernel-Unread"] ], [ 404, "wg1" ]);
+	});
+});
+
 t.describe('handler.make_collection, get_one', () => {
 	function fixture(items, id_field) {
 		let mod = {
