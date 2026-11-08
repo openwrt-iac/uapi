@@ -1,6 +1,5 @@
 let values = require('values');
 let shell_bool = values.shell_bool;
-let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
 function fromUci(section) {
@@ -10,12 +9,13 @@ function fromUci(section) {
 		managed: !anonymous,
 		enable:             shell_bool(section.enable, true),
 		port:               as_int(section.Port),
-		password_auth:      normalize_bool(section.PasswordAuth, true),
-		root_password_auth: normalize_bool(section.RootPasswordAuth, true),
-		root_login:         normalize_bool(section.RootLogin, true),
+		// dropbear.init reads these through libvalidate `:bool:`.
+		password_auth:      shell_bool(section.PasswordAuth, true),
+		root_password_auth: shell_bool(section.RootPasswordAuth, true),
+		root_login:         shell_bool(section.RootLogin, true),
 		banner_file:        section.BannerFile ?? null,
 		interface:          section.Interface ?? null,
-		gateway_ports:      normalize_bool(section.GatewayPorts, false),
+		gateway_ports:      shell_bool(section.GatewayPorts, false),
 		runtime: {},
 	};
 }

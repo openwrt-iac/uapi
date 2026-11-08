@@ -265,10 +265,11 @@ record; this is the engineering one.
 `resolve_for_replace` seam in `handler.uc` along with its contract in
 `docs/adding-a-resource.md`.
 
-**Not done, and deliberately:** retiring `values.normalize_bool`'s remaining callers. The
-precondition is reading libvalidate's accepted set out of ubox rather than guessing at it, and
-that has not happened. It could change which strings are accepted on the wire, so acting on a
-guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
+**Partly done in v4 (#310):** the readers of sysntpd, logd, usteer and dropbear moved to the
+helper of their reader, after #312 read libvalidate's set out of ubox. fw4's `parse_bool` keeps
+`normalize_bool`, which matches it. Two readers still use `normalize_bool` without that reason:
+`sqm/queues.enabled`, which sqm-scripts takes as on only for `1` (#372), and `unbound/servers`,
+whose consumer has not been read yet. See `docs/ucode-quirks.md`.
 
 ## Shipped in 3.1.0
 

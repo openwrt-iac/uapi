@@ -157,7 +157,7 @@ netifd's is the strict one:
 | shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default | `shell_bool` |
 | raw compare, `[ "$x" != "1" ]` | `1` | everything else | there is no else | `strict_bool` |
 | numeric test, `[ "$x" -gt 0 ]` | a number above 0, whitespace around it included | `0`, a number below it, and any word, `true` included | there is no else | see below |
-| libvalidate `:bool:` via `uci_validate_section` | `1`, `on`, `true`, `yes`, `enabled` | `0`, `off`, `false`, `no`, `disabled` | section **dropped**, see below | `normalize_bool` | verified: ubox `6f78fa4` (2025-10-30, the 25.12.5 SDK), `dt_type_bool()` in `validate/validate.c`, `strcasecmp` against those ten spellings, case-insensitive |
+| libvalidate `:bool:` via `uci_validate_section` | `1`, `on`, `true`, `yes`, `enabled` | `0`, `off`, `false`, `no`, `disabled` | section **dropped**, see below | `shell_bool` | verified: ubox `6f78fa4` (2025-10-30, the 25.12.5 SDK and the snapshot), `dt_type_bool()` in `validate/validate.c` takes those ten spellings with `strcasecmp`, and `bool_to_num()` in `validate/cli.c` hands the script `1`/`0` for the lower-case ten only |
 
 So `option auto 'no'` on an interface does not disable autostart: netifd drops
 the value and uses its own `true`.
@@ -186,11 +186,14 @@ whole section for anything else, because `validate_data` rejecting a value makes
 init script drop the section (`dropbear.init` and `sysntpd` both do this). The uci
 blob converter is narrower and case-sensitive: `true`/`1` and `false`/`0` only, from
 libuci `66127cd` (2025-12-02, the 25.12.5 SDK), and anything else drops the option
-rather than the section. So `system.log_remote` and `system/timeservers` read with `platform_bool` since v4 (#310),
-which changes what the word spellings `on`/`yes` read as: the blob converter does not take
-them, so they read false, and dropbear's auth flags keep `normalize_bool`, because
-dropbear.init reads them through libvalidate, which takes all ten spellings. The v4
-announcement (#310 in the v4 milestone) cites these two pins as the evidence.
+rather than the section. The value that a libvalidate script then tests is the `1` or `0`
+of `bool_to_num()`, which takes the ten lower-case spellings of `get_bool` and no others, so
+`shell_bool` reads this row. `Yes` validates but reaches the script empty, a case no helper
+models. Since v4 (#310), `system.log_remote`, `system/timeservers` and dropbear's flags read
+with `shell_bool` for this reason, and so do the `usteer/config` booleans, which usteer.init
+reads with `config_get_bool`. Before, they read with `normalize_bool`, which misses
+`enabled`/`disabled`. The v4 announcement (#310 in the v4 milestone) cites these pins as
+the evidence.
 
 Writes still emit `"1"` / `"0"`, which every reader above accepts.
 

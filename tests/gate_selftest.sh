@@ -371,9 +371,9 @@ mut_default_and_clear_on_omit() {
 	python3 - <<'EOF'
 import pathlib
 p = pathlib.Path('src/resources/system.uc'); s = p.read_text()
-a = 'log_remote:   { type: "boolean", default: false }'
+a = 'log_remote:   { type: "boolean", default: true }'
 assert a in s, 'default-carrying property not found'
-p.write_text(s.replace(a, 'log_remote:   { type: "boolean", default: false, "x-uapi-clear-on-omit": true }', 1))
+p.write_text(s.replace(a, 'log_remote:   { type: "boolean", default: true, "x-uapi-clear-on-omit": true }', 1))
 EOF
 }
 
