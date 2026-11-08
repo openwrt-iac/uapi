@@ -32,45 +32,24 @@ removed in a major it moves to `Removed in past releases` below.
 
 ## How to migrate
 
-For each deprecated input field your client sends, switch to the replacement
-column. uapi accepts both during the window, so the migration can be staged:
-update writes first, observe nothing breaks, then drop the old field. Reads do
-not change during the window. When the release that opens a window also changes
-a read, its row says so.
+For each deprecated input field your client sends, switch to the replacement column. uapi accepts both during the window, so the migration can be staged: update writes first, observe nothing breaks, then drop the old field. Reads do not change during the window. When the release that opens a window also changes a read, its row says so.
 
-The OpenAPI spec at `/openapi.json` carries `deprecated: true` on every
-deprecated request field that disappears as a whole. Codegen tools that respect
-that flag (openapi-generator, oapi-codegen, etc.) will emit warnings in the
-generated client when you regenerate; that's the signal your client has surface
-area to migrate.
+The OpenAPI spec at `/openapi.json` carries `deprecated: true` on every deprecated request field that disappears as a whole. Codegen tools that respect that flag (openapi-generator, oapi-codegen, etc.) will emit warnings in the generated client when you regenerate; that's the signal your client has surface area to migrate.
 
-A field that stays and loses only a write form carries no flag, and deliberately
-so.
-OpenAPI's `deprecated` is a property-level flag with no read/write split, so
-setting it
-would tell a generator the field was disappearing. `network/interfaces.ipaddr`
-was the
-first case: it survived as a read field and lost its write half, and the v3 spec
-says it
-precisely, with `readOnly: true` in the response schema and no `ipaddr` at all
-in the
-request one. `network/interfaces.ip6prefix` is the current case: it keeps its
-array form
-and loses only the string form on write. While a window is open, the
-announcement lives
-in this table and in the field's own `description`, which is the honest signal
-available.
+A field that stays and loses only a write form carries no flag, and deliberately so.
+OpenAPI's `deprecated` is a property-level flag with no read/write split, so setting it
+would tell a generator the field was disappearing. `network/interfaces.ipaddr` was the
+first case: it survived as a read field and lost its write half, and the v3 spec says it
+precisely, with `readOnly: true` in the response schema and no `ipaddr` at all in the
+request one. `network/interfaces.ip6prefix` was the second case: it kept its array form
+and lost only the string form on write in 4.0.0. While a window is open, the announcement
+lives in this table and in the field's own `description`, which is the honest signal available.
 
 ## Announced response-shape changes
 
-These land in v4, not before. The list is mirrored in the published spec's own "Upcoming in v4" block, which `make lint-doc-refs` keeps in sync with this section by count.
-
-- **A `wireless/interfaces` section with no `mode` will read as null in v4 instead of `ap`.** wifi-scripts sets up nothing for such a section, so the current read reports an access point that does not exist. (#307)
-- **A write will be refused for any stored error the section holds in v4, as LuCI does.** Today a write refuses only the errors it adds. (#308)
-- **The special endpoints move under `/uapi/...` in v4.** `/tokens`, `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami` become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and `/uapi/whoami`, matching the scopes that already exist (`uapi:tokens`, `uapi:metrics`, `uapi:diagnostics`). The unauthenticated trio stays at the top level: `/healthz`, `/openapi.json`, `/schema/*`. (#319)
-- **`dhcp/leases6` merges into `dhcp/leases` in v4.** `GET /dhcp/leases?family=v6` returns the v6 entries, and the `/dhcp/leases6` endpoint is removed. (#320)
-- **`runtime` is always present and documented on every resource in v4.** Today 4 of 45 resources document their runtime block and the rest publish an opaque object. (#322)
-- **Dead error codes leave the ErrorEnvelope enum in v4.** `unsupported_media_type` is declared but never returned; the emitted set is audited against the declared one. (#323)
+v4 ships every change that 3.x announced here, and `docs/migration-v3-to-v4.md` says what each one
+changes for a client. A change announced for v5 goes here, mirrored in the published spec's own
+"Upcoming in v5" block, which `make lint-doc-refs` keeps in sync with this section by count.
 
 ## Removed in past releases
 
