@@ -26,7 +26,8 @@ not prove arch-neutrality, despite what this said until 2.5.0: it
 compares no digests and has no x86_64 leg to compare against. It fails
 the release on a missing per-arch SDK pin, a tarball that does not match
 its pin, a cross-build that breaks under any of the three, or a build
-that produces no `.apk` - which is what 2.4.1 actually relied on. Per-arch SDK tarball sha256 lives in
+that produces no `.apk` - which is what 2.4.1 actually relied on. Per-arch SDK
+tarball sha256 lives in
 `build/sdk.sha256`; refresh those lines whenever `OPENWRT_VERSION` bumps
 (the matrix in `.github/workflows/ci.yml` names the targets, and
 `tools/openwrt-sdk.sh` resolves each URL from the pin).
@@ -57,7 +58,8 @@ it also upgrades from 3.2.0, the last release whose package shipped
 
 `VERSION` at the repo root drives every other version string:
 
-- `build/openwrt/uapi/Makefile` reads it via `$(shell sed 's/-/_/g' files/VERSION)`.
+- `build/openwrt/uapi/Makefile` reads it via `$(shell sed 's/-/_/g'
+  files/VERSION)`.
 - `build/gen_openapi.uc` reads it and stamps `info.version`.
 - `src/main.uc` reads it at parent VM startup; `/healthz` returns it.
 - CI verifies the tag's signature, not its name: nothing compares the pushed
@@ -248,39 +250,60 @@ tooling (cosign, syft, etc.) can consume it directly.
 
 ## Changelog
 
-`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): an
-`## [Unreleased]` section at the top, and one section per release below it. The process is the
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
+an
+`## [Unreleased]` section at the top, and one section per release below it. The
+process is the
 one Grafana Mimir uses: each PR writes its own entry, and CI checks that it did.
 
-**Every PR records its change in the same PR.** It adds an entry under `## [Unreleased]`, in the
-heading that fits: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, or
-`Internal` for release and build machinery. The entry ends with the PR number in parentheses,
-for example `(#193)`. `.github/workflows/changelog.yml` runs `scripts/changelog-has-entry.sh`
+**Every PR records its change in the same PR.** It adds an entry under `##
+[Unreleased]`, in the
+heading that fits: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+`Security`, or
+`Internal` for release and build machinery. The entry ends with the PR number in
+parentheses,
+for example `(#193)`. `.github/workflows/changelog.yml` runs
+`scripts/changelog-has-entry.sh`
 and fails the PR when no entry under `## [Unreleased]` carries its number.
 
-**An entry is needed for every change that someone outside the repo can see:** the wire
-surface, the behavior on the router, the package, or the release artifacts (APK, SBOM, GitHub
-Release). A PR that changes none of these takes the `changelog-not-needed` label instead. The
-`entry` job still runs on that PR, reads the label from the API and passes. That covers docs,
+**An entry is needed for every change that someone outside the repo can see:**
+the wire
+surface, the behavior on the router, the package, or the release artifacts (APK,
+SBOM, GitHub
+Release). A PR that changes none of these takes the `changelog-not-needed` label
+instead. The
+`entry` job still runs on that PR, reads the label from the API and passes. That
+covers docs,
 tests, CI that changes no artifact, refactors, and release PRs.
 
-**The entry says why, not only what.** It names the defect or the need, what changed on the
-wire, and what a client must do, if anything. A breaking change opens with `BREAKING:`. A
-tightening under a carve-out in `docs/versioning.md` names the carve-out and says how loudly it
-fails. This is why entries are not generated from PR titles, as release-please does in Grafana
+**The entry says why, not only what.** It names the defect or the need, what
+changed on the
+wire, and what a client must do, if anything. A breaking change opens with
+`BREAKING:`. A
+tightening under a carve-out in `docs/versioning.md` names the carve-out and
+says how loudly it
+fails. This is why entries are not generated from PR titles, as release-please
+does in Grafana
 Loki and Alloy: a title cannot carry that.
 
-**The PR number exists only once the PR does.** Either open the PR and then push the entry, or
-predict the number with `scripts/next-pr-number.sh` before you open it. Issues and PRs share one
-counter, so the guess is wrong if an issue opens in between, and the check then fails until the
+**The PR number exists only once the PR does.** Either open the PR and then push
+the entry, or
+predict the number with `scripts/next-pr-number.sh` before you open it. Issues
+and PRs share one
+counter, so the guess is wrong if an issue opens in between, and the check then
+fails until the
 entry carries the real number.
 
-**At release time,** `scripts/changelog-missing.sh <previous-tag>` lists every PR merged into
-`main` since that tag that has neither an entry nor the label. It must print nothing. Step 3
-above then turns `## [Unreleased]` into the release section, and `scripts/release-notes.sh`
+**At release time,** `scripts/changelog-missing.sh <previous-tag>` lists every
+PR merged into
+`main` since that tag that has neither an entry nor the label. It must print
+nothing. Step 3
+above then turns `## [Unreleased]` into the release section, and
+`scripts/release-notes.sh`
 makes that section the GitHub Release body.
 
-Before this process, entries were written at release time from memory. Between 3.0.0 and the
+Before this process, entries were written at release time from memory. Between
+3.0.0 and the
 first PR the check covered, nine PRs merged and none of them added an entry.
 
 ## Pre-release verification checklist
@@ -301,8 +324,10 @@ Before tagging:
   without it. Grep the docs for the version being cut and for the one before
   it.
 - [ ] `make test coverage` green.
-- [ ] CI green on the branch being tagged, for the exact commit that will be tagged.
-  `main` for a release off the current major, `release/<major>.<minor>.x` for a patch on an
+- [ ] CI green on the branch being tagged, for the exact commit that will be
+  tagged.
+  `main` for a release off the current major, `release/<major>.<minor>.x` for a
+  patch on an
   older one. Both are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
@@ -316,10 +341,14 @@ After tagging, before announcing:
 - [ ] verify-arch-build matrix completed (all three non-x86 arches green).
 - [ ] APK attached to the GitHub Release.
 - [ ] **Stable releases only**: trigger `gh workflow run publish.yml --repo
-      openwrt-iac/openwrt-iac.github.io` (or wait for the nightly schedule) and confirm
-      `apk update` against `openwrt-iac.github.io/feed/...` finds the new version. For an RC,
-      confirm the opposite instead, that `apk policy uapi` still offers the previous stable:
-      the aggregator filters prereleases at source, so an RC reaching the feed is the bug.
+      openwrt-iac/openwrt-iac.github.io` (or wait for the nightly schedule) and
+      confirm
+      `apk update` against `openwrt-iac.github.io/feed/...` finds the new
+      version. For an RC,
+      confirm the opposite instead, that `apk policy uapi` still offers the
+      previous stable:
+      the aggregator filters prereleases at source, so an RC reaching the feed
+      is the bug.
 - [ ] Smoke install on a real router works.
 - [ ] SBOM attached.
 

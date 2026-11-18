@@ -1,86 +1,208 @@
 # uapi
 
-Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates standard REST verbs into ubus calls so modern edge routers become first-class targets for Infrastructure-as-Code workflows. Primary design validation: serving as the backend for the openwrt-iac Terraform provider.
+Native, lightweight, production-grade HTTP REST API for OpenWrt. Translates
+standard REST verbs into ubus calls so modern edge routers become first-class
+targets for Infrastructure-as-Code workflows. Primary design validation: serving
+as the backend for the openwrt-iac Terraform provider.
 
-This file is the every-turn meta document: project identity, non-negotiable principles, code-style and workflow rules, plus a pointer table to topic-specific docs under `docs/`. Topical normative content (process model, transaction recipe, auth, error envelope, observability, testing, packaging, versioning) lives in the corresponding `docs/<topic>.md` file. When in doubt, the table at the bottom of this file is the index.
+This file is the every-turn meta document: project identity, non-negotiable
+principles, code-style and workflow rules, plus a pointer table to
+topic-specific docs under `docs/`. Topical normative content (process model,
+transaction recipe, auth, error envelope, observability, testing, packaging,
+versioning) lives in the corresponding `docs/<topic>.md` file. When in doubt,
+the table at the bottom of this file is the index.
 
 ---
 
 ## Architectural principles (non-negotiable)
 
-1. **Native integration (direct-to-bus).** Communicate with OpenWrt via ubus through the ucode runtime. No intermediate proxy daemons. No direct `/etc/config/` file manipulation; all writes go through uci's API.
-2. **Zero-bloat footprint.** Target is resource-constrained embedded hardware. Runtime overhead, memory, and storage stay negligible. Reject dependencies that don't earn their keep.
-3. **Atomic transactions.** A single HTTP write request stages → validates → commits → reloads in one transaction. No partial-failure states, no config drift.
-4. **Report state, never correct it.** A read answers what uci holds *and* what the daemon is actually doing, and says so when they disagree (`network/interfaces.effective_proto` is the shape). A write reports whether the effect landed, not merely that the intent was stored (`X-Kernel-Status`). uapi never repairs drift on its own: there is no loop to host one, and the IaC tool above it already is that loop, so a second corrector would fight the first. Persistence is uci's job, boot-time convergence is the daemon's, and being trustworthy about both is uapi's.
+1. **Native integration (direct-to-bus).** Communicate with OpenWrt via ubus
+   through the ucode runtime. No intermediate proxy daemons. No direct
+   `/etc/config/` file manipulation; all writes go through uci's API.
+2. **Zero-bloat footprint.** Target is resource-constrained embedded hardware.
+   Runtime overhead, memory, and storage stay negligible. Reject dependencies
+   that don't earn their keep.
+3. **Atomic transactions.** A single HTTP write request stages → validates →
+   commits → reloads in one transaction. No partial-failure states, no config
+   drift.
+4. **Report state, never correct it.** A read answers what uci holds *and* what
+   the daemon is actually doing, and says so when they disagree
+   (`network/interfaces.effective_proto` is the shape). A write reports whether
+   the effect landed, not merely that the intent was stored (`X-Kernel-Status`).
+   uapi never repairs drift on its own: there is no loop to host one, and the
+   IaC tool above it already is that loop, so a second corrector would fight the
+   first. Persistence is uci's job, boot-time convergence is the daemon's, and
+   being trustworthy about both is uapi's.
 
-Before adopting any library, daemon, persistence layer, or abstraction, check it against these four. Prefer ucode-native solutions; flag anything requiring a long-running auxiliary process, direct `/etc/config/` writes, splitting a logical state change across multiple HTTP requests, or a timer or background pass that would make uapi correct drift rather than report it.
+Before adopting any library, daemon, persistence layer, or abstraction, check it
+against these four. Prefer ucode-native solutions; flag anything requiring a
+long-running auxiliary process, direct `/etc/config/` writes, splitting a
+logical state change across multiple HTTP requests, or a timer or background
+pass that would make uapi correct drift rather than report it.
 
-**Aim.** Every change should move uapi closer to state-of-the-art for an embedded HTTP control plane: correctness, observability, security posture, test discipline, lock-and-state hygiene, drift detection. The roadmap (`docs/roadmap.md`) is not aspirational backlog; it is the gap between today's posture and that target. Prefer hardening that closes a real gap over a feature that adds wire surface for its own sake.
+**Aim.** Every change should move uapi closer to state-of-the-art for an
+embedded HTTP control plane: correctness, observability, security posture, test
+discipline, lock-and-state hygiene, drift detection. The roadmap
+(`docs/roadmap.md`) is not aspirational backlog; it is the gap between today's
+posture and that target. Prefer hardening that closes a real gap over a feature
+that adds wire surface for its own sake.
 
-**Design reference: LuCI.** When a design choice is non-obvious (should this field be required? what should happen on a proto switch? how is this option meant to interact with that one?), read LuCI's source for the same surface before deciding. The OpenWrt SDK feeds carry it at `build/sdk/feeds/luci/`; the form/view code under `modules/luci-mod-*/htdocs/luci-static/resources/view/` and the platform abstractions under `modules/luci-base/htdocs/luci-static/resources/` are the two main entry points. LuCI is the long-baked baseline every OpenWrt operator already lives with; matching its behavior is the safe default. *Deliberately* diverging from it is fine when the divergence is a documented improvement; *accidentally* diverging because we didn't check is the failure mode to avoid.
+**Design reference: LuCI.** When a design choice is non-obvious (should this
+field be required? what should happen on a proto switch? how is this option
+meant to interact with that one?), read LuCI's source for the same surface
+before deciding. The OpenWrt SDK feeds carry it at `build/sdk/feeds/luci/`; the
+form/view code under `modules/luci-mod-*/htdocs/luci-static/resources/view/` and
+the platform abstractions under
+`modules/luci-base/htdocs/luci-static/resources/` are the two main entry points.
+LuCI is the long-baked baseline every OpenWrt operator already lives with;
+matching its behavior is the safe default. *Deliberately* diverging from it is
+fine when the divergence is a documented improvement; *accidentally* diverging
+because we didn't check is the failure mode to avoid.
 
 ## API contract (non-negotiable)
 
-The wire surface is what clients build on. `docs/versioning.md` decides the semver impact of a change. These rules decide what the change must carry.
+The wire surface is what clients build on. `docs/versioning.md` decides the
+semver impact of a change. These rules decide what the change must carry.
 
-- **A wire change** is any change to a path, method, field, type, default, status, error code, header, scope, ETag, or the spellings that a value accepts.
-- **A breaking change goes to the major preparation branch only** (today `v4`). It needs its issue, an announcement in a released 3.x (`docs/deprecations.md` and the "Upcoming" block of the spec), a section in the migration doc of the major, and a CHANGELOG entry that starts with `BREAKING:`.
-- **The commit that changes the wire carries the whole change.** It also updates the resource schema and its descriptions, `build/openapi.json` (`make openapi`), `docs/errors.md` for codes and headers, `docs/resources.md`, and the migration doc for a breaking change.
-- **Schema and response match.** Each field that a response holds is in the schema, and each field of the schema is in the response. Each query parameter is declared in the spec and validated, and a value that the endpoint does not know is refused.
-- **A removal or a rename is a sweep.** Before a path, field, code, header, scope or flag goes, search for every spelling of it in `src/`, `build/`, `cli/`, `docs/`, `tests/`, `examples/`, `README.md` and `CHANGELOG.md`. The gate self-test, the lint scripts and the OpenAPI generator are part of the search. Fix or remove each hit, and list in the PR each hit that stays, with the reason. Write in the migration doc what an upgraded router sees change: ETags, stored tokens and their scopes, defaults, ids. Open an issue on each downstream consumer that uses the name (`terraform-provider-uapi`, `uapi-mcp`, the Pulumi provider, the org site), and change none of their code.
-- **A pagination cursor uses a key that every item has and no two items share.** A test reads the second page.
-- **An anonymous uci section has a positional name.** libuci names it at each load from its ordinal in the package and a hash of its type, so the name moves to another section when an earlier one is deleted. Never use it as an id across requests.
-- **A new package dependency needs a failure reproduced without it**, and the PR states its installed size (principle 2).
+- **A wire change** is any change to a path, method, field, type, default,
+  status, error code, header, scope, ETag, or the spellings that a value
+  accepts.
+- **A breaking change goes to the major preparation branch only** (today `v4`).
+  It needs its issue, an announcement in a released 3.x (`docs/deprecations.md`
+  and the "Upcoming" block of the spec), a section in the migration doc of the
+  major, and a CHANGELOG entry that starts with `BREAKING:`.
+- **The commit that changes the wire carries the whole change.** It also updates
+  the resource schema and its descriptions, `build/openapi.json` (`make
+  openapi`), `docs/errors.md` for codes and headers, `docs/resources.md`, and
+  the migration doc for a breaking change.
+- **Schema and response match.** Each field that a response holds is in the
+  schema, and each field of the schema is in the response. Each query parameter
+  is declared in the spec and validated, and a value that the endpoint does not
+  know is refused.
+- **A removal or a rename is a sweep.** Before a path, field, code, header,
+  scope or flag goes, search for every spelling of it in `src/`, `build/`,
+  `cli/`, `docs/`, `tests/`, `examples/`, `README.md` and `CHANGELOG.md`. The
+  gate self-test, the lint scripts and the OpenAPI generator are part of the
+  search. Fix or remove each hit, and list in the PR each hit that stays, with
+  the reason. Write in the migration doc what an upgraded router sees change:
+  ETags, stored tokens and their scopes, defaults, ids. Open an issue on each
+  downstream consumer that uses the name (`terraform-provider-uapi`, `uapi-mcp`,
+  the Pulumi provider, the org site), and change none of their code.
+- **A pagination cursor uses a key that every item has and no two items share.**
+  A test reads the second page.
+- **An anonymous uci section has a positional name.** libuci names it at each
+  load from its ordinal in the package and a hash of its type, so the name moves
+  to another section when an earlier one is deleted. Never use it as an id
+  across requests.
+- **A new package dependency needs a failure reproduced without it**, and the PR
+  states its installed size (principle 2).
 
 ---
 
 ## Code and documentation style
 
-- **Priorities, in order:** simplicity, maintainability, modularity, readability.
-- **No em-dashes.** Applies to code, comments, docs, commit messages, and design notes.
-- **Comments are rare.** Default to writing none. Naming and structure should carry the meaning.
-- **When a comment is necessary, explain why, not what.** A reader can see what the code does; what they cannot see is the non-obvious constraint, invariant, or workaround that motivated the choice.
+- **Priorities, in order:** simplicity, maintainability, modularity,
+  readability.
+- **No em-dashes.** Applies to code, comments, docs, commit messages, and design
+  notes.
+- **Comments are rare.** Default to writing none. Naming and structure should
+  carry the meaning.
+- **When a comment is necessary, explain why, not what.** A reader can see what
+  the code does; what they cannot see is the non-obvious constraint, invariant,
+  or workaround that motivated the choice.
 
 ### Avoid AI slop (HIGH IMPORTANCE)
 
-Slop is plausible-looking ceremony that adds no signal. It is the single most common failure mode for AI-generated patches and the most expensive to remove in review. Treat every line you write or accept as carrying a justification cost. Apply ruthlessly:
+Slop is plausible-looking ceremony that adds no signal. It is the single most
+common failure mode for AI-generated patches and the most expensive to remove in
+review. Treat every line you write or accept as carrying a justification cost.
+Apply ruthlessly:
 
-- **No narration headers.** No "What this file does" preambles, no `// ---- section ----` banner comments, no multi-paragraph docstrings explaining the obvious. The filename and the first function are the header.
-- **No what-comments.** Anything a competent reader can read directly off the code (`// Loop over keys`, `// Check if X is null`, `// Cleanup`) is slop. Delete it.
-- **One-call-site helpers are suspect.** A helper that wraps a single-line operation in a function is slop unless naming it adds real meaning. Inline.
-- **Defensive code for cases that cannot happen** (given the rest of the code, not the universe) is slop. Either prove the case is reachable and handle it, or delete the guard.
-- **Tautological assertions** that always pass given how the data was constructed earlier in the test are slop. Delete or replace with a real check.
-- **Ceremonial echoes / printfs** in scripts ("starting X", "finished X") are slop unless the script genuinely needs progress narration for a long-running task.
-- **Variables named to give a name to a value used once** are slop unless the name carries non-obvious meaning.
-- **Phrases like "we intentionally", "this is by design", "for clarity", "in order to"** are usually slop tells. Read those comments again; most should be deleted.
+- **No narration headers.** No "What this file does" preambles, no `// ----
+  section ----` banner comments, no multi-paragraph docstrings explaining the
+  obvious. The filename and the first function are the header.
+- **No what-comments.** Anything a competent reader can read directly off the
+  code (`// Loop over keys`, `// Check if X is null`, `// Cleanup`) is slop.
+  Delete it.
+- **One-call-site helpers are suspect.** A helper that wraps a single-line
+  operation in a function is slop unless naming it adds real meaning. Inline.
+- **Defensive code for cases that cannot happen** (given the rest of the code,
+  not the universe) is slop. Either prove the case is reachable and handle it,
+  or delete the guard.
+- **Tautological assertions** that always pass given how the data was
+  constructed earlier in the test are slop. Delete or replace with a real check.
+- **Ceremonial echoes / printfs** in scripts ("starting X", "finished X") are
+  slop unless the script genuinely needs progress narration for a long-running
+  task.
+- **Variables named to give a name to a value used once** are slop unless the
+  name carries non-obvious meaning.
+- **Phrases like "we intentionally", "this is by design", "for clarity", "in
+  order to"** are usually slop tells. Read those comments again; most should be
+  deleted.
 
-The bar for every comment, helper, variable, and assertion: **a senior engineer reading this asks "why is this here?" and gets a non-obvious answer.** If the answer is obvious, delete.
+The bar for every comment, helper, variable, and assertion: **a senior engineer
+reading this asks "why is this here?" and gets a non-obvious answer.** If the
+answer is obvious, delete.
 
-Load-bearing WHY comments stay: historical bug context, hidden constraints, workarounds for upstream behavior, lock-acquire ordering, the kind of thing that would cost the next reader an hour to rediscover. Be honest about which is which.
+Load-bearing WHY comments stay: historical bug context, hidden constraints,
+workarounds for upstream behavior, lock-acquire ordering, the kind of thing that
+would cost the next reader an hour to rediscover. Be honest about which is
+which.
 
 ### Branch + PR workflow
 
-All code changes land via a PR, never via direct push to `main`. Cut a branch (`release/v<version>` for releases, `feat/<topic>` or `fix/<topic>` otherwise), push the branch, open the PR with `gh pr create --base main`, wait for CI to pass on the branch, then merge only when explicitly told. The PR is the reviewable diff; direct-pushing bypasses that gate even when CI passes locally.
+All code changes land via a PR, never via direct push to `main`. Cut a branch
+(`release/v<version>` for releases, `feat/<topic>` or `fix/<topic>` otherwise),
+push the branch, open the PR with `gh pr create --base main`, wait for CI to
+pass on the branch, then merge only when explicitly told. The PR is the
+reviewable diff; direct-pushing bypasses that gate even when CI passes locally.
 
-Force-with-lease is permitted on the branch (typical use: amending a release commit after review fixes). Force-pushing `main` remains forbidden. Tag-creation discipline is unchanged: signed annotated tag after merge, only when explicitly told to tag.
+Force-with-lease is permitted on the branch (typical use: amending a release
+commit after review fixes). Force-pushing `main` remains forbidden. Tag-creation
+discipline is unchanged: signed annotated tag after merge, only when explicitly
+told to tag.
 
 Applies to every repo under the `openwrt-iac` org, not just uapi.
 
-**Every PR body answers three questions.** These are not a checklist to tick; each one has caught a real defect that CI could not, so answer them with evidence and say so plainly when the answer is "no".
+**Every PR body answers three questions.** These are not a checklist to tick;
+each one has caught a real defect that CI could not, so answer them with
+evidence and say so plainly when the answer is "no".
 
-1. **Does this change the wire surface?** Naming the semver impact (`docs/versioning.md`) at authoring time is what stops a breaking change shipping as a patch. A new field, header or status is additive and belongs in a minor; a payload that used to be accepted and now is not is the breaking clause and needs its carve-out stated.
-2. **Was it verified against a real device, or only by CI?** Both are fine answers, but they are not the same claim. Unit tests and CI pass against stubs, so anything asserting what a daemon or the kernel *did* has to be run somewhere real, and the observed output belongs in the PR.
-3. **Was LuCI checked, when the change is a behaviour or design choice?** Per the design-reference rule above. Matching it is the safe default and diverging is fine, but the divergence has to be deliberate and written down, not discovered later.
+1. **Does this change the wire surface?** Naming the semver impact
+   (`docs/versioning.md`) at authoring time is what stops a breaking change
+   shipping as a patch. A new field, header or status is additive and belongs in
+   a minor; a payload that used to be accepted and now is not is the breaking
+   clause and needs its carve-out stated.
+2. **Was it verified against a real device, or only by CI?** Both are fine
+   answers, but they are not the same claim. Unit tests and CI pass against
+   stubs, so anything asserting what a daemon or the kernel *did* has to be run
+   somewhere real, and the observed output belongs in the PR.
+3. **Was LuCI checked, when the change is a behaviour or design choice?** Per
+   the design-reference rule above. Matching it is the safe default and
+   diverging is fine, but the divergence has to be deliberate and written down,
+   not discovered later.
 
-There is no PR template file: PRs here are opened with `gh pr create --body`, which never reads one.
+**PR bodies and commit messages stay short.** They say what changes and why in a
+few sentences, matched to the size of the change. The AI policy of
+openwrt/packages (`AI_POLICY.md`, "Keep it short") applies to the PRs this
+project opens there, and its comment rule applies to every upstream discussion:
+comments are written by the human maintainer, never by an agent.
 
-**Every PR records its changelog entry.** It adds an entry under `## [Unreleased]` in `CHANGELOG.md` that ends with `(#<PR>)`, or it carries the `changelog-not-needed` label when nothing outside the repo changes. CI fails the PR otherwise. A released section is never edited. The rules are in `docs/release-process.md`, section Changelog.
+There is no PR template file: PRs here are opened with `gh pr create --body`,
+which never reads one.
+
+**Every PR records its changelog entry.** It adds an entry under `##
+[Unreleased]` in `CHANGELOG.md` that ends with `(#<PR>)`, or it carries the
+`changelog-not-needed` label when nothing outside the repo changes. CI fails the
+PR otherwise. A released section is never edited. The rules are in
+`docs/release-process.md`, section Changelog.
 
 ---
 
 ## Where the details live
 
-CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-specific normative content lives in `docs/`:
+CLAUDE.md is the every-turn meta document (principles, style, workflow).
+Topic-specific normative content lives in `docs/`:
 
 | Topic | Primary file | Read when... |
 |-------|--------------|--------------|
@@ -107,4 +229,7 @@ CLAUDE.md is the every-turn meta document (principles, style, workflow). Topic-s
 | Field-level deprecation log | `docs/deprecations.md` | Renaming or removing a wire-surface field. |
 | Roadmap (shipped, in-flight, deferred, out of scope) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |
 
-A handful of topics span more than one file. The pointer above names the **primary** home (where the canonical contract lives); incidental coverage in other files is noted inline when relevant. If you find divergence between two files claiming the same rule, the primary is authoritative.
+A handful of topics span more than one file. The pointer above names the
+**primary** home (where the canonical contract lives); incidental coverage in
+other files is noted inline when relevant. If you find divergence between two
+files claiming the same rule, the primary is authoritative.

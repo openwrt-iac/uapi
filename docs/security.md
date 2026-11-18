@@ -84,7 +84,8 @@ What uapi defends against, what it doesn't, and what the operator should do.
    constant-time (byte-XOR-accumulate via `values.constant_time_equals`)
    and the authorize loop iterates every token regardless of where the
    match occurs, so the dominant timing channel is closed. Pre-match work
-   (the `t.salt == null || t.hash == null` skip, hash-function runtime itself) and
+   (the `t.salt == null || t.hash == null` skip, hash-function runtime itself)
+   and
    downstream paths (expiry check, CIDR match, scope lookup) are not
    constant-time. A determined attacker with low-latency local access
    could in principle still extract bits, but tokens are 128 random bits
@@ -128,41 +129,61 @@ Hierarchical, deepest-match wins. Syntax: `<segment>[:<segment>...]:(rw|ro)`.
 
 ### Scopes that grant root
 
-Some write scopes let the holder run code as root directly, or choose a file that a root daemon
+Some write scopes let the holder run code as root directly, or choose a file
+that a root daemon
 writes. Grant each one as if it were `*:rw`:
 
 - `system:cron_jobs:rw` adds a crontab line, and crond runs its command as root.
 - `system:authorized_keys:rw` adds an SSH key that logs in as root.
 - `system:password:rw` sets the root password.
-- `packages:installed:rw` installs a package, and its install script runs as root.
-- `uhttpd:instances:rw` sets the document root and the CGI, Lua and ucode prefixes of an
-  instance, so it chooses which programs uhttpd runs as root and which files it serves.
-- `dhcp:odhcpd:rw` sets `leasetrigger`, a program that odhcpd runs as root on each lease change.
-- `dhcp:dnsmasq:rw` sets `leasefile`, a file that dnsmasq opens as root and rewrites with its
+- `packages:installed:rw` installs a package, and its install script runs as
+  root.
+- `uhttpd:instances:rw` sets the document root and the CGI, Lua and ucode
+  prefixes of an
+  instance, so it chooses which programs uhttpd runs as root and which files it
+  serves.
+- `dhcp:odhcpd:rw` sets `leasetrigger`, a program that odhcpd runs as root on
+  each lease change.
+- `dhcp:dnsmasq:rw` sets `leasefile`, a file that dnsmasq opens as root and
+  rewrites with its
   leases.
 
-The list is not complete: several uci options name a script that a daemon runs as root.
-A parent scope includes them, so `system:rw` grants the first three. Deepest match wins,
-so `system:rw` with `system:cron_jobs:ro` keeps the system writes and denies cron writes.
+The list is not complete: several uci options name a script that a daemon runs
+as root.
+A parent scope includes them, so `system:rw` grants the first three. Deepest
+match wins,
+so `system:rw` with `system:cron_jobs:ro` keeps the system writes and denies
+cron writes.
 
-One read scope deserves the same care. `system:cron_jobs:ro`, and every scope above it up
-to `*:ro`, returns each root crontab command in full, and a command can carry a credential.
-Keep secrets in a 0600 file that the command reads, rather than on the crontab line.
+One read scope deserves the same care. `system:cron_jobs:ro`, and every scope
+above it up
+to `*:ro`, returns each root crontab command in full, and a command can carry a
+credential.
+Keep secrets in a 0600 file that the command reads, rather than on the crontab
+line.
 
 ### Values that a daemon reads later
 
-An init script copies some stored values into a daemon's config file or into a shell command
-without quoting, and root reads the result. In the curated values that an audit for 3.2.0 found,
-uapi refuses the characters that end the line or the argument, so that a value cannot add a
-directive, a command or a command argument. The check runs when a write goes through uapi, so a
+An init script copies some stored values into a daemon's config file or into a
+shell command
+without quoting, and root reads the result. In the curated values that an audit
+for 3.2.0 found,
+uapi refuses the characters that end the line or the argument, so that a value
+cannot add a
+directive, a command or a command argument. The check runs when a write goes
+through uapi, so a
 value that LuCI, `uci` or another writer stored stays until a write replaces it.
 
-`/raw/` checks a value only for what uci can store, never for what a daemon reads.
-`raw:<package>:rw` with a domain scope of that package counts as a root scope for each package
+`/raw/` checks a value only for what uci can store, never for what a daemon
+reads.
+`raw:<package>:rw` with a domain scope of that package counts as a root scope
+for each package
 that a root daemon or script reads.
 
-uapi checks the dnsmasq config after a reload with `dnsmasq --test`, as root and outside the jail
-that procd gives dnsmasq, so a `conf-script` in that config runs there too. Only `raw:dhcp:rw` with
+uapi checks the dnsmasq config after a reload with `dnsmasq --test`, as root and
+outside the jail
+that procd gives dnsmasq, so a `conf-script` in that config runs there too. Only
+`raw:dhcp:rw` with
 a domain scope of `dhcp`, a root scope already, can write such a line.
 
 ### Audit consequence
@@ -173,12 +194,24 @@ identifies the responsible party, not a hash.
 
 ## Authentication-design exclusions
 
-uapi defends the surface above with bearer tokens deliberately, not by accident. Two design candidates that would seem natural but are explicitly rejected:
+uapi defends the surface above with bearer tokens deliberately, not by accident.
+Two design candidates that would seem natural but are explicitly rejected:
 
-- **No rpcd sessions.** The OpenWrt rpcd session model (login endpoint returning a session id, session expiry, ubus `session.*` namespace) is well-trodden by LuCI but adds a runtime store, session-eviction machinery, and a separate failure mode for "session expired vs token revoked." uapi's bearer-token model is simpler at the cost of forcing the operator to mint tokens out of band.
-- **No HTTP login endpoint.** Tokens are minted via the `uapi-token` CLI on the router or via `POST /tokens` (which itself requires a token with `uapi:tokens:rw`). There is no bootstrap "POST /login with username+password to get a token" path. The first token is always minted locally; everything after composes from that.
+- **No rpcd sessions.** The OpenWrt rpcd session model (login endpoint returning
+  a session id, session expiry, ubus `session.*` namespace) is well-trodden by
+  LuCI but adds a runtime store, session-eviction machinery, and a separate
+  failure mode for "session expired vs token revoked." uapi's bearer-token model
+  is simpler at the cost of forcing the operator to mint tokens out of band.
+- **No HTTP login endpoint.** Tokens are minted via the `uapi-token` CLI on the
+  router or via `POST /tokens` (which itself requires a token with
+  `uapi:tokens:rw`). There is no bootstrap "POST /login with username+password
+  to get a token" path. The first token is always minted locally; everything
+  after composes from that.
 
-Both could be added without breaking the wire surface (new endpoints are non-breaking). The deliberate exclusion is to keep the security model auditable as "the set of tokens in `/etc/config/uapi`" with no second authentication path to reason about.
+Both could be added without breaking the wire surface (new endpoints are
+non-breaking). The deliberate exclusion is to keep the security model auditable
+as "the set of tokens in `/etc/config/uapi`" with no second authentication path
+to reason about.
 
 ## Public endpoints
 
@@ -188,15 +221,63 @@ Three endpoints skip the bearer-token requirement:
 - `GET /openapi.json`: spec discovery.
 - `GET /schema/*`: per-resource JSON Schema (codegen input).
 
-All three still pass the TLS check; only the bearer requirement is waived. Plain HTTP from a non-loopback source still returns `403 tls_required` before the public-endpoint short-circuit runs.
+All three still pass the TLS check; only the bearer requirement is waived. Plain
+HTTP from a non-loopback source still returns `403 tls_required` before the
+public-endpoint short-circuit runs.
 
-uapi reads and parses the body of a POST, PUT or PATCH before the bearer check, on every path. `json()` takes about 1.6 KB for each object or array, so 1 MiB of `[{},{},...]` took 560 MB. A body over 256 KiB, sent with a `Content-Length` or chunked, or a body with more than 2000 `{` and `[` characters, answers `413 payload_too_large` before the parse, which keeps the parse of a body without a token under about 13 MB (measured with ucode 2026.01.16 on x86_64). A `Content-Length` that uapi does not read as a whole number from 0 to 262144 answers 413 too, because uhttpd reads such a value in another way: on a 64-bit router it wraps a value of 2^32 or more. uhttpd hands a chunked body over de-chunked and with no `Content-Length`, and uapi reads it until uhttpd closes the pipe after the last chunk. uapi joins the parts of a body as it reads them, so a body that arrives a byte at a time takes about as much memory as one that arrives whole.
+uapi reads and parses the body of a POST, PUT or PATCH before the bearer check,
+on every path. `json()` takes about 1.6 KB for each object or array, so 1 MiB of
+`[{},{},...]` took 560 MB. A body over 256 KiB, sent with a `Content-Length` or
+chunked, or a body with more than 2000 `{` and `[` characters, answers `413
+payload_too_large` before the parse, which keeps the parse of a body without a
+token under about 13 MB (measured with ucode 2026.01.16 on x86_64). A
+`Content-Length` that uapi does not read as a whole number from 0 to 262144
+answers 413 too, because uhttpd reads such a value in another way: on a 64-bit
+router it wraps a value of 2^32 or more. uhttpd hands a chunked body over
+de-chunked and with no `Content-Length`, and uapi reads it until uhttpd closes
+the pipe after the last chunk. uapi joins the parts of a body as it reads them,
+so a body that arrives a byte at a time takes about as much memory as one that
+arrives whole.
 
-uhttpd parses what the request process leaves unread as the next request on the connection. So before it answers, on every path and the public endpoints included, uapi reads and drops what is left of every body that uhttpd hands over. uhttpd does not hand over some bodies whole, and uapi cannot drop what follows them: uhttpd ends a chunked body at a chunk extension, parses a trailer after the last chunk as a new request, and reads a `Transfer-Encoding` value other than `chunked` in lower case, such as `Chunked`, as no body.
+uhttpd parses what the request process leaves unread as the next request on the
+connection. So before it answers, on every path and the public endpoints
+included, uapi reads and drops what is left of every body that uhttpd hands
+over. uhttpd does not hand over some bodies whole, and uapi cannot drop what
+follows them: uhttpd ends a chunked body at a chunk extension, parses a trailer
+after the last chunk as a new request, and reads a `Transfer-Encoding` value
+other than `chunked` in lower case, such as `Chunked`, as no body.
 
-A body has to arrive in full within 10 s of the start of the request process. uhttpd hands it over a blocking pipe, where a process that waits for a body that does not come holds one of the `max_requests` of uhttpd, 3 by default and shared with LuCI, until the script timeout of uhttpd, 60 s by default. uapi makes the pipe non-blocking with `ucode-mod-io`. So a POST, PUT or PATCH whose client declares a body and sends less, sends it too slowly, or does not send the last chunk of a chunked body, gets `400 bad_request` after about 10 s, before the bearer check, and syslog gets a `uapi-body-deadline` line (`docs/operations.md`). The drop of what is left of a body stops at the same deadline. So a request that answers without reading its body gets its normal answer 10 s after it started when that body does not arrive, and logs the same line: a 413, a POST to `/healthz`, or a GET or DELETE with a declared body. A DELETE has then already been applied. uapi checks the deadline when it finds the pipe empty, so that a drop after a write that took longer still reads a body that has arrived. A body that keeps arriving faster than uapi drops it is therefore bounded by its `Content-Length` or its last chunk and by the script timeout, not by the deadline. The deadline bounds each request, not how many a client opens one after another. Without `ucode-mod-io`, uapi reads a body from the blocking pipe with no deadline, and logs that once when uhttpd starts.
+A body has to arrive in full within 10 s of the start of the request process.
+uhttpd hands it over a blocking pipe, where a process that waits for a body that
+does not come holds one of the `max_requests` of uhttpd, 3 by default and shared
+with LuCI, until the script timeout of uhttpd, 60 s by default. uapi makes the
+pipe non-blocking with `ucode-mod-io`. So a POST, PUT or PATCH whose client
+declares a body and sends less, sends it too slowly, or does not send the last
+chunk of a chunked body, gets `400 bad_request` after about 10 s, before the
+bearer check, and syslog gets a `uapi-body-deadline` line
+(`docs/operations.md`). The drop of what is left of a body stops at the same
+deadline. So a request that answers without reading its body gets its normal
+answer 10 s after it started when that body does not arrive, and logs the same
+line: a 413, a POST to `/healthz`, or a GET or DELETE with a declared body. A
+DELETE has then already been applied. uapi checks the deadline when it finds the
+pipe empty, so that a drop after a write that took longer still reads a body
+that has arrived. A body that keeps arriving faster than uapi drops it is
+therefore bounded by its `Content-Length` or its last chunk and by the script
+timeout, not by the deadline. The deadline bounds each request, not how many a
+client opens one after another. Without `ucode-mod-io`, uapi reads a body from
+the blocking pipe with no deadline, and logs that once when uhttpd starts.
 
-uhttpd keeps the connection open after every answer of the handler, and nothing that uapi sends makes it close the connection. After a body that missed the deadline, uhttpd parses what the client sends next on the connection, the rest of that body included, as a new request, and answers it. For a client on its own connection this changes nothing that it could not do with a request of its own. It matters behind a reverse proxy that streams request bodies to uhttpd and reuses its connections to uhttpd for other clients: the rest of a late body would reach uhttpd as a request, and its answer would go to the request that the proxy sends next on that connection. Such a proxy should buffer each request body before it forwards it, as nginx does by default, or close a connection to uhttpd on which it did not finish sending a request.
+uhttpd keeps the connection open after every answer of the handler, and nothing
+that uapi sends makes it close the connection. After a body that missed the
+deadline, uhttpd parses what the client sends next on the connection, the rest
+of that body included, as a new request, and answers it. For a client on its own
+connection this changes nothing that it could not do with a request of its own.
+It matters behind a reverse proxy that streams request bodies to uhttpd and
+reuses its connections to uhttpd for other clients: the rest of a late body
+would reach uhttpd as a request, and its answer would go to the request that the
+proxy sends next on that connection. Such a proxy should buffer each request
+body before it forwards it, as nginx does by default, or close a connection to
+uhttpd on which it did not finish sending a request.
 
 ## TLS posture
 
@@ -294,9 +375,11 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
 4. **Pin tokens to source CIDRs.** `allowed_cidrs` defends against token
    theft from outside the management network. Prefixes of either family are
    accepted and a list may mix them. A caller is matched only against entries of
-   its own family, so on a dual-stack router `0.0.0.0/0` alone still denies every
+   its own family, so on a dual-stack router `0.0.0.0/0` alone still denies
+   every
    IPv6 caller; "any address" means listing both `0.0.0.0/0` and `::/0`. That
-   asymmetry is deliberate: an allowlist that silently widened to a second address
+   asymmetry is deliberate: an allowlist that silently widened to a second
+   address
    family would be a worse failure than one that denies.
 5. **Set token expiry.** `--expires-in 90d` on every minted token forces
    rotation. The HTTP rotation endpoint (`POST /tokens`, which takes
@@ -319,7 +402,10 @@ Specifically NOT logged:
 
 ## Reporting issues
 
-Do not file a security issue as a public GitHub issue. Use GitHub's private vulnerability
-reporting, linked from [`SECURITY.md`](../SECURITY.md), which also sets out what counts as a
-vulnerability in a daemon that is root-privileged by design, and which of the decisions above
+Do not file a security issue as a public GitHub issue. Use GitHub's private
+vulnerability
+reporting, linked from [`SECURITY.md`](../SECURITY.md), which also sets out what
+counts as a
+vulnerability in a daemon that is root-privileged by design, and which of the
+decisions above
 are recorded choices rather than defects.

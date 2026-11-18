@@ -2,7 +2,10 @@
 
 One script per resource, demonstrating CRUD against a running uapi instance.
 
-Each script requires `UAPI_BASE` and `UAPI_TOKEN` in the environment and fails closed if either is unset. They make their requests with `curl -k` so a self-signed uhttpd cert does not get in the way; remove that flag in production once you have proper TLS.
+Each script requires `UAPI_BASE` and `UAPI_TOKEN` in the environment and fails
+closed if either is unset. They make their requests with `curl -k` so a
+self-signed uhttpd cert does not get in the way; remove that flag in production
+once you have proper TLS.
 
 ```sh
 export UAPI_BASE=https://192.168.1.1/api/v3
@@ -14,4 +17,6 @@ export UAPI_TOKEN=<bearer printed by 'uapi-token create' on the router>
 ./system.sh
 ```
 
-The scripts intentionally do not clean up after themselves on the happy path so you can inspect the result in LuCI; each ends with a "to delete: curl ..." reminder.
+The scripts intentionally do not clean up after themselves on the happy path so
+you can inspect the result in LuCI; each ends with a "to delete: curl ..."
+reminder.

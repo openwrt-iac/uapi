@@ -1,8 +1,14 @@
 # Lock and resource-state audit
 
-This audit lists every site in `src/` and `cli/` that takes a file descriptor, a pipe, an flock, a ubus connection or a uci cursor. For each site it records which paths release the resource (normal return, early return, error, a propagated `die()`) and what happens on a path that does not.
+This audit lists every site in `src/` and `cli/` that takes a file descriptor, a
+pipe, an flock, a ubus connection or a uci cursor. For each site it records
+which paths release the resource (normal return, early return, error, a
+propagated `die()`) and what happens on a path that does not.
 
-uapi runs fork-per-request (`docs/concurrency.md`). A descriptor that a request does not close ends with the request process. That backstop does not cover a lock that a child process still holds, a lock held across a long operation, or a file left on disk, so those are what the proofs below look at.
+uapi runs fork-per-request (`docs/concurrency.md`). A descriptor that a request
+does not close ends with the request process. That backstop does not cover a
+lock that a child process still holds, a lock held across a long operation, or a
+file left on disk, so those are what the proofs below look at.
 
 ucode has no `try/finally`. The critical paths use this pattern:
 
@@ -20,19 +26,44 @@ if (caught != null) die(caught);
 grep -rnE '\.(open|fdopen|popen|opendir|mkstemp|pipe|writefile|lock|connect|cursor)\(|uloop\.|_lock_one\(|acquire[a-z_]*\(' src/ cli/
 ```
 
-The alternatives catch, in order: `fs.open` and `fs_mod.open`, the other `fs` calls that return a handle or write a file, `fd.lock`, `bus.connect` and `ubus_mod.connect`, `uci_mod.cursor`, any use of uloop, and the lock entry points of `src/lib/transaction.uc`: `_lock_one(`, the injected `acquire(`, `default_acquire_pkg(`, and `acquire_pkg_waiting(`, which `uapi-token` calls.
+The alternatives catch, in order: `fs.open` and `fs_mod.open`, the other `fs`
+calls that return a handle or write a file, `fd.lock`, `bus.connect` and
+`ubus_mod.connect`, `uci_mod.cursor`, any use of uloop, and the lock entry
+points of `src/lib/transaction.uc`: `_lock_one(`, the injected `acquire(`,
+`default_acquire_pkg(`, and `acquire_pkg_waiting(`, which `uapi-token` calls.
 
-The earlier command was `grep -rn 'fs\.open\|fs\.popen\|\.lock(' src/ cli/`. It found 36 lines, one of them a comment. It missed every ubus connection, every uci cursor, the two `fs_mod.open` calls of the snapshot and the restore in `src/lib/bus.uc`, and the places where `multi_transaction()`, `transaction()` and `with_lock()` take their locks, because those call `_lock_one()` or `acquire()` and not `.lock(` itself.
+The earlier command was `grep -rn 'fs\.open\|fs\.popen\|\.lock(' src/ cli/`. It
+found 36 lines, one of them a comment. It missed every ubus connection, every
+uci cursor, the two `fs_mod.open` calls of the snapshot and the restore in
+`src/lib/bus.uc`, and the places where `multi_transaction()`, `transaction()`
+and `with_lock()` take their locks, because those call `_lock_one()` or
+`acquire()` and not `.lock(` itself.
 
-The pattern leaves out three things on purpose. `fs.readfile` and `fs.lsdir` return a value and hold nothing. Calls to `transaction()`, `multi_transaction()` and `with_lock()` from other modules take a lock, but they release it through the entry point's own proof, so they are listed by function in [What runs while a lock is held](#what-runs-while-a-lock-is-held) rather than as sites. The ubus `defer`, `subscriber` and `listener` calls hold resources too, but nothing in the tree uses them. `system()` holds a child until it exits, and only `default_reload()` and `run_test()` call it, each on a line inside the row of its `fs.mkstemp()`.
+The pattern leaves out three things on purpose. `fs.readfile` and `fs.lsdir`
+return a value and hold nothing. Calls to `transaction()`, `multi_transaction()`
+and `with_lock()` from other modules take a lock, but they release it through
+the entry point's own proof, so they are listed by function in [What runs while
+a lock is held](#what-runs-while-a-lock-is-held) rather than as sites. The ubus
+`defer`, `subscriber` and `listener` calls hold resources too, but nothing in
+the tree uses them. `system()` holds a child until it exits, and only
+`default_reload()` and `run_test()` call it, each on a line inside the row of
+its `fs.mkstemp()`.
 
-`make lint-lock-audit` runs the command above, as written here, and fails when a site is in no row of the table below, when a site is in two rows, when a row holds no site, or when a "covers all N sites" count in this file or in `CLAUDE.md` is not the number of lines the command prints.
+`make lint-lock-audit` runs the command above, as written here, and fails when a
+site is in no row of the table below, when a site is in two rows, when a row
+holds no site, or when a "covers all N sites" count in this file or in
+`CLAUDE.md` is not the number of lines the command prints.
 
 ## Summary
 
-**This audit covers all 60 sites that the command finds.** It used to cover 16 of the 36 lines that the earlier command found, and nine modules were absent from it: `error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`, `token_store`, `dhcp.leases`, `dhcp.leases6` and `dhcp.servers`.
+**This audit covers all 60 sites that the command finds.** It used to cover 16
+of the 36 lines that the earlier command found, and nine modules were absent
+from it: `error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`,
+`token_store`, `dhcp.leases`, `dhcp.leases6` and `dhcp.servers`.
 
-Every descriptor, pipe and lock below is released on every in-request exit path. What the audit did find is listed under [Open findings](#open-findings): a request that uhttpd kills can stop between its commit and its reload.
+Every descriptor, pipe and lock below is released on every in-request exit path.
+What the audit did find is listed under [Open findings](#open-findings): a
+request that uhttpd kills can stop between its commit and its reload.
 
 ## Sites
 
@@ -88,7 +119,13 @@ Every descriptor, pipe and lock below is released on every in-request exit path.
 
 ## What runs while a lock is held
 
-Every uapi lock is taken with `LOCK_NB`, so no request waits for one. A request that finds it taken answers 423 at once. `uapi-token` polls instead, for up to 10 s. libuci's own flocks on a package file block, so a load or a commit waits while LuCI or a shell holds them. The restore tries that flock for up to 5 s instead. A load holds it while it parses the file, and a commit while it reads the file again, writes and syncs it. How long a lock is held is set by what runs under it:
+Every uapi lock is taken with `LOCK_NB`, so no request waits for one. A request
+that finds it taken answers 423 at once. `uapi-token` polls instead, for up to
+10 s. libuci's own flocks on a package file block, so a load or a commit waits
+while LuCI or a shell holds them. The restore tries that flock for up to 5 s
+instead. A load holds it while it parses the file, and a commit while it reads
+the file again, writes and syncs it. How long a lock is held is set by what runs
+under it:
 
 | Entry point | Locks | Callers | Held across |
 |-------------|-------|---------|-------------|
@@ -99,25 +136,97 @@ Every uapi lock is taken with `LOCK_NB`, so no request waits for one. A request 
 
 Four of these hold a lock longer than the write itself takes.
 
-- **The reloads hold the lock for up to 20 s in all.** `default_reload()` waits for the scripts of a request, those of the restore included, for 20 s in all, and then answers without them, so the global SH and the EX locks are held for 20 s of reloads at most, plus the checks and the wait of a restore on libuci's flock, and every non-uci write answers 423 meanwhile. A script still running then runs on without the lock, and the next write can commit and reload beside it: its reload of the same service waits for the lock of `procd_lock` within its own 20 s. Before, a script that did not end, or a process that it left running with its pipe open, held the locks until uhttpd killed the request at its script timeout, and the client got no answer from uapi.
-- **The stay-up watch sleeps under the lock.** A reload of `unbound` or `unbound-uci-ext` with a running daemon, which a `dhcp` or `system` write also runs while procd holds a trigger for unbound, polls `service list` every 100 ms for up to 2 s (the `sleep()` in `default_watch()`), still holding the global SH and the EX locks. The restore runs the watch again. While it waits, every non-uci write answers 423. The watch needs the lock, because another writer's restart of unbound would read as a stop.
-- **The dnsmasq check parses the whole config under the lock.** After a reload of `dnsmasq` by a write that commits `dhcp`, `run_test()` runs `dnsmasq --test` for each instance, and the restore runs it again, still holding the global SH and the EX locks. The parse grows with the config: a `conf-dir` with 500k `address=/x/` lines, as adblock writes, took 0.5 to 0.6 s and 34 to 42 MB of RSS on two x86 machines. While it runs, every non-uci write answers 423. Each run is killed after 10 s, which leaves the write committed with `X-Reload-Status: unverified`, see the row of `run_test()`.
-- **The apk paths hold the global EX across network I/O.** `apk add`, `apk update` and the retry fetch from the feeds, and uapi sets no timeout of its own. Every uci write answers 423 until apk returns. Only uhttpd's script timeout (60 s unless configured) ends the request, and the kill then releases the lock while apk still runs, see the next section.
+- **The reloads hold the lock for up to 20 s in all.** `default_reload()` waits
+  for the scripts of a request, those of the restore included, for 20 s in all,
+  and then answers without them, so the global SH and the EX locks are held for
+  20 s of reloads at most, plus the checks and the wait of a restore on libuci's
+  flock, and every non-uci write answers 423 meanwhile. A script still running
+  then runs on without the lock, and the next write can commit and reload beside
+  it: its reload of the same service waits for the lock of `procd_lock` within
+  its own 20 s. Before, a script that did not end, or a process that it left
+  running with its pipe open, held the locks until uhttpd killed the request at
+  its script timeout, and the client got no answer from uapi.
+- **The stay-up watch sleeps under the lock.** A reload of `unbound` or
+  `unbound-uci-ext` with a running daemon, which a `dhcp` or `system` write also
+  runs while procd holds a trigger for unbound, polls `service list` every 100
+  ms for up to 2 s (the `sleep()` in `default_watch()`), still holding the
+  global SH and the EX locks. The restore runs the watch again. While it waits,
+  every non-uci write answers 423. The watch needs the lock, because another
+  writer's restart of unbound would read as a stop.
+- **The dnsmasq check parses the whole config under the lock.** After a reload
+  of `dnsmasq` by a write that commits `dhcp`, `run_test()` runs `dnsmasq
+  --test` for each instance, and the restore runs it again, still holding the
+  global SH and the EX locks. The parse grows with the config: a `conf-dir` with
+  500k `address=/x/` lines, as adblock writes, took 0.5 to 0.6 s and 34 to 42 MB
+  of RSS on two x86 machines. While it runs, every non-uci write answers 423.
+  Each run is killed after 10 s, which leaves the write committed with
+  `X-Reload-Status: unverified`, see the row of `run_test()`.
+- **The apk paths hold the global EX across network I/O.** `apk add`, `apk
+  update` and the retry fetch from the feeds, and uapi sets no timeout of its
+  own. Every uci write answers 423 until apk returns. Only uhttpd's script
+  timeout (60 s unless configured) ends the request, and the kill then releases
+  the lock while apk still runs, see the next section.
 
 ## When the request process is killed
 
-uhttpd sends `SIGKILL` to the request process when the client closes the connection after its request body has arrived and before the response, and when its script timeout expires (60 s unless `script_timeout` is set). A Terraform interrupt or a client-side timeout does the first. No release code runs, so this is where the sites rely on process exit:
+uhttpd sends `SIGKILL` to the request process when the client closes the
+connection after its request body has arrived and before the response, and when
+its script timeout expires (60 s unless `script_timeout` is set). A Terraform
+interrupt or a client-side timeout does the first. No release code runs, so this
+is where the sites rely on process exit:
 
-- **The request's own descriptors, ubus connection and uci cursor** close at exit. That is safe: nothing else holds them, and the cursor writes no delta file.
-- **A lock** is released at exit. uapi's lock files are opened with `O_CLOEXEC`, so a child that runs under the lock (an init script, `apk`, `passwd`, `wg`, `ip`) holds no copy of the descriptor. uhttpd kills the request process alone, so that child runs on without the lock, and the next write can take the lock and start its own reload or `apk` beside it. `apk` has its own lock on its database. Before `O_CLOEXEC` the child held a copy, which kept the serialization while it worked but kept the lock until it exited, and a daemon that it started outside procd kept the lock for as long as the daemon ran, with every write behind that lock answering 423.
-- **Temp files** are not removed by an exit. A request killed between the open and the rename leaves `<file>.uapi.tmp` beside `/etc/crontabs/root` or `/etc/dropbear/authorized_keys`, which crond and dropbear do not read and the next write unlinks first, `/var/run/uapi.wg.psk` (mode 0600, unlinked by the next peer write that stages a key), a `.tmp` file in `/var/run/uapi-metrics` or `/var/run/uapi-ratelimit`, which the next write of the same name replaces and no reader opens, `<hash>.json.<pid>` or `.swept.tmp` in `/var/run/uapi-idempotency`, which no reader opens and the first sweep after the TTL unlinks, and `ring.json.<pid>` in `/var/run/uapi-error-ring`, which only a later request with the same pid replaces, so each such kill can leave one copy of the ring until reboot. A kill inside libuci's commit leaves `/etc/config/.<pkg>.uci-XXXXXX` on flash, which libuci never lists and nothing removes. A kill inside the restore before its rename leaves `.<pkg>.uapi-restore` beside the package file and the package as the failed write left it, and the next restore of that package unlinks the temp file first. A kill after the rename leaves the package restored and no temp file.
-- **The transaction itself** is not safe; the write journal reports the interruption, see the open finding below.
+- **The request's own descriptors, ubus connection and uci cursor** close at
+  exit. That is safe: nothing else holds them, and the cursor writes no delta
+  file.
+- **A lock** is released at exit. uapi's lock files are opened with `O_CLOEXEC`,
+  so a child that runs under the lock (an init script, `apk`, `passwd`, `wg`,
+  `ip`) holds no copy of the descriptor. uhttpd kills the request process alone,
+  so that child runs on without the lock, and the next write can take the lock
+  and start its own reload or `apk` beside it. `apk` has its own lock on its
+  database. Before `O_CLOEXEC` the child held a copy, which kept the
+  serialization while it worked but kept the lock until it exited, and a daemon
+  that it started outside procd kept the lock for as long as the daemon ran,
+  with every write behind that lock answering 423.
+- **Temp files** are not removed by an exit. A request killed between the open
+  and the rename leaves `<file>.uapi.tmp` beside `/etc/crontabs/root` or
+  `/etc/dropbear/authorized_keys`, which crond and dropbear do not read and the
+  next write unlinks first, `/var/run/uapi.wg.psk` (mode 0600, unlinked by the
+  next peer write that stages a key), a `.tmp` file in `/var/run/uapi-metrics`
+  or `/var/run/uapi-ratelimit`, which the next write of the same name replaces
+  and no reader opens, `<hash>.json.<pid>` or `.swept.tmp` in
+  `/var/run/uapi-idempotency`, which no reader opens and the first sweep after
+  the TTL unlinks, and `ring.json.<pid>` in `/var/run/uapi-error-ring`, which
+  only a later request with the same pid replaces, so each such kill can leave
+  one copy of the ring until reboot. A kill inside libuci's commit leaves
+  `/etc/config/.<pkg>.uci-XXXXXX` on flash, which libuci never lists and nothing
+  removes. A kill inside the restore before its rename leaves
+  `.<pkg>.uapi-restore` beside the package file and the package as the failed
+  write left it, and the next restore of that package unlinks the temp file
+  first. A kill after the rename leaves the package restored and no temp file.
+- **The transaction itself** is not safe; the write journal reports the
+  interruption, see the open finding below.
 
 ## Open findings
 
-These are recorded here, not fixed. A finding leaves this list when it is fixed, and the CHANGELOG entry of the fix describes it.
+These are recorded here, not fixed. A finding leaves this list when it is fixed,
+and the CHANGELOG entry of the fix describes it.
 
-- **A killed request stops the recipe where it is; the interruption is reported, not repaired.** `transaction.uc::run_inner()` commits, then reloads, checks and restores, all in the request process. If uhttpd kills that process during the reload, uci keeps the new config, no stay-up check or restore runs, and the client gets no answer. Since the write journal landed, the in-flight write is recorded before the commit, under the package lock so the record and the commit are ordered together, and removed when the recipe ends on a path the request can still reach; a record whose process is gone is reported by `/diagnostics` under `interrupted_writes`, with the packages, the request id and whether the reload had started. What stays refused by design: one request may not finish or restore a write another request started, because the scopes of the request that started the write are the only authority over what its revert may touch. The kill still releases the lock while the reload runs on, so the next write to the package can commit and reload beside it; that race is unchanged. The same holds for `multi_transaction()` and for the non-uci writes through `with_lock()` (crontab, apk, authorized_keys, password).
+- **A killed request stops the recipe where it is; the interruption is reported,
+  not repaired.** `transaction.uc::run_inner()` commits, then reloads, checks
+  and restores, all in the request process. If uhttpd kills that process during
+  the reload, uci keeps the new config, no stay-up check or restore runs, and
+  the client gets no answer. Since the write journal landed, the in-flight write
+  is recorded before the commit, under the package lock so the record and the
+  commit are ordered together, and removed when the recipe ends on a path the
+  request can still reach; a record whose process is gone is reported by
+  `/diagnostics` under `interrupted_writes`, with the packages, the request id
+  and whether the reload had started. What stays refused by design: one request
+  may not finish or restore a write another request started, because the scopes
+  of the request that started the write are the only authority over what its
+  revert may touch. The kill still releases the lock while the reload runs on,
+  so the next write to the package can commit and reload beside it; that race is
+  unchanged. The same holds for `multi_transaction()` and for the non-uci writes
+  through `with_lock()` (crontab, apk, authorized_keys, password).
 
 ## Tricky case: `non_uci.uc::replace_private_file()`
 
@@ -138,29 +247,82 @@ if (fs.stat(tmp)?.size != length(content)) {
 Four exit paths to verify, in order:
 
 1. `fs.open` returns null: early return. No fd held.
-2. `fs.chmod` fails: it returns null rather than throwing, and the `try` is only a guard. `f.write` and `f.close` still run on the next lines, so the fd is released. The tolerance is deliberate (some filesystems return EPERM): content correctness is the priority, and the file then gets the default umask permissions.
-3. Normal path: `f.write` and `f.close` run unconditionally after the chmod, so the fd is released before the result is judged.
-4. Short or failed write: ucode's `close()` drops `fclose`'s result, and `flush()` answers inverted on the ucode that CI runs, so a filesystem that runs out of space shows up as a temp file on disk shorter than `content`. That unlinks the temp file and returns false. Until 3.1.0 nothing checked, and an empty temp file was renamed over the original.
+2. `fs.chmod` fails: it returns null rather than throwing, and the `try` is only
+   a guard. `f.write` and `f.close` still run on the next lines, so the fd is
+   released. The tolerance is deliberate (some filesystems return EPERM):
+   content correctness is the priority, and the file then gets the default umask
+   permissions.
+3. Normal path: `f.write` and `f.close` run unconditionally after the chmod, so
+   the fd is released before the result is judged.
+4. Short or failed write: ucode's `close()` drops `fclose`'s result, and
+   `flush()` answers inverted on the ucode that CI runs, so a filesystem that
+   runs out of space shows up as a temp file on disk shorter than `content`.
+   That unlinks the temp file and returns false. Until 3.1.0 nothing checked,
+   and an empty temp file was renamed over the original.
 
-The following `fs.rename(tmp, path)` is checked: a failure unlinks `tmp` and returns false. The rename keeps the replacement atomic.
+The following `fs.rename(tmp, path)` is checked: a failure unlinks `tmp` and
+returns false. The rename keeps the replacement atomic.
 
 ## Patterns confirmed
 
-- **fd: open / use / close.** Every `fs.open` is followed by an early return (when the open returned null) or an unconditional `.close()` on the success path. No site holds an fd across a return without closing it, except the ubus connections and uci cursors, which live for the request by design.
-- **pipe: popen / read / close.** Every `fs.popen` is followed by `.close()`, which both releases the pipe and yields the child's exit code.
-- **child with a time bound: mkstemp / system / close.** `run_test()` creates an unlinked file, runs `--test` through a `system()` that waits for that child alone and kills it at the bound, and closes the file on every path. `default_reload()` creates its files the same way and closes its copies on every path, but waits for its scripts through the file of exit codes and kills none of them.
-- **flock: acquire / try-fn / release / die-if-caught.** `transaction()`, `multi_transaction()` and `with_lock()` release OUTSIDE the try block, AFTER the catch, BEFORE the conditional `die(caught)`.
-- **2-level locks.** `default_acquire_pkg()` and `multi_transaction()` take the global SH, then each per-package EX in sorted order. A failure part way releases the per-package locks already held and the global one. The release runs in reverse order (per-package, then global).
-- **Temp file then rename.** `replace_private_file()` and `state_dir.replace()`, which the idempotency cache, the metrics, the rate limiter and the error ring write through, check the size on disk and the rename, and unlink the temp file when either fails. The restore in `bus.uc` checks the rename too, and reads the temp file back in place of a size check. No site checks a `flush()`, because ucode's `close()` drops the result of `fclose` and `flush()` answers inverted on the ucode that CI runs (`docs/ucode-quirks.md`).
+- **fd: open / use / close.** Every `fs.open` is followed by an early return
+  (when the open returned null) or an unconditional `.close()` on the success
+  path. No site holds an fd across a return without closing it, except the ubus
+  connections and uci cursors, which live for the request by design.
+- **pipe: popen / read / close.** Every `fs.popen` is followed by `.close()`,
+  which both releases the pipe and yields the child's exit code.
+- **child with a time bound: mkstemp / system / close.** `run_test()` creates an
+  unlinked file, runs `--test` through a `system()` that waits for that child
+  alone and kills it at the bound, and closes the file on every path.
+  `default_reload()` creates its files the same way and closes its copies on
+  every path, but waits for its scripts through the file of exit codes and kills
+  none of them.
+- **flock: acquire / try-fn / release / die-if-caught.** `transaction()`,
+  `multi_transaction()` and `with_lock()` release OUTSIDE the try block, AFTER
+  the catch, BEFORE the conditional `die(caught)`.
+- **2-level locks.** `default_acquire_pkg()` and `multi_transaction()` take the
+  global SH, then each per-package EX in sorted order. A failure part way
+  releases the per-package locks already held and the global one. The release
+  runs in reverse order (per-package, then global).
+- **Temp file then rename.** `replace_private_file()` and `state_dir.replace()`,
+  which the idempotency cache, the metrics, the rate limiter and the error ring
+  write through, check the size on disk and the rename, and unlink the temp file
+  when either fails. The restore in `bus.uc` checks the rename too, and reads
+  the temp file back in place of a size check. No site checks a `flush()`,
+  because ucode's `close()` drops the result of `fclose` and `flush()` answers
+  inverted on the ucode that CI runs (`docs/ucode-quirks.md`).
 
 ## The wireguard peer apply
 
-`wg.uc` shells out to `wg set` after the commit, inside the locked region, to push peer changes to the kernel (see `docs/architecture.md` § Transaction recipe step 7). Two things about it are load-bearing here.
+`wg.uc` shells out to `wg set` after the commit, inside the locked region, to
+push peer changes to the kernel (see `docs/architecture.md` § Transaction recipe
+step 7). Two things about it are load-bearing here.
 
-The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than a unique one. That is safe only because every uci transaction holds the per-package exclusive lock for `network`, so two peer applies can never be in flight at once. If that lock discipline ever changes, this needs a unique path. Mode `0600` is set before the content is written, following the same order as `replace_private_file` above, and the file is unlinked immediately after the command returns. The write is checked as in `replace_private_file`, because `wg` reads an empty key file as no key. `apply_peer()` stages the key before it removes or sets the peer, so a key that the tmpfs cannot hold fails the apply with the peer as the kernel holds it, and no peer is removed for it. The restore then sets every peer of the interface again from uci and stops at the first one that fails, so on a full tmpfs it answers `reload_failed_unrecovered` unless no peer of that interface has a key that wg can read in the restored config.
+The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than
+a unique one. That is safe only because every uci transaction holds the
+per-package exclusive lock for `network`, so two peer applies can never be in
+flight at once. If that lock discipline ever changes, this needs a unique path.
+Mode `0600` is set before the content is written, following the same order as
+`replace_private_file` above, and the file is unlinked immediately after the
+command returns. The write is checked as in `replace_private_file`, because `wg`
+reads an empty key file as no key. `apply_peer()` stages the key before it
+removes or sets the peer, so a key that the tmpfs cannot hold fails the apply
+with the peer as the kernel holds it, and no peer is removed for it. The restore
+then sets every peer of the interface again from uci and stops at the first one
+that fails, so on a full tmpfs it answers `reload_failed_unrecovered` unless no
+peer of that interface has a key that wg can read in the restored config.
 
-`wg show <iface> dump` is read on the reconcile path, and for the `runtime` of a GET of `network/wireguard_peers`, which holds no lock. A write does not read it, and neither does a GET in a `/batch` that writes. Its first line holds the private key of the interface and the second field of each peer line its preshared key, so that output must never be logged or surfaced in an error message. `kernel_peers()` keeps only the other fields.
+`wg show <iface> dump` is read on the reconcile path, and for the `runtime` of a
+GET of `network/wireguard_peers`, which holds no lock. A write does not read it,
+and neither does a GET in a `/batch` that writes. Its first line holds the
+private key of the interface and the second field of each peer line its
+preshared key, so that output must never be logged or surfaced in an error
+message. `kernel_peers()` keeps only the other fields.
 
 ## Scope
 
-This audit is about **logical** resource-state correctness. Every site releases explicitly inside the request on every path the request itself takes. The fork-per-request model closes what remains at exit, and [When the request process is killed](#when-the-request-process-is-killed) says where that backstop is enough and where it is not.
+This audit is about **logical** resource-state correctness. Every site releases
+explicitly inside the request on every path the request itself takes. The
+fork-per-request model closes what remains at exit, and [When the request
+process is killed](#when-the-request-process-is-killed) says where that backstop
+is enough and where it is not.

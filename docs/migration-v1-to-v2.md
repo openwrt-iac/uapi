@@ -28,7 +28,8 @@ uapi` over v1.2.x automatically removes the v1 prefix from uhttpd's
    v2 expectations. Test against a staging router.
 3. `apk upgrade uapi`. The install hook will `uhttpd reload` automatically;
    existing tokens in `/etc/config/uapi` are preserved (the file is a conffile).
-4. Verify `GET /api/v2/healthz` returns `{"status":"ok", "version":"2.0.0", ...}`.
+4. Verify `GET /api/v2/healthz` returns `{"status":"ok", "version":"2.0.0",
+   ...}`.
    The new URL prefix is `/api/v2/`; the install hook handles the uhttpd
    prefix migration. v1 clients hitting `/api/v1/` get a 404 from uhttpd
    because the old prefix is no longer registered (this is intentional - the
@@ -234,7 +235,8 @@ immediately - the token store is re-read on every request.
 
 Two safe additions for Terraform-style and dashboard-style clients:
 
-- **POST retries are no longer dangerous.** Send `Idempotency-Key: <client-uuid>`
+- **POST retries are no longer dangerous.** Send `Idempotency-Key:
+  <client-uuid>`
   with each POST; if the network blips and you retry the same payload, you
   get the original response back instead of a duplicate resource. uhttpd's
   CGI env strips the header by default, so pass `?idempotency_key=<id>` as
@@ -249,14 +251,17 @@ Two safe additions for Terraform-style and dashboard-style clients:
 GET, so changing a zone invalidated the rule's ETag. That was dropped again
 during the 2.x line, and this section described it as current until 2.5.0.
 the ETag helper in `src/lib/handler.uc` hashes the response body with
-`runtime` stripped and nothing else, so an ETag reflects only its own resource. Cross-resource
+`runtime` stripped and nothing else, so an ETag reflects only its own resource.
+Cross-resource
 consistency is enforced at `resource.validate()` time on every write instead;
 `docs/architecture.md` carries the current contract.
 
 Declared dependencies at v2.0 launch:
 
-- `firewall.rules`, `firewall.redirects`, `firewall.forwardings` → `firewall:zone`
-- `sqm.queues`, `network.routes`, `dhcp.servers`, `network.wireguard_peers` → `network:interface`
+- `firewall.rules`, `firewall.redirects`, `firewall.forwardings` →
+  `firewall:zone`
+- `sqm.queues`, `network.routes`, `dhcp.servers`, `network.wireguard_peers` →
+  `network:interface`
 - `network.bridge_vlans` → `network:device`
 
 If your client was already correctly handling 412 on If-Match writes, this is
@@ -266,7 +271,8 @@ strictly more accurate - no behavior change required.
 
 - The atomic-transaction recipe (snapshot → validate → commit → reload →
   restore on failure).
-- The error envelope shape (`code`, `message`, `request_id`, optional `errors[]`).
+- The error envelope shape (`code`, `message`, `request_id`, optional
+  `errors[]`).
 - The bearer-token + scope-tree authn/authz model (scopes are additive; new
   ones added, no existing ones renamed or removed).
 - The fork-per-request CGI execution model.
