@@ -74,7 +74,29 @@ define Package/uapi/postinst
 # code until something else restarted uhttpd. Force a restart so new code is
 # in effect immediately after `apk add` / `apk upgrade uapi`, unless the
 # operator disabled uhttpd: a restart would start it.
-/etc/init.d/uhttpd enabled && /etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+if /etc/init.d/uhttpd enabled; then
+	/etc/init.d/uhttpd restart >/dev/null 2>&1
+	# A uhttpd that cannot load a plugin exits within a second, and procd then reports the
+	# instance stopped. The feed of a release is rebuilt after it, so `apk add uapi` can pull a
+	# uhttpd-mod-ucode of a newer build than the uhttpd of the image, and none of the uhttpd
+	# packages pins the version of the others.
+	sleep 1
+	running=$$(ubus call service list '{"name":"uhttpd"}' 2>/dev/null \
+		| jsonfilter -e '@.uhttpd.instances.*.running' 2>/dev/null)
+	if [ -z "$$running" ] || echo "$$running" | grep -qx false; then
+cat <<EOF
+
+uapi: uhttpd is not running after its restart, so neither uapi nor LuCI answers.
+  The usual cause is a uhttpd and a uhttpd-mod-* of different builds:
+    apk list -I 'uhttpd*'
+  Align them on the feed, then restart uhttpd:
+    apk upgrade uhttpd uhttpd-mod-ubus uhttpd-mod-ucode uhttpd-mod-lua
+    /etc/init.d/uhttpd restart
+  The error of uhttpd is in: logread -e uhttpd
+
+EOF
+	fi
+fi
 # These hold a 24 h replay window and state that a reboot clears too, so each starts empty at an
 # install or upgrade. An older uapi kept four of them in /tmp, 0755 with files 0644, and its cached
 # VM writes them until the restart above. Only an entry that is itself a directory owned by root is

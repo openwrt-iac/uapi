@@ -2,6 +2,8 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
+tests/vm/align_uhttpd.sh
+
 passed=0
 failed=0
 failures=""
