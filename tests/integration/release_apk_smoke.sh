@@ -30,6 +30,9 @@ push_file "$APK_PATH" /tmp/uapi.apk
 echo "--- mark the VM insecure for non-localhost testing ---"
 $SSH 'touch /etc/uapi.insecure'
 
+echo "--- align the uhttpd family on the feed ---"
+tests/vm/align_uhttpd.sh
+
 echo "--- apk add the uapi package ---"
 $SSH 'apk add --allow-untrusted /tmp/uapi.apk 2>&1 | tail -10'
 

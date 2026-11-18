@@ -4,6 +4,25 @@
 
 A router running **OpenWrt 25.12+** (the first apk-based release line). Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`, `uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log,io}` mods, and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's `Depends:` makes apk resolve them automatically.
 
+### Align the uhttpd packages first
+
+The feed of an OpenWrt release is rebuilt after the release, and `uhttpd` and its plugins
+(`uhttpd-mod-ubus`, `uhttpd-mod-ucode`, `uhttpd-mod-lua`) do not pin each other's version.
+`apk add uapi` installs `uhttpd-mod-ucode` from the current feed and leaves the `uhttpd` of
+the image in place. When the two come from different builds, uhttpd does not start, and
+neither uapi nor LuCI answers. On 25.12.6, `uhttpd` 2026.08.24 of the image with
+`uhttpd-mod-ucode` 2026.11.05 of the feed stops at its start with `Unable to open ucode
+handler`, and `uhttpd` 2026.11.05 with `uhttpd-mod-ubus` 2026.08.24 segfaults on the first
+LuCI request. Upgrade the whole family before installing uapi:
+
+```sh
+apk update
+apk upgrade uhttpd uhttpd-mod-ubus uhttpd-mod-ucode uhttpd-mod-lua
+```
+
+`apk upgrade` skips a name that is not installed, so the line fits any router. When uhttpd
+does not run after the install, the post-install hook says so and prints these commands.
+
 ## Install from a local .apk
 
 Get the package onto the router (any way you like: scp, USB stick, sysupgrade overlay), then:
