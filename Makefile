@@ -158,6 +158,9 @@ lint-emdash:
 # reviewer's editor flags. Code blocks, tables, headings, link definitions and
 # single-token lines (long URLs) are exempt, and CHANGELOG.md is checked only above
 # its first released section, which a release never edits.
+# awk runs in the C locale and counts characters by dropping UTF-8 continuation
+# bytes: mawk and busybox awk count bytes in any locale, so `→` read as 3 columns
+# in CI and 1 under gawk. The regexes avoid `{m,n}`, on which mawk 1.3.4 panics.
 lint-md-lines:
 	@command -v git >/dev/null 2>&1 || { \
 		echo "lint-md-lines needs git to list tracked files; without it this check passes without scanning anything"; \
@@ -166,7 +169,8 @@ lint-md-lines:
 		echo "lint-md-lines cannot use this checkout, so the scan would be empty. git said:"; \
 		sed 's/^/  /' /tmp/uapi-mdlines-git.err; \
 		exit 1; }
-	@hits=$$(git ls-files -z -- '*.md' | xargs -0 -r awk 'FNR == 1 { fence = 0; released = 0 } FILENAME ~ /CHANGELOG\.md$$/ && /^## \[/ && !/Unreleased/ { released = 1 } released { next } /^[[:space:]]{0,3}(```|~~~)/ { fence = !fence; next } fence { next } length($$0) <= 80 { next } /^[[:space:]]*\|/ { next } /^#{1,6}[[:space:]]/ { next } /^[[:space:]]*\[[^]]*\]:/ { next } { s = $$0; sub(/^[[:space:]]+/, "", s); if (index(s, " ") == 0 && index(s, "\t") == 0) next; print FILENAME ":" FNR ": " length($$0) " columns" }' 2>/dev/null || true); \
+	@hits=$$(git ls-files -z -- '*.md' | LC_ALL=C xargs -0 -r awk 'FNR == 1 { fence = 0; released = 0 } FILENAME ~ /CHANGELOG\.md$$/ && /^## \[/ && !/Unreleased/ { released = 1 } released { next } /^[[:space:]]*(```|~~~)/ { fence = !fence; next } fence { next } { w = $$0; gsub(/[\200-\277]/, "", w); w = length(w) } w <= 80 { next } /^[[:space:]]*\|/ { next } /^#+[[:space:]]/ { next } /^[[:space:]]*\[[^]]*\]:/ { next } { s = $$0; sub(/^[[:space:]]+/, "", s); if (index(s, " ") == 0 && index(s, "\t") == 0) next; print FILENAME ":" FNR ": " w " columns" }') || { \
+		echo "lint-md-lines: awk failed, so the scan is incomplete"; exit 1; }; \
 	if [ -n "$$hits" ]; then \
 		echo "$$hits"; \
 		echo ""; echo "Markdown prose over 80 columns (wrap it; code, tables, headings and unbreakable lines are exempt)"; exit 1; \
