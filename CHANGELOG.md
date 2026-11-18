@@ -1,38 +1,155 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project will be documented in this file. Format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
+uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
 
-- **`/diagnostics` reports interrupted writes.** A write now records itself in `/var/run/uapi-interrupted-writes/` before the commit, under the package lock so the record and the commit are ordered together, and removes the record when the recipe ends on any path the request can still reach. When uhttpd kills the request process after the commit (client disconnect or `script_timeout`), the record survives: `GET /diagnostics` lists it under `interrupted_writes` with the packages, the request id, the staged sections and whether the reload had started. Report only; uapi still never finishes or restores another request's write. Additive. (#341)
+- **`/diagnostics` reports interrupted writes.** A write now records itself in
+  `/var/run/uapi-interrupted-writes/` before the commit, under the package lock
+  so the record and the commit are ordered together, and removes the record when
+  the recipe ends on any path the request can still reach. When uhttpd kills the
+  request process after the commit (client disconnect or `script_timeout`), the
+  record survives: `GET /diagnostics` lists it under `interrupted_writes` with
+  the packages, the request id, the staged sections and whether the reload had
+  started. Report only; uapi still never finishes or restores another request's
+  write. Additive. (#341)
 
-- **Request bounds are configurable from `config limits` in `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers` (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time constants; they are now read per request, with the compiled values as defaults and accepted ranges that ignore out-of-bounds values. An option can lower a bound and not raise it above its default: the body is parsed before the bearer check, so a raised body bound let a request without a token make the parse take hundreds of MB, and the time bounds at their defaults already fill uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`. Additive. (#339) (#374)
-- **`POST /batch` results carry per-operation headers.** Each entry of the 207 `results` array now has a `headers` object with the headers of the sub-request's own response: its own `X-Request-Id`, and on a 200 the `ETag` of the body, so a client can chain an `If-Match` after a batch. The reload and kernel outcome stays on the 207, one for the whole batch, because a sub-request runs no commit and no reload of its own. Additive. (#338)
+- **Request bounds are configurable from `config limits` in
+  `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers`
+  (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time
+  constants; they are now read per request, with the compiled values as defaults
+  and accepted ranges that ignore out-of-bounds values. An option can lower a
+  bound and not raise it above its default: the body is parsed before the bearer
+  check, so a raised body bound let a request without a token make the parse
+  take hundreds of MB, and the time bounds at their defaults already fill
+  uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`.
+  Additive. (#339) (#374)
+- **`POST /batch` results carry per-operation headers.** Each entry of the 207
+  `results` array now has a `headers` object with the headers of the
+  sub-request's own response: its own `X-Request-Id`, and on a 200 the `ETag` of
+  the body, so a client can chain an `If-Match` after a batch. The reload and
+  kernel outcome stays on the 207, one for the whole batch, because a
+  sub-request runs no commit and no reload of its own. Additive. (#338)
 
 ### Changed
 
-- **On OpenWrt main, a wireguard peer write waits for netifd to restart the interface.** The ucode proto handler of OpenWrt main restarts a wireguard interface on every peer change, and the kernel apply ran during that restart, so it skipped the interface: a peer that wg refuses was committed with a 200, and the interface stayed down. The apply now waits up to 8 s for the restart to end, and a restart that does not end fails the write with 500 `reload_failed_restored` and a restore. The handler sets all the peers of an interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down (#370). The 200 that this replaces left a peer committed and the interface down, a state that no caller could rely on, which is the carve-out of `docs/versioning.md` for a tightening in a patch. OpenWrt 25.12 is unchanged. (#366)
+- **On OpenWrt main, a wireguard peer write waits for netifd to restart the
+  interface.** The ucode proto handler of OpenWrt main restarts a wireguard
+  interface on every peer change, and the kernel apply ran during that restart,
+  so it skipped the interface: a peer that wg refuses was committed with a 200,
+  and the interface stayed down. The apply now waits up to 8 s for the restart
+  to end, and a restart that does not end fails the write with 500
+  `reload_failed_restored` and a restore. The handler sets all the peers of an
+  interface or none, so the same 500 answers a write to an interface that
+  another stored peer already keeps down (#370). The 200 that this replaces left
+  a peer committed and the interface down, a state that no caller could rely on,
+  which is the carve-out of `docs/versioning.md` for a tightening in a patch.
+  OpenWrt 25.12 is unchanged. (#366)
 
 ### Deprecated
 
-- **The v4 announcement says that `dhcp/leases` will refuse an unknown `family`.** 3.x ignores the parameter, so `?family=ipv6` or `?family=` lists the IPv4 leases. In v4 a value other than `v4` or `v6` answers 400 `bad_request`, as `getDHCPLeases` of LuCI refuses an unknown family. (#391)
-- **The v4 boolean change names the reader of each option and the three defaults that move with it.** The announcement of #310 said that every boolean field would follow the uci blob converter. In v4 each option reads as the daemon that consumes it reads it, an absent `system.log_remote` reads true and an absent `usteer/config.syslog` false, as logd and usteer read them, and `sqm/queues.enabled` reads true only for a value that sqm-scripts takes as 1. `docs/deprecations.md` and the "Upcoming in v4" block of the spec now say so. (#369)
-- **The v4 announcement says what the v4 branch does.** It no longer says that this major accepts both forms of every announced change: that holds for `ip6prefix` alone. It adds what v4 also changes: a `wireless/interfaces` write with no `mode` stores none, a write that only disables a section with a stored error is refused, the `path` label of the metrics follows the new paths, and the `dhcp:leases6` scope goes with its endpoint. It says that `runtime` becomes required, not documented everywhere. The removal of `managed` and of the adopt flow is withdrawn: an anonymous section is named from its position in the file at each load, so its name cannot be a client's id, and adopt is how a client gets one that holds. (#376)
+- **The v4 announcement says that `dhcp/leases` will refuse an unknown
+  `family`.** 3.x ignores the parameter, so `?family=ipv6` or `?family=` lists
+  the IPv4 leases. In v4 a value other than `v4` or `v6` answers 400
+  `bad_request`, as `getDHCPLeases` of LuCI refuses an unknown family. (#391)
+- **The v4 boolean change names the reader of each option and the three defaults
+  that move with it.** The announcement of #310 said that every boolean field
+  would follow the uci blob converter. In v4 each option reads as the daemon
+  that consumes it reads it, an absent `system.log_remote` reads true and an
+  absent `usteer/config.syslog` false, as logd and usteer read them, and
+  `sqm/queues.enabled` reads true only for a value that sqm-scripts takes as 1.
+  `docs/deprecations.md` and the "Upcoming in v4" block of the spec now say so.
+  (#369)
+- **The v4 announcement says what the v4 branch does.** It no longer says that
+  this major accepts both forms of every announced change: that holds for
+  `ip6prefix` alone. It adds what v4 also changes: a `wireless/interfaces` write
+  with no `mode` stores none, a write that only disables a section with a stored
+  error is refused, the `path` label of the metrics follows the new paths, and
+  the `dhcp:leases6` scope goes with its endpoint. It says that `runtime`
+  becomes required, not documented everywhere. The removal of `managed` and of
+  the adopt flow is withdrawn: an anonymous section is named from its position
+  in the file at each load, so its name cannot be a client's id, and adopt is
+  how a client gets one that holds. (#376)
 
 ### Fixed
 
-- **The install says when uhttpd does not run after its restart.** The feed of 25.12.6 was rebuilt after the release, and `uhttpd` and its plugins do not pin each other's version, so `apk add uapi` installed `uhttpd-mod-ucode` 2026.11.05 next to the `uhttpd` 2026.08.24 of the image, which then does not start: neither uapi nor LuCI answered, and the install said nothing. The post-install hook now checks that procd runs every uhttpd instance, and when one does not, prints the commands that upgrade `uhttpd` and its `uhttpd-mod-*` together. `docs/installation.md` asks for that upgrade before the install. (#395)
-- **The spec of `GET /diagnostics` requires `limits` again, and the docs say what a batch result, the rulesets and the `kernel_ops` hook do.** Two `required` lists in one schema dropped `limits`. The docs said that `package` is not a required check, that a batch result carries the reload headers of its sub-request, and that `kernel_ops` receives `replace` and `patch`, which it never does. (#389)
-- **A wireguard peer apply refuses an `allowed_ips` marker that follows a space.** `wg set` drops every space of the list before it reads a `+` or `-` marker. So a stored entry with a space before its marker got past the check, and made the list an incremental update, which adds prefixes to what the peer holds instead of replacing them. On 25.12 the space had to be a tab, a line break or an escaped space such as `\040`. On OpenWrt main a plain space in a `list` entry was enough. The apply and the restore now refuse such an entry, as they refuse a marker at the start. (#386)
-- **Every list that pages declares `limit`, `cursor` and its paging headers in the spec.** No list declared the `limit` and `cursor` query parameters, and the read-only lists (`dhcp/leases`, `dhcp/leases6`, `network/wireguard_kernel_peers`) did not declare the `Link` and `X-Next-Cursor` headers that they send. The pattern of `X-Next-Cursor` also refused the cursor of a lease, which holds `.` or `:`. (#385)
-- **`/diagnostics` keeps reporting an interrupted write after a throw or a pid reuse.** A write that threw after its commit, such as a restore that died, removed its journal record, so `interrupted_writes` did not report a write whose commit may have landed. The record now stays, as it does when uhttpd kills the request. A record was also named by the pid alone, and a later process that got the same pid hid it while it ran, or overwrote and removed it. A record is now named by the pid and the start time of its process, and a running process hides only its own record. (#384)
-- **`network/wireguard_kernel_peers` names the interfaces whose kernel it could not read.** When `wg show <interface> dump` failed on an up interface, or printed a shape that uapi does not read, the collection listed nothing for it and answered `200 []`, which reads as a kernel that holds no drift. It still lists nothing for such an interface, and now names it in the new `X-Kernel-Unread` response header, on the list and on a read by id. An absent header means that every up interface was read. The header is new, which is an addition under `docs/versioning.md`. (#380)
-- **The description of `dhcp/servers.dhcpv4` says what an unset value does on each platform.** It said that dnsmasq serves on every value but `disabled`. Since openwrt `6f30f08d0e`, the dnsmasq of OpenWrt main reads an unset `dhcpv4` as `disabled`, so a server that reads `dhcpv4: null` serves DHCPv4 on 25.12 and not on OpenWrt main. The description and `docs/resources.md` now say so, and that LuCI's setup writes `server`. Test 57 checks the unset case on both platforms, where it had stopped testing it. (#381)
-- **`network/wireguard_peers` reads, routes and restores peers as the ucode proto handler of OpenWrt main does.** Where netifd has `/lib/netifd/proto/wireguard.uc`, uapi modeled the shell handler of 25.12 and reported keys and prefixes that the platform refused. It now follows that handler: no `printf %b` expansion of a stored value, one entry per list item, one route per entry with the prefix length that `int()` reads, no route for a peer without a key, and `disabled` and `route_allowed_ips` on only for `1`. A prefix length with a leading zero is refused under the shell handler only, where netifd reads it as octal. OpenWrt 25.12 is unchanged. (#366)
-- **`dhcp/leases6` lists the leases of odhcpd, and `dhcp/servers` counts them.** odhcpd writes each lease on a line that starts with `#`, which the reader skipped, so the list was always empty and `runtime.active_leases_v6_iface` was always 0. The reader now takes those lines, as rpcd-mod-luci does for LuCI, from the `leasefile` of the odhcpd section, and skips a line whose fields do not parse. `interface` is the device that odhcpd names, for example `br-lan`. `dhcp/servers` matches it to the `l3_device` of its interface, and counts a lease of several addresses once. (#367)
-- **The next page of `dhcp/leases` and `dhcp/leases6` loads.** A lease has no `id`, so the cursor read `c_null`, and following it answered 400 `invalid_cursor` after the first page of 100 leases. The cursor is now the `ip` of the last entry of the page. (#367)
+- **The install says when uhttpd does not run after its restart.** The feed of
+  25.12.6 was rebuilt after the release, and `uhttpd` and its plugins do not pin
+  each other's version, so `apk add uapi` installed `uhttpd-mod-ucode`
+  2026.11.05 next to the `uhttpd` 2026.08.24 of the image, which then does not
+  start: neither uapi nor LuCI answered, and the install said nothing. The
+  post-install hook now checks that procd runs every uhttpd instance, and when
+  one does not, prints the commands that upgrade `uhttpd` and its `uhttpd-mod-*`
+  together. `docs/installation.md` asks for that upgrade before the install.
+  (#395)
+- **The spec of `GET /diagnostics` requires `limits` again, and the docs say
+  what a batch result, the rulesets and the `kernel_ops` hook do.** Two
+  `required` lists in one schema dropped `limits`. The docs said that `package`
+  is not a required check, that a batch result carries the reload headers of its
+  sub-request, and that `kernel_ops` receives `replace` and `patch`, which it
+  never does. (#389)
+- **A wireguard peer apply refuses an `allowed_ips` marker that follows a
+  space.** `wg set` drops every space of the list before it reads a `+` or `-`
+  marker. So a stored entry with a space before its marker got past the check,
+  and made the list an incremental update, which adds prefixes to what the peer
+  holds instead of replacing them. On 25.12 the space had to be a tab, a line
+  break or an escaped space such as `\040`. On OpenWrt main a plain space in a
+  `list` entry was enough. The apply and the restore now refuse such an entry,
+  as they refuse a marker at the start. (#386)
+- **Every list that pages declares `limit`, `cursor` and its paging headers in
+  the spec.** No list declared the `limit` and `cursor` query parameters, and
+  the read-only lists (`dhcp/leases`, `dhcp/leases6`,
+  `network/wireguard_kernel_peers`) did not declare the `Link` and
+  `X-Next-Cursor` headers that they send. The pattern of `X-Next-Cursor` also
+  refused the cursor of a lease, which holds `.` or `:`. (#385)
+- **`/diagnostics` keeps reporting an interrupted write after a throw or a pid
+  reuse.** A write that threw after its commit, such as a restore that died,
+  removed its journal record, so `interrupted_writes` did not report a write
+  whose commit may have landed. The record now stays, as it does when uhttpd
+  kills the request. A record was also named by the pid alone, and a later
+  process that got the same pid hid it while it ran, or overwrote and removed
+  it. A record is now named by the pid and the start time of its process, and a
+  running process hides only its own record. (#384)
+- **`network/wireguard_kernel_peers` names the interfaces whose kernel it could
+  not read.** When `wg show <interface> dump` failed on an up interface, or
+  printed a shape that uapi does not read, the collection listed nothing for it
+  and answered `200 []`, which reads as a kernel that holds no drift. It still
+  lists nothing for such an interface, and now names it in the new
+  `X-Kernel-Unread` response header, on the list and on a read by id. An absent
+  header means that every up interface was read. The header is new, which is an
+  addition under `docs/versioning.md`. (#380)
+- **The description of `dhcp/servers.dhcpv4` says what an unset value does on
+  each platform.** It said that dnsmasq serves on every value but `disabled`.
+  Since openwrt `6f30f08d0e`, the dnsmasq of OpenWrt main reads an unset
+  `dhcpv4` as `disabled`, so a server that reads `dhcpv4: null` serves DHCPv4 on
+  25.12 and not on OpenWrt main. The description and `docs/resources.md` now say
+  so, and that LuCI's setup writes `server`. Test 57 checks the unset case on
+  both platforms, where it had stopped testing it. (#381)
+- **`network/wireguard_peers` reads, routes and restores peers as the ucode
+  proto handler of OpenWrt main does.** Where netifd has
+  `/lib/netifd/proto/wireguard.uc`, uapi modeled the shell handler of 25.12 and
+  reported keys and prefixes that the platform refused. It now follows that
+  handler: no `printf %b` expansion of a stored value, one entry per list item,
+  one route per entry with the prefix length that `int()` reads, no route for a
+  peer without a key, and `disabled` and `route_allowed_ips` on only for `1`. A
+  prefix length with a leading zero is refused under the shell handler only,
+  where netifd reads it as octal. OpenWrt 25.12 is unchanged. (#366)
+- **`dhcp/leases6` lists the leases of odhcpd, and `dhcp/servers` counts them.**
+  odhcpd writes each lease on a line that starts with `#`, which the reader
+  skipped, so the list was always empty and `runtime.active_leases_v6_iface` was
+  always 0. The reader now takes those lines, as rpcd-mod-luci does for LuCI,
+  from the `leasefile` of the odhcpd section, and skips a line whose fields do
+  not parse. `interface` is the device that odhcpd names, for example `br-lan`.
+  `dhcp/servers` matches it to the `l3_device` of its interface, and counts a
+  lease of several addresses once. (#367)
+- **The next page of `dhcp/leases` and `dhcp/leases6` loads.** A lease has no
+  `id`, so the cursor read `c_null`, and following it answered 400
+  `invalid_cursor` after the first page of 100 leases. The cursor is now the
+  `ip` of the last entry of the page. (#367)
 
 ## [3.4.1] - 2026-11-05
 

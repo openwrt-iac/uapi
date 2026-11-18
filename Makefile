@@ -1,4 +1,4 @@
-.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs lint-lock-audit gate-selftest
+.PHONY: lint-response-nullability test test-unit test-integration test-property coverage bench soak lint lint-emdash lint-md-lines lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults openapi openapi-check openapi-validate stage sbom vm-setup vm-start vm-stop vm-wait clean help lint-doc-refs lint-lock-audit gate-selftest
 
 UCODE ?= ucode
 UNIT_PATHS = -L tests -L src/lib
@@ -14,6 +14,7 @@ help:
 	@echo "  soak               long-duration read-only load test (UAPI_BASE + UAPI_TOKEN required)"
 	@echo "  lint               em-dash check + ucode syntax check"
 	@echo "  lint-emdash        forbid em-dashes in tracked sources"
+	@echo "  lint-md-lines      fail on Markdown prose lines over 80 columns"
 	@echo "  lint-syntax        ucode -c on all .uc files"
 	@echo "  lint-reserved      fail on Terraform-reserved schema property names"
 	@echo "  lint-refs          fail on dangling \$\$ref strings in build/openapi.json"
@@ -125,7 +126,7 @@ test-integration: vm-setup vm-start
 	@trap 'tests/vm/stop.sh' EXIT INT TERM; \
 	 tests/vm/wait.sh && tests/integration/run.sh
 
-lint: lint-emdash lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability lint-lock-audit
+lint: lint-emdash lint-md-lines lint-syntax lint-reserved lint-refs lint-openapi-shape lint-defaults lint-wire-names lint-doc-refs lint-response-nullability lint-lock-audit
 
 # Tracked files only, via git rather than a hand-kept directory list. The list had
 # gone stale: it named a `web` directory deleted in 2.0.3, and a missing path makes
@@ -151,6 +152,24 @@ lint-emdash:
 	if [ -n "$$hits" ]; then \
 		echo "$$hits"; \
 		echo ""; echo "em-dash found in tracked files (forbidden per CLAUDE.md style)"; exit 1; \
+	fi
+
+# Tracked Markdown prose wraps at 80 columns, the markdownlint MD013 limit that a
+# reviewer's editor flags. Code blocks, tables, headings, link definitions and
+# single-token lines (long URLs) are exempt, and CHANGELOG.md is checked only above
+# its first released section, which a release never edits.
+lint-md-lines:
+	@command -v git >/dev/null 2>&1 || { \
+		echo "lint-md-lines needs git to list tracked files; without it this check passes without scanning anything"; \
+		exit 1; }
+	@git rev-parse --git-dir >/dev/null 2>/tmp/uapi-mdlines-git.err || { \
+		echo "lint-md-lines cannot use this checkout, so the scan would be empty. git said:"; \
+		sed 's/^/  /' /tmp/uapi-mdlines-git.err; \
+		exit 1; }
+	@hits=$$(git ls-files -z -- '*.md' | xargs -0 -r awk 'FNR == 1 { fence = 0; released = 0 } FILENAME ~ /CHANGELOG\.md$$/ && /^## \[/ && !/Unreleased/ { released = 1 } released { next } /^[[:space:]]{0,3}(```|~~~)/ { fence = !fence; next } fence { next } length($$0) <= 80 { next } /^[[:space:]]*\|/ { next } /^#{1,6}[[:space:]]/ { next } /^[[:space:]]*\[[^]]*\]:/ { next } { s = $$0; sub(/^[[:space:]]+/, "", s); if (index(s, " ") == 0 && index(s, "\t") == 0) next; print FILENAME ":" FNR ": " length($$0) " columns" }' 2>/dev/null || true); \
+	if [ -n "$$hits" ]; then \
+		echo "$$hits"; \
+		echo ""; echo "Markdown prose over 80 columns (wrap it; code, tables, headings and unbreakable lines are exempt)"; exit 1; \
 	fi
 
 lint-syntax:

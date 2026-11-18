@@ -12,10 +12,16 @@ modes are.
 no `procd` service definition, no procmon entry.
 
 The code runs inside `uhttpd`'s existing fork-per-request CGI workers via
-`uhttpd-mod-ucode`. A single `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'`
+`uhttpd-mod-ucode`. A single `list ucode_prefix
+'/api/v3=/usr/share/uapi/main.uc'`
 entry in `/etc/config/uhttpd` is the entire wiring.
 
-Specifically, uapi shares the default `main` uhttpd instance with LuCI. Both serve configuration use cases; sharing keeps the footprint minimal and lets uapi inherit whatever TLS configuration the operator already set up for LuCI (acme certs, custom listen addresses, etc.). A dedicated uapi uhttpd instance was considered and rejected: it doubles the runtime cost without earning the isolation back (an attacker who can reach LuCI can already reach the same box).
+Specifically, uapi shares the default `main` uhttpd instance with LuCI. Both
+serve configuration use cases; sharing keeps the footprint minimal and lets uapi
+inherit whatever TLS configuration the operator already set up for LuCI (acme
+certs, custom listen addresses, etc.). A dedicated uapi uhttpd instance was
+considered and rejected: it doubles the runtime cost without earning the
+isolation back (an attacker who can reach LuCI can already reach the same box).
 
 ```
                          uhttpd parent (always running)
@@ -141,7 +147,8 @@ without uci state change.
    again a daemon that crashed too often, and starts dnsmasq when it enables
    a `dnsmasq` section while every other one is disabled, as the save does.
    At boot, unbound.init registers only a trigger on interface events, which
-   starts unbound 3 s after the last of them, so neither starts it earlier. Any config trigger counts,
+   starts unbound 3 s after the last of them, so neither starts it earlier. Any
+   config trigger counts,
    not only one on the package written, because a `system` write reaches
    unbound only through ucitrack's `affects`. Otherwise the daemon is
    skipped, so it never answers 503, and a reload does not start a daemon
@@ -163,11 +170,15 @@ without uci state change.
    for each kept service.
 2. **Unload.** `uci_unload(<package>)` drops the copy of the package that the
    preview before the lock loaded into the cursor, which serves every later read
-   from that copy, so a commit by LuCI or a shell in between was invisible to the
+   from that copy, so a commit by LuCI or a shell in between was invisible to
+   the
    write.
-3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id, delta, partial)`
-   run inside the lock, and `validate_new(json, conn)` where a resource has one, which refuses only
-   the errors that the write adds (`docs/adding-a-resource.md`). Any field error → `422 validation_failed` with the
+3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id,
+   delta, partial)`
+   run inside the lock, and `validate_new(json, conn)` where a resource has one,
+   which refuses only
+   the errors that the write adds (`docs/adding-a-resource.md`). Any field error
+   → `422 validation_failed` with the
    full set of field errors (not fail-fast); no uci change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
@@ -194,9 +205,12 @@ without uci state change.
 5. **Snapshot and commit.** `uci_export(<package>)` captures the package file
    into an in-memory string, the snapshot that step 8 restores. When the request
    wrote to the package, `uci_commit(<package>)` then loads the package file
-   again, replays the writes over it and writes it through libuci, so a commit by
-   LuCI or a shell while the request ran is kept. The snapshot is taken here, and
-   not at the lock, so that it holds such a commit too, and the restore of step 8
+   again, replays the writes over it and writes it through libuci, so a commit
+   by
+   LuCI or a shell while the request ran is kept. The snapshot is taken here,
+   and
+   not at the lock, so that it holds such a commit too, and the restore of step
+   8
    keeps it. Taken at the lock, it put back the file from before such a commit.
    A commit by another writer between the snapshot and the load of the commit,
    a few microseconds, is still lost on a restore, as one between that load and
@@ -227,7 +241,8 @@ without uci state change.
    writes that file full of spaces first, so that the codes land in bytes that
    the file already holds on a tmpfs that the output of a script has filled,
    and a file that it cannot fill, or a shell that cannot start the scripts,
-   fails the write. uapi waits for the reloads of a request, those of the restore
+   fails the write. uapi waits for the reloads of a request, those of the
+   restore
    included, for 20 s in all, and does not kill a reload that runs longer.
    Such a reload is no failure: the write keeps its commit, runs no stay-up
    watch and no `dnsmasq --test` check, since the reload may not have written
@@ -246,7 +261,8 @@ without uci state change.
    the shell with a `system()` that waits only for the shell that puts the
    scripts in the background. 20 s of reloads, the checks and the flock wait
    of a restore fit in the 60 s, see `docs/operations.md`. procd starts
-   the daemon with its new config on its own, so the init script exits 0 before the daemon
+   the daemon with its new config on its own, so the init script exits 0 before
+   the daemon
    has read that config, and a daemon that refuses it stops later. For the
    reloads that `STAY_UP` in `src/lib/transaction.uc` lists, which are
    `unbound`, also when a `dhcp` or `system` write reloads it, and
@@ -303,7 +319,8 @@ without uci state change.
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
    leaves the peer in uci alone and a caller otherwise cannot tell that from a
    write that reached the kernel.
-8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>, snapshot)`
+8. **On reload, stay-up check or apply non-zero:** `uci_import(<package>,
+   snapshot)`
    → reload, then **reconcile** each touched interface
    against the restored uci. Then `500 reload_failed_restored` with the
    captured stderr/exit summary. If the restore itself fails,
@@ -331,7 +348,8 @@ without uci state change.
    undone, as is one in the window of step 5. A file that uapi could not read
    for the snapshot or after the commit stays as it is too, with a
    `restore_error` that says so.
-   ucode has no `fsync`, so the rename holds against a kill but not against a power
+   ucode has no `fsync`, so the rename holds against a kill but not against a
+   power
    cut on a filesystem that writes data back later than the rename, such as
    ubifs.
 9. **On success:** `200` with the refreshed resource.
@@ -350,7 +368,8 @@ later `uci commit` in the shell replays it over what uapi committed.
 
 This also differs from libuci in one place. A load by name reads
 `/var/run/uci/<package>`, libuci's override directory, in place of
-`/etc/config/<package>` when that file exists, and a commit by name writes there.
+`/etc/config/<package>` when that file exists, and a commit by name writes
+there.
 uapi reads, writes and restores `/etc/config/<package>` only. Among the package
 files of the OpenWrt feeds, only procd's `reload_config` reads `/var/run/uci`,
 and nothing writes it. A package that does not load by its path fails the call
@@ -360,14 +379,17 @@ dot or holds a slash, so the temp files of libuci and of the restore are no
 packages.
 
 libuci commits a package loaded by path by writing the copy that the cursor
-holds, without reading the file again. The commit of step 5 therefore reloads the
+holds, without reading the file again. The commit of step 5 therefore reloads
+the
 file and replays the request's writes, which keeps a commit by another writer
 that landed while the request ran, as libuci's own replay of a delta does. A
 replay that no longer applies, because another writer deleted a section that the
 request wrote into, or that a PUT or a PATCH addressed without writing to it,
 fails the commit, and the request answers `409 conflict` with
-a message that names the package. A package that the request did not write is not
-committed, as libuci skips a commit with no changes, so its comments stay, and it
+a message that names the package. A package that the request did not write is
+not
+committed, as libuci skips a commit with no changes, so its comments stay, and
+it
 gets no reload and no restore.
 `uci_revert` and `uci_unload` drop the copy and the writes, which is the whole
 of what the request staged.
@@ -437,9 +459,11 @@ expands the escapes that it gives wg, and takes the address before the first
 the section as it stages it: a PATCH that leaves `allowed_ips` as it is keeps
 an option with an escape, whose route differs from the allowed IPs of the
 read. Routes are compared in that one spelling, so a respelled prefix, or the
-spelling that the kernel prints, is the same route. A prefix is only withdrawn when no
+spelling that the kernel prints, is the same route. A prefix is only withdrawn
+when no
 remaining peer and no `config route` section still wants it, because two peers
-can carry overlapping `allowed_ips`. The kernel is never scanned for strays on the request path, only
+can carry overlapping `allowed_ips`. The kernel is never scanned for strays on
+the request path, only
 on the reconcile that follows a rollback, so a route uapi did not install is not
 at risk.
 
@@ -469,10 +493,13 @@ a remove for the old key before the set, or the kernel would keep the previous
 peer and its access. A disabled peer is removed, matching what netifd omits when
 it builds the config. A remove takes every key that wg can read from the stored
 `public_key`, not only the key on its first line, with the escapes that
-wireguard.sh expands when it hands the config to wg. A value with a backslash that
+wireguard.sh expands when it hands the config to wg. A value with a backslash
+that
 is longer than 512 bytes is not expanded, and its remove is refused. The kernel
-holds one peer per key, so a remove then sets again each other enabled section of
-the interface that holds one of these keys, in uci order, as ifup does. A set, in
+holds one peer per key, so a remove then sets again each other enabled section
+of
+the interface that holds one of these keys, in uci order, as ifup does. A set,
+in
 a write or in the reconcile after a failed write, takes a stored value that wg
 reads as the key alone. It refuses any other value, and the reconcile refuses it
 before it changes the kernel of the interface, as it refuses a stored
@@ -495,7 +522,8 @@ what keeps a peer orphaned by deleting its parent interface deletable.
 `POST /batch` composes N sub-requests under one combined snapshot/restore:
 
 1. Pre-resolve every sub-request's target (path → package + reload services),
-   and check its scope, before the pre-flight checks: their 503 would tell a token
+   and check its scope, before the pre-flight checks: their 503 would tell a
+   token
    whether a package that it has no scope for is installed. An operation out of
    scope aborts the batch with its 403 before anything runs.
 2. **Only WRITE sub-requests contribute to the lock/reload set.** Pure-read
@@ -510,11 +538,13 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    handlers that skip their own per-package flock + snapshot + commit + reload
    (since the outer multi_transaction has those covered).
 6. First sub-request status ≥ 400 → abort: `uci_revert()` each package,
-   return `{ code: "batch_partial_failure", aborted_at_index, error: ..., reverted: true }`
+   return `{ code: "batch_partial_failure", aborted_at_index, error: ...,
+   reverted: true }`
    with the failing sub's status.
 7. All sub-requests 2xx → `uci_commit()` each package, run the union of the
    reload services of the packages that the batch committed, then the collected
-   kernel operations. A PUT or a PATCH that changes nothing writes nothing, as in
+   kernel operations. A PUT or a PATCH that changes nothing writes nothing, as
+   in
    step 4 of the single-package recipe, and a batch that committed nothing runs
    neither. Same failure
    recipe as the single-package transaction, and a commit that fails part way
@@ -527,7 +557,8 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    daemons of the packages that it wrote back only, and reconciles the kernel
    only when it wrote `network` back, so a package that it left is not
    reloaded on the config that just failed. A restore that wrote no file back
-   runs no reload. Each other package is reverted before that, so that the cursor
+   runs no reload. Each other package is reverted before that, so that the
+   cursor
    holds no write that uci did not store, and a reconcile reads `network` from
    the file. A commit that fails stops there, with no reload and no reconcile:
    both come after every commit, so neither ran, and the restore puts a package
@@ -622,7 +653,9 @@ ETag mixing.)
 
 Two GETs of the same unchanged section always return the same ETag.
 
-Multi-resource collection endpoints (`GET /firewall/rules` without an id) do not currently carry an ETag. `If-Match` and `If-None-Match` only fire on resource-level endpoints; collections operate last-write-wins.
+Multi-resource collection endpoints (`GET /firewall/rules` without an id) do not
+currently carry an ETag. `If-Match` and `If-None-Match` only fire on
+resource-level endpoints; collections operate last-write-wins.
 
 ### Conditional GET
 
@@ -808,7 +841,8 @@ can write one of them again.
 
 `/var/run` is tmpfs on OpenWrt, as `/var` is `/tmp`: rate-limit buckets,
 idempotency entries, metrics counters, recent errors, sentinels and
-interrupted-write records reset on reboot. This is acceptable: operational counters that span uptime aren't a
+interrupted-write records reset on reboot. This is acceptable: operational
+counters that span uptime aren't a
 uapi responsibility - point a `node_exporter` or central collector at the
 box and aggregate there.
 

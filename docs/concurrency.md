@@ -1,25 +1,46 @@
 # Concurrency rules for contributors
 
-uapi runs inside `uhttpd-mod-ucode`'s fork-per-request CGI model. That changes what's safe to write compared to a long-lived process. Read this before adding caches, background work, or "obvious" performance optimizations.
+uapi runs inside `uhttpd-mod-ucode`'s fork-per-request CGI model. That changes
+what's safe to write compared to a long-lived process. Read this before adding
+caches, background work, or "obvious" performance optimizations.
 
-The model is described in detail in [`docs/architecture.md`](architecture.md); this page is the contributor-facing rules summary.
+The model is described in detail in [`docs/architecture.md`](architecture.md);
+this page is the contributor-facing rules summary.
 
 ## The model in one sentence
 
-The handler script runs ONCE in the parent uhttpd at startup. Every HTTP request is a forked child that inherits the parent VM via copy-on-write, calls `handle_request(env)`, and exits.
+The handler script runs ONCE in the parent uhttpd at startup. Every HTTP request
+is a forked child that inherits the parent VM via copy-on-write, calls
+`handle_request(env)`, and exits.
 
 Consequences:
 
-- Anything you compute at module top level (constants, loaded resources, parsed tables) lives in the parent VM and is visible to every request via COW.
-- Anything you MUTATE at module top level during a request is private to the fork and lost when the fork exits.
-- Two concurrent requests run in separate processes. They cannot communicate via in-memory state.
+- Anything you compute at module top level (constants, loaded resources, parsed
+  tables) lives in the parent VM and is visible to every request via COW.
+- Anything you MUTATE at module top level during a request is private to the
+  fork and lost when the fork exits.
+- Two concurrent requests run in separate processes. They cannot communicate via
+  in-memory state.
 
 ## What you can do safely
 
-- **Compute static tables at startup.** `RESOURCES`, `SINGLETONS`, `KNOWN_PATHS`, all the resource module return-objects are built once and treated as read-only.
-- **Read uci on every request.** uci reads are millisecond-scale and the request volume is low. There is no benefit to caching uci state in memory across requests, and the integration test for the parent-fork model would catch you if you tried.
-- **Acquire flocks before writing.** Use `transaction.transaction()` for single-package uci writes; it takes SH on the global lock + EX on the per-package lock. Use `transaction.with_lock()` for non-uci writes; it takes EX on the global. Use `transaction.multi_transaction()` for cross-package atomic writes (`/batch`).
-- **Use file-backed state for cross-request data.** The token-bucket rate limiter writes to `/var/run/uapi-ratelimit/<token>.txt`, where `<token>` is the token name, or its sha256 for a name longer than 63 characters. The idempotency cache writes to `/var/run/uapi-idempotency/`. File IO + atomic rename + flock is the cross-fork channel.
+- **Compute static tables at startup.** `RESOURCES`, `SINGLETONS`,
+  `KNOWN_PATHS`, all the resource module return-objects are built once and
+  treated as read-only.
+- **Read uci on every request.** uci reads are millisecond-scale and the request
+  volume is low. There is no benefit to caching uci state in memory across
+  requests, and the integration test for the parent-fork model would catch you
+  if you tried.
+- **Acquire flocks before writing.** Use `transaction.transaction()` for
+  single-package uci writes; it takes SH on the global lock + EX on the
+  per-package lock. Use `transaction.with_lock()` for non-uci writes; it takes
+  EX on the global. Use `transaction.multi_transaction()` for cross-package
+  atomic writes (`/batch`).
+- **Use file-backed state for cross-request data.** The token-bucket rate
+  limiter writes to `/var/run/uapi-ratelimit/<token>.txt`, where `<token>` is
+  the token name, or its sha256 for a name longer than 63 characters. The
+  idempotency cache writes to `/var/run/uapi-idempotency/`. File IO + atomic
+  rename + flock is the cross-fork channel.
 
 ## What you cannot do
 
@@ -33,17 +54,29 @@ function get_tokens() {
 }
 ```
 
-This compiles. It works on the first request. The cache is private to the fork; the second request gets a fresh `null` and re-loads. Worse: a token rotation in one fork is invisible to every other fork. Use the file-backed pattern (re-read on each request, atomic-rename to publish updates) instead.
+This compiles. It works on the first request. The cache is private to the fork;
+the second request gets a fresh `null` and re-loads. Worse: a token rotation in
+one fork is invisible to every other fork. Use the file-backed pattern (re-read
+on each request, atomic-rename to publish updates) instead.
 
 ### No `conn.defer()` for ubus
 
-Use `conn.call()` only. Async ubus does not buy you any concurrency you don't already have from forking, and the synchronous failure path is easier to reason about. No lint enforces this; it is a code-review rule.
+Use `conn.call()` only. Async ubus does not buy you any concurrency you don't
+already have from forking, and the synchronous failure path is easier to reason
+about. No lint enforces this; it is a code-review rule.
 
 ### No "background" work after the response
 
-The fork exits as soon as `handle_request` returns. There is no `setTimeout`, no thread, no detached task. If you need work to outlive the request, write to a file the next request will pick up, or rely on an external cron/timer.
+The fork exits as soon as `handle_request` returns. There is no `setTimeout`, no
+thread, no detached task. If you need work to outlive the request, write to a
+file the next request will pick up, or rely on an external cron/timer.
 
-One exception exists. uapi runs the init scripts of a write in a detached shell and waits for them for 20 s, so a reload that runs longer outlives its request, which answers `X-Reload-Status: unverified`. It then runs without the uapi locks. A procd service stays serialized by the lock that `procd_lock` of rc.common takes for it. An init script without `procd_lock` is serialized with the next write to its package only during those 20 s.
+One exception exists. uapi runs the init scripts of a write in a detached shell
+and waits for them for 20 s, so a reload that runs longer outlives its request,
+which answers `X-Reload-Status: unverified`. It then runs without the uapi
+locks. A procd service stays serialized by the lock that `procd_lock` of
+rc.common takes for it. An init script without `procd_lock` is serialized with
+the next write to its package only during those 20 s.
 
 ### No in-process pubsub / event bus
 
@@ -60,12 +93,22 @@ Two lock files, in three patterns:
 | `/var/lock/uapi.pkg.<package>.lock` (EX) | a uci transaction on `<package>` | serializes writes to the same package; cross-package writes do not collide |
 | `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext`, and on `dhcp`, or on `system` but not through `system/timeservers`, while `/etc/init.d/unbound` exists, whether unbound runs or not | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another. The writes that reload unbound only while procd holds a trigger for it take the lock before they ask procd, so that the restart of a write to unbound cannot fall between the answer and the commit. A restart that outlives its request, see above, is no longer covered |
 
-This is the recipe taken by `transaction.uc`. New write paths should go through one of the three existing entry points (`transaction()`, `multi_transaction()`, `with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a new code path is a smell; pause and check if you can route through `transaction.uc` instead. `uapi-token` writes `/etc/config/uapi` outside a request, so it takes the same locks as a uci transaction on `uapi` through `transaction.acquire_pkg_waiting()`, which polls for a bounded time rather than answer 423.
+This is the recipe taken by `transaction.uc`. New write paths should go through
+one of the three existing entry points (`transaction()`, `multi_transaction()`,
+`with_lock()`) so the locking is consistent. Direct `fs.open` + `fs.lock` in a
+new code path is a smell; pause and check if you can route through
+`transaction.uc` instead. `uapi-token` writes `/etc/config/uapi` outside a
+request, so it takes the same locks as a uci transaction on `uapi` through
+`transaction.acquire_pkg_waiting()`, which polls for a bounded time rather than
+answer 423.
 
 Reading uci state acquires no lock. One thing rides along with a GET though: the
-last-used stamp on the presenting token is written through a real `uapi`-package transaction,
-so roughly one authed request per token per minute does take SH on the global lock plus EX on
-`uapi`. It is best-effort, and a 423 there is swallowed rather than failing the read.
+last-used stamp on the presenting token is written through a real `uapi`-package
+transaction,
+so roughly one authed request per token per minute does take SH on the global
+lock plus EX on
+`uapi`. It is best-effort, and a 423 there is swallowed rather than failing the
+read.
 
 ### 423 message identity
 
@@ -117,19 +160,39 @@ Practical guidance for operators driving large same-package fleets:
 
 ## Lock ordering for `/batch`
 
-`multi_transaction` acquires per-package EX locks in sorted (lexicographic) order. This is the standard deadlock-avoidance pattern: two batches touching the same set of packages will both acquire in the same order, so one waits for the other, neither holds-and-waits.
+`multi_transaction` acquires per-package EX locks in sorted (lexicographic)
+order. This is the standard deadlock-avoidance pattern: two batches touching the
+same set of packages will both acquire in the same order, so one waits for the
+other, neither holds-and-waits.
 
-If you add a code path that takes multiple locks at once, follow the same sorted-acquire rule. Don't invent a new ordering.
+If you add a code path that takes multiple locks at once, follow the same
+sorted-acquire rule. Don't invent a new ordering.
 
 ## Test coverage for concurrency claims
 
 The concurrency model is asserted by integration tests, not just docs:
 
-- `tests/integration/01_concurrency_model_test.sh` confirms fork-per-request (5 concurrent requests; the test asserts at least 2 distinct PIDs, since uhttpd caps concurrent CGI children at 3).
-- Lock granularity is asserted at two different levels, and the difference matters when reading a green run. The live half is `tests/integration/13_lock_contention_test.sh`, which claims "two concurrent writes to the SAME package serialize; the second gets 423 naming the lock" but holds `/var/lock/uapi.lock` from outside and asserts the global-write-lock wording, so what it proves over HTTP is global contention. The per-package halves are unit tests over real flocks, not HTTP (`tests/unit/transaction_test.uc`, "per-package lock serializes same-package writes" and "per-package lock allows different packages to proceed in parallel").
+- `tests/integration/01_concurrency_model_test.sh` confirms fork-per-request (5
+  concurrent requests; the test asserts at least 2 distinct PIDs, since uhttpd
+  caps concurrent CGI children at 3).
+- Lock granularity is asserted at two different levels, and the difference
+  matters when reading a green run. The live half is
+  `tests/integration/13_lock_contention_test.sh`, which claims "two concurrent
+  writes to the SAME package serialize; the second gets 423 naming the lock" but
+  holds `/var/lock/uapi.lock` from outside and asserts the global-write-lock
+  wording, so what it proves over HTTP is global contention. The per-package
+  halves are unit tests over real flocks, not HTTP
+  (`tests/unit/transaction_test.uc`, "per-package lock serializes same-package
+  writes" and "per-package lock allows different packages to proceed in
+  parallel").
 
-If you change the locking model, run integration tests in QEMU before opening the PR.
+If you change the locking model, run integration tests in QEMU before opening
+the PR.
 
 ## When in doubt
 
-The fork-per-request property is the constraint that drives most of the otherwise-surprising design choices in uapi (file-backed rate limit, re-read tokens on every request, no in-process subscriber model). When something feels harder than it should be, ask: "would this approach require state to survive `fork().exit()`?" If yes, that's why.
+The fork-per-request property is the constraint that drives most of the
+otherwise-surprising design choices in uapi (file-backed rate limit, re-read
+tokens on every request, no in-process subscriber model). When something feels
+harder than it should be, ask: "would this approach require state to survive
+`fork().exit()`?" If yes, that's why.

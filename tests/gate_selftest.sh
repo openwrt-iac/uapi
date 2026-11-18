@@ -57,6 +57,8 @@ done
 # One function per mutation, so quoting stays one level deep.
 mut_emdash() { printf '\nplanted \342\200\224 here\n' >> docs/testing.md; }
 
+mut_md_long_line() { printf '\nA planted prose line that runs well past the eighty column limit that the Markdown lint gate enforces on every tracked file.\n' >> docs/testing.md; }
+
 mut_syntax() { printf 'function (((\n' >> src/lib/values.uc; }
 
 mut_reserved() {
@@ -435,6 +437,7 @@ accept() {
 
 echo "=== each gate, broken on purpose ==="
 probe lint-emdash        "em-dash in a tracked file"           "em-dash found in tracked files"    mut_emdash
+probe lint-md-lines      "a Markdown line over 80 columns"     "over 80 columns"                   mut_md_long_line
 probe lint-syntax        "ucode that does not parse"           "Syntax error"                      mut_syntax
 probe lint-reserved      "a Terraform-reserved property name"  "Terraform meta-arguments"          mut_reserved
 probe lint-refs          "a dangling ref"                      "dangling"                          mut_dangling_ref

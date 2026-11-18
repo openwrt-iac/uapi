@@ -6,23 +6,38 @@ schema (every field, its type, enum values, ranges, patterns), read
 router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
-`GET /schema/<package>/<resource>` serves a module's declared properties as one set, without the
-request and response split the OpenAPI document makes. It is the module's own view: a property
-marked `readOnly` there is absent from that resource's `*Request` schema, a property marked
-`x-uapi-read-nullable` has `null` added to its type (and to its `enum`) in both halves, as the
-next paragraph explains, a property marked `x-uapi-write-string` keeps `string` in its type only
-in the `*Request` schema, the keywords under a property's `x-uapi-write` (such as `minimum: 68`
-on `mtu`) apply only in the `*Request` schema, and `id`, `managed` and `runtime` are stamped by
-the framework rather than declared by the module. For the two halves, read `build/openapi.json`.
+`GET /schema/<package>/<resource>` serves a module's declared properties as one
+set, without the
+request and response split the OpenAPI document makes. It is the module's own
+view: a property
+marked `readOnly` there is absent from that resource's `*Request` schema, a
+property marked
+`x-uapi-read-nullable` has `null` added to its type (and to its `enum`) in both
+halves, as the
+next paragraph explains, a property marked `x-uapi-write-string` keeps `string`
+in its type only
+in the `*Request` schema, the keywords under a property's `x-uapi-write` (such
+as `minimum: 68`
+on `mtu`) apply only in the `*Request` schema, and `id`, `managed` and `runtime`
+are stamped by
+the framework rather than declared by the module. For the two halves, read
+`build/openapi.json`.
 
-`x-uapi-read-nullable` marks a property a read can answer null for, and widens its type (and
-`enum`) with null in **both** halves. Both, because every IaC apply is a read-modify-write: the
-response view goes back out as the next request body, so a request schema that refused those
-nulls would describe the round trip as invalid while the server accepts it. Widening does not
-weaken a required field, since the type is not what guards one; `resource.validate()` is, and it
+`x-uapi-read-nullable` marks a property a read can answer null for, and widens
+its type (and
+`enum`) with null in **both** halves. Both, because every IaC apply is a
+read-modify-write: the
+response view goes back out as the next request body, so a request schema that
+refused those
+nulls would describe the round trip as invalid while the server accepts it.
+Widening does not
+weaken a required field, since the type is not what guards one;
+`resource.validate()` is, and it
 answers 422 naming the field for a null `target` on a create.
-`tests/lint_response_nullability.uc` calls each resource's real `fromUci` on a bare section and
-fails if anything it returns null for is not null-permitted in the response schema.
+`tests/lint_response_nullability.uc` calls each resource's real `fromUci` on a
+bare section and
+fails if anything it returns null for is not null-permitted in the response
+schema.
 
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.
@@ -72,20 +87,43 @@ packages are deliberately not pulled in.
 | `network/wireguard_kernel_peers` (read-only collection) | `wg show <iface> dump` | The WireGuard peers the kernel holds that no uci section of their interface claims, on up interfaces with proto=wireguard: what a hand `wg set` added or a failed apply left, which no other read reports. Keyed as wg reads the stored key, the later `PublicKey=` lines of one included, and disabled sections included, because the `runtime` of a disabled section already reports a peer the kernel holds under its key. One dump per interface per request, the same one the `runtime` reads. A down interface or a failing `wg` lists nothing, as `runtime` answers `{}`. The stable `id` is the first 12 hex of the sha256 of the interface name and the public key. No write, no lock, no ETag. |
 
 **`option disabled` is modelled on `network/interfaces`, `network/routes` and
-`network/rules`.** netifd drops a disabled section outright on all three: a disabled
-interface is never registered, so it has no ubus object and its addresses and routes
-are absent, and a disabled route or rule is never installed. Each resource reads the
-option with the helper matching its own parser, because netifd does not parse it the
-same way for all three: `strict_bool` on the interface, where netifd compares the
-value literally against `1`, and `platform_bool` on routes and rules, where it goes
-through the boolean blob converter that also accepts `true`. `network/wireguard_peers`
+`network/rules`.** netifd drops a disabled section outright on all three: a
+disabled
+interface is never registered, so it has no ubus object and its addresses and
+routes
+are absent, and a disabled route or rule is never installed. Each resource reads
+the
+option with the helper matching its own parser, because netifd does not parse it
+the
+same way for all three: `strict_bool` on the interface, where netifd compares
+the
+value literally against `1`, and `platform_bool` on routes and rules, where it
+goes
+through the boolean blob converter that also accepts `true`.
+`network/wireguard_peers`
 models `disabled` as well.
 
-[#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap while it was
-open; `docs/roadmap.md` carries the reasoning and the alternatives that were turned
+[#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap while it
+was
+open; `docs/roadmap.md` carries the reasoning and the alternatives that were
+turned
 down.
 
-Reload: `network` (netifd), then `odhcpd` while procd holds a `config.change` trigger for it, under the rule of a `dhcp` write below. odhcpd reads the network config and has a procd trigger on `network`, which a commit through libuci does not fire. So a network write runs one more init script while procd holds that trigger, `/etc/init.d/odhcpd reload`, which sends odhcpd a signal, and holds the global SH and the lock of `network` while it runs, so a non-uci write at that moment answers `423 locked`. If that reload exits non-zero, the write answers `500 reload_failed_restored` and restores the previous config, or `500 reload_failed_unrecovered` when the reload fails on that config too. A LuCI save of `network` also reloads dnsmasq and unbound, because LuCI's ucitrack has `network` affect `dhcp`. uapi leaves them out on purpose: from this package dnsmasq.init reads only `ula_prefix` of the globals, which no resource here writes, and unbound that and the names of the interface sections, and both reload on the netifd events of the interfaces that they serve (`docs/raw.md`). So a network write takes no lock of `unbound` and does not wait for unbound.
+Reload: `network` (netifd), then `odhcpd` while procd holds a `config.change`
+trigger for it, under the rule of a `dhcp` write below. odhcpd reads the network
+config and has a procd trigger on `network`, which a commit through libuci does
+not fire. So a network write runs one more init script while procd holds that
+trigger, `/etc/init.d/odhcpd reload`, which sends odhcpd a signal, and holds the
+global SH and the lock of `network` while it runs, so a non-uci write at that
+moment answers `423 locked`. If that reload exits non-zero, the write answers
+`500 reload_failed_restored` and restores the previous config, or `500
+reload_failed_unrecovered` when the reload fails on that config too. A LuCI save
+of `network` also reloads dnsmasq and unbound, because LuCI's ucitrack has
+`network` affect `dhcp`. uapi leaves them out on purpose: from this package
+dnsmasq.init reads only `ula_prefix` of the globals, which no resource here
+writes, and unbound that and the names of the interface sections, and both
+reload on the netifd events of the interfaces that they serve (`docs/raw.md`).
+So a network write takes no lock of `unbound` and does not wait for unbound.
 
 **Editing the interface that backs your management connection is dangerous.**
 `/etc/init.d/network reload` returns exit 0 even when an interface fails to
@@ -112,7 +150,10 @@ Reload: `firewall` (fw4).
 | `wireless/devices` | `config wifi-device` | Radios (mac80211/broadcom), the `path`, `macaddr`, `phy` and `radio` that bind them to their hardware, band, channel, htmode, country, txpower, cell_density, legacy_rates. |
 | `wireless/interfaces` | `config wifi-iface` | SSIDs, with every 802.11r option of LuCI's WLAN roaming tab. `key`, `r0kh` and `r1kh` are write-only, and a PUT that leaves them out keeps them. Responses include `has_key`, `has_r0kh` and `has_r1kh`. wifi-scripts writes `key`, `nasid`, `mobility_domain`, `r1_key_holder`, `r0kh` and `r1kh` into the daemon's config as lines, so a write refuses a newline in them, more than 1024 bytes in each of them but `key`, and a key holder entry that hostapd reads and cannot parse. A write is refused for such a value only when it adds the error, for example when it changes the field, sets the SSID up, which wifi-scripts does only while the SSID and its radio are enabled, or turns 802.11r on. A write also refuses the values that the daemons refuse or misread: an `ssid` over 32 bytes, a `key` in a form that hostapd or wpa_supplicant refuses for the mode and encryption, a `nasid` over 253 bytes on an EAP access point, `ieee80211r` with owe on an access point, a `reassociation_deadline` outside 1000 to 65535, a `mobility_domain` other than 4 hex digits, an `r1_key_holder` other than 12, and mode `wds`. The same rule applies to these: a write that leaves a stored value as it is is refused for it only when it makes the daemon read it. hostapd reads `mobility_domain` as the mobility domain with 802.11r, and as the EAP domain of an access point with `fils`, which uapi does not model. That domain takes any form, so a newline or a length in `mobility_domain` counts on an EAP access point too, and its form only with 802.11r. A write to `wireless/devices` that turns a radio on is refused while an enabled SSID of the radio holds any of these values. The validation sweep lists every SSID that holds such a value. These rules follow the ucode wifi-scripts, which OpenWrt 25.12 builds by default. They were not checked against the shell wifi-scripts, which OpenWrt 24.10 uses: uapi supports 25.12 and later, where the shell variant runs only on an image built without `CONFIG_WIFI_SCRIPTS_UCODE`. `validate()` and the schema check run as before: every write still requires `key` for the EAP modes, which LuCI writes without one. A create or a PUT that sends no `mode` stores `ap`, which a read reports for a section with no mode. A write that sends a null `mode` answers 422 `required`: wifi-scripts sets up no interface without a mode, and storing `ap` would turn a station into an access point. `runtime` carries iwinfo state. |
 
-Reload: `network`. A LuCI save of `wireless` also reaches odhcpd, dnsmasq and unbound, because LuCI's ucitrack has `wireless` affect `network`, which affects `dhcp`. None of them reads `/etc/config/wireless`, so a wireless write leaves them out (`docs/raw.md`). Requires `rpcd-mod-iwinfo` at runtime for the
+Reload: `network`. A LuCI save of `wireless` also reaches odhcpd, dnsmasq and
+unbound, because LuCI's ucitrack has `wireless` affect `network`, which affects
+`dhcp`. None of them reads `/etc/config/wireless`, so a wireless write leaves
+them out (`docs/raw.md`). Requires `rpcd-mod-iwinfo` at runtime for the
 `runtime` block on `wireless/interfaces`.
 
 ## DHCP
@@ -126,9 +167,51 @@ Reload: `network`. A LuCI save of `wireless` also reaches odhcpd, dnsmasq and un
 | `dhcp/leases` (read-only collection) | `/tmp/dhcp.leases` | IPv4 leases parsed from dnsmasq's lease file. |
 | `dhcp/leases6` (read-only collection) | the `leasefile` of odhcpd, `/tmp/odhcpd.leases` by default | IPv6 leases from odhcpd. Per-IA-address entries. |
 
-Reload: each write reloads the daemons that read what it writes, in this order, and each of them only while procd runs it. `dhcp/servers` and `dhcp/hosts` reload `dnsmasq`, `odhcpd` and `unbound`. odhcpd reads a server section too, `ra`, `dhcpv6` and `ra_default` among others, and the static leases of a host. unbound reads `interface` and `ignore` of a server section, and makes records of the `name` and `ip` of a host when its `add_extra_dns` is set. `dhcp/odhcpd` reloads `odhcpd`, `dnsmasq` and `unbound`, because dnsmasq.init reads `maindhcp` and unbound makes the directory of `leasefile`. `dhcp/dnsmasq` reloads `dnsmasq` and `unbound`, which reads `domain` and `port` when it forwards local names to dnsmasq. procd runs a daemon while it holds a `config.change` trigger for it, from the start of the service to its stop, whatever its instances show, which is when a LuCI save reloads it. A daemon that the router does not ship, that the operator stopped, or that has no such trigger yet, as unbound at boot until 3 s after the last interface event, is skipped: the write does not answer `503 init_script_missing` for it, and its reload does not start it, as the reload of dnsmasq.init and unbound.init would. When the `service list` call fails, uapi cannot tell, and reloads the daemon. A write when none of them runs answers 2xx with `X-Reload-Status: no_reload`. LuCI saves through rpcd, which fires the procd reload trigger on `dhcp` of each daemon that procd lists with one. A commit through libuci fires none, so uapi runs the reloads above itself. A write takes the lock of `unbound` too while `/etc/init.d/unbound` exists, before it asks procd which daemons to reload, so a write to the `unbound` packages, or a `system` write that can reload unbound, at the same moment answers `423 locked`, whether unbound runs or not. When unbound ran before the write, it waits 2 s for unbound to keep running, as a write to `unbound/server` does.
+Reload: each write reloads the daemons that read what it writes, in this order,
+and each of them only while procd runs it. `dhcp/servers` and `dhcp/hosts`
+reload `dnsmasq`, `odhcpd` and `unbound`. odhcpd reads a server section too,
+`ra`, `dhcpv6` and `ra_default` among others, and the static leases of a host.
+unbound reads `interface` and `ignore` of a server section, and makes records of
+the `name` and `ip` of a host when its `add_extra_dns` is set. `dhcp/odhcpd`
+reloads `odhcpd`, `dnsmasq` and `unbound`, because dnsmasq.init reads `maindhcp`
+and unbound makes the directory of `leasefile`. `dhcp/dnsmasq` reloads `dnsmasq`
+and `unbound`, which reads `domain` and `port` when it forwards local names to
+dnsmasq. procd runs a daemon while it holds a `config.change` trigger for it,
+from the start of the service to its stop, whatever its instances show, which is
+when a LuCI save reloads it. A daemon that the router does not ship, that the
+operator stopped, or that has no such trigger yet, as unbound at boot until 3 s
+after the last interface event, is skipped: the write does not answer `503
+init_script_missing` for it, and its reload does not start it, as the reload of
+dnsmasq.init and unbound.init would. When the `service list` call fails, uapi
+cannot tell, and reloads the daemon. A write when none of them runs answers 2xx
+with `X-Reload-Status: no_reload`. LuCI saves through rpcd, which fires the
+procd reload trigger on `dhcp` of each daemon that procd lists with one. A
+commit through libuci fires none, so uapi runs the reloads above itself. A write
+takes the lock of `unbound` too while `/etc/init.d/unbound` exists, before it
+asks procd which daemons to reload, so a write to the `unbound` packages, or a
+`system` write that can reload unbound, at the same moment answers `423 locked`,
+whether unbound runs or not. When unbound ran before the write, it waits 2 s for
+unbound to keep running, as a write to `unbound/server` does.
 
-After a write that reloads dnsmasq, uapi runs the command of each dnsmasq instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq refuses it, the write answers `500 reload_failed_restored` and restores the previous config. dnsmasq refuses a line such as a `dhcp_option` of `3,not-an-address` in a section that it reads, one that is not ignored, on an interface that is up and static. The check covers every instance, one that is not running included, so on a router whose dnsmasq config was refused before the write, a write that does not fix it answers `500 reload_failed_unrecovered`. A `--test` that cannot run, because fork fails, fails the write in the same way. A `--test` that does not finish within 10 s, such as one that reads a `conf-file` on a mount that hangs, or that another `SIGKILL` stops, is killed and judges nothing: the write keeps its commit and answers 2xx with `X-Reload-Status: unverified`. A target that takes longer than 10 s to parse its config, such as a slow router with large adblock lists, answers `unverified` on every dhcp write. `--test` only parses: a config that dnsmasq parses but cannot start with, such as one whose port another daemon holds, still answers 2xx. No write waits for the daemon to start, and each pays one parse of the whole config per instance, which grows with its size, and again on a restore. A write that does not reload dnsmasq, because procd does not run it, runs no check.
+After a write that reloads dnsmasq, uapi runs the command of each dnsmasq
+instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq
+refuses it, the write answers `500 reload_failed_restored` and restores the
+previous config. dnsmasq refuses a line such as a `dhcp_option` of
+`3,not-an-address` in a section that it reads, one that is not ignored, on an
+interface that is up and static. The check covers every instance, one that is
+not running included, so on a router whose dnsmasq config was refused before the
+write, a write that does not fix it answers `500 reload_failed_unrecovered`. A
+`--test` that cannot run, because fork fails, fails the write in the same way. A
+`--test` that does not finish within 10 s, such as one that reads a `conf-file`
+on a mount that hangs, or that another `SIGKILL` stops, is killed and judges
+nothing: the write keeps its commit and answers 2xx with `X-Reload-Status:
+unverified`. A target that takes longer than 10 s to parse its config, such as a
+slow router with large adblock lists, answers `unverified` on every dhcp write.
+`--test` only parses: a config that dnsmasq parses but cannot start with, such
+as one whose port another daemon holds, still answers 2xx. No write waits for
+the daemon to start, and each pays one parse of the whole config per instance,
+which grows with its size, and again on a restore. A write that does not reload
+dnsmasq, because procd does not run it, runs no check.
 
 ## System
 
@@ -167,7 +250,13 @@ After a write that reloads dnsmasq, uapi runs the command of each dnsmasq instan
 | `openvpn/instances` | `config openvpn` | Per-instance OpenVPN config. `key`, `tls_auth` and `pkcs12` are write-only; responses carry `has_key` / `has_tls_auth` / `has_pkcs12`. |
 | `usteer/config` (singleton) | `config usteer` | Band-steering and roaming thresholds for the usteer daemon. |
 
-When unbound runs, a write to one of the three unbound resources waits 2 s after the reload. If unbound stops in that time, the write answers `500 reload_failed_restored` and restores the previous config. unbound stops for a line of `srv_line` or `ext_line` that it cannot parse. Two of these writes at the same time answer `423 locked` for the second, because each restarts unbound, and so does one of them beside a `dhcp` or `system` write, which can reload unbound.
+When unbound runs, a write to one of the three unbound resources waits 2 s after
+the reload. If unbound stops in that time, the write answers `500
+reload_failed_restored` and restores the previous config. unbound stops for a
+line of `srv_line` or `ext_line` that it cannot parse. Two of these writes at
+the same time answer `423 locked` for the second, because each restarts unbound,
+and so does one of them beside a `dhcp` or `system` write, which can reload
+unbound.
 
 ## Packages (non-uci)
 
@@ -178,24 +267,50 @@ When unbound runs, a write to one of the three unbound resources waits 2 s after
 
 ## Anonymous sections and adoption
 
-OpenWrt's uci distinguishes **named** sections (stable identifier across rewrites) from **anonymous** sections (auto-assigned `cfgXXXXXX` ids that change on rewrite). Anonymous ids are useless for IaC state tracking.
+OpenWrt's uci distinguishes **named** sections (stable identifier across
+rewrites) from **anonymous** sections (auto-assigned `cfgXXXXXX` ids that change
+on rewrite). Anonymous ids are useless for IaC state tracking.
 
-uapi-managed sections are always named: when a client POSTs to create a resource, the server emits a ULID-style identifier (Crockford base32, alphanumeric only, fitting uci's `[A-Za-z0-9_]` charset) and writes it as the section's `.name`. From that point on, the section behaves like any other named uci section and its id is stable. Optional one-character type prefix for grep-ability (`r_01HX...` for rules, `i_01HX...` for interfaces). No `uapi_` namespace prefix; uapi is just another writer to uci.
+uapi-managed sections are always named: when a client POSTs to create a
+resource, the server emits a ULID-style identifier (Crockford base32,
+alphanumeric only, fitting uci's `[A-Za-z0-9_]` charset) and writes it as the
+section's `.name`. From that point on, the section behaves like any other named
+uci section and its id is stable. Optional one-character type prefix for
+grep-ability (`r_01HX...` for rules, `i_01HX...` for interfaces). No `uapi_`
+namespace prefix; uapi is just another writer to uci.
 
-Section names are caller-pickable on every CRUD resource (since 2.2.0). `POST /<resource>` accepts an optional `id` field; if supplied it becomes the section name (after charset / length / collision checks). Absent, the server emits the ULID.
+Section names are caller-pickable on every CRUD resource (since 2.2.0). `POST
+/<resource>` accepts an optional `id` field; if supplied it becomes the section
+name (after charset / length / collision checks). Absent, the server emits the
+ULID.
 
 ### Pre-existing anonymous sections
 
-The common starting state for a router under management is a mix of LuCI-named sections, hand-edited sections, and anonymous sections from prior tooling. Posture: **read-only by default, explicit adoption.**
+The common starting state for a router under management is a mix of LuCI-named
+sections, hand-edited sections, and anonymous sections from prior tooling.
+Posture: **read-only by default, explicit adoption.**
 
-- `GET /<resource>` returns existing anonymous sections with a content-derived synthetic id and `managed: false`.
-- `PUT`/`PATCH`/`DELETE` on a `managed: false` section returns `409 unmanaged_resource`.
-- `POST /<resource>/<id>/adopt` on an **anonymous** section renames it under uapi's ULID scheme and flips it to `managed: true`. The section is writable like any other after that.
-- `POST /<resource>/<id>/adopt` on a **named** section is an idempotent acknowledgement: the section keeps its name and the response carries the existing view with `managed: true`. The 2.2.0 behavior change replaced the prior rename-to-ULID which broke uci cross-references where sections referenced this one by name (`firewall.zones.lan` → `firewall.rules.src_zone = "lan"`).
+- `GET /<resource>` returns existing anonymous sections with a content-derived
+  synthetic id and `managed: false`.
+- `PUT`/`PATCH`/`DELETE` on a `managed: false` section returns `409
+  unmanaged_resource`.
+- `POST /<resource>/<id>/adopt` on an **anonymous** section renames it under
+  uapi's ULID scheme and flips it to `managed: true`. The section is writable
+  like any other after that.
+- `POST /<resource>/<id>/adopt` on a **named** section is an idempotent
+  acknowledgement: the section keeps its name and the response carries the
+  existing view with `managed: true`. The 2.2.0 behavior change replaced the
+  prior rename-to-ULID which broke uci cross-references where sections
+  referenced this one by name (`firewall.zones.lan` → `firewall.rules.src_zone =
+  "lan"`).
 
-Sections that already have a `.name` (e.g. LuCI-named `myrule`) are managed normally, using their existing `.name` as the id. uapi does not rewrite names it didn't author.
+Sections that already have a `.name` (e.g. LuCI-named `myrule`) are managed
+normally, using their existing `.name` as the id. uapi does not rewrite names it
+didn't author.
 
-`GET` on a collection includes both managed and unmanaged sections by default. Clients filter via `?managed=true` / `?managed=false` when they want one or the other.
+`GET` on a collection includes both managed and unmanaged sections by default.
+Clients filter via `?managed=true` / `?managed=false` when they want one or the
+other.
 
 ## Generic raw passthrough
 

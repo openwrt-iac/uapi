@@ -2,30 +2,37 @@
 
 ## Prerequisites
 
-A router running **OpenWrt 25.12+** (the first apk-based release line). Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`, `uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log,io}` mods, and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's `Depends:` makes apk resolve them automatically.
+A router running **OpenWrt 25.12+** (the first apk-based release line).
+Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`,
+`uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log,io}` mods,
+and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's
+`Depends:` makes apk resolve them automatically.
 
 ### Align the uhttpd packages first
 
-The feed of an OpenWrt release is rebuilt after the release, and `uhttpd` and its plugins
-(`uhttpd-mod-ubus`, `uhttpd-mod-ucode`, `uhttpd-mod-lua`) do not pin each other's version.
-`apk add uapi` installs `uhttpd-mod-ucode` from the current feed and leaves the `uhttpd` of
-the image in place. When the two come from different builds, uhttpd does not start, and
-neither uapi nor LuCI answers. On 25.12.6, `uhttpd` 2026.08.24 of the image with
-`uhttpd-mod-ucode` 2026.11.05 of the feed stops at its start with `Unable to open ucode
-handler`, and `uhttpd` 2026.11.05 with `uhttpd-mod-ubus` 2026.08.24 segfaults on the first
-LuCI request. Upgrade the whole family before installing uapi:
+The feed of an OpenWrt release is rebuilt after the release, and `uhttpd` and
+its plugins (`uhttpd-mod-ubus`, `uhttpd-mod-ucode`, `uhttpd-mod-lua`) do not pin
+each other's version. `apk add uapi` installs `uhttpd-mod-ucode` from the
+current feed and leaves the `uhttpd` of the image in place. When the two come
+from different builds, uhttpd does not start, and neither uapi nor LuCI answers.
+On 25.12.6, `uhttpd` 2026.08.24 of the image with `uhttpd-mod-ucode` 2026.11.05
+of the feed stops at its start with `Unable to open ucode handler`, and `uhttpd`
+2026.11.05 with `uhttpd-mod-ubus` 2026.08.24 segfaults on the first LuCI
+request. Upgrade the whole family before installing uapi:
 
 ```sh
 apk update
 apk upgrade uhttpd uhttpd-mod-ubus uhttpd-mod-ucode uhttpd-mod-lua
 ```
 
-`apk upgrade` skips a name that is not installed, so the line fits any router. When uhttpd
-does not run after the install, the post-install hook says so and prints these commands.
+`apk upgrade` skips a name that is not installed, so the line fits any router.
+When uhttpd does not run after the install, the post-install hook says so and
+prints these commands.
 
 ## Install from a local .apk
 
-Get the package onto the router (any way you like: scp, USB stick, sysupgrade overlay), then:
+Get the package onto the router (any way you like: scp, USB stick, sysupgrade
+overlay), then:
 
 ```sh
 apk add /path/to/uapi-<version>-r1.apk
@@ -33,9 +40,16 @@ apk add /path/to/uapi-<version>-r1.apk
 
 The post-install hook will:
 
-1. Run `/etc/uci-defaults/99-uapi`, which creates the token store `/etc/config/uapi` with mode 0600 when it does not exist, or sets mode 0600 on an existing one, and adds `list ucode_prefix '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so that it loads the new code. Both the hook's reload and this restart run only when uhttpd is enabled, because on OpenWrt either one starts a stopped uhttpd, and an operator disables it when another web server owns the ports.
+1. Run `/etc/uci-defaults/99-uapi`, which creates the token store
+   `/etc/config/uapi` with mode 0600 when it does not exist, or sets mode 0600
+   on an existing one, and adds `list ucode_prefix
+   '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so
+   that it loads the new code. Both the hook's reload and this restart run only
+   when uhttpd is enabled, because on OpenWrt either one starts a stopped
+   uhttpd, and an operator disables it when another web server owns the ports.
 2. Delete itself.
-3. Print the bootstrap message (first install only; suppressed on upgrade or reinstall).
+3. Print the bootstrap message (first install only; suppressed on upgrade or
+   reinstall).
 
 Verify:
 
@@ -48,7 +62,13 @@ curl -k https://localhost/api/v3/healthz
 
 ## Install from the project feed
 
-The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages are RSA-4096 signed; the public key is served from the feed root at <https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The feed aggregates stable releases from every repo under the `openwrt-iac` org (uapi, unbound-uci-ext, ...), so one `apk` repositories line installs any of them.
+The project hosts an apk feed at <https://openwrt-iac.github.io/feed/>. Packages
+are RSA-4096 signed; the public key is served from the feed root at
+<https://openwrt-iac.github.io/feed/uapi-feed.pub.pem> and the key source of
+truth lives at `openwrt-iac/openwrt-iac.github.io:keys/uapi-feed.pub.pem`. The
+feed aggregates stable releases from every repo under the `openwrt-iac` org
+(uapi, unbound-uci-ext, ...), so one `apk` repositories line installs any of
+them.
 
 ```sh
 # Trust the feed's signing key (one-time). uclient-fetch ships with OpenWrt;
@@ -71,7 +91,11 @@ apk update
 apk upgrade uapi
 ```
 
-Up to 3.2.0 the package shipped `/etc/config/uapi`, and each upgrade left the shipped copy beside the token store as `/etc/config/uapi.apk-new`. The upgrade from such a release deletes that file and keeps the token store. Do not pass `--purge` to that upgrade: it makes apk delete every file that the old package shipped and the new one does not, so every token is lost.
+Up to 3.2.0 the package shipped `/etc/config/uapi`, and each upgrade left the
+shipped copy beside the token store as `/etc/config/uapi.apk-new`. The upgrade
+from such a release deletes that file and keeps the token store. Do not pass
+`--purge` to that upgrade: it makes apk delete every file that the old package
+shipped and the new one does not, so every token is lost.
 
 `apk add uapi` does **not** upgrade a package that is already installed. On
 apk-tools 3.0.5, as shipped in OpenWrt 25.12.x, it resolves to the installed
@@ -84,29 +108,58 @@ This applies to `apk add <name>`, resolving from a repository. `apk add
 <file.apk>`, the local-file form at the top of this page, does upgrade: it
 installs the version in that file whether or not an older one is present.
 
-The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`, `-beta`, `-pre`) are intentionally excluded so that `apk add uapi` and `apk upgrade uapi` never resolve to a not-yet-ready build. RC APKs land on the GitHub Release page (marked Pre-release); to install one, download it manually and `apk add --allow-untrusted /tmp/uapi-<rc>.apk`.
+The feed carries **stable releases only**. Release candidates (`-rc`, `-alpha`,
+`-beta`, `-pre`) are intentionally excluded so that `apk add uapi` and `apk
+upgrade uapi` never resolve to a not-yet-ready build. RC APKs land on the GitHub
+Release page (marked Pre-release); to install one, download it manually and `apk
+add --allow-untrusted /tmp/uapi-<rc>.apk`.
 
-**Installing from a file pins the package, and nothing tells you.** `apk add <file>.apk` writes a checksum-pinned entry into `/etc/apk/world`, of the form `uapi><Q1zxo621V...=`, which holds that exact build. `apk upgrade` then silently leaves uapi alone: no error, no mention in the output, the version simply never moves. Restore feed tracking with
+**Installing from a file pins the package, and nothing tells you.** `apk add
+<file>.apk` writes a checksum-pinned entry into `/etc/apk/world`, of the form
+`uapi><Q1zxo621V...=`, which holds that exact build. `apk upgrade` then silently
+leaves uapi alone: no error, no mention in the output, the version simply never
+moves. Restore feed tracking with
 
 ```sh
 apk add uapi        # replaces the pinned world entry with a plain `uapi`
 apk upgrade         # now resolves the feed's current release
 ```
 
-`grep uapi /etc/apk/world` shows which state a box is in: a bare `uapi` tracks the feed, anything with a `><Q1...` suffix is pinned to one build. This is why a router that dogfooded an RC keeps reporting the RC long after a stable release exists.
+`grep uapi /etc/apk/world` shows which state a box is in: a bare `uapi` tracks
+the feed, anything with a `><Q1...` suffix is pinned to one build. This is why a
+router that dogfooded an RC keeps reporting the RC long after a stable release
+exists.
 
-The feed carries the **current stable release only**: the index is rebuilt from the latest stable tag each publish, so the previous version's APK stops resolving the moment a new one ships. `apk add uapi=<version>-r1` therefore pins an exact build only while that build is the current one, and a constraint like `apk add 'uapi<3.0.0'` will not find an older release once it has rolled off. Older releases stay on the GitHub Releases page permanently, and installing one from there is the supported way back, subject to the pinning note above. `CHANGELOG.md` and the GitHub Releases page are the sources of truth for what the current line is; this page deliberately does not name it, because a version written here goes stale the moment the next one ships.
+The feed carries the **current stable release only**: the index is rebuilt from
+the latest stable tag each publish, so the previous version's APK stops
+resolving the moment a new one ships. `apk add uapi=<version>-r1` therefore pins
+an exact build only while that build is the current one, and a constraint like
+`apk add 'uapi<3.0.0'` will not find an older release once it has rolled off.
+Older releases stay on the GitHub Releases page permanently, and installing one
+from there is the supported way back, subject to the pinning note above.
+`CHANGELOG.md` and the GitHub Releases page are the sources of truth for what
+the current line is; this page deliberately does not name it, because a version
+written here goes stale the moment the next one ships.
 
 ## TLS
 
-uapi inherits TLS from the `main` uhttpd instance. By default OpenWrt ships a self-signed certificate (regenerated at first boot via `px5g`); browsers and curl complain, and over a real network this is **not adequate**. Two well-trodden options on OpenWrt:
+uapi inherits TLS from the `main` uhttpd instance. By default OpenWrt ships a
+self-signed certificate (regenerated at first boot via `px5g`); browsers and
+curl complain, and over a real network this is **not adequate**. Two
+well-trodden options on OpenWrt:
 
-- **`acme.sh` + `luci-app-acme`**: ACME (Let's Encrypt) on the router itself. Requires the router to be reachable from the internet on port 80 (or DNS-01 challenge support).
-- **Front the API with a reverse proxy** holding a real certificate (nginx, Caddy, traefik) on a different machine. Useful when the router lives behind double-NAT.
+- **`acme.sh` + `luci-app-acme`**: ACME (Let's Encrypt) on the router itself.
+  Requires the router to be reachable from the internet on port 80 (or DNS-01
+  challenge support).
+- **Front the API with a reverse proxy** holding a real certificate (nginx,
+  Caddy, traefik) on a different machine. Useful when the router lives behind
+  double-NAT.
 
 ### Mutual TLS (client certificate auth)
 
-`uhttpd` supports verifying client certificates if you set `option tls_client_cert_file` (path to a CA cert in PEM form) and `option tls_require_client_cert '1'` on the listener:
+`uhttpd` supports verifying client certificates if you set `option
+tls_client_cert_file` (path to a CA cert in PEM form) and `option
+tls_require_client_cert '1'` on the listener:
 
 ```sh
 uci set uhttpd.main.tls_client_cert_file='/etc/uapi/clients-ca.pem'
@@ -115,9 +168,15 @@ uci commit uhttpd
 /etc/init.d/uhttpd restart
 ```
 
-After that, every request must present a certificate signed by the CA at `/etc/uapi/clients-ca.pem`. Combine this with a bearer-token scoped to read-only and you have two-factor service-account auth: the cert proves the caller is approved infrastructure; the token proves what scope it is allowed to exercise. uapi does not look at the client certificate fields itself; uhttpd terminates and validates them.
+After that, every request must present a certificate signed by the CA at
+`/etc/uapi/clients-ca.pem`. Combine this with a bearer-token scoped to read-only
+and you have two-factor service-account auth: the cert proves the caller is
+approved infrastructure; the token proves what scope it is allowed to exercise.
+uapi does not look at the client certificate fields itself; uhttpd terminates
+and validates them.
 
-uapi enforces TLS by default for any request whose `REMOTE_ADDR` is not loopback:
+uapi enforces TLS by default for any request whose `REMOTE_ADDR` is not
+loopback:
 
 ```
 HTTP/1.1 403 Forbidden
@@ -134,7 +193,8 @@ That **is** a security hole; don't leave it on a production router.
 
 ## Multiple uhttpd instances
 
-The package wires only the `uhttpd.main` instance. If you run additional instances (e.g. a separate admin port), add the prefix manually:
+The package wires only the `uhttpd.main` instance. If you run additional
+instances (e.g. a separate admin port), add the prefix manually:
 
 ```sh
 uci add_list uhttpd.<instance>.ucode_prefix='/api/v3=/usr/share/uapi/main.uc'
@@ -148,4 +208,10 @@ uci commit uhttpd
 apk del uapi
 ```
 
-The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and reloads uhttpd if it is enabled. `/etc/config/uapi` (the token store) is no file of the package, so apk keeps it across removal and upgrades. A sysupgrade keeps it too, also after a removal: on OpenWrt 25.12.5, base-files lists all of `/etc/config/` in `/lib/upgrade/keep.d/base-files`, and while the package is installed `/lib/upgrade/keep.d/uapi` names the store as well. To wipe tokens: `rm /etc/config/uapi` after removal.
+The pre-remove hook removes the `ucode_prefix` entry from `uhttpd.main` and
+reloads uhttpd if it is enabled. `/etc/config/uapi` (the token store) is no file
+of the package, so apk keeps it across removal and upgrades. A sysupgrade keeps
+it too, also after a removal: on OpenWrt 25.12.5, base-files lists all of
+`/etc/config/` in `/lib/upgrade/keep.d/base-files`, and while the package is
+installed `/lib/upgrade/keep.d/uapi` names the store as well. To wipe tokens:
+`rm /etc/config/uapi` after removal.

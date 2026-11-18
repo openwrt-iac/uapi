@@ -4,174 +4,682 @@ Three layers, plus the harness and the load-bearing test inventory.
 
 ## Layers
 
-- **Unit tests** (pure ucode): schema validation, `fromUci`/`toUci`, scope matcher, ID generation, error envelope, transaction snapshot logic. Runs anywhere ucode runs. Sub-5s end-to-end. The rate limiter, the metrics, the error ring, the idempotency cache and the last-used markers keep their state under `/var/run`, which only root can write, so the suite runs as root, as CI runs it. For anyone else `make test-unit` and `make test-property` run it with `unshare -rm`, as root of a user namespace with a `/var/run` of its own and the directory of `/var/lock` made again inside it, which needs unprivileged user namespaces.
-- **Integration tests** (QEMU + official OpenWrt VM image): full transaction recipe against real ubus/uci, auth on the wire, audit log emission, snapshot-restore. ~1-2 min including boot.
-- **Contract / Terraform provider tests**: handled by `openwrt-iac/terraform-provider-uapi` against a running uapi. Seeded by the in-repo curl example suite (`examples/curl/`) and the emitted OpenAPI spec.
+- **Unit tests** (pure ucode): schema validation, `fromUci`/`toUci`, scope
+  matcher, ID generation, error envelope, transaction snapshot logic. Runs
+  anywhere ucode runs. Sub-5s end-to-end. The rate limiter, the metrics, the
+  error ring, the idempotency cache and the last-used markers keep their state
+  under `/var/run`, which only root can write, so the suite runs as root, as CI
+  runs it. For anyone else `make test-unit` and `make test-property` run it with
+  `unshare -rm`, as root of a user namespace with a `/var/run` of its own and
+  the directory of `/var/lock` made again inside it, which needs unprivileged
+  user namespaces.
+- **Integration tests** (QEMU + official OpenWrt VM image): full transaction
+  recipe against real ubus/uci, auth on the wire, audit log emission,
+  snapshot-restore. ~1-2 min including boot.
+- **Contract / Terraform provider tests**: handled by
+  `openwrt-iac/terraform-provider-uapi` against a running uapi. Seeded by the
+  in-repo curl example suite (`examples/curl/`) and the emitted OpenAPI spec.
 
 ## ucode test harness
 
-Thin homegrown harness (`tests/harness.uc`, ~150 lines): `describe` / `it` / `assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1 on any failure. `load_with_fs` loads modules of `src/lib` against a stub `fs`, which can move a path that a test cannot write, such as `/var/run`, into `/tmp`, or hand the module a handle on `/dev/full` in place of a full filesystem (see `docs/ucode-quirks.md` for how the tests of a full filesystem use real files). `load_with` takes stubs of other modules too, such as `t.digest` for `digest`, which ucode-mod-digest provides on a router and the unit hosts lack.
+Thin homegrown harness (`tests/harness.uc`, ~150 lines): `describe` / `it` /
+`assert_equal` / `assert_true` / `assert_throws`, plain text output, exit code 1
+on any failure. `load_with_fs` loads modules of `src/lib` against a stub `fs`,
+which can move a path that a test cannot write, such as `/var/run`, into `/tmp`,
+or hand the module a handle on `/dev/full` in place of a full filesystem (see
+`docs/ucode-quirks.md` for how the tests of a full filesystem use real files).
+`load_with` takes stubs of other modules too, such as `t.digest` for `digest`,
+which ucode-mod-digest provides on a router and the unit hosts lack.
 
 ## Injectable ubus surface
 
-All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`). In production it's the real `ubus.connect()` / `uci.cursor()`; in unit tests it's a stub returning canned responses. The stub writes into the state that it reads, and its `uci_export` answers the package as it was before the first write that is not committed yet, as the real one reads the file, because the transaction takes its snapshot after `fn` has written. This is the difference between covering 30% and covering the transaction recipe's failure paths (specifically the snapshot-restore rollback, which is hard to trigger naturally). The stub cannot show what `bus.connect()` itself does, so `tests/unit/bus_test.uc` also runs `connect()` with a fake ubus, a fake uci module, and real files for the restore. CI's ucode has no uci module, which is why the fake exists. The fake keeps only what those tests need from libuci: a load by name, also on first use, applies what a shell staged and reads an override in place of the file, a load by path does neither and fails for a package that the cursor holds, a commit writes the cursor's copy, and a revert deletes what the shell staged. It holds sections as plain objects, so it knows nothing of anonymous sections, lists, section order or parse errors.
+All ubus/uci calls route through a single injectable surface (`src/lib/bus.uc`).
+In production it's the real `ubus.connect()` / `uci.cursor()`; in unit tests
+it's a stub returning canned responses. The stub writes into the state that it
+reads, and its `uci_export` answers the package as it was before the first write
+that is not committed yet, as the real one reads the file, because the
+transaction takes its snapshot after `fn` has written. This is the difference
+between covering 30% and covering the transaction recipe's failure paths
+(specifically the snapshot-restore rollback, which is hard to trigger
+naturally). The stub cannot show what `bus.connect()` itself does, so
+`tests/unit/bus_test.uc` also runs `connect()` with a fake ubus, a fake uci
+module, and real files for the restore. CI's ucode has no uci module, which is
+why the fake exists. The fake keeps only what those tests need from libuci: a
+load by name, also on first use, applies what a shell staged and reads an
+override in place of the file, a load by path does neither and fails for a
+package that the cursor holds, a commit writes the cursor's copy, and a revert
+deletes what the shell staged. It holds sections as plain objects, so it knows
+nothing of anonymous sections, lists, section order or parse errors.
 
 ## Load-bearing integration tests
 
-Every regression in this list has cost a real debug round-trip at some point. Keep them green; if one starts failing, that is the prompt to stop and investigate before pushing.
+Every regression in this list has cost a real debug round-trip at some point.
+Keep them green; if one starts failing, that is the prompt to stop and
+investigate before pushing.
 
-1. **Concurrency model confirmation.** `tests/integration/01_concurrency_model_test.sh` claims "5 concurrent requests fork; at least 2 distinct PIDs, uhttpd caps CGI children at 3", and asserts `count == 1` on every response. The claim string is printed by the test beside the assertion and is checked by `lint-doc-refs`, so this description cannot drift from what the test does: it said "5 distinct PIDs" for several releases while the test asserted 2.
-2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in syslog.
+1. **Concurrency model confirmation.**
+   `tests/integration/01_concurrency_model_test.sh` claims "5 concurrent
+   requests fork; at least 2 distinct PIDs, uhttpd caps CGI children at 3", and
+   asserts `count == 1` on every response. The claim string is printed by the
+   test beside the assertion and is checked by `lint-doc-refs`, so this
+   description cannot drift from what the test does: it said "5 distinct PIDs"
+   for several releases while the test asserted 2.
+2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in
+   syslog.
 3. **Validation failure.** Bad payload → 422 with field errors → no uci change.
-4. **Reload failure rollback.** Construct a config uci accepts but the daemon rejects → 500 `reload_failed_restored` → uci back to prior state.
-5. **Auth paths.** Missing/bad token → 401. Insufficient scope → 403. Plain HTTP from remote → 403 `tls_required`.
-6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT denied with `unmanaged_resource` → `POST .../adopt` → writable.
-7. **APK install smoke test.** Fresh OpenWrt 25.12 → align the uhttpd packages on the feed, as `docs/installation.md` asks → `apk add uapi` → the uci-defaults hook wires uhttpd and creates the token store → curl works. It also upgrades from 3.2.0, the last release whose package shipped `/etc/config/uapi`: with tokens, which the store keeps, with the store as shipped, which the hook creates again, and with `--purge`, which loses the tokens. Each time it checks that no `.apk-new` is left and that `sysupgrade -l` lists the store. CI runs it in the `package` job, on the APK that the job builds with the pinned SDK: on a release tag, on `workflow_dispatch`, and on a pull request that changes what goes into the APK, how it is built, or this test, by the list of paths in the `lint` job of `.github/workflows/ci.yml`. The list holds `src/`, because the test runs `uapi-token` and the API from the APK, and both load the modules of `src/lib`. A pull request that changes none of these paths, such as one of docs only, runs none of this, because the integration suite copies the source files into the VM and installs no APK.
-8. **Stock-config compatibility round-trip** (`tests/integration/44_stock_config_test.sh`, 2.3.0+). For every curated CRUD resource whose package ships in the bare OpenWrt image: `GET` the section, adopt it if `managed: false`, `PUT` the body back verbatim, then `GET` again and diff the persistable shape. Singletons follow the same pattern with `PATCH` instead of `PUT` (singletons don't expose PUT, per `handler.make_singleton`). A 422 or a diff surfaces a regression where uapi rejects (or silently mutates) what OpenWrt itself ships. Catches the validation-stricter-than-the-platform class. Scope is every curated resource whose package is on the box: the bare-image ones (firewall, network, dhcp, dropbear, system) plus lldpd and vnstat, which `install_uapi` installs at bootstrap. The families still outside the image are listed under "Which resources a daemon has to be installed to test" below. No test numbered after this one may depend on pristine stock config, because PUT-self cumulatively rewrites the VM's `/etc/config/*` (`toUci` drops options not in `schema_properties`) and a later test reading a stock value would see drift.
+4. **Reload failure rollback.** Construct a config uci accepts but the daemon
+   rejects → 500 `reload_failed_restored` → uci back to prior state.
+5. **Auth paths.** Missing/bad token → 401. Insufficient scope → 403. Plain HTTP
+   from remote → 403 `tls_required`.
+6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT
+   denied with `unmanaged_resource` → `POST .../adopt` → writable.
+7. **APK install smoke test.** Fresh OpenWrt 25.12 → align the uhttpd packages
+   on the feed, as `docs/installation.md` asks → `apk add uapi` → the
+   uci-defaults hook wires uhttpd and creates the token store → curl works. It
+   also upgrades from 3.2.0, the last release whose package shipped
+   `/etc/config/uapi`: with tokens, which the store keeps, with the store as
+   shipped, which the hook creates again, and with `--purge`, which loses the
+   tokens. Each time it checks that no `.apk-new` is left and that `sysupgrade
+   -l` lists the store. CI runs it in the `package` job, on the APK that the job
+   builds with the pinned SDK: on a release tag, on `workflow_dispatch`, and on
+   a pull request that changes what goes into the APK, how it is built, or this
+   test, by the list of paths in the `lint` job of `.github/workflows/ci.yml`.
+   The list holds `src/`, because the test runs `uapi-token` and the API from
+   the APK, and both load the modules of `src/lib`. A pull request that changes
+   none of these paths, such as one of docs only, runs none of this, because the
+   integration suite copies the source files into the VM and installs no APK.
+8. **Stock-config compatibility round-trip**
+   (`tests/integration/44_stock_config_test.sh`, 2.3.0+). For every curated CRUD
+   resource whose package ships in the bare OpenWrt image: `GET` the section,
+   adopt it if `managed: false`, `PUT` the body back verbatim, then `GET` again
+   and diff the persistable shape. Singletons follow the same pattern with
+   `PATCH` instead of `PUT` (singletons don't expose PUT, per
+   `handler.make_singleton`). A 422 or a diff surfaces a regression where uapi
+   rejects (or silently mutates) what OpenWrt itself ships. Catches the
+   validation-stricter-than-the-platform class. Scope is every curated resource
+   whose package is on the box: the bare-image ones (firewall, network, dhcp,
+   dropbear, system) plus lldpd and vnstat, which `install_uapi` installs at
+   bootstrap. The families still outside the image are listed under "Which
+   resources a daemon has to be installed to test" below. No test numbered after
+   this one may depend on pristine stock config, because PUT-self cumulatively
+   rewrites the VM's `/etc/config/*` (`toUci` drops options not in
+   `schema_properties`) and a later test reading a stock value would see drift.
 
-9. **Read-honesty round-trip** (`tests/integration/47_read_honesty_test.sh`, 2.5.0+). The resources layer 8 cannot reach (wireguard interface and peer, wireless, plus the `ipaddr` / `ipaddrs` pair), round-tripped both verbatim and with one field changed, with the masked credential read back out of uci and the address list checked on the netdev. See the section below for why each part is there.
+9. **Read-honesty round-trip** (`tests/integration/47_read_honesty_test.sh`,
+   2.5.0+). The resources layer 8 cannot reach (wireguard interface and peer,
+   wireless, plus the `ipaddr` / `ipaddrs` pair), round-tripped both verbatim
+   and with one field changed, with the masked credential read back out of uci
+   and the address list checked on the netdev. See the section below for why
+   each part is there.
 
 ## The no-partial-state property
 
-`tests/unit/no_partial_state_test.uc` (2.5.0+) is the first architectural principle stated as a test: a write that fails leaves uci exactly as it found it. It runs over the same fixtures as the read-honesty property, injecting the failure at reload, the one point where uci has already been committed and the daemon then refuses. That is the case the restore path exists for and the only one where a partial state can survive a request.
+`tests/unit/no_partial_state_test.uc` (2.5.0+) is the first architectural
+principle stated as a test: a write that fails leaves uci exactly as it found
+it. It runs over the same fixtures as the read-honesty property, injecting the
+failure at reload, the one point where uci has already been committed and the
+daemon then refuses. That is the case the restore path exists for and the only
+one where a partial state can survive a request.
 
-Before this, "no partial-failure states, no config drift" was asserted in ten documentation files and covered by one unit test on the transaction module. Never per resource, which is where it can actually go wrong: the transaction restores a snapshot, but whether a given resource's write falls entirely inside that snapshot depends on the resource.
+Before this, "no partial-failure states, no config drift" was asserted in ten
+documentation files and covered by one unit test on the transaction module.
+Never per resource, which is where it can actually go wrong: the transaction
+restores a snapshot, but whether a given resource's write falls entirely inside
+that snapshot depends on the resource.
 
 Two things the injection had to get right, both learned by getting them wrong:
 
-- **Only the first reload fails.** The restore path reloads too, so a stub that fails every call produces `reload_failed_unrecovered` and exercises the wrong branch. The case worth covering is a daemon that refuses the new config and accepts the restored one.
-- **The test asserts the write actually failed** before comparing state. A `200` would mean the injected error never reached the transaction, and the comparison would then pass for the wrong reason.
+- **Only the first reload fails.** The restore path reloads too, so a stub that
+  fails every call produces `reload_failed_unrecovered` and exercises the wrong
+  branch. The case worth covering is a daemon that refuses the new config and
+  accepts the restored one.
+- **The test asserts the write actually failed** before comparing state. A `200`
+  would mean the injected error never reached the transaction, and the
+  comparison would then pass for the wrong reason.
 
-Validated by neutering the restore (`conn.uci_import` in `transaction.uc`), when the list held 45 cases: 5 of them fail with the before-and-after uci printed. The other 40 write back the body they just read, so uci ends where it started whether or not the restore ran. The 5 that fail are the writes that do not store what they read verbatim: `dhcp/hosts.tag` and `snmpd/agents.agentaddress` turn a scalar into a list, `unbound/server` and `lldpd/config` move the value onto the uci key their daemon actually reads, and `network/interfaces` writes back a field the seed left absent.
+Validated by neutering the restore (`conn.uci_import` in `transaction.uc`), when
+the list held 45 cases: 5 of them fail with the before-and-after uci printed.
+The other 40 write back the body they just read, so uci ends where it started
+whether or not the restore ran. The 5 that fail are the writes that do not store
+what they read verbatim: `dhcp/hosts.tag` and `snmpd/agents.agentaddress` turn a
+scalar into a list, `unbound/server` and `lldpd/config` move the value onto the
+uci key their daemon actually reads, and `network/interfaces` writes back a
+field the seed left absent.
 
-Not covered: a crash between commit and reload. Nothing in-process can restore after that, `docs/architecture.md` says so, and it is the reason commit-confirmed apply was designed at all.
+Not covered: a crash between commit and reload. Nothing in-process can restore
+after that, `docs/architecture.md` says so, and it is the reason
+commit-confirmed apply was designed at all.
 
 ## The write-overlay property
 
-A keyword under a property's `x-uapi-write` narrows only the `*Request` schema, and nothing at runtime reads it, so `validate()` is what makes it true. `tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the fixtures of its module. A value just past the keyword must be refused in every case, with the keyword's own code in at least one of them, and the value at it must pass in at least one case. A `pattern` has no value at it, because none can be derived from a regex: it is probed with the values among `x`, `0`, the empty string, a newline, a space, `#`, `[` and a backslash that the regex itself refuses, and the module's own tests cover the values that it takes. The entries of `openapi_write_conditional` are checked the same way, over the cases that match their `if`. When no case matches, every case is probed with the `if` applied, because the fixtures seed each defaulted field off its default, so that none is, for example, an enabled access point. An `if` that holds a keyword other than `const` or `enum` cannot be applied, and fails the test instead. A nested property is probed under the path that `validate()` reports, such as `match.device`, and an element under `items` as the only element of its array, under a path such as `ip6class[0]`. A keyword without a probe fails the test, so a new kind of keyword cannot pass unchecked, and so does a keyword below an element. Validated by raising the `mtu` bound to 70, by removing the `proto` check from `validate()`, by raising the pppd floor to 576, by removing the `match.device` check from `firewall/nat`, and by removing the rule in `validate()` behind a keyword added under the `items` of `ip6class`: each fails its own case.
+A keyword under a property's `x-uapi-write` narrows only the `*Request` schema,
+and nothing at runtime reads it, so `validate()` is what makes it true.
+`tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the fixtures
+of its module. A value just past the keyword must be refused in every case, with
+the keyword's own code in at least one of them, and the value at it must pass in
+at least one case. A `pattern` has no value at it, because none can be derived
+from a regex: it is probed with the values among `x`, `0`, the empty string, a
+newline, a space, `#`, `[` and a backslash that the regex itself refuses, and
+the module's own tests cover the values that it takes. The entries of
+`openapi_write_conditional` are checked the same way, over the cases that match
+their `if`. When no case matches, every case is probed with the `if` applied,
+because the fixtures seed each defaulted field off its default, so that none is,
+for example, an enabled access point. An `if` that holds a keyword other than
+`const` or `enum` cannot be applied, and fails the test instead. A nested
+property is probed under the path that `validate()` reports, such as
+`match.device`, and an element under `items` as the only element of its array,
+under a path such as `ip6class[0]`. A keyword without a probe fails the test, so
+a new kind of keyword cannot pass unchecked, and so does a keyword below an
+element. Validated by raising the `mtu` bound to 70, by removing the `proto`
+check from `validate()`, by raising the pppd floor to 576, by removing the
+`match.device` check from `firewall/nat`, and by removing the rule in
+`validate()` behind a keyword added under the `items` of `ip6class`: each fails
+its own case.
 
 ## The read-honesty property
 
-Principle 4 as a test: read a section, write the body back, read again, and nothing may change or be rejected. Two layers state it, `tests/unit/read_honesty_test.uc` and `tests/integration/47_read_honesty_test.sh` (both 2.5.0+). Each runs in two forms, because the forms catch different defects.
+Principle 4 as a test: read a section, write the body back, read again, and
+nothing may change or be rejected. Two layers state it,
+`tests/unit/read_honesty_test.uc` and
+`tests/integration/47_read_honesty_test.sh` (both 2.5.0+). Each runs in two
+forms, because the forms catch different defects.
 
-- **Body written back verbatim.** Catches a read the write path cannot reproduce. This is how 2.4.0 destroyed write-only credentials: the read masks them, so the body a client echoes cannot carry them, and the write dropped what it could not see.
-- **One field changed first, the rest left as read.** Catches a read whose fields are not independently writable, which the verbatim form structurally cannot see. This is how the `ipaddr` / `ipaddrs` pair became unwritable in 2.4.1: unmodified, the scalar agrees with the list, so the contradiction only appears once the list moves and the previously-read scalar travels beside it. It is also the shape of every real apply.
+- **Body written back verbatim.** Catches a read the write path cannot
+  reproduce. This is how 2.4.0 destroyed write-only credentials: the read masks
+  them, so the body a client echoes cannot carry them, and the write dropped
+  what it could not see.
+- **One field changed first, the rest left as read.** Catches a read whose
+  fields are not independently writable, which the verbatim form structurally
+  cannot see. This is how the `ipaddr` / `ipaddrs` pair became unwritable in
+  2.4.1: unmodified, the scalar agrees with the list, so the contradiction only
+  appears once the list moves and the previously-read scalar travels beside it.
+  It is also the shape of every real apply.
 
-Both forms were validated by re-introducing the bug they claim to catch, at both layers, and each catches only its own. Neutering `carry_write_only` fails four unit cases on the verbatim form and exits the integration test non-zero; neutering `resolve_for_replace` failed one case, and only on the modified form. That second measurement was taken against 2.x, and 3.0.0 deleted the seam it neutered along with the mirrored pair that needed it, so it cannot be repeated as written. The form stays because the class outlives the instance: any read whose fields are not independently writable produces the same signature, and only the modified form perturbs one field at a time to expose it.
+Both forms were validated by re-introducing the bug they claim to catch, at both
+layers, and each catches only its own. Neutering `carry_write_only` fails four
+unit cases on the verbatim form and exits the integration test non-zero;
+neutering `resolve_for_replace` failed one case, and only on the modified form.
+That second measurement was taken against 2.x, and 3.0.0 deleted the seam it
+neutered along with the mirrored pair that needed it, so it cannot be repeated
+as written. The form stays because the class outlives the instance: any read
+whose fields are not independently writable produces the same signature, and
+only the modified form perturbs one field at a time to expose it.
 
-Every writable resource carries a case: a companion test walks `src/resources/` and fails naming any module with a `validate()` that has none. There is no exempt category. The first version demanded cases only from modules with a masked field or a merge hook, four of forty-three, which would not have demanded `dhcp/hosts` and so would not have caught the `tag` bug that shipped in the same release as the property itself.
+Every writable resource carries a case: a companion test walks `src/resources/`
+and fails naming any module with a `validate()` that has none. There is no
+exempt category. The first version demanded cases only from modules with a
+masked field or a merge hook, four of forty-three, which would not have demanded
+`dhcp/hosts` and so would not have caught the `tag` bug that shipped in the same
+release as the property itself.
 
-A second companion test enforces something the first version got wrong: **no case may seed a field at the value `fromUci` would synthesize for it.** If a seed uses the default, dropping that field from `toUci` is invisible, because the re-read fills the default back in and before matches after. Measured rather than assumed: deleting `out.forward` from `firewall.zones` went unnoticed while the seed said `REJECT`, the documented default, and was caught immediately once the seed said `DROP`. The check found seven more cases seeding booleans at their defaults that a hand audit had missed.
+A second companion test enforces something the first version got wrong: **no
+case may seed a field at the value `fromUci` would synthesize for it.** If a
+seed uses the default, dropping that field from `toUci` is invisible, because
+the re-read fills the default back in and before matches after. Measured rather
+than assumed: deleting `out.forward` from `firewall.zones` went unnoticed while
+the seed said `REJECT`, the documented default, and was caught immediately once
+the seed said `DROP`. The check found seven more cases seeding booleans at their
+defaults that a hand audit had missed.
 
-A third unit property (3.2.0+) checks the raw section instead of the view: **a PATCH that names nothing leaves uci as stored.** The view cannot see this, because a PATCH that writes a default reads back exactly as before. It runs on each seed, and again with each option removed whose absence the read fills in, because an absent option is where a PATCH can write a value nobody sent. It needs no `default:` annotation to find those options, so it also covers a default that applies under one proto only. Validated by projecting the defaults from an empty section again, as before 3.2.0: the three wireguard cases fail with `nohostroute: null -> "0"`. Three cases move options on purpose while they store the source option, two legacy names moved to the name the daemon reads and a rule action that netifd cannot parse, and the test names them. It also names the one removal that leaves a section no write accepts, so any other refusal fails it.
+A third unit property (3.2.0+) checks the raw section instead of the view: **a
+PATCH that names nothing leaves uci as stored.** The view cannot see this,
+because a PATCH that writes a default reads back exactly as before. It runs on
+each seed, and again with each option removed whose absence the read fills in,
+because an absent option is where a PATCH can write a value nobody sent. It
+needs no `default:` annotation to find those options, so it also covers a
+default that applies under one proto only. Validated by projecting the defaults
+from an empty section again, as before 3.2.0: the three wireguard cases fail
+with `nohostroute: null -> "0"`. Three cases move options on purpose while they
+store the source option, two legacy names moved to the name the daemon reads and
+a rule action that netifd cannot parse, and the test names them. It also names
+the one removal that leaves a section no write accepts, so any other refusal
+fails it.
 
-A fourth unit property (3.2.0+) holds the server to the null that the spec admits: **a null that a merge-patch body takes removes the field.** For each seed and each field of its `<Name>Patch`, nested fields too, it sends a PATCH that sets the field to null, and compares the section with the section after an empty PATCH. Where the Patch takes the null, the PATCH must answer 422, or remove each stored option that `toUci` leaves out for the null and write nothing else. A field that keeps its Request type, by the rule of `nullable_properties` in `build/gen_openapi.uc`, must answer 422 or remove nothing. `mwan3/interfaces.family` is the one exception: the Request requires it, but its `validate()` does not, so a null removes it. The test lists it and fails when that changes. Four seeds store an option for this property only, because no seed stored it in a form whose null the server takes: `firewall/nat.target` as `ACCEPT` without `snat_ip`, the `match.family` of a rule and of a redirect, and `nohostroute` of a wireguard interface. Validated three times. An openvpn `merge_for_patch` that skips a null fails it with `{"enabled": null} left enabled: "1"`. Without `mode` in `openapi_patch_non_null` of `wireless/interfaces`, `{"mode": null}` wrote `mode: "sta" -> "ap"`, and `lint-openapi-shape` and `tests/merge_patch_bodies.py` failed too. Since `validate()` refuses a null `mode`, the property takes the 422 there, and only the other two fail. An empty exception list fails it on `mwan3/interfaces.family`. `lint-openapi-shape` and `tests/merge_patch_bodies.py` send no null to the server: the lint reads only the spec, and the Python check runs no ucode.
+A fourth unit property (3.2.0+) holds the server to the null that the spec
+admits: **a null that a merge-patch body takes removes the field.** For each
+seed and each field of its `<Name>Patch`, nested fields too, it sends a PATCH
+that sets the field to null, and compares the section with the section after an
+empty PATCH. Where the Patch takes the null, the PATCH must answer 422, or
+remove each stored option that `toUci` leaves out for the null and write nothing
+else. A field that keeps its Request type, by the rule of `nullable_properties`
+in `build/gen_openapi.uc`, must answer 422 or remove nothing.
+`mwan3/interfaces.family` is the one exception: the Request requires it, but its
+`validate()` does not, so a null removes it. The test lists it and fails when
+that changes. Four seeds store an option for this property only, because no seed
+stored it in a form whose null the server takes: `firewall/nat.target` as
+`ACCEPT` without `snat_ip`, the `match.family` of a rule and of a redirect, and
+`nohostroute` of a wireguard interface. Validated three times. An openvpn
+`merge_for_patch` that skips a null fails it with `{"enabled": null} left
+enabled: "1"`. Without `mode` in `openapi_patch_non_null` of
+`wireless/interfaces`, `{"mode": null}` wrote `mode: "sta" -> "ap"`, and
+`lint-openapi-shape` and `tests/merge_patch_bodies.py` failed too. Since
+`validate()` refuses a null `mode`, the property takes the 422 there, and only
+the other two fail. An empty exception list fails it on
+`mwan3/interfaces.family`. `lint-openapi-shape` and
+`tests/merge_patch_bodies.py` send no null to the server: the lint reads only
+the spec, and the Python check runs no ucode.
 
-A fifth property (3.3.0+), in `tests/unit/bus_test.uc`, runs each seed through the real bus and the fake libuci: **a PUT of the read commits nothing, reloads nothing and collects no kernel operation**, a singleton with the PATCH of its read, and so does a `/batch` of such PUTs. A PUT stores some reads in another form, such as a list that uci holds as an option, a number in hex or a legacy option name, so the first PUT of the read must commit nothing only when it leaves the package as it was, and the PUT of the read after it must commit nothing in every case. A PUT does not write a default that the section does not hold, which two more cases check, a peer that LuCI wrote without its flags and a rule that a POST created: their first PUT of the read commits nothing. Validated by restoring the `diff_apply` of 3.2.0: every collection case, the two cases and the batch fail, and writing the defaults again fails the two cases. The singletons pass either way, because a PATCH already wrote only what it changed. In the same file, a PUT of the read, a PATCH that names nothing and a raw PUT or PATCH of what uci holds answer `409 conflict` when another writer deleted the section during the request, which fails when the commit replays no check of the section.
+A fifth property (3.3.0+), in `tests/unit/bus_test.uc`, runs each seed through
+the real bus and the fake libuci: **a PUT of the read commits nothing, reloads
+nothing and collects no kernel operation**, a singleton with the PATCH of its
+read, and so does a `/batch` of such PUTs. A PUT stores some reads in another
+form, such as a list that uci holds as an option, a number in hex or a legacy
+option name, so the first PUT of the read must commit nothing only when it
+leaves the package as it was, and the PUT of the read after it must commit
+nothing in every case. A PUT does not write a default that the section does not
+hold, which two more cases check, a peer that LuCI wrote without its flags and a
+rule that a POST created: their first PUT of the read commits nothing. Validated
+by restoring the `diff_apply` of 3.2.0: every collection case, the two cases and
+the batch fail, and writing the defaults again fails the two cases. The
+singletons pass either way, because a PATCH already wrote only what it changed.
+In the same file, a PUT of the read, a PATCH that names nothing and a raw PUT or
+PATCH of what uci holds answer `409 conflict` when another writer deleted the
+section during the request, which fails when the commit replays no check of the
+section.
 
-A sixth property (3.3.0+), in `tests/unit/handler_test.uc`, guards what `new_errors()` assumes: **no message of `validate_new()` quotes a value of the section.** For each seed of a resource with `validate_new()`, it puts a probe into one field at a time, over the seed, the seed with each field null, and the seed with each value of each enum and boolean field. A probe is a marker as a plain string, as a string with the characters that the rules refuse, as one of 64 bytes and one over 1024 bytes, or as a list of one of these, or it is a number that a rule refuses: two out of every range, 0 and -1. A number holds no marker, so each context runs the probes again with a marker of its own in every free-text field, which catches a message that quotes a field other than the one that set off its rule. That second run is skipped for a context that raises the same errors as an earlier one, and for a context with a null field. A message that holds a marker fails the property, and so does a seed on which no probe makes `validate_new()` report anything. What it cannot see is a rule that only a combination of values that no context holds sets off, such as an access point with EAP on a seed in station mode, and a quoted value that the rule transforms, such as a length. Validated by quoting a value in nine messages of the five modules, four of them a field other than the one that sets off the rule: each fails its own case.
+A sixth property (3.3.0+), in `tests/unit/handler_test.uc`, guards what
+`new_errors()` assumes: **no message of `validate_new()` quotes a value of the
+section.** For each seed of a resource with `validate_new()`, it puts a probe
+into one field at a time, over the seed, the seed with each field null, and the
+seed with each value of each enum and boolean field. A probe is a marker as a
+plain string, as a string with the characters that the rules refuse, as one of
+64 bytes and one over 1024 bytes, or as a list of one of these, or it is a
+number that a rule refuses: two out of every range, 0 and -1. A number holds no
+marker, so each context runs the probes again with a marker of its own in every
+free-text field, which catches a message that quotes a field other than the one
+that set off its rule. That second run is skipped for a context that raises the
+same errors as an earlier one, and for a context with a null field. A message
+that holds a marker fails the property, and so does a seed on which no probe
+makes `validate_new()` report anything. What it cannot see is a rule that only a
+combination of values that no context holds sets off, such as an access point
+with EAP on a seed in station mode, and a quoted value that the rule transforms,
+such as a length. Validated by quoting a value in nine messages of the five
+modules, four of them a field other than the one that sets off the rule: each
+fails its own case.
 
-What the integration layer adds is the part a stub bus cannot reach. It reads the secret back out of uci, which matters because the view masks credentials: a write that replaced one with a different non-empty value satisfies any view-level comparison, and only the stored bytes disprove it. It also confirms the modified address list reached the netdev rather than only uci. Both were measured with the bug present: `preshared_key` was emptied in uci while the response stayed 200.
+What the integration layer adds is the part a stub bus cannot reach. It reads
+the secret back out of uci, which matters because the view masks credentials: a
+write that replaced one with a different non-empty value satisfies any
+view-level comparison, and only the stored bytes disprove it. It also confirms
+the modified address list reached the netdev rather than only uci. Both were
+measured with the bug present: `preshared_key` was emptied in uci while the
+response stayed 200.
 
-Relationship to the stock-config round-trip (layer 8 above): 44 covers many more resources against genuinely stock configuration, but it PUTs verbatim only and its scope is bare-image packages, excluding wireless outright. Neither the secret-destruction nor the mirror-field class is reachable from it, because both live in wireguard, wireless and openvpn. 47 is the narrow complement: four resources, both forms, plus the uci and netdev checks.
+Relationship to the stock-config round-trip (layer 8 above): 44 covers many more
+resources against genuinely stock configuration, but it PUTs verbatim only and
+its scope is bare-image packages, excluding wireless outright. Neither the
+secret-destruction nor the mirror-field class is reachable from it, because both
+live in wireguard, wireless and openvpn. 47 is the narrow complement: four
+resources, both forms, plus the uci and netdev checks.
 
-Test 47 deletes the wireguard netdev in cleanup, not just the uci section. A wireguard netdev that outlives its config takes only part of it back on the next `ifup`: a re-run saw the v6 addresses return without the v4 one, which would have made the kernel assertion grade leftover state instead of the write under test.
+Test 47 deletes the wireguard netdev in cleanup, not just the uci section. A
+wireguard netdev that outlives its config takes only part of it back on the next
+`ifup`: a re-run saw the v6 addresses return without the v4 one, which would
+have made the kernel assertion grade leftover state instead of the write under
+test.
 
-No layer here can see a uci option no resource models at all. PUT deliberately drops unmodelled options, so a view-level comparison cannot detect the loss; that is a curation-completeness question, and layer 8 is what answers it.
+No layer here can see a uci option no resource models at all. PUT deliberately
+drops unmodelled options, so a view-level comparison cannot detect the loss;
+that is a curation-completeness question, and layer 8 is what answers it.
 
 ## Every gate ships with a demonstrated failure
 
-`make gate-selftest` breaks each gate on purpose and asserts it says so. Forty-eight probes across thirteen gates: the ten `lint` sub-targets, `openapi-check`, `coverage` and `stage`, with each distinct rejection shape probed separately (twenty-one for `lint-openapi-shape`, seven for `lint-doc-refs`, six for `lint-lock-audit`, three for `lint-defaults`, two each for `lint-reserved` and `coverage`). It also makes one well-formed change that a gate must let through. It deprecates a CRUD field with a reason, and `lint-openapi-shape` must pass.
+`make gate-selftest` breaks each gate on purpose and asserts it says so.
+Fifty-one probes across fourteen gates: the eleven `lint` sub-targets,
+`openapi-check`, `coverage` and `stage`, with each distinct rejection shape
+probed separately (twenty-three for `lint-openapi-shape`, seven for
+`lint-doc-refs`, six for `lint-lock-audit`, three for `lint-defaults`, two each
+for `lint-reserved` and `coverage`). It also makes one well-formed change that a
+gate must let through. It deprecates a CRUD field with a reason, and
+`lint-openapi-shape` must pass.
 
-It exists because `lint-emdash` shipped for several releases without ever running in CI. It lists tracked files with `git ls-files`, the CI container installed no `git`, and `|| true` turned the failure into a pass, so it reported success without reading a file. From the outside a green check and a working check look identical: "the gate runs" and "the gate works" are different claims, and only a planted defect separates them.
+It exists because `lint-emdash` shipped for several releases without ever
+running in CI. It lists tracked files with `git ls-files`, the CI container
+installed no `git`, and `|| true` turned the failure into a pass, so it reported
+success without reading a file. From the outside a green check and a working
+check look identical: "the gate runs" and "the gate works" are different claims,
+and only a planted defect separates them.
 
-Each rejection shape the bullets below describe has its own probe, so the list of what a gate catches is executable rather than prose that can drift from it: `lint-openapi-shape` documented four shapes while only one was probed, which is how prose and behaviour separate. If you add a shape to a gate, add its probe, and if the two disagree the self-test says so.
+Each rejection shape the bullets below describe has its own probe, so the list
+of what a gate catches is executable rather than prose that can drift from it:
+`lint-openapi-shape` documented four shapes while only one was probed, which is
+how prose and behaviour separate. If you add a shape to a gate, add its probe,
+and if the two disagree the self-test says so.
 
-Adding a gate means adding a probe. The completeness check derives the gate list from the Makefile's `lint:` chain rather than a hand-kept copy, so a new gate with no probe fails the self-test instead of passing quietly. That was verified by adding a gate with no probe and watching it fail.
+Adding a gate means adding a probe. The completeness check derives the gate list
+from the Makefile's `lint:` chain rather than a hand-kept copy, so a new gate
+with no probe fails the self-test instead of passing quietly. That was verified
+by adding a gate with no probe and watching it fail.
 
 Three properties worth knowing before editing it:
 
-- **Probes run in a throwaway git worktree**, so a mutation can never reach the tree you are working in, and an interrupted run cannot leave your checkout dirty.
-- **The worktree mirrors your working tree, not `HEAD`.** Uncommitted changes are carried across and committed as a throwaway baseline inside the worktree. Without that, a gate and its probe arriving in one commit could not be validated until after committing, and the reset between probes would revert them.
-- **A probe that changes nothing is reported as a broken probe**, not as a blind gate. The two are indistinguishable from an exit code alone, and telling them apart is the whole point. Each probe also asserts a fragment of the expected message, so a gate failing for an unrelated reason does not read as a pass.
+- **Probes run in a throwaway git worktree**, so a mutation can never reach the
+  tree you are working in, and an interrupted run cannot leave your checkout
+  dirty.
+- **The worktree mirrors your working tree, not `HEAD`.** Uncommitted changes
+  are carried across and committed as a throwaway baseline inside the worktree.
+  Without that, a gate and its probe arriving in one commit could not be
+  validated until after committing, and the reset between probes would revert
+  them.
+- **A probe that changes nothing is reported as a broken probe**, not as a blind
+  gate. The two are indistinguishable from an exit code alone, and telling them
+  apart is the whole point. Each probe also asserts a fragment of the expected
+  message, so a gate failing for an unrelated reason does not read as a pass.
 
-It found a real hole on its first complete run: `coverage`'s dead-export gate could never fire. `used_internally` scanned for the export's name as a token, and the module's own export block names every export, so every export counted as used and the `exit_code = 1` on dead exports was unreachable. Excluding the export block from that scan fixed it, verified in both directions: a planted dead export is now reported, and all 135 real exports still pass.
+It found a real hole on its first complete run: `coverage`'s dead-export gate
+could never fire. `used_internally` scanned for the export's name as a token,
+and the module's own export block names every export, so every export counted as
+used and the `exit_code = 1` on dead exports was unreachable. Excluding the
+export block from that scan fixed it, verified in both directions: a planted
+dead export is now reported, and all 135 real exports still pass.
 
 ## Lint suite
 
 `make lint` chains these sub-targets:
 
-- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule, enforced).
+- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule,
+  enforced).
+- `lint-md-lines`: fails on a prose line over 80 columns in a tracked Markdown
+  file, the markdownlint MD013 limit a reviewer's editor flags. Code blocks,
+  tables, headings, link definitions and single-token lines (long URLs) are
+  exempt, and `CHANGELOG.md` is checked only above its first released section,
+  which a release never edits.
 - `lint-syntax`: `ucode -c` on every `.uc` file in `src/`, `cli/`, `tests/`.
-- `lint-reserved`: fails on schema property names that collide with Terraform meta-arguments or HCL block keywords.
-- `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json` and fails on dangling targets.
-- `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json` that a conformance validator does not make, because the shapes are legal JSON Schema and merely useless to a generator: a schema `required` naming a property the schema does not declare, an `if` with no `then` or `else` (and the reverse), an empty or non-array `enum`, and any value that is the string `"NaN"`. The NaN one exists because ucode's `+` on two arrays yields NaN rather than concatenating, which is how an `enum` of `"NaN"` reached the published spec. It also checks that emitted response headers are declared on the responses that can carry them and nowhere else: the four transaction headers (`X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status`, `X-Kernel-Applied`) appear as a complete set on every curated-resource write and on the `POST /batch` 207, which commits and reloads once for the whole set and reports them aggregated, and on nothing else, `ETag` appears on exactly the curated CRUD and singleton reads and writes that call `set_etag_header` (which excludes the collection-kind lease views, curated but bare), and `X-Mgmt-Path-Warning` appears on exactly the collection POST 200 and the item PUT 200, PATCH 200 and DELETE 204 of each resource whose module sets `mgmt_path_guard` (the create arm is there because a new section can claim the management device). The curated path set is derived from the generator's own `ENDPOINTS` catalog and the guarded set from `src/resources/`, so neither is kept by hand and a new resource is covered the day it is added. The reverse error is the one that motivated them: three headers were emitted and declared nowhere at all, which a generated client cannot see. It also requires every `deprecated: true` property to carry a description opening with `Deprecated`: the flag tells codegen a field is going away, and only the text tells an operator why, which is what a provider prints in a plan warning. Eight fields shipped the flag with no reason attached. The match is case-insensitive because `network/interfaces.name` predated the convention and opened `DEPRECATED in 2.2.0`; 3.0.0 removed every deprecated property, so the rule currently guards the next one rather than an existing field. It also checks the merge-patch body of every PATCH. That body must not declare `required` or `allOf`. The server type-checks the body, but it checks the required fields on the merged section. Each `<Name>Patch` must equal `<Name>Request` without these two keywords. A nested object also loses its `required`, because `default_merge_for_patch` merges it into the stored one. The comparison ignores descriptions, examples, defaults and null. Each field of a curated merge-patch body must take null, nested fields too, because the server removes a field for a null. Where a null does not remove the field, the field must take null exactly when `<Name>Request` does. That is `id`, a write-only secret, a field that the Request requires, and a field in the lint's `PATCH_NULL_KEPT`, which lists each such field of a module's `openapi_patch_non_null` with what its null does. Before the merge-patch bodies took null, the rule found 100 fields.
-- `lint-doc-refs` (2.5.0+): walks `docs/*.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md` and `.github/workflows/ci.yml`, and fails on a reference that does not resolve: a repo path that is not there, a `module.export` a module does not export, a backticked `make <target>` the Makefile does not define, a `claims "..."` string no test prints, an active `docs/deprecations.md` row the spec's own description does not announce, and an error code documented as returned that nothing in `src/` emits (plus the reverse, a published enum code absent from `docs/errors.md`). Waivers live in `tests/lint_doc_refs.uc::WAIVERS`, keyed by the reference with the reason as the value, because some references are deliberately unresolvable: `bench/baseline.json` is cited precisely because it does not exist. What it does not catch is stated in its own header and is the larger half: "this job proves X" where the job exists and does something adjacent, and modal invariants like `never` or `atomic`. Both of those shapes shipped false claims that had to be caught by reading.
-- `lint-lock-audit`: runs the reproduction command of `docs/lock-state-audit.md`, taken from the doc itself, and fails when a site it prints falls in no row of the Sites table or in two rows, when a row's range holds no site, when a "covers all N sites" count in that doc or in `CLAUDE.md` is not the number of sites, and when the command exits non-zero, which is how an empty result shows. A row only has to contain its sites, so an edit that moves a site within its range passes and one that moves it out fails, naming the site's line and enclosing function. The count is what catches a new site added inside a range that already holds one. It exists because the doc said "17 sites audited" while its own command found 36, and nothing read the table.
-- `lint-wire-names` (2.5.0+): every API field whose name is not the uci option it writes has to be accounted for, with the reason as the value. Three shapes hide here and only one is a defect. A **rename** is one API name for one uci key spelled to the wire's conventions (`resource_limits` for uci's `resource`, `sys_location` for `sysLocation`), and stays. An **alias** is two API names for the same key, which is what a major removes: it makes a round-trip ambiguous, forces a merge hook to decide which name the caller meant, and cannot be expressed once request and response schemas split. 3.0.0 removed all three aliases that existed when this lint was written, so it currently guards an empty set. That is the point: it exists so a fourth cannot arrive unnoticed and force the next major to repeat the removal. A **proto-disjoint pair** is two API names for one uci key that never appear on the same section, because the key means different things under different values of another field. `network/interfaces.broadcast_flag` is the one case: uci `broadcast` is a flag on proto dhcp and an address on proto static, and each section reads and writes only one of the two names, so the round trip stays unambiguous. The lint checks only that each such field has a waiver with a reason, not that the two names stay disjoint, so the resource's own tests carry that.
-- `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies a matching `default:` annotation in `schema_properties`; for every `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ?? null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`, and the schema type includes `"null"`.
-- `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a bare section, and once per value of a Request `proto` enum, and fails when a field that comes back null is not null-permitted in the Response schema.
+- `lint-reserved`: fails on schema property names that collide with Terraform
+  meta-arguments or HCL block keywords.
+- `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json`
+  and fails on dangling targets.
+- `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json`
+  that a conformance validator does not make, because the shapes are legal JSON
+  Schema and merely useless to a generator: a schema `required` naming a
+  property the schema does not declare, an `if` with no `then` or `else` (and
+  the reverse), an empty or non-array `enum`, and any value that is the string
+  `"NaN"`. The NaN one exists because ucode's `+` on two arrays yields NaN
+  rather than concatenating, which is how an `enum` of `"NaN"` reached the
+  published spec. It also checks that emitted response headers are declared on
+  the responses that can carry them and nowhere else: the four transaction
+  headers (`X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status`,
+  `X-Kernel-Applied`) appear as a complete set on every curated-resource write
+  and on the `POST /batch` 207, which commits and reloads once for the whole set
+  and reports them aggregated, and on nothing else, `ETag` appears on exactly
+  the curated CRUD and singleton reads and writes that call `set_etag_header`
+  (which excludes the collection-kind lease views, curated but bare), and
+  `X-Mgmt-Path-Warning` appears on exactly the collection POST 200 and the item
+  PUT 200, PATCH 200 and DELETE 204 of each resource whose module sets
+  `mgmt_path_guard` (the create arm is there because a new section can claim the
+  management device). The curated path set is derived from the generator's own
+  `ENDPOINTS` catalog and the guarded set from `src/resources/`, so neither is
+  kept by hand and a new resource is covered the day it is added. The reverse
+  error is the one that motivated them: three headers were emitted and declared
+  nowhere at all, which a generated client cannot see. It also requires every
+  `deprecated: true` property to carry a description opening with `Deprecated`:
+  the flag tells codegen a field is going away, and only the text tells an
+  operator why, which is what a provider prints in a plan warning. Eight fields
+  shipped the flag with no reason attached. The match is case-insensitive
+  because `network/interfaces.name` predated the convention and opened
+  `DEPRECATED in 2.2.0`; 3.0.0 removed every deprecated property, so the rule
+  currently guards the next one rather than an existing field. It also checks
+  the merge-patch body of every PATCH. That body must not declare `required` or
+  `allOf`. The server type-checks the body, but it checks the required fields on
+  the merged section. Each `<Name>Patch` must equal `<Name>Request` without
+  these two keywords. A nested object also loses its `required`, because
+  `default_merge_for_patch` merges it into the stored one. The comparison
+  ignores descriptions, examples, defaults and null. Each field of a curated
+  merge-patch body must take null, nested fields too, because the server removes
+  a field for a null. Where a null does not remove the field, the field must
+  take null exactly when `<Name>Request` does. That is `id`, a write-only
+  secret, a field that the Request requires, and a field in the lint's
+  `PATCH_NULL_KEPT`, which lists each such field of a module's
+  `openapi_patch_non_null` with what its null does. Before the merge-patch
+  bodies took null, the rule found 100 fields.
+- `lint-doc-refs` (2.5.0+): walks `docs/*.md`, `CLAUDE.md`, `README.md`,
+  `CONTRIBUTING.md` and `.github/workflows/ci.yml`, and fails on a reference
+  that does not resolve: a repo path that is not there, a `module.export` a
+  module does not export, a backticked `make <target>` the Makefile does not
+  define, a `claims "..."` string no test prints, an active
+  `docs/deprecations.md` row the spec's own description does not announce, and
+  an error code documented as returned that nothing in `src/` emits (plus the
+  reverse, a published enum code absent from `docs/errors.md`). Waivers live in
+  `tests/lint_doc_refs.uc::WAIVERS`, keyed by the reference with the reason as
+  the value, because some references are deliberately unresolvable:
+  `bench/baseline.json` is cited precisely because it does not exist. What it
+  does not catch is stated in its own header and is the larger half: "this job
+  proves X" where the job exists and does something adjacent, and modal
+  invariants like `never` or `atomic`. Both of those shapes shipped false claims
+  that had to be caught by reading.
+- `lint-lock-audit`: runs the reproduction command of
+  `docs/lock-state-audit.md`, taken from the doc itself, and fails when a site
+  it prints falls in no row of the Sites table or in two rows, when a row's
+  range holds no site, when a "covers all N sites" count in that doc or in
+  `CLAUDE.md` is not the number of sites, and when the command exits non-zero,
+  which is how an empty result shows. A row only has to contain its sites, so an
+  edit that moves a site within its range passes and one that moves it out
+  fails, naming the site's line and enclosing function. The count is what
+  catches a new site added inside a range that already holds one. It exists
+  because the doc said "17 sites audited" while its own command found 36, and
+  nothing read the table.
+- `lint-wire-names` (2.5.0+): every API field whose name is not the uci option
+  it writes has to be accounted for, with the reason as the value. Three shapes
+  hide here and only one is a defect. A **rename** is one API name for one uci
+  key spelled to the wire's conventions (`resource_limits` for uci's `resource`,
+  `sys_location` for `sysLocation`), and stays. An **alias** is two API names
+  for the same key, which is what a major removes: it makes a round-trip
+  ambiguous, forces a merge hook to decide which name the caller meant, and
+  cannot be expressed once request and response schemas split. 3.0.0 removed all
+  three aliases that existed when this lint was written, so it currently guards
+  an empty set. That is the point: it exists so a fourth cannot arrive unnoticed
+  and force the next major to repeat the removal. A **proto-disjoint pair** is
+  two API names for one uci key that never appear on the same section, because
+  the key means different things under different values of another field.
+  `network/interfaces.broadcast_flag` is the one case: uci `broadcast` is a flag
+  on proto dhcp and an address on proto static, and each section reads and
+  writes only one of the two names, so the round trip stays unambiguous. The
+  lint checks only that each such field has a waiver with a reason, not that the
+  two names stay disjoint, so the resource's own tests carry that.
+- `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies
+  a matching `default:` annotation in `schema_properties`; for every
+  `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ??
+  null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`, and the schema
+  type includes `"null"`.
+- `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a
+  bare section, and once per value of a Request `proto` enum, and fails when a
+  field that comes back null is not null-permitted in the Response schema.
 
-Outside `make lint`, `50_response_conformance_test.sh` (3.0.0+) validates live response bodies against their published 200 schemas, and asserts the served `openapi.json` matches the tree's. The document-only gates cannot see an `allOf` whose branches are each valid but whose composition nothing can satisfy; that shape shipped twice, in `TokenMetadata` and in the `wireless/interfaces` `key` conditional.
+Outside `make lint`, `50_response_conformance_test.sh` (3.0.0+) validates live
+response bodies against their published 200 schemas, and asserts the served
+`openapi.json` matches the tree's. The document-only gates cannot see an `allOf`
+whose branches are each valid but whose composition nothing can satisfy; that
+shape shipped twice, in `TokenMetadata` and in the `wireless/interfaces` `key`
+conditional.
 
 ### Asserting that a write reached the daemon
 
-A 200 and a successful read-back prove only that uci accepted the write. Both were true of the redirect bug that made every uapi-created port forward silently vanish. Where a daemon compiles uci into something else, the integration library asserts against that compiled form instead:
+A 200 and a successful read-back prove only that uci accepted the write. Both
+were true of the redirect bug that made every uapi-created port forward silently
+vanish. Where a daemon compiles uci into something else, the integration library
+asserts against that compiled form instead:
 
-- `assert_fw4_emits` / `assert_fw4_omits` / `assert_fw4_loads` check what firewall4 renders from uci and that `nft -c` accepts the whole ruleset. Rendering is used rather than the applied table because CI stubs `/etc/init.d/firewall`, and because `nft -f` is atomic, so one bad token rejects every rule while `firewall reload` still exits 0.
-- `assert_dnsmasq_emits` / `assert_dnsmasq_omits` / `assert_dnsmasq_loads` check `/var/etc/dnsmasq.conf.<id>`, which dnsmasq compiles from `/etc/config/dhcp` on reload, and run `dnsmasq --test` over it. `--test` is the counterpart to `nft -c`: it reports a bad option or a bad value without disturbing the running server.
+- `assert_fw4_emits` / `assert_fw4_omits` / `assert_fw4_loads` check what
+  firewall4 renders from uci and that `nft -c` accepts the whole ruleset.
+  Rendering is used rather than the applied table because CI stubs
+  `/etc/init.d/firewall`, and because `nft -f` is atomic, so one bad token
+  rejects every rule while `firewall reload` still exits 0.
+- `assert_dnsmasq_emits` / `assert_dnsmasq_omits` / `assert_dnsmasq_loads` check
+  `/var/etc/dnsmasq.conf.<id>`, which dnsmasq compiles from `/etc/config/dhcp`
+  on reload, and run `dnsmasq --test` over it. `--test` is the counterpart to
+  `nft -c`: it reports a bad option or a bad value without disturbing the
+  running server.
 
-There is deliberately **no equivalent for network**. netifd reports a status object for an interface whose proto it does not recognise (silently falling back to `none`) and for one whose device does not exist, so "netifd knows about it" passes for broken configuration and would be a tautological assertion. `available: false` is not a usable signal either, since it is also false for a perfectly valid interface that has no device to bind to. A meaningful check would need a test interface bound to a real device, which the suite does not currently create.
+There is deliberately **no equivalent for network**. netifd reports a status
+object for an interface whose proto it does not recognise (silently falling back
+to `none`) and for one whose device does not exist, so "netifd knows about it"
+passes for broken configuration and would be a tautological assertion.
+`available: false` is not a usable signal either, since it is also false for a
+perfectly valid interface that has no device to bind to. A meaningful check
+would need a test interface bound to a real device, which the suite does not
+currently create.
 
 ### The dead-field audit
 
-`scripts/audit-dead-fields.sh root@<device>` checks every uci option a resource writes against the thing that reads it, and fails on any that nothing reads. A field nothing reads accepts a write, answers 200, and changes nothing on the device, which no status code distinguishes from a working one. It needs a device rather than CI, because the readers are what it greps: firewall4 is ucode, the init scripts are shell, and a uci option name a C daemon looks up is a literal in its string table. Several of those packages ship only a Makefile in the SDK feed, so a running box is the only place they can be read at all.
+`scripts/audit-dead-fields.sh root@<device>` checks every uci option a resource
+writes against the thing that reads it, and fails on any that nothing reads. A
+field nothing reads accepts a write, answers 200, and changes nothing on the
+device, which no status code distinguishes from a working one. It needs a device
+rather than CI, because the readers are what it greps: firewall4 is ucode, the
+init scripts are shell, and a uci option name a C daemon looks up is a literal
+in its string table. Several of those packages ship only a Makefile in the SDK
+feed, so a running box is the only place they can be read at all.
 
-**The corpus is the part that goes wrong, and it fails in the direction of looking productive.** An empty or partial corpus reports live options as dead, which is indistinguishable from a real finding. Three corpora were wrong on the first pass: the firewall4 entry was misnamed and produced 63 false positives including `src` and `target`, openvpn's option table turned out to live in `/usr/share/openvpn/openvpn.options` rather than the init, and `unbound_srv` / `unbound_ext` are read by a separate package entirely. So the script self-checks first, with two probes per package rather than one, and refuses to report a result if any probe cannot find an option that is unmistakably live. One probe was not enough: `openvpn/client` passed against a corpus that could not see a single openvpn option, because the init declares a shell local of that name.
+**The corpus is the part that goes wrong, and it fails in the direction of
+looking productive.** An empty or partial corpus reports live options as dead,
+which is indistinguishable from a real finding. Three corpora were wrong on the
+first pass: the firewall4 entry was misnamed and produced 63 false positives
+including `src` and `target`, openvpn's option table turned out to live in
+`/usr/share/openvpn/openvpn.options` rather than the init, and `unbound_srv` /
+`unbound_ext` are read by a separate package entirely. So the script self-checks
+first, with two probes per package rather than one, and refuses to report a
+result if any probe cannot find an option that is unmistakably live. One probe
+was not enough: `openvpn/client` passed against a corpus that could not see a
+single openvpn option, because the init declares a shell local of that name.
 
-Known-accounted entries live in the script beside the corpus, each with its reason: announced for removal, a deliberate decision such as `system.notes` which LuCI reads, or an artifact of reading option names out of the source such as a legacy key that is cleared on write. Anything else is a new finding and fails the run.
+Known-accounted entries live in the script beside the corpus, each with its
+reason: announced for removal, a deliberate decision such as `system.notes`
+which LuCI reads, or an artifact of reading option names out of the source such
+as a legacy key that is cleared on write. Anything else is a new finding and
+fails the run.
 
-Validated in both directions: adding an option nothing reads is reported as new, and blinding one package's corpus fails the run instead of reporting that package's options as dead.
+Validated in both directions: adding an option nothing reads is reported as new,
+and blinding one package's corpus fails the run instead of reporting that
+package's options as dead.
 
-**Two categories were attempted mechanically and rejected, which is worth recording so nobody rebuilds them.** Checking whether a daemon ever iterates the uci **section type** a resource models would have caught `vnstat/interfaces`, but it reports 13 false positives for every true one: netifd, odhcpd and mwan3 parse uci in C, so their iteration is invisible to the `config_foreach` idiom the check keys on, and wireguard peers use per-interface section names that never appear as a literal. Checking whether a **boolean-typed** field is read as free text (the `lldp_description` shape) conflates two different things: a reader taking the value with `config_get` and comparing it to `1` is the ordinary raw-compare class, not a type error. Of its seven candidates, `unbound_srv.ip_transparent` turned out to accept exactly what the field's helper emits and says so in a comment. Both remain human review.
+**Two categories were attempted mechanically and rejected, which is worth
+recording so nobody rebuilds them.** Checking whether a daemon ever iterates the
+uci **section type** a resource models would have caught `vnstat/interfaces`,
+but it reports 13 false positives for every true one: netifd, odhcpd and mwan3
+parse uci in C, so their iteration is invisible to the `config_foreach` idiom
+the check keys on, and wireguard peers use per-interface section names that
+never appear as a literal. Checking whether a **boolean-typed** field is read as
+free text (the `lldp_description` shape) conflates two different things: a
+reader taking the value with `config_get` and comparing it to `1` is the
+ordinary raw-compare class, not a type error. Of its seven candidates,
+`unbound_srv.ip_transparent` turned out to accept exactly what the field's
+helper emits and says so in a comment. Both remain human review.
 
 ### Which resources a daemon has to be installed to test
 
-A resource whose package is not on the box answers 503 `init_script_missing`, which is correct behaviour and also indistinguishable from a correct model: nothing exercises the resource, so a section-type mismatch looks exactly like a working one. That is how `vnstat/interfaces` shipped modelling `config interface` sections vnstat has never read.
+A resource whose package is not on the box answers 503 `init_script_missing`,
+which is correct behaviour and also indistinguishable from a correct model:
+nothing exercises the resource, so a section-type mismatch looks exactly like a
+working one. That is how `vnstat/interfaces` shipped modelling `config
+interface` sections vnstat has never read.
 
-`wireless/*` needs a radio: `wifi config` creates `/etc/config/wireless` but adds a `wifi-device` only for a radio that it finds. The wireless tests therefore load `mac80211_hwsim` through `ensure_wireless_radio` first, and `19_wireless_devices_test.sh` moves the file aside once to check the 503 `config_missing` refusal.
+`wireless/*` needs a radio: `wifi config` creates `/etc/config/wireless` but
+adds a `wifi-device` only for a radio that it finds. The wireless tests
+therefore load `mac80211_hwsim` through `ensure_wireless_radio` first, and
+`19_wireless_devices_test.sh` moves the file aside once to check the 503
+`config_missing` refusal.
 
-`install_uapi` installs lldpd and vnstat2 at bootstrap (about 560 KiB together), so `lldpd/config` and `vnstat/config` are exercised by `49_daemon_gated_resources_test.sh` and included in the stock-config round-trip. `40_unbound_uci_ext_test.sh` installs unbound itself, so `unbound/*` is covered only while that test runs.
+`install_uapi` installs lldpd and vnstat2 at bootstrap (about 560 KiB together),
+so `lldpd/config` and `vnstat/config` are exercised by
+`49_daemon_gated_resources_test.sh` and included in the stock-config round-trip.
+`40_unbound_uci_ext_test.sh` installs unbound itself, so `unbound/*` is covered
+only while that test runs.
 
-Six resource families remain uncovered because their packages stay outside the image: `snmpd/*`, `mwan3/*`, `sqm/queues`, `usteer/config`, `prometheus_node_exporter_lua/config` and `openvpn/*`. That is a standing gap rather than a decision that they cannot be tested, and the prometheus one matters least because most of its surface is now deprecated. Anything asserting what those daemons do has to be run by hand on a real device.
+Six resource families remain uncovered because their packages stay outside the
+image: `snmpd/*`, `mwan3/*`, `sqm/queues`, `usteer/config`,
+`prometheus_node_exporter_lua/config` and `openvpn/*`. That is a standing gap
+rather than a decision that they cannot be tested, and the prometheus one
+matters least because most of its surface is now deprecated. Anything asserting
+what those daemons do has to be run by hand on a real device.
 
-`make openapi-validate` (2.4.0+) runs a real OpenAPI 3.1 conformance validator over the emitted document. It is deliberately **not** part of `make lint`, which stays dependency-free; it needs `python3` and `openapi-spec-validator`, and CI runs it as its own step so the gate is enforced without every local `make lint` requiring a pip install. It fails rather than skips when the validator is absent, since a check that quietly passes is worse than no check. The two gates are complementary and were measured to be so: the conformance run catches type and keyword violations anywhere in the document, and misses the two semantic cases above, which are valid JSON Schema. It then runs `tests/merge_patch_bodies.py`. This script asks `jsonschema` what a strict client concludes from each merge-patch body schema. An empty body and a body that names one field must pass. A body with a wrong type must fail. For each field of each curated merge-patch body, nested fields too, a body that sets the field to null must pass. Where a null does not remove the field, by the same rule as `lint-openapi-shape`, the body must take null exactly when the property of `<Name>Request` does. Before the merge-patch bodies took null, 100 of these bodies failed.
+`make openapi-validate` (2.4.0+) runs a real OpenAPI 3.1 conformance validator
+over the emitted document. It is deliberately **not** part of `make lint`, which
+stays dependency-free; it needs `python3` and `openapi-spec-validator`, and CI
+runs it as its own step so the gate is enforced without every local `make lint`
+requiring a pip install. It fails rather than skips when the validator is
+absent, since a check that quietly passes is worse than no check. The two gates
+are complementary and were measured to be so: the conformance run catches type
+and keyword violations anywhere in the document, and misses the two semantic
+cases above, which are valid JSON Schema. It then runs
+`tests/merge_patch_bodies.py`. This script asks `jsonschema` what a strict
+client concludes from each merge-patch body schema. An empty body and a body
+that names one field must pass. A body with a wrong type must fail. For each
+field of each curated merge-patch body, nested fields too, a body that sets the
+field to null must pass. Where a null does not remove the field, by the same
+rule as `lint-openapi-shape`, the body must take null exactly when the property
+of `<Name>Request` does. Before the merge-patch bodies took null, 100 of these
+bodies failed.
 
 ## CI shape
 
 - Every commit/PR: unit suite + lint.
-- The OpenWrt that the VM and SDK jobs use follows the ref: `v4` (the branch or a PR base) runs against the OpenWrt main snapshot, verified against the `sha256sums` published beside each artifact because a moving target has no filename to pin; every other ref, tags included, runs against the stable release, pinned by checksum in `build/sdk.sha256`. `tools/openwrt-sdk.sh` resolves both, and `tests/vm/setup.sh` picks the image the same way.
-- Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's number and the PR has no `changelog-not-needed` label.
+- The OpenWrt that the VM and SDK jobs use follows the ref: `v4` (the branch or
+  a PR base) runs against the OpenWrt main snapshot, verified against the
+  `sha256sums` published beside each artifact because a moving target has no
+  filename to pin; every other ref, tags included, runs against the stable
+  release, pinned by checksum in `build/sdk.sha256`. `tools/openwrt-sdk.sh`
+  resolves both, and `tests/vm/setup.sh` picks the image the same way.
+- Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails
+  when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's
+  number and the PR has no `changelog-not-needed` label.
 - Every PR + push to main or v4: unit + integration suite (QEMU).
-- A PR that changes what goes into the APK (`src/`, `build/openapi.json`, `files/`, `cli/uapi-token`), how it is built, or the APK smoke test: + the `package` job, which builds the APK and runs the APK install smoke test above on it, the upgrades from 3.2.0 included. That is most code PRs: 211 of the 259 commits on main between 1 August and 1 November 2026 touched one of the paths. The job runs beside `integration`, and on a hit of the SDK cache it took 10 to 12 minutes at the last release tags, so it adds little to the wait. On any other PR the job is skipped.
-- `package` is a required check: the `main` and `v4` rulesets require `unit`, `lint`, `integration`, `entry` and `package`, with the branch up to date, so a red `package` blocks a merge. A PR that does not change the APK still merges, because a skipped job passes as a required check. The `lint` job decides whether `package` runs. An error of `git diff` there counts as a change and runs `package`, and a failure of that step or of the checkout fails `lint`, which is required. A job of its own would skip `package` when it failed, and the skip would pass.
-- Release tag: + multi-arch verify-build (cross-compile sanity) + `package` job + release-apk job (publishes the APK that `package` tested to the GitHub Release, with CHANGELOG-extracted notes).
+- A PR that changes what goes into the APK (`src/`, `build/openapi.json`,
+  `files/`, `cli/uapi-token`), how it is built, or the APK smoke test: + the
+  `package` job, which builds the APK and runs the APK install smoke test above
+  on it, the upgrades from 3.2.0 included. That is most code PRs: 211 of the 259
+  commits on main between 1 August and 1 November 2026 touched one of the paths.
+  The job runs beside `integration`, and on a hit of the SDK cache it took 10 to
+  12 minutes at the last release tags, so it adds little to the wait. On any
+  other PR the job is skipped.
+- `package` is a required check: the `main` and `v4` rulesets require `unit`,
+  `lint`, `integration`, `entry` and `package`, with the branch up to date, so a
+  red `package` blocks a merge. A PR that does not change the APK still merges,
+  because a skipped job passes as a required check. The `lint` job decides
+  whether `package` runs. An error of `git diff` there counts as a change and
+  runs `package`, and a failure of that step or of the checkout fails `lint`,
+  which is required. A job of its own would skip `package` when it failed, and
+  the skip would pass.
+- Release tag: + multi-arch verify-build (cross-compile sanity) + `package` job
+  + release-apk job (publishes the APK that `package` tested to the GitHub
+  Release, with CHANGELOG-extracted notes).
 
 ## OpenAPI emission
 
-Generated at build time (`make openapi`) from the inline `schema_properties` blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and surfaced at `/api/v3/openapi.json`. The uapi release APK and the test VM carry it without whitespace, and `make stage` fails unless that copy parses to the same JSON value as `build/openapi.json`, key order included (see `docs/packaging.md`). The uapi package of the OpenWrt packages feed copies `build/openapi.json` as it is, so it installs the indented file until its Makefile runs `tools/compact_json.py`. The spec is the contract document and the input for openapi-codegen consumers (the Terraform provider in particular).
+Generated at build time (`make openapi`) from the inline `schema_properties`
+blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and
+surfaced at `/api/v3/openapi.json`. The uapi release APK and the test VM carry
+it without whitespace, and `make stage` fails unless that copy parses to the
+same JSON value as `build/openapi.json`, key order included (see
+`docs/packaging.md`). The uapi package of the OpenWrt packages feed copies
+`build/openapi.json` as it is, so it installs the indented file until its
+Makefile runs `tools/compact_json.py`. The spec is the contract document and the
+input for openapi-codegen consumers (the Terraform provider in particular).
 
-`make openapi-check` regenerates the spec into a temp file and diffs against the committed `build/openapi.json`. CI runs this as a sanity gate; if it fails, the committed spec is out of sync with the resource modules and one of them has to give.
+`make openapi-check` regenerates the spec into a temp file and diffs against the
+committed `build/openapi.json`. CI runs this as a sanity gate; if it fails, the
+committed spec is out of sync with the resource modules and one of them has to
+give.
 
 ## Curl example suite
 
-In-repo at `examples/curl/`, sixteen files covering a subset of the curated resources rather than all of them, one per distinct shape: plain collections, a singleton, an adopt flow, a masked credential, a non-uci resource and the raw passthrough. Doubles as documentation and seed for provider contract tests. `adopt.sh` was added in 2.5.0 after an audit found the flow every operator meets on pre-existing config had no runnable example at all.
+In-repo at `examples/curl/`, sixteen files covering a subset of the curated
+resources rather than all of them, one per distinct shape: plain collections, a
+singleton, an adopt flow, a masked credential, a non-uci resource and the raw
+passthrough. Doubles as documentation and seed for provider contract tests.
+`adopt.sh` was added in 2.5.0 after an audit found the flow every operator meets
+on pre-existing config had no runnable example at all.
 
 ## Coverage gates
 
 `make coverage` reports:
 
-- Module coverage: every `.uc` file under `src/lib/` and `src/resources/` exercised by at least one unit test. Target: 100% (every module covered, even shallowly).
-- Direct-call coverage: every exported function from `src/lib/` invoked by name in at least one unit test. Threshold: 80%. Functions reached only through production code paths count toward "total covered" but not "directly tested."
+- Module coverage: every `.uc` file under `src/lib/` and `src/resources/`
+  exercised by at least one unit test. Target: 100% (every module covered, even
+  shallowly).
+- Direct-call coverage: every exported function from `src/lib/` invoked by name
+  in at least one unit test. Threshold: 80%. Functions reached only through
+  production code paths count toward "total covered" but not "directly tested."
 
-The thresholds are guardrails, not strict; if coverage drops below them, the CI step fails and the responsible commit has to add a missing test or justify the gap.
+The thresholds are guardrails, not strict; if coverage drops below them, the CI
+step fails and the responsible commit has to add a missing test or justify the
+gap.

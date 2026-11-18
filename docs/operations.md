@@ -16,17 +16,28 @@ background.
 
 Two signals worth wiring into your automation:
 
-- **`X-Reload-Status`** response header on curated-resource writes: `ok` means the init
-  script ran and exited 0, and `no_reload` means that no init script ran. The header is
-  intentionally not a "converged" promise. Each writable resource outside `dhcp` has
-  a reload service that it always runs, so there `no_reload` means that the write changed
-  nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that sends the values that uci holds.
-  A write that commits nothing reloads nothing, since 3.2.0 for a PATCH and since 3.3.0 for a PUT. A `dhcp` write reloads
-  dnsmasq, odhcpd and unbound only while procd runs them, so it also answers `no_reload`
-  when none of them runs. As for a LuCI save, procd runs such a daemon while it holds a
-  config trigger for it, from the start of the service to its stop, whatever the instances
-  show, so a write also starts again a daemon that crashed too often. At boot, unbound holds
-  no such trigger until 3 s after the last interface event, and a write leaves it as it is.
+- **`X-Reload-Status`** response header on curated-resource writes: `ok` means
+  the init
+  script ran and exited 0, and `no_reload` means that no init script ran. The
+  header is
+  intentionally not a "converged" promise. Each writable resource outside `dhcp`
+  has
+  a reload service that it always runs, so there `no_reload` means that the
+  write changed
+  nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that
+  sends the values that uci holds.
+  A write that commits nothing reloads nothing, since 3.2.0 for a PATCH and
+  since 3.3.0 for a PUT. A `dhcp` write reloads
+  dnsmasq, odhcpd and unbound only while procd runs them, so it also answers
+  `no_reload`
+  when none of them runs. As for a LuCI save, procd runs such a daemon while it
+  holds a
+  config trigger for it, from the start of the service to its stop, whatever the
+  instances
+  show, so a write also starts again a daemon that crashed too often. At boot,
+  unbound holds
+  no such trigger until 3 s after the last interface event, and a write leaves
+  it as it is.
   `unverified` means that the write kept its commit and that whether its
   daemons take the new config is unknown: an init script was still running
   when uapi stopped waiting for it, or the `dnsmasq --test` check after a
@@ -57,7 +68,8 @@ commits `dhcp`, reloads `dnsmasq` while procd runs it, and then uapi runs the
 command of each dnsmasq instance with `--test` on the config that dnsmasq.init
 just wrote. If dnsmasq refuses it, the write answers
 `500 reload_failed_restored`, and its `reload_error` reads, for example,
-`dnsmasq refuses its config cfg01411c: bad IP address at line 33 of /var/etc/dnsmasq.conf.cfg01411c`.
+`dnsmasq refuses its config cfg01411c: bad IP address at line 33 of
+/var/etc/dnsmasq.conf.cfg01411c`.
 The check covers every instance, one that is not running included, since
 procd starts it on that config. So on a router whose dnsmasq config was
 refused before the write, a write that does not fix it answers
@@ -156,20 +168,26 @@ reflection".
 
 ## NTP
 
-Audit logs and request IDs both encode timestamps. If the router's clock is wrong, those timestamps are wrong, and correlating events across machines breaks.
+Audit logs and request IDs both encode timestamps. If the router's clock is
+wrong, those timestamps are wrong, and correlating events across machines
+breaks.
 
-OpenWrt ships an SNTP client (`sysntpd`) enabled by default. Confirm it is running and has synced:
+OpenWrt ships an SNTP client (`sysntpd`) enabled by default. Confirm it is
+running and has synced:
 
 ```sh
 /etc/init.d/sysntpd status
 date
 ```
 
-If the router has no internet during boot (or you ship a different time source), point sysntpd at it via `uci set system.ntp.server=...`.
+If the router has no internet during boot (or you ship a different time source),
+point sysntpd at it via `uci set system.ntp.server=...`.
 
 ## Persistent syslog
 
-By default `logd` keeps the log ring in memory (default size 16 KiB) and loses it on reboot. For any router serving uapi in production, configure persistent logging:
+By default `logd` keeps the log ring in memory (default size 16 KiB) and loses
+it on reboot. For any router serving uapi in production, configure persistent
+logging:
 
 ```sh
 uci set system.@system[0].log_file='/var/log/messages'
@@ -178,13 +196,17 @@ uci commit system
 /etc/init.d/log restart
 ```
 
-This writes the in-memory ring through to flash, surviving reboots. Mind flash wear: 2-4 MiB is typical; full-time access logging is not appropriate for flash without external storage.
+This writes the in-memory ring through to flash, surviving reboots. Mind flash
+wear: 2-4 MiB is typical; full-time access logging is not appropriate for flash
+without external storage.
 
-For longer retention, mount a USB stick or remote filesystem and point `log_file` there.
+For longer retention, mount a USB stick or remote filesystem and point
+`log_file` there.
 
 ## Forwarding audit logs off-box
 
-uapi emits one syslog line per successful write under the `daemon.notice` priority. Forward to a central collector for tamper-resistant audit trails:
+uapi emits one syslog line per successful write under the `daemon.notice`
+priority. Forward to a central collector for tamper-resistant audit trails:
 
 ```sh
 uci set system.@system[0].log_ip='10.0.0.5'        # syslog collector IP
@@ -194,7 +216,8 @@ uci commit system
 /etc/init.d/log restart
 ```
 
-The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on the `uapi:` prefix to isolate API audit events.
+The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on
+the `uapi:` prefix to isolate API audit events.
 
 ## Log categories
 
@@ -205,7 +228,10 @@ The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on t
 | ACCESS   | INFO            | off     | Every request (non-`/healthz`) |
 | DEBUG    | DEBUG           | off     | Per-ubus-call tracing |
 
-`/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
+`/healthz` is excluded from all categories so monitoring traffic does not drown
+out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not
+logged: the client receives the error directly and there is no
+operator-actionable signal in volume.
 
 ACCESS and DEBUG are opt-in via `/etc/config/uapi`:
 
@@ -217,19 +243,27 @@ config logging
 
 ## Log line format
 
-Plain text, fixed field order, syslog-native (chosen over JSON-per-line because `logread` is the primary consumer):
+Plain text, fixed field order, syslog-native (chosen over JSON-per-line because
+`logread` is the primary consumer):
 
 ```
 uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<duration_ms>ms]
 ```
 
-- `request_id`: ULID; also returned in the `X-Request-Id` response header. The link between server-side log and client-visible response.
-- `token_name`: never the token value. `-` for unauthenticated failures (e.g. missing `Authorization`).
-- `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN` (401/403 auth failures), `ERROR` (5xx).
+- `request_id`: ULID; also returned in the `X-Request-Id` response header. The
+  link between server-side log and client-visible response.
+- `token_name`: never the token value. `-` for unauthenticated failures (e.g.
+  missing `Authorization`).
+- `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN`
+  (401/403 auth failures), `ERROR` (5xx).
 - `code`: error code on failures, `-` on successful writes.
-- `path`: uhttpd's `PATH_INFO`, so the `/api/v3` mount prefix is already stripped. A client's `POST /api/v3/firewall/rules` logs as `/firewall/rules`.
+- `path`: uhttpd's `PATH_INFO`, so the `/api/v3` mount prefix is already
+  stripped. A client's `POST /api/v3/firewall/rules` logs as `/firewall/rules`.
 
-`/healthz` is excluded from all categories so monitoring traffic does not drown out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not logged: the client receives the error directly and there is no operator-actionable signal in volume.
+`/healthz` is excluded from all categories so monitoring traffic does not drown
+out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not
+logged: the client receives the error directly and there is no
+operator-actionable signal in volume.
 
 ## Sample syslog output
 
@@ -259,7 +293,8 @@ uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /system status=2
 uapi[1234]: uapi-body-deadline 01HX7890ABCDEFGHJKMNNNNNNN POST /firewall/rules status=400 remote=10.0.2.2
 ```
 
-By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged. Optional knobs in `/etc/config/uapi`:
+By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged.
+Optional knobs in `/etc/config/uapi`:
 
 ```
 config logging
@@ -267,7 +302,8 @@ config logging
     option debug '1'    # per-ubus-call tracing (DEBUG)
 ```
 
-Leave these off unless you're debugging. They are noisy and will fill the in-memory ring quickly.
+Leave these off unless you're debugging. They are noisy and will fill the
+in-memory ring quickly.
 
 ## Metrics
 
@@ -395,8 +431,10 @@ source-IP enforcement.
 
 The request bounds are read per request from `config limits` in
 `/etc/config/uapi`; no reload is needed. An option can lower a bound, not raise
-it: the body is parsed before the bearer check, so a raised body bound would let a
-request without a token make the parse take hundreds of MB, and the time bounds at
+it: the body is parsed before the bearer check, so a raised body bound would let
+a
+request without a token make the parse take hundreds of MB, and the time bounds
+at
 their defaults already fill uhttpd's 60 s. The defaults below are the highest
 accepted values, and the fallback when an option is absent or outside its range:
 
@@ -461,7 +499,8 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 ### Finding sections a write would reject (`?validate=1`)
 
 `GET /api/v3/diagnostics?validate=1` adds a validation sweep: every section of
-every resource the token may read is run through the same path a write takes, and
+every resource the token may read is run through the same path a write takes,
+and
 the ones that would be rejected are reported with the reason, together with the
 ones that hold a value that a write cannot add.
 
@@ -478,27 +517,38 @@ ones that hold a value that a write cannot add.
 ```
 
 It answers "which sections on this router will stop being accepted" before an
-upgrade, rather than one `422` at a time during a write. Every section it reports
+upgrade, rather than one `422` at a time during a write. Every section it
+reports
 is already broken on the router: the rule above is already matching a whole
 protocol rather than a port. The sweep is the first time anyone is told.
 
-One finding is not a break. An interface on a proto that uapi does not model, such as
-the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`, because a PUT of
-it is refused: a PUT replaces the section and would delete the options of the tunnel.
+One finding is not a break. An interface on a proto that uapi does not model,
+such as
+the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`, because a
+PUT of
+it is refused: a PUT replaces the section and would delete the options of the
+tunnel.
 The tunnel itself works, and a PATCH that leaves `proto` out is accepted.
 
-A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break either, until the
-daemon reads the value. Another writer can store a value that such a rule refuses, and
-the sweep lists it whether the daemon reads it yet or not: the section can be disabled,
-its mode can leave the field unused, or the radio of an SSID can be disabled. A write is
+A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break either,
+until the
+daemon reads the value. Another writer can store a value that such a rule
+refuses, and
+the sweep lists it whether the daemon reads it yet or not: the section can be
+disabled,
+its mode can leave the field unused, or the radio of an SSID can be disabled. A
+write is
 refused for such a value only when it
-adds the error, for example when it changes the field or enables the section. The sweep
-lists the section because another writer, such as LuCI, can enable it later. Each error of such
+adds the error, for example when it changes the field or enables the section.
+The sweep
+lists the section because another writer, such as LuCI, can enable it later.
+Each error of such
 a rule has `live`, which is `false` when the daemon does not read the value yet.
 
 Three things worth knowing:
 
-- **Opt-in on purpose.** Each resource walks its own uci package, so a package is
+- **Opt-in on purpose.** Each resource walks its own uci package, so a package
+  is
   traversed once per resource that lives in it, six times for `firewall` and
   `network`. The cost therefore scales with the number of sections in the
   configuration, not with a fixed overhead: 44 resources over a stock-sized
@@ -523,7 +573,8 @@ section to name:
   "errors": [ { "field": "", "code": "sweep_failed", "message": "..." } ] }
 ```
 
-That is deliberately a finding rather than a failed request: a resource that could
+That is deliberately a finding rather than a failed request: a resource that
+could
 not be checked must not be reported as clean.
 
 `dhcp/leases` and `dhcp/leases6` are not swept. They are read-only views of
@@ -569,43 +620,64 @@ keep no new entry. What `false` costs while it lasts:
 
 ## Management-path warning
 
-The lockout this guards against is the one atomic writes cannot help with: a change that
-reloads cleanly and then severs the only path to the box. uapi warns rather than refuses,
-because renumbering the management VLAN or moving to an out-of-band path are legitimate
+The lockout this guards against is the one atomic writes cannot help with: a
+change that
+reloads cleanly and then severs the only path to the box. uapi warns rather than
+refuses,
+because renumbering the management VLAN or moving to an out-of-band path are
+legitimate
 things to do, and because LuCI warns rather than blocking on the same condition.
 
 Two places report it, and they answer different questions.
 
-`GET /diagnostics` carries `management_path`, which names the interface this request
+`GET /diagnostics` carries `management_path`, which names the interface this
+request
 arrived through:
 
 ```json
 { "management_path": { "address": "192.168.0.236", "device": "eth1", "interface": "wan" } }
 ```
 
-That is the pre-flight answer. Ask it before a risky write, or have a wrapper ask it, and
-you know which interface not to touch. `interface` is `null` when the request arrives on a
+That is the pre-flight answer. Ask it before a risky write, or have a wrapper
+ask it, and
+you know which interface not to touch. `interface` is `null` when the request
+arrives on a
 device no uci interface claims, which is honest rather than a guess.
 
-A write to `network/interfaces` gets `X-Mgmt-Path-Warning` when it moves that interface's
-`disabled`, `proto`, `ipaddrs` or `netmask`, or deletes it. `network/devices` and
-`network/bridge_vlans` are matched by device instead of by interface name, and report
-`device=<name>` when a create or a delete names the caller's own device, or a bridge that
+A write to `network/interfaces` gets `X-Mgmt-Path-Warning` when it moves that
+interface's
+`disabled`, `proto`, `ipaddrs` or `netmask`, or deletes it. `network/devices`
+and
+`network/bridge_vlans` are matched by device instead of by interface name, and
+report
+`device=<name>` when a create or a delete names the caller's own device, or a
+bridge that
 device is a port of. That is the after-the-fact
-answer, and it is worth having because most such writes do not actually break the path:
-the header tells an operator they are in a risky state while the connection still works.
+answer, and it is worth having because most such writes do not actually break
+the path:
+the header tells an operator they are in a risky state while the connection
+still works.
 
-Its limit, stated plainly: if the write really does strand you, the response never
-arrives. This is not a safety net, it is a warning light. The scope is deliberately
-LuCI's: those four field names on the inbound interface, and no firewall analysis at all,
-because predicting a firewall lockout means modelling fw4 zone and rule ordering, and a
+Its limit, stated plainly: if the write really does strand you, the response
+never
+arrives. This is not a safety net, it is a warning light. The scope is
+deliberately
+LuCI's: those four field names on the inbound interface, and no firewall
+analysis at all,
+because predicting a firewall lockout means modelling fw4 zone and rule
+ordering, and a
 guess dressed as a warning is worse than silence.
 
-The interface is derived from the kernel's own route lookup rather than by comparing the
-caller's address against each interface's configured prefixes. An operator reaching the
-box from another network sits inside no local prefix, and that is exactly the operator a
-write can strand, so containment arithmetic would report "unknown" for the case that
-matters most. The route lookup also answers for IPv6, where uapi's own prefix helpers are
+The interface is derived from the kernel's own route lookup rather than by
+comparing the
+caller's address against each interface's configured prefixes. An operator
+reaching the
+box from another network sits inside no local prefix, and that is exactly the
+operator a
+write can strand, so containment arithmetic would report "unknown" for the case
+that
+matters most. The route lookup also answers for IPv6, where uapi's own prefix
+helpers are
 IPv4-only.
 
 ## Healthz
@@ -639,23 +711,34 @@ package they installed.
 
 ## Insecure-test bypass
 
-For closed-network testing only, creating `/etc/uapi.insecure` lets plain HTTP through from any client (the loopback bypass is always available; this opens it for remote hosts too). Every request that takes the bypass emits a syslog `NOTICE` line:
+For closed-network testing only, creating `/etc/uapi.insecure` lets plain HTTP
+through from any client (the loopback bypass is always available; this opens it
+for remote hosts too). Every request that takes the bypass emits a syslog
+`NOTICE` line:
 
 ```
 uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
 ```
 
-so it shows up in `logread` and any remote-syslog collector. Delete the marker for production use.
+so it shows up in `logread` and any remote-syslog collector. Delete the marker
+for production use.
 
 ## Request body deadline
 
-The body of a request has to arrive in full within 10 s of its start (`docs/security.md`, Public endpoints). Every request that misses the deadline emits a syslog `WARNING` line, on every path, with no body content:
+The body of a request has to arrive in full within 10 s of its start
+(`docs/security.md`, Public endpoints). Every request that misses the deadline
+emits a syslog `WARNING` line, on every path, with no body content:
 
 ```
 uapi-body-deadline <request_id> <method> <path> status=<n> remote=<addr>
 ```
 
-The status is the answer that the request got: `400` when uapi read the body and it did not arrive in full, or the normal answer of a request that answers without reading its body, such as a 413 or a GET with a declared body. Many such lines from one address are a client that holds the request slots of uhttpd. Without `ucode-mod-io` there is no deadline, and the handler logs one line when uhttpd starts:
+The status is the answer that the request got: `400` when uapi read the body and
+it did not arrive in full, or the normal answer of a request that answers
+without reading its body, such as a 413 or a GET with a declared body. Many such
+lines from one address are a client that holds the request slots of uhttpd.
+Without `ucode-mod-io` there is no deadline, and the handler logs one line when
+uhttpd starts:
 
 ```
 uapi-body-deadline: ucode-mod-io is not installed, so a request body that does not arrive holds its request until the script timeout of uhttpd
@@ -663,8 +746,17 @@ uapi-body-deadline: ucode-mod-io is not installed, so a request body that does n
 
 ## Capacity
 
-uapi runs in-process inside uhttpd via uhttpd-mod-ucode. Each request is a forked CGI child. On low-end MIPS hardware, fork+ucode+ubus is in the tens of milliseconds per request; on modern aarch64/x86_64 it is sub-10ms. The intended workload is Terraform applies plus occasional curl, not high-volume RPC. If you need RPS in the hundreds, front uapi with a caching reverse proxy.
+uapi runs in-process inside uhttpd via uhttpd-mod-ucode. Each request is a
+forked CGI child. On low-end MIPS hardware, fork+ucode+ubus is in the tens of
+milliseconds per request; on modern aarch64/x86_64 it is sub-10ms. The intended
+workload is Terraform applies plus occasional curl, not high-volume RPC. If you
+need RPS in the hundreds, front uapi with a caching reverse proxy.
 
 ## Backups
 
-The token store at `/etc/config/uapi` is the only uapi-specific state worth backing up beyond what you'd back up for OpenWrt itself (`sysupgrade --create-backup`). Treat it as a secret. The tokens within are hashed (so a leaked backup file doesn't directly expose bearers), but the salts + hashes still allow an offline brute-force on weak inputs; in practice the bearers are 128 random bits so brute force is infeasible, but discipline still wins.
+The token store at `/etc/config/uapi` is the only uapi-specific state worth
+backing up beyond what you'd back up for OpenWrt itself (`sysupgrade
+--create-backup`). Treat it as a secret. The tokens within are hashed (so a
+leaked backup file doesn't directly expose bearers), but the salts + hashes
+still allow an offline brute-force on weak inputs; in practice the bearers are
+128 random bits so brute force is infeasible, but discipline still wins.

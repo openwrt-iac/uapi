@@ -1,16 +1,28 @@
 # Adding a curated resource
 
-This is the workflow we used for every resource in `src/resources/`. Following it should take an hour for a typical config type.
+This is the workflow we used for every resource in `src/resources/`. Following
+it should take an hour for a typical config type.
 
-The reference implementations live in `src/resources/`; `firewall.rules.uc` is the most-featured (cross-reference validation, nested `match` block) and `system.uc` is the simplest (singleton, flat fields).
+The reference implementations live in `src/resources/`; `firewall.rules.uc` is
+the most-featured (cross-reference validation, nested `match` block) and
+`system.uc` is the simplest (singleton, flat fields).
 
 ## 1. Pick the uci package and section type
 
-Look at `/etc/config/<package>` on a real router. Find the section type you want to expose. Note the option names, which are lists vs. scalars, which are uci-bools (`"1"`/`"0"`/`"on"`/`"off"`), and which reference other sections.
+Look at `/etc/config/<package>` on a real router. Find the section type you want
+to expose. Note the option names, which are lists vs. scalars, which are
+uci-bools (`"1"`/`"0"`/`"on"`/`"off"`), and which reference other sections.
 
 ## 2. Create the resource module
 
-`src/resources/<package>.<plural-type>.uc`. Schemas live inline in the resource module, not in separate JSON Schema files. `schema_properties` is the centrally-enforced type/enum/range/pattern/items table (`handler.check_schema_types` walks it on every write); `validate()` carries the cross-field, cross-section, and format-string logic that pure JSON Schema can't express (e.g. "src_zone must reference an existing zone"). Both run on every write and their errors are merged, deduped by field+code, into one 422 with the shape errors first.
+`src/resources/<package>.<plural-type>.uc`. Schemas live inline in the resource
+module, not in separate JSON Schema files. `schema_properties` is the
+centrally-enforced type/enum/range/pattern/items table
+(`handler.check_schema_types` walks it on every write); `validate()` carries the
+cross-field, cross-section, and format-string logic that pure JSON Schema can't
+express (e.g. "src_zone must reference an existing zone"). Both run on every
+write and their errors are merged, deduped by field+code, into one 422 with the
+shape errors first.
 
 Export the uniform contract:
 
@@ -64,68 +76,149 @@ return {
 
 ### Section name (`id`) at create time
 
-Every CRUD resource accepts an optional `id` field at create time as of 2.2.0; you do not need to opt in. The framework reads `body.id`, runs section-name validation (charset `^[A-Za-z][A-Za-z0-9_]{0,31}$`, in-package uniqueness across all section types), and uses it as both the uci section name and the response `id`. When the caller omits `id`, the framework falls back to a server-emitted ULID (or the result of your module's `id_for_create` hook if you registered one).
+Every CRUD resource accepts an optional `id` field at create time as of 2.2.0;
+you do not need to opt in. The framework reads `body.id`, runs section-name
+validation (charset `^[A-Za-z][A-Za-z0-9_]{0,31}$`, in-package uniqueness across
+all section types), and uses it as both the uci section name and the response
+`id`. When the caller omits `id`, the framework falls back to a server-emitted
+ULID (or the result of your module's `id_for_create` hook if you registered
+one).
 
-`id_for_create` is the place to inject proto-specific fallbacks. `network/interfaces` uses it to emit a 14-char `wg_<rand>` for `proto=wireguard` because Linux IFNAMSIZ caps netifd's netdev name at 15 chars. Most resources don't need this hook; the default ULID is fine.
+`id_for_create` is the place to inject proto-specific fallbacks.
+`network/interfaces` uses it to emit a 14-char `wg_<rand>` for `proto=wireguard`
+because Linux IFNAMSIZ caps netifd's netdev name at 15 chars. Most resources
+don't need this hook; the default ULID is fine.
 
-If your resource type binds the section name to something kernel- or daemon-constrained beyond the framework's 32-char default cap, tighten in your own `validate()` (per-resource refinement runs after the framework check).
+If your resource type binds the section name to something kernel- or
+daemon-constrained beyond the framework's 32-char default cap, tighten in your
+own `validate()` (per-resource refinement runs after the framework check).
 
 ### Singletons that may be wiped (`create_if_missing`)
 
-For resources whose underlying uci package can be deleted by an operator without uapi noticing (typical pattern: an extension package whose conffile is the only source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced), set `create_if_missing: true` on the resource module. `handler.make_singleton.patch` then creates the uci section on the fly instead of returning 404, as long as the file under `/etc/config/` exists. A write into a deleted file answers 503 `config_missing` before the hook runs, because uci stores nothing in a missing file. The created section's name defaults to `main`; override via `singleton_section_name` if the daemon expects a different convention.
+For resources whose underlying uci package can be deleted by an operator without
+uapi noticing (typical pattern: an extension package whose conffile is the only
+source of the section, like the unbound-uci-ext packages uapi 2.1.0 introduced),
+set `create_if_missing: true` on the resource module.
+`handler.make_singleton.patch` then creates the uci section on the fly instead
+of returning 404, as long as the file under `/etc/config/` exists. A write into
+a deleted file answers 503 `config_missing` before the hook runs, because uci
+stores nothing in a missing file. The created section's name defaults to `main`;
+override via `singleton_section_name` if the daemon expects a different
+convention.
 
-Most singletons (`system`, `dhcp/dnsmasq`, `firewall/defaults`, etc.) should NOT opt in: their config sections ship with the package they wrap, and a missing section there is a real problem worth surfacing as 404 so the operator notices.
+Most singletons (`system`, `dhcp/dnsmasq`, `firewall/defaults`, etc.) should NOT
+opt in: their config sections ship with the package they wrap, and a missing
+section there is a real problem worth surfacing as 404 so the operator notices.
 
 ### Cross-section reference fields (`unique_field`)
 
-If your resource has a uci option whose VALUE other sections reference (rather than referencing this section by its section id), or whose duplication would break the daemon, declare it with `unique_field`. The framework rejects creates and modifies whose value collides with another section's, returning `422 conflict` with the offending section named in the error message.
+If your resource has a uci option whose VALUE other sections reference (rather
+than referencing this section by its section id), or whose duplication would
+break the daemon, declare it with `unique_field`. The framework rejects creates
+and modifies whose value collides with another section's, returning `422
+conflict` with the offending section named in the error message.
 
 Concrete shapes that need this flag:
 
-- `firewall/zones.name`: fw4 keys forwardings, rules, and redirects on this value (`src_zone = "lan"` refers to the zone whose `name` option is `lan`, not its section id).
-- `network/devices.name`: netifd uses this as the kernel netdev name; `network/interfaces.device` references it.
-- `sqm/queues.interface`: tc cannot disambiguate two queues bound to the same interface.
+- `firewall/zones.name`: fw4 keys forwardings, rules, and redirects on this
+  value (`src_zone = "lan"` refers to the zone whose `name` option is `lan`, not
+  its section id).
+- `network/devices.name`: netifd uses this as the kernel netdev name;
+  `network/interfaces.device` references it.
+- `sqm/queues.interface`: tc cannot disambiguate two queues bound to the same
+  interface.
 
 What does NOT need the flag:
 
-- Resources identified by their section id (`network/interfaces`, `wireless/devices`, etc.). The framework's existing section-id uniqueness check already covers them.
-- Fields that are human-readable labels with no semantic meaning to the daemon (`firewall/rules.name`, `firewall/redirects.name`).
-- Singletons (the section name is immutable and the resource is not referenced by value).
-- Fields that an OpenWrt convention DELIBERATELY allows to repeat across sections. Example: `snmpd.config group` sections share `option group` across multiple `(version, secname)` bindings as part of net-snmp's VACM model; that is not a duplicate to reject. Audit the upstream default config before declaring the flag on a new resource.
+- Resources identified by their section id (`network/interfaces`,
+  `wireless/devices`, etc.). The framework's existing section-id uniqueness
+  check already covers them.
+- Fields that are human-readable labels with no semantic meaning to the daemon
+  (`firewall/rules.name`, `firewall/redirects.name`).
+- Singletons (the section name is immutable and the resource is not referenced
+  by value).
+- Fields that an OpenWrt convention DELIBERATELY allows to repeat across
+  sections. Example: `snmpd.config group` sections share `option group` across
+  multiple `(version, secname)` bindings as part of net-snmp's VACM model; that
+  is not a duplicate to reject. Audit the upstream default config before
+  declaring the flag on a new resource.
 
-The flag is scope-correct: same package, same section type. A `firewall.zone` with `name="lan"` does not conflict with a `firewall.rule` with `name="lan"` because different daemons read different fields. The check runs on `POST`, `PUT`, and `PATCH`; PATCH and PUT exclude the section being modified, so updates that keep the value unchanged still pass.
+The flag is scope-correct: same package, same section type. A `firewall.zone`
+with `name="lan"` does not conflict with a `firewall.rule` with `name="lan"`
+because different daemons read different fields. The check runs on `POST`,
+`PUT`, and `PATCH`; PATCH and PUT exclude the section being modified, so updates
+that keep the value unchanged still pass.
 
-The flag is string-only. The runtime check guards `type(val) == "string"` so non-string fields are silently skipped today; if your resource has a numeric or list-typed cross-reference key, the helper would need extending. Dynamic-type resources (those that declare `type_predicate` to match a family of section types like `wireguard_<iface>`) cannot declare `unique_field`; the framework will refuse to load such a module so the latent footgun does not ship.
+The flag is string-only. The runtime check guards `type(val) == "string"` so
+non-string fields are silently skipped today; if your resource has a numeric or
+list-typed cross-reference key, the helper would need extending. Dynamic-type
+resources (those that declare `type_predicate` to match a family of section
+types like `wireguard_<iface>`) cannot declare `unique_field`; the framework
+will refuse to load such a module so the latent footgun does not ship.
 
-Resources can keep their own per-validate uniqueness logic in place; `unique_field` is opt-in.
+Resources can keep their own per-validate uniqueness logic in place;
+`unique_field` is opt-in.
 
-A separate question: should `validate()` reject a cross-resource reference (e.g. `dhcp.servers.interface` naming a non-existent `network.interface` section)? **Default: no.** Stock OpenWrt ships configs that reference resources absent on the running target (`config dhcp wan` against an absent `network.wan` on x86 generic), and daemons typically tolerate dangling refs (the section is silently inactive). Rejecting them would be stricter than the platform. Validate cross-refs only when the daemon itself errors on a dangling ref, not because the operator might typo. A few curated resources do reject one: `sqm/queues.interface` and `network/routes.interface` both 422 when the named `network.interface` section is absent.
+A separate question: should `validate()` reject a cross-resource reference (e.g.
+`dhcp.servers.interface` naming a non-existent `network.interface` section)?
+**Default: no.** Stock OpenWrt ships configs that reference resources absent on
+the running target (`config dhcp wan` against an absent `network.wan` on x86
+generic), and daemons typically tolerate dangling refs (the section is silently
+inactive). Rejecting them would be stricter than the platform. Validate
+cross-refs only when the daemon itself errors on a dangling ref, not because the
+operator might typo. A few curated resources do reject one:
+`sqm/queues.interface` and `network/routes.interface` both 422 when the named
+`network.interface` section is absent.
 
 ### Server-side defaults (`default:`) and clear-on-omit safety (`x-uapi-clear-on-omit:`)
 
-If your `fromUci` synthesizes a value for an absent uci option (via `normalize_bool(section.X, true)`, `section.X ?? "literal"`, or similar), declare the same fallback as `default:` in the field's `schema_properties` entry:
+If your `fromUci` synthesizes a value for an absent uci option (via
+`normalize_bool(section.X, true)`, `section.X ?? "literal"`, or similar),
+declare the same fallback as `default:` in the field's `schema_properties`
+entry:
 
 ```ucode
 auto: { type: "boolean", default: true,
         description: "Bring this interface up at boot" },
 ```
 
-This is standard OpenAPI 3.1 / JSON Schema 2020-12 documentation. Clients (Redoc, openapi-codegen, Terraform provider) read it to understand which fields the server populates on their behalf. The runtime validator at `handler.uc:_check_value` does NOT apply `default:`; it is purely documentation. fromUci owns server-side defaults; the framework MUST NOT silently fill absent fields from the spec or PATCH-delta semantics break.
+This is standard OpenAPI 3.1 / JSON Schema 2020-12 documentation. Clients
+(Redoc, openapi-codegen, Terraform provider) read it to understand which fields
+the server populates on their behalf. The runtime validator at
+`handler.uc:_check_value` does NOT apply `default:`; it is purely documentation.
+fromUci owns server-side defaults; the framework MUST NOT silently fill absent
+fields from the spec or PATCH-delta semantics break.
 
-Only annotate **unconditional** defaults. Conditional defaults (e.g. `network.interfaces.nohostroute` reads false only under `proto=wireguard`) stay un-annotated because the literal value misleads under other protos.
+Only annotate **unconditional** defaults. Conditional defaults (e.g.
+`network.interfaces.nohostroute` reads false only under `proto=wireguard`) stay
+un-annotated because the literal value misleads under other protos.
 
-For a field that is **caller-owned and safe for an IaC client to clear by omitting it from config**, also add `"x-uapi-clear-on-omit": true`:
+For a field that is **caller-owned and safe for an IaC client to clear by
+omitting it from config**, also add `"x-uapi-clear-on-omit": true`:
 
 ```ucode
 netmask: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
            description: "IPv4 netmask (static proto)" },
 ```
 
-A Terraform provider can read this flag and emit explicit JSON null on Update when the operator's config omits the attribute, which clears the uci option. The flag enforces two hard constraints (the framework's `lint-defaults` verifies both):
+A Terraform provider can read this flag and emit explicit JSON null on Update
+when the operator's config omits the attribute, which clears the uci option. The
+flag enforces two hard constraints (the framework's `lint-defaults` verifies
+both):
 
-1. **fromUci shape**: the field's assignment in fromUci's returned dict must be exactly `<jsonkey>: section.<ucikey> ?? null`, `<jsonkey>: as_list_or_null(section.<ucikey>)` or `<jsonkey>: as_word_list_or_null(section.<ucikey>)`, the three shapes that read an absent key as null. No plain `as_list()` (returns `[]` for null, not null itself), no derivation, no aliasing to another field. The Terraform plugin-framework rejects the apply with "Provider produced inconsistent result after apply" if a plain Optional attribute reads back any value for an absent uci option other than null.
+1. **fromUci shape**: the field's assignment in fromUci's returned dict must be
+   exactly `<jsonkey>: section.<ucikey> ?? null`, `<jsonkey>:
+   as_list_or_null(section.<ucikey>)` or `<jsonkey>:
+   as_word_list_or_null(section.<ucikey>)`, the three shapes that read an absent
+   key as null. No plain `as_list()` (returns `[]` for null, not null itself),
+   no derivation, no aliasing to another field. The Terraform plugin-framework
+   rejects the apply with "Provider produced inconsistent result after apply" if
+   a plain Optional attribute reads back any value for an absent uci option
+   other than null.
 
-2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type: ["string", "null"]`). The provider sends explicit JSON null to clear; a non-nullable type fails the spec itself.
+2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type:
+   ["string", "null"]`). The provider sends explicit JSON null to clear; a
+   non-nullable type fails the spec itself.
 
 Safe (passes the lint):
 
@@ -140,7 +233,8 @@ gateway: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 // fromUci: ip6prefix: as_word_list_or_null(section.ip6prefix)
 ```
 
-All three read an absent key as `null`, which is what a plain-Optional attribute needs. Lists could
+All three read an absent key as `null`, which is what a plain-Optional attribute
+needs. Lists could
 not be flagged before 3.0.0, because `as_list` returned `[]` for absent.
 
 Unsafe (lint fails):
@@ -154,9 +248,19 @@ Unsafe (lint fails):
 // schema:  dns: { type: "array", "x-uapi-clear-on-omit": true }   <-- non-nullable; lint type violation
 ```
 
-Conservative scope: only annotate when there is **evidence** a field is leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3 is `network/interfaces` `netmask` and `gateway`. The originally-considered set in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those failed the shape/type constraints as they stood then and were dropped; see `docs/deprecations.md` and the openwrt-iac/uapi#3 thread for the design discussion on how to handle the aliased/array-typed cases.
+Conservative scope: only annotate when there is **evidence** a field is
+leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3
+is `network/interfaces` `netmask` and `gateway`. The originally-considered set
+in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those failed the shape/type
+constraints as they stood then and were dropped; see `docs/deprecations.md` and
+the openwrt-iac/uapi#3 thread for the design discussion on how to handle the
+aliased/array-typed cases.
 
-A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted fields would cause perpetual non-converging diffs if the provider treats them as clearable (apply clears uci, fromUci re-defaults, next plan diffs again). Either the field has a server-side default (sticky) or the operator fully owns it (clearable); never both.
+A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted
+fields would cause perpetual non-converging diffs if the provider treats them as
+clearable (apply clears uci, fromUci re-defaults, next plan diffs again). Either
+the field has a server-side default (sticky) or the operator fully owns it
+(clearable); never both.
 
 `fromUci` and `toUci` form a (lossy) bijection: round-tripping a section
 through both should produce the same uci options. `fromUci` may take a
@@ -169,8 +273,10 @@ problem; the caller translates to a `422` response. Codes come from a
 fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
 `not_in_enum`, `conflict`, `read_only`.
 
-`json` is the post-image: the request body on a create, the body with the stored secrets
-carried in on a PUT, and the stored section with the request merged in on a PATCH.
+`json` is the post-image: the request body on a create, the body with the stored
+secrets
+carried in on a PUT, and the stored section with the request merged in on a
+PATCH.
 `delta` holds only what the request names: the body of a create or a PUT,
 a merge-patch body, or the paths of a JSON Patch without its `test`
 operations. Check a rule against `json` when it describes the section as
@@ -197,56 +303,96 @@ declared types already hold has to guard for itself. Per-field
 constraints that fit (type, enum, range, pattern, items recursion) belong
 here; cross-field / cross-section / format-string logic stays in `validate()`.
 
-The constraints here describe what a read can return, because the sweep checks every stored
-section against them. When `validate()` refuses a value that a read can still return, such as a
-stored `mtu` below 68, keep the read bound here and put the write bound under the property's
-`x-uapi-write`, for example `mtu: { type: ["integer", "null"], minimum: 0, "x-uapi-write": {
-minimum: 68 } }`. The generator puts those keywords on the `*Request` schema only, and the type
+The constraints here describe what a read can return, because the sweep checks
+every stored
+section against them. When `validate()` refuses a value that a read can still
+return, such as a
+stored `mtu` below 68, keep the read bound here and put the write bound under
+the property's
+`x-uapi-write`, for example `mtu: { type: ["integer", "null"], minimum: 0,
+"x-uapi-write": {
+minimum: 68 } }`. The generator puts those keywords on the `*Request` schema
+only, and the type
 gate does not read them, so `validate()` must refuse the value itself.
-`tests/unit/write_overlay_test.uc` checks that it does, with a value just past each keyword in
-every fixture case of the module. A `pattern` is probed only with values that the regex refuses,
-because no value that a regex accepts can be derived from it, so the module's own tests must
-cover the values it takes. A nested property takes the marker in the same way, such as
-`match.device` on `firewall/nat`, and the test probes it under the path that `validate()`
-reports. An element under `items` takes it too, and the test probes it as the only element of
-its array, under the path that `validate()` gives it, such as `ip6class[0]`. A keyword below an
-element has no probe and fails the test. A rule that depends on another field, such as the pppd range of `mtu` on proto `ppp`,
+`tests/unit/write_overlay_test.uc` checks that it does, with a value just past
+each keyword in
+every fixture case of the module. A `pattern` is probed only with values that
+the regex refuses,
+because no value that a regex accepts can be derived from it, so the module's
+own tests must
+cover the values it takes. A nested property takes the marker in the same way,
+such as
+`match.device` on `firewall/nat`, and the test probes it under the path that
+`validate()`
+reports. An element under `items` takes it too, and the test probes it as the
+only element of
+its array, under the path that `validate()` gives it, such as `ip6class[0]`. A
+keyword below an
+element has no probe and fails the test. A rule that depends on another field,
+such as the pppd range of `mtu` on proto `ppp`,
 goes in `openapi_write_conditional`.
 
 ### Rules that a stored value can fail
 
-`validate()` refuses a write whenever the section it leaves behind breaks a rule, so a stored
-value that a rule refuses blocks every write of the section until a write replaces it. That is
-right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi can break in uci,
-when the section must stay writable: disabling an SSID that holds an injected key has to work. Put
-such rules in `validate_new(json, conn)`, which returns errors with a `live` flag: `false` when the
-daemon does not read the value yet, because the section is disabled, its mode does not use the
-field, or a section that it depends on is disabled, as the radio of an SSID can be. `conn` reads
-that section, and is null when a test calls the function directly. Report the error either way,
+`validate()` refuses a write whenever the section it leaves behind breaks a
+rule, so a stored
+value that a rule refuses blocks every write of the section until a write
+replaces it. That is
+right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi
+can break in uci,
+when the section must stay writable: disabling an SSID that holds an injected
+key has to work. Put
+such rules in `validate_new(json, conn)`, which returns errors with a `live`
+flag: `false` when the
+daemon does not read the value yet, because the section is disabled, its mode
+does not use the
+field, or a section that it depends on is disabled, as the radio of an SSID can
+be. `conn` reads
+that section, and is null when a test calls the function directly. Report the
+error either way,
 because another writer can enable the section later, and
-report each problem of a value as its own error, so that one cannot hide another: the 422 keeps
-each of them, unless the schema check or `validate()` already reported its field and code.
+report each problem of a value as its own error, so that one cannot hide
+another: the 422 keeps
+each of them, unless the schema check or `validate()` already reported its field
+and code.
 
-The handler runs `validate_new()` on the section as it was and as the write leaves it, and
-refuses the write only for an error that it adds: one in a field that the write changes, one
-that the section did not have, by field, code and message, or one that was not live and is now.
-So a message names its rule and quotes no value: a message that quotes another field changes when
+The handler runs `validate_new()` on the section as it was and as the write
+leaves it, and
+refuses the write only for an error that it adds: one in a field that the write
+changes, one
+that the section did not have, by field, code and message, or one that was not
+live and is now.
+So a message names its rule and quotes no value: a message that quotes another
+field changes when
 that field changes, and the old error then reads as a new one. A property in
-`tests/unit/handler_test.uc` puts a marker into each field of the fixture cases and fails on a
+`tests/unit/handler_test.uc` puts a marker into each field of the fixture cases
+and fails on a
 message that holds it.
-An option and the list of its words, split on whitespace as netifd splits it, are the same
-value. Two lists are the same only entry by entry, because a daemon can read each entry as a line
-of its own. So a write that leaves a field alone is refused for an error that the field already
-had only when the write makes the error live, for example by enabling the section. The sweep runs
-`validate_new()` on every stored section and lists its errors with their `live` flag, merged with
-the others as in a 422. A write of one resource can make the stored values of another live:
-`validate()` of `network/interfaces` runs `validate_new()` of `network/wireguard_peers` over the
-peers of an interface that a write switches to wireguard or enables, and refuses their live
+An option and the list of its words, split on whitespace as netifd splits it,
+are the same
+value. Two lists are the same only entry by entry, because a daemon can read
+each entry as a line
+of its own. So a write that leaves a field alone is refused for an error that
+the field already
+had only when the write makes the error live, for example by enabling the
+section. The sweep runs
+`validate_new()` on every stored section and lists its errors with their `live`
+flag, merged with
+the others as in a 422. A write of one resource can make the stored values of
+another live:
+`validate()` of `network/interfaces` runs `validate_new()` of
+`network/wireguard_peers` over the
+peers of an interface that a write switches to wireguard or enables, and refuses
+their live
 errors. `validate()` and the schema check run as before: `validate()` sees the
-whole section, and the schema check sees what the caller sent, which for a JSON Patch is each field
-that its operations name and leave in the document, as they leave it. The schema check does not see a write-only field that
-the handler carries from uci, because uci can hold it in a shape that the schema does not declare,
-such as an option where the schema says list, and the caller can neither see it nor send it.
+whole section, and the schema check sees what the caller sent, which for a JSON
+Patch is each field
+that its operations name and leave in the document, as they leave it. The schema
+check does not see a write-only field that
+the handler carries from uci, because uci can hold it in a shape that the schema
+does not declare,
+such as an option where the schema says list, and the caller can neither see it
+nor send it.
 `validate()` sees it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
@@ -257,21 +403,31 @@ unconditional `if (json.X == null) push(errs, {required})` goes in
 `openapi_required`; `if (json.proto == "wireguard" && json.addresses == null)`
 becomes an `openapi_conditional` `if/then/required` block, and a field that
 applies only to some protos becomes an `if/then` that types it `null` on the
-others, which `network.interfaces` generates from its applicability table. For resources
+others, which `network.interfaces` generates from its applicability table. For
+resources
 that populate a non-empty `runtime: {...}`, define its sub-shape in
 `openapi_runtime` so clients can see the keys without reading source.
 
-For cross-reference validation (e.g. "this firewall rule's `src_zone` must be a real zone"), use the `conn` argument. See `firewall.rules.uc`'s `load_zones(conn)` for the pattern.
+For cross-reference validation (e.g. "this firewall rule's `src_zone` must be a
+real zone"), use the `conn` argument. See `firewall.rules.uc`'s
+`load_zones(conn)` for the pattern.
 
 ### Runtime that only a GET reads (`read_runtime`)
 
-`fromUci` builds `runtime` on every path, writes included, where it runs inside the transaction
-before the reload and the kernel apply. A runtime that comes from a process, or that the apply of
-the write changes, belongs in `read_runtime(section, conn)` instead: the handler calls it for a GET
-and a list, and puts what it returns in `runtime`, while `fromUci` returns `runtime: {}`. So a write
-answers `{}` and runs nothing under the lock for it, and so does a GET in a `/batch` that writes,
-whose sub-requests run before the apply of the batch: `main.uc` marks them with `batch_writes`. `network/wireguard_peers` reads `wg show` this
-way: read in a write, it would come from before the apply, and a POST would answer
+`fromUci` builds `runtime` on every path, writes included, where it runs inside
+the transaction
+before the reload and the kernel apply. A runtime that comes from a process, or
+that the apply of
+the write changes, belongs in `read_runtime(section, conn)` instead: the handler
+calls it for a GET
+and a list, and puts what it returns in `runtime`, while `fromUci` returns
+`runtime: {}`. So a write
+answers `{}` and runs nothing under the lock for it, and so does a GET in a
+`/batch` that writes,
+whose sub-requests run before the apply of the batch: `main.uc` marks them with
+`batch_writes`. `network/wireguard_peers` reads `wg show` this
+way: read in a write, it would come from before the apply, and a POST would
+answer
 `in_kernel: false` beside `X-Kernel-Status: ok`.
 
 ### Dynamic section types and a post-commit kernel apply (`type_predicate`, `kernel_ops`)
@@ -309,12 +465,34 @@ consumer. The other hooks have more users: `openvpn/instances` declares
 Per CLAUDE.md:
 
 - `snake_case` field names.
-- Stable `id` at top level (set by the dispatcher; your `fromUci` provides it from `section['.name']`).
-- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put it in `schema_properties`: the generator stamps it into the response schema and keeps it out of the request one, and declaring it in the module would also enrol it in the runtime type checker, turning `managed: "true"` from a 200 into a 422.
-- Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with the helper that matches the parser the option's own reader uses, which is not the same for every option and not even for every section type.** `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal compare against `1`, `platform_bool` for netifd's blob converter (`1` and `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for `get_bool` in `/lib/functions.sh`, which adds `enabled`/`disabled`. Picking the wide one where the reader is narrow reports a section as configured when the daemon ignored the value, which is the read-honesty failure principle 4 exists to prevent. `network/interfaces.disabled` and `network/routes.disabled` are the same option name on the same package needing two different helpers, with the measurement in the module comments. Integers and lists that netifd reads go through the same converter: read them with `netifd_int` and `as_word_list_or_null`, as the table in `docs/ucode-quirks.md` says.
-- Lift single-value uci list options to JSON arrays (a uci list with one element comes through as a string from `cursor.get`; coerce to an array).
-- Nest related fields where it improves readability. `firewall.rules` uses `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This pays off in the Terraform mapping.
-- Runtime/computed fields go under `runtime: {...}`. Currently empty for most resources; populate when ubus exposes useful data.
+- Stable `id` at top level (set by the dispatcher; your `fromUci` provides it
+  from `section['.name']`).
+- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put
+  it in `schema_properties`: the generator stamps it into the response schema
+  and keeps it out of the request one, and declaring it in the module would also
+  enrol it in the runtime type checker, turning `managed: "true"` from a 200
+  into a 422.
+- Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with
+  the helper that matches the parser the option's own reader uses, which is not
+  the same for every option and not even for every section type.**
+  `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal
+  compare against `1`, `platform_bool` for netifd's blob converter (`1` and
+  `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for
+  `get_bool` in `/lib/functions.sh`, which adds `enabled`/`disabled`. Picking
+  the wide one where the reader is narrow reports a section as configured when
+  the daemon ignored the value, which is the read-honesty failure principle 4
+  exists to prevent. `network/interfaces.disabled` and `network/routes.disabled`
+  are the same option name on the same package needing two different helpers,
+  with the measurement in the module comments. Integers and lists that netifd
+  reads go through the same converter: read them with `netifd_int` and
+  `as_word_list_or_null`, as the table in `docs/ucode-quirks.md` says.
+- Lift single-value uci list options to JSON arrays (a uci list with one element
+  comes through as a string from `cursor.get`; coerce to an array).
+- Nest related fields where it improves readability. `firewall.rules` uses
+  `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This
+  pays off in the Terraform mapping.
+- Runtime/computed fields go under `runtime: {...}`. Currently empty for most
+  resources; populate when ubus exposes useful data.
 
 ### Where snake_case stops
 
@@ -397,20 +575,29 @@ through a `GET`. Name the field and describe the expected shape
 
 ### One uci option, one wire name
 
-A uci option gets exactly one writable name. Mirroring one option into two, or splitting a
-list positionally into a scalar and a tail, is what `network/interfaces` did with
-`ipaddr`/`ipaddrs` and `dhcp/hosts` did with `mac`/`mac_aliases`, and 3.0.0 removed both. The
-cost was not the extra name: it was that a caller sending both had half its body silently
-discarded on a 200, which needed a per-method resolution hook on every write path to work
+A uci option gets exactly one writable name. Mirroring one option into two, or
+splitting a
+list positionally into a scalar and a tail, is what `network/interfaces` did
+with
+`ipaddr`/`ipaddrs` and `dhcp/hosts` did with `mac`/`mac_aliases`, and 3.0.0
+removed both. The
+cost was not the extra name: it was that a caller sending both had half its body
+silently
+discarded on a 200, which needed a per-method resolution hook on every write
+path to work
 around, and a deprecation window plus a major to undo.
 
-A field that reads differently from how it writes is expressible now that request and response
-schemas are separate: mark it `readOnly` and it stays in the response half only, which is what
+A field that reads differently from how it writes is expressible now that
+request and response
+schemas are separate: mark it `readOnly` and it stays in the response half only,
+which is what
 `network/interfaces.ipaddr` does.
 
 ## 4. Add unit tests
 
-`tests/unit/<package>_<type>_test.uc`. Test `fromUci`, `toUci` (including round-trip), and `validate` for required-missing, enum-violation, and format cases.
+`tests/unit/<package>_<type>_test.uc`. Test `fromUci`, `toUci` (including
+round-trip), and `validate` for required-missing, enum-violation, and format
+cases.
 
 For cross-reference validation, use the `bus` stub:
 
@@ -424,13 +611,18 @@ let errs = mod.validate({ ... }, c);
 
 ## 5. Register the resource
 
-`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry (single-section types like `system`). Both go through `load_resource`, which registers the source module into `RESOURCE_SOURCES` (the thing backing `/schema/<...>`) and derives the filename from the key by swapping `:` for `.`:
+`src/main.uc` has a `RESOURCES` registry (CRUD) and a `SINGLETONS` registry
+(single-section types like `system`). Both go through `load_resource`, which
+registers the source module into `RESOURCE_SOURCES` (the thing backing
+`/schema/<...>`) and derives the filename from the key by swapping `:` for `.`:
 
 ```ucode
 "<domain>:<plural-type>": handler.make(load_resource("<domain>:<plural-type>")),
 ```
 
-So the module file has to be named `<domain>.<plural-type>.uc`, matching the key. That is not a new convention, it is what all 45 resources already do; the filename simply is not written a second time.
+So the module file has to be named `<domain>.<plural-type>.uc`, matching the
+key. That is not a new convention, it is what all 45 resources already do; the
+filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
 for read-only runtime lists. Writable resources also automatically
@@ -457,11 +649,13 @@ instances today. The module declares:
   it, or the next page repeats or skips items. `dhcp/leases` pages on the IP
   for this reason.
 - `list_fn(conn, query)`: returns the items array, or `{ items, headers }` when
-  the read has more to say than the items. The handler adds `headers` to the list
+  the read has more to say than the items. The handler adds `headers` to the
+  list
   and to the read of one item. `network/wireguard_kernel_peers` sends
   `X-Kernel-Unread` this way.
 - `openapi_headers`: needed when `list_fn` returns headers. It maps each header
-  name to its `$ref` under `#/components/headers/`, and the generator declares it
+  name to its `$ref` under `#/components/headers/`, and the generator declares
+  it
   on the 200 of both GETs. A new header also needs its entry in `components` and
   its row in `docs/errors.md`.
 - `schema_properties`: the item shape, published under `/schema/...`.
@@ -484,7 +678,8 @@ install_uapi
 # Drive via curl; check status code and key fields in the response body.
 ```
 
-Cover at least: POST creates, GET reads, validation failure returns 422, DELETE returns 204.
+Cover at least: POST creates, GET reads, validation failure returns 422, DELETE
+returns 204.
 
 ## 7. Regenerate OpenAPI
 
@@ -492,33 +687,64 @@ Cover at least: POST creates, GET reads, validation failure returns 422, DELETE 
 make openapi
 ```
 
-This walks the resource modules and emits `build/openapi.json`. Add an entry for the new resource in `build/gen_openapi.uc`'s `ENDPOINTS` list. The lint job in CI gates against drift, so commit the regenerated `openapi.json` alongside the resource.
+This walks the resource modules and emits `build/openapi.json`. Add an entry for
+the new resource in `build/gen_openapi.uc`'s `ENDPOINTS` list. The lint job in
+CI gates against drift, so commit the regenerated `openapi.json` alongside the
+resource.
 
 ## 8. Add a curl example
 
-`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to delete: ..." reminder. The suite is a representative subset rather than one file per resource, so this is expected when the new resource shows a shape the existing sixteen do not, and optional when it is another instance of one they already cover.
+`examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to
+delete: ..." reminder. The suite is a representative subset rather than one file
+per resource, so this is expected when the new resource shows a shape the
+existing sixteen do not, and optional when it is another instance of one they
+already cover.
 
 ## 9. Update docs/tokens.md
 
-If the new resource introduces a new scope path (e.g. a new package), add it to the scope tree table.
+If the new resource introduces a new scope path (e.g. a new package), add it to
+the scope tree table.
 
 ## Curation completeness
 
-When adding or extending a curated resource, the test is: *does this resource expose the options that a typical real configuration of this section actually sets?* If a common real-world setup of this section requires uci options the curated resource does not surface, that is a curation gap; close it. Telling users to drop to `/raw/` for a routine field is a smell.
+When adding or extending a curated resource, the test is: *does this resource
+expose the options that a typical real configuration of this section actually
+sets?* If a common real-world setup of this section requires uci options the
+curated resource does not surface, that is a curation gap; close it. Telling
+users to drop to `/raw/` for a routine field is a smell.
 
 ## Validation should not be stricter than the platform
 
-uapi's `validate()` is for catching client mistakes early (typos, missing required fields, cross-resource references that won't resolve) and for surfacing well-formed `422` errors instead of letting uci fail mid-commit. It is NOT a venue for inventing constraints the underlying uci/netifd/daemon doesn't have.
+uapi's `validate()` is for catching client mistakes early (typos, missing
+required fields, cross-resource references that won't resolve) and for surfacing
+well-formed `422` errors instead of letting uci fail mid-commit. It is NOT a
+venue for inventing constraints the underlying uci/netifd/daemon doesn't have.
 
-Concrete recurring temptation: "this bridge has no ports / this firewall rule has no match / this static interface has no ipaddrs, surely that's an error?" Sometimes it is, sometimes the operator is staging an incremental configuration (Terraform's create-before-reference ordering, an empty bridge whose members get added later, an interface that's intentionally up but unconfigured). uapi 2.2.0-rc2 fixed exactly this antipattern in `network.devices` (a `type=bridge` without `ports` was being rejected even though uci/netifd accept it without complaint). Don't add a `validate()` check just because something "feels off"; first check whether uci accepts it. If uci does, uapi should too.
+Concrete recurring temptation: "this bridge has no ports / this firewall rule
+has no match / this static interface has no ipaddrs, surely that's an error?"
+Sometimes it is, sometimes the operator is staging an incremental configuration
+(Terraform's create-before-reference ordering, an empty bridge whose members get
+added later, an interface that's intentionally up but unconfigured). uapi
+2.2.0-rc2 fixed exactly this antipattern in `network.devices` (a `type=bridge`
+without `ports` was being rejected even though uci/netifd accept it without
+complaint). Don't add a `validate()` check just because something "feels off";
+first check whether uci accepts it. If uci does, uapi should too.
 
-If a real protocol-level constraint applies (e.g. `proto=wireguard` genuinely cannot work without a `private_key`, the kernel will reject it), that's worth catching upfront. If it's just "feels incomplete to me", let the platform decide.
+If a real protocol-level constraint applies (e.g. `proto=wireguard` genuinely
+cannot work without a `private_key`, the kernel will reject it), that's worth
+catching upfront. If it's just "feels incomplete to me", let the platform
+decide.
 
 ## Things to watch for
 
 - ucode does not hoist function declarations. Define helpers before callers.
-- `cursor.get(pkg, sect)` returns the section *type* as a string. The dict requires `cursor.get_all(pkg, sect)`. Our `bus.uci_get` already does the right thing.
-- ucode-mod-uci has no `cursor.export`/`cursor.import`. Snapshot/restore is file IO via `bus.uci_export`/`uci_import`.
-- Resources are loaded with `{raw_mode: true}` from the template-mode main.uc handler. They should be raw-script (`.uc` files starting with code, not `{%`).
+- `cursor.get(pkg, sect)` returns the section *type* as a string. The dict
+  requires `cursor.get_all(pkg, sect)`. Our `bus.uci_get` already does the right
+  thing.
+- ucode-mod-uci has no `cursor.export`/`cursor.import`. Snapshot/restore is file
+  IO via `bus.uci_export`/`uci_import`.
+- Resources are loaded with `{raw_mode: true}` from the template-mode main.uc
+  handler. They should be raw-script (`.uc` files starting with code, not `{%`).
 
-See [`docs/ucode-quirks.md`](ucode-quirks.md) for the full running list of language and runtime gotchas.
+See [`docs/ucode-quirks.md`](ucode-quirks.md) for the full running list of
+language and runtime gotchas.
