@@ -249,10 +249,10 @@ const SHELL_BOOLS = [
 t.describe('sqm/queues.enabled reads true only where sqm-scripts starts the queue', () => {
 	let sqm = loadfile('src/resources/sqm.queues.uc')();
 	let read = (v) => sqm.fromUci({ '.name': 'q', '.type': 'queue', enabled: v }).enabled;
-	t.it('takes 1 alone, and reads an absent value and the other spellings as off', () => {
-		t.assert_deep_equal(map([ "1", "01", [ "1" ] ], read), [ true, true, true ]);
-		t.assert_deep_equal(map([ null, "0", "yes", "on", "true", "enabled", "2", "" ], read),
-		                    [ false, false, false, false, false, false, false, false ]);
+	t.it('takes 1 as the shell test reads it, and reads an absent value and the other spellings as off', () => {
+		t.assert_deep_equal(map([ "1", "01", [ "1" ], "+01", " 1", "\t1\n" ], read), [ true, true, true, true, true, true ]);
+		t.assert_deep_equal(map([ null, "0", "yes", "on", "true", "enabled", "2", "", "-1", "+ 1", "1 1", "0x1" ], read),
+		                    [ false, false, false, false, false, false, false, false, false, false, false, false ]);
 		t.assert_equal(sqm.schema_properties.enabled.default, false);
 	});
 });
