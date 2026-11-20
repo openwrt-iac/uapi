@@ -55,7 +55,6 @@ const CASES = fx.CASES;
 const STORED_REFUSED = {
 	"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
 	                          "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
-	"snmpd.accesses.uc/ac1": [ "notify required", "write required" ],
 };
 
 function seeded(c) {

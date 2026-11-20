@@ -47,6 +47,11 @@ function seeded(c) {
 
 function snapshot(conn) { return sprintf("%J", conn._state.uci); }
 
+const STORED_REFUSED = {
+	"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
+	                          "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
+};
+
 t.describe('property: a failed write leaves uci untouched', () => {
 	for (let c in fx.CASES) {
 		t.it(sprintf("%s/%s", c.file, c.id), () => {
@@ -69,9 +74,12 @@ t.describe('property: a failed write leaves uci untouched', () => {
 
 			// v4 (#308): a seed that stores a value validate_new() refuses answers 422 at
 			// validation, before the injected reload failure, and leaves uci untouched too.
-			if (w.status == 422)
+			// The 422 never reaches the restore path, so only the listed seeds may answer it.
+			if (w.status == 422) {
 				t.assert_equal(w.body.code, "validation_failed");
-			else {
+				t.assert_deep_equal(sort(map(w.body.errors, (e) => e.field + " " + e.code)),
+				                    sort(STORED_REFUSED[c.file + "/" + c.id] ?? []), sprintf("%J", w.body));
+			} else {
 				// The write has to actually fail, or this proves nothing: a 200 here means the
 				// injected reload error never reached the transaction and the comparison below
 				// would pass for the wrong reason.
