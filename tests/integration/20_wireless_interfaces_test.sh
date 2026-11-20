@@ -125,8 +125,24 @@ echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of a 64-hex-digit r0kh entr
 $SSH "uci get wireless.$sid.r0kh" | grep -qx "02:00:00:00:00:01,ap-1.example.com,$kh$kh" \
 	|| fail "the r0kh entry was not stored"
 
+up_ifname() { $SSH 'ubus call network.wireless status' | jq -r --arg s "$1" '[.[].interfaces[]? | select(.section == $s) | .ifname // empty][0] // empty'; }
+# The CI image has no network.wireless object, so wifi-scripts sets up nothing there. The checks of
+# what wifi-scripts and hostapd do run only where it does, such as the test VM.
+daemon=0
+$SSH 'ubus call network.wireless status' >/dev/null 2>&1 && daemon=1
+[ "$daemon" = 1 ] || echo "skip: no network.wireless object, so the wifi-scripts and hostapd checks do not run"
+# A write answers before wifi-scripts has set up the radio, so an SSID without an interface proves
+# nothing until netifd lists it and reports radio0 up, with the access point $id set up again. The
+# wait before the POST lets a setup that an earlier write started end first, so that its end cannot
+# pass for the setup of the new config.
+radio0_set_up() {
+	$SSH 'ubus call network.wireless status' | jq -e --arg s "$1" --arg ap "$id" '.radio0 | .up and (.pending | not)
+		and any(.interfaces[]; .section == $s) and any(.interfaces[]; .section == $ap and .ifname != null)' >/dev/null
+}
+
 # wifi-scripts sets up no interface for a section with no mode, which a read reports as null (#307).
 echo "--- a POST with no mode stores no mode, and the read answers null ---"
+[ "$daemon" = 0 ] || wait_for "radio0 did not set up $id" 'radio0_set_up "$id"'
 nomode=$(call -X POST -H 'Content-Type: application/json' "$URL/wireless/interfaces" -d '{
 	"device": "radio0", "network": "lan", "ssid": "uapi-test-nomode", "encryption": "none"
 }')
@@ -135,13 +151,10 @@ nid=$(echo "$nomode" | grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s
 [ -z "$($SSH "uci -q get wireless.$nid.mode")" ] || fail "a POST with no mode stored a mode"
 echo "$(call "$URL/wireless/interfaces/$nid")" | sed '$d' | jq -e '.mode == null' >/dev/null \
 	|| fail "a section with no mode did not read null"
-up_ifname() { $SSH 'ubus call network.wireless status' | jq -r --arg s "$1" '[.[].interfaces[]? | select(.section == $s) | .ifname // empty][0] // empty'; }
-# The CI image has no network.wireless object, so wifi-scripts sets up nothing there. The checks of
-# what wifi-scripts and hostapd do run only where it does, such as the test VM.
-daemon=0
-$SSH 'ubus call network.wireless status' >/dev/null 2>&1 && daemon=1
-[ "$daemon" = 1 ] || echo "skip: no network.wireless object, so the wifi-scripts and hostapd checks do not run"
-[ "$daemon" = 0 ] || wait_for "wifi-scripts set up no interface for $nid" '[ -z "$(up_ifname "$nid")" ]'
+if [ "$daemon" = 1 ]; then
+	wait_for "radio0 did not set up the config that holds $nid" 'radio0_set_up "$nid"'
+	[ -z "$(up_ifname "$nid")" ] || fail "wifi-scripts set up an interface for $nid, which has no mode"
+fi
 
 echo "--- a mode, ssid or key that the daemons refuse answers 422 ---"
 for body in '{"mode":"wds"}' '{"ssid":"'"$(printf '%033d' 0)"'"}' \
@@ -231,6 +244,14 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/
 echo "$r" | tail -1 | grep -q '^422$' || fail "enabling an SSID with a stored bad value expected 422: $r"
 echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["reassociation_deadline", "out_of_range"]]' >/dev/null \
 	|| fail "expected the stored reassociation_deadline error: $r"
+# LuCI or a hand edit can still enable the SSID.
+$SSH 'uci set wireless.uapi20r.disabled=0; uci commit wireless'
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
+echo "$r" | tail -1 | grep -q '^422$' || fail "turning radio0 on expected 422: $r"
+echo "$r" | sed '$d' | jq -e '[.errors[] | [.field, .code]] == [["disabled", "conflict"]]
+	and (.errors[0].message | contains("uapi20r (reassociation_deadline)"))' >/dev/null || fail "turning radio0 on: $r"
+[ "$($SSH 'uci get wireless.radio0.disabled')" = 1 ] || fail "a refused PATCH turned radio0 on"
+$SSH 'uci set wireless.uapi20r.disabled=1; uci commit wireless'
 # v4 (#308): the SSID above could not be enabled while its stored value was bad, so the radio
 # comes on cleanly; the stored error was already reported by the refused PATCH.
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/devices/radio0" -d '{"disabled":false}')
