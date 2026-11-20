@@ -190,17 +190,21 @@ annotations beyond the OpenAPI baseline shape:
 Both annotations are enforced by `make lint-defaults`. See
 `docs/adding-a-resource.md` for the authoring rules.
 
-Source-only markers, stripped from both halves by `build/gen_openapi.uc` and never published
-(`lint-openapi-shape` fails the build if one leaks into the spec):
+Source-only markers, stripped from both halves by `build/gen_openapi.uc` and
+never published (`lint-openapi-shape` fails the build if one leaks into the
+spec):
 
-- **`x-uapi-read-nullable`**: a read can answer null for this property, so the response half widens
-  `type` and `enum` with null while the request half keeps the write contract.
-- **`x-uapi-write`**: keywords the request half declares instead of the response half, for a value
-  a read can return but a write refuses (a stored `mtu` below 68, a route `table` of 0).
-  `tests/unit/write_overlay_test.uc` ties each keyword to a refusal in `validate()`.
+- **`x-uapi-read-nullable`**: a read can answer null for this property, so the
+  response half widens `type` and `enum` with null while the request half keeps
+  the write contract.
+- **`x-uapi-write`**: keywords the request half declares instead of the response
+  half, for a value a read can return but a write refuses (a stored `mtu` below
+  68, a route `table` of 0). `tests/unit/write_overlay_test.uc` ties each
+  keyword to a refusal in `validate()`.
 
-`x-uapi-write-string` marked a write form kept while a read answered an array, as `ip6prefix` until
-3.2.0; v4 removed it together with the last write form it marked (#241, #329).
+`x-uapi-write-string` marked a write form kept while a read answered an array,
+as `ip6prefix` until 3.2.0; v4 removed it together with the last write form it
+marked (#241, #329).
 
 ## What the request and response halves guarantee
 
@@ -228,14 +232,16 @@ a field present in the response and absent from the request is server-derived,
 which is how
 `network/interfaces.ipaddr` reads as computed with no special case.
 
-A request type can be wider than the response type of the same field while a write form is
-phased out. Until v4, `network/interfaces.ip6prefix` was the case since 3.2.0: a read was always
-an array, and a write still took the space-separated string that the 3.1 spec declared; v4
-removed it. A type in `<Name>Patch` is also wider where it takes a null that a read does
-not return, because a null removes the field. The merge-patch body below says which fields.
+A request type can be wider than the response type of the same field while a
+write form is phased out. Until v4, `network/interfaces.ip6prefix` was the case
+since 3.2.0: a read was always an array, and a write still took the
+space-separated string that the 3.1 spec declared; v4 removed it. A type in
+`<Name>Patch` is also wider where it takes a null that a read does not return,
+because a null removes the field. The merge-patch body below says which fields.
 
-A request can also be narrower than the response, since 3.2.0, where a read returns a value
-that the request schema does not take. Three kinds of value qualify:
+A request can also be narrower than the response, since 3.2.0, where a read
+returns a value that the request schema does not take. Three kinds of value
+qualify:
 
 - a stored option that the daemon ignores or cannot use, such as `mtu` below 68
   or a route

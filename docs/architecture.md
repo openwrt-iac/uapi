@@ -132,36 +132,32 @@ behind. `make lint-lock-audit` fails when a site is missing from it.
 Every write request follows this sequence. Failure at any step short-circuits
 without uci state change.
 
-0. **Pre-flight checks.** For each entry in the resource's
-   `reload` list, confirm `/etc/init.d/<svc>` exists and the name matches
-   `^[A-Za-z0-9_-]+$`. Miss → `503 init_script_missing` with the missing path;
-   no uci write attempted. A service in the resource's `reload_if_running`
-   list, a daemon that reads the package but that an image can lack or that
-   the operator stopped, such as dnsmasq, odhcpd and unbound for the dhcp
-   writes, is kept when its init script exists. Under the locks of step 1,
-   it joins the reload when a verbose
-   `service list` shows a `config.change` trigger for it. That matches a
-   LuCI save, whose commit fires each such trigger that procd holds,
-   whatever the instances of the daemon show. procd holds them from the
-   start of the service to its stop, which removes them, so a write starts
-   again a daemon that crashed too often, and starts dnsmasq when it enables
-   a `dnsmasq` section while every other one is disabled, as the save does.
-   At boot, unbound.init registers only a trigger on interface events, which
-   starts unbound 3 s after the last of them, so neither starts it earlier. Any
-   config trigger counts,
-   not only one on the package written, because a `system` write reaches
-   unbound only through ucitrack's `affects`. Otherwise the daemon is
-   skipped, so it never answers 503, and a reload does not start a daemon
-   that the operator stopped, as the reload of dnsmasq.init and unbound.init
-   would. When the `service list` call fails, uapi cannot tell, and reloads
-   it. Then confirm
-   `/etc/config/<package>` exists, because the uci cursor stores nothing in a
-   missing file and reports that only through a null return. Miss →
-   `503 config_missing` with the path. A DELETE checks the file first and
-   answers `404 not_found` for a missing one, because no section
-   can exist there, and a client reads a 404 on DELETE as already gone. A
-   `POST /uapi/batch` answers the 503 for a DELETE too, because it commits as one
-   write.
+0. **Pre-flight checks.** For each entry in the resource's `reload` list,
+   confirm `/etc/init.d/<svc>` exists and the name matches `^[A-Za-z0-9_-]+$`.
+   Miss → `503 init_script_missing` with the missing path; no uci write
+   attempted. A service in the resource's `reload_if_running` list, a daemon
+   that reads the package but that an image can lack or that the operator
+   stopped, such as dnsmasq, odhcpd and unbound for the dhcp writes, is kept
+   when its init script exists. Under the locks of step 1, it joins the reload
+   when a verbose `service list` shows a `config.change` trigger for it. That
+   matches a LuCI save, whose commit fires each such trigger that procd holds,
+   whatever the instances of the daemon show. procd holds them from the start of
+   the service to its stop, which removes them, so a write starts again a daemon
+   that crashed too often, and starts dnsmasq when it enables a `dnsmasq`
+   section while every other one is disabled, as the save does. At boot,
+   unbound.init registers only a trigger on interface events, which starts
+   unbound 3 s after the last of them, so neither starts it earlier. Any config
+   trigger counts, not only one on the package written, because a `system` write
+   reaches unbound only through ucitrack's `affects`. Otherwise the daemon is
+   skipped, so it never answers 503, and a reload does not start a daemon that
+   the operator stopped, as the reload of dnsmasq.init and unbound.init would.
+   When the `service list` call fails, uapi cannot tell, and reloads it. Then
+   confirm `/etc/config/<package>` exists, because the uci cursor stores nothing
+   in a missing file and reports that only through a null return. Miss → `503
+   config_missing` with the path. A DELETE checks the file first and answers
+   `404 not_found` for a missing one, because no section can exist there, and a
+   client reads a 404 on DELETE as already gone. A `POST /uapi/batch` answers
+   the 503 for a DELETE too, because it commits as one write.
 1. **Acquire flock.** SH on global + EX on the per-package file
    (non-blocking), and EX on `unbound` when one of the `reload` services, or
    of the `reload_if_running` services that step 0 kept, restarts unbound, as
