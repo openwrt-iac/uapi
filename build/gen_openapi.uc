@@ -1585,11 +1585,9 @@ function build_schemas() {
 			}
 		}
 
-		// v4 (#322): runtime is always present in a response and documented on every
-		// resource. The module's openapi_runtime wins when declared; otherwise the shape
-		// is an object with the envelope's description. readOnly because toUci ignores it,
-		// so it can never be written: a generator treating it as writable would produce a
-		// diff no configuration can resolve. Collections are item lists, not envelopes.
+		// readOnly because toUci ignores it, so it can never be written: a generator treating it
+		// as writable would produce a diff no configuration can resolve. Collections are item
+		// lists, not envelopes.
 		if (ep.kind != "collection") {
 			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : {
 				"type": "object",
@@ -1640,8 +1638,7 @@ function build_schemas() {
 			"properties": resp_props,
 		};
 
-		// v4 (#322): id and runtime are always present in a resource response. Collections
-		// are item lists, so only their own required lists apply.
+		// A collection item is not an envelope, so it has no id or runtime of its own.
 		let resp_required = (ep.kind == "collection")
 			? [ ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ]
 			: [ "id", "runtime", ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
