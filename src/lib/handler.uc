@@ -44,7 +44,7 @@ const MAX_LIMIT = 500;
 // A lease is paged by its IP, so a cursor takes `.` and `:` too.
 const CURSOR_RE = /^c_[A-Za-z0-9_.:-]+$/;
 
-function paginate(ctx, items, query, id_field) {
+function paginate(ctx, items, query, id_field, carry) {
 	let key = id_field ?? "id";
 	let limit = DEFAULT_LIMIT;
 	if (query != null && query.limit != null) {
@@ -76,7 +76,7 @@ function paginate(ctx, items, query, id_field) {
 	let resp = errors.ok(ctx, page);
 	if (end < length(items) && length(page) > 0) {
 		let next = "c_" + page[length(page) - 1][key];
-		resp.headers["Link"] = sprintf("<?cursor=%s&limit=%d>; rel=\"next\"", next, limit);
+		resp.headers["Link"] = sprintf("<?cursor=%s&limit=%d%s>; rel=\"next\"", next, limit, carry ?? "");
 		resp.headers["X-Next-Cursor"] = next;
 	}
 	return resp;
@@ -842,7 +842,8 @@ function make(resource, opts) {
 			if (want_managed == "false" && r.managed) return;
 			push(out, r);
 		});
-		return paginate(ctx, out, query);
+		let carry = (want_managed == "true" || want_managed == "false") ? "&managed=" + want_managed : null;
+		return paginate(ctx, out, query, null, carry);
 	}
 
 	function get_one(conn, ctx, id) {
