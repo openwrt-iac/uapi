@@ -77,6 +77,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The `Link` to the next page of a curated list keeps `managed`.** The link
+  is relative, so it replaced the whole query, and the second page of
+  `?managed=false` listed the managed sections too. (#399)
 - **The install says when uhttpd does not run after its restart.** The feed of
   25.12.6 was rebuilt after the release, and `uhttpd` and its plugins do not pin
   each other's version, so `apk add uapi` installed `uhttpd-mod-ucode`
