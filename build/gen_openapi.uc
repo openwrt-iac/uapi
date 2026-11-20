@@ -306,10 +306,9 @@ function patch_copy(v) {
 // keeps its Request type, because its null is not a removal: `id`, which a PATCH ignores, a field
 // that the Request requires, which validate() refuses on the merged section, and a field that the
 // module names in openapi_patch_non_null. So does a write-only secret, which carry_write_only
-// keeps for a null. `mwan3/interfaces.family` is the one required field whose null the server
-// removes, because its validate() does not require it, and its Request already takes null.
-// Array items stay as they are, because a merge patch replaces an array whole. The copy is there
-// because widen_null writes into a node that carries no marker, and this node is the Request's.
+// keeps for a null. Array items stay as they are, because a merge patch replaces an array whole.
+// The copy is there because widen_null writes into a node that carries no marker, and this node
+// is the Request's.
 // lint-openapi-shape, tests/merge_patch_bodies.py and tests/unit/read_honesty_test.uc check this
 // rule against the spec and the server.
 function nullable_properties(props, keep) {
