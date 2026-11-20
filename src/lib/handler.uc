@@ -252,11 +252,8 @@ _check_value = function(spec, val, field_path, errs) {
 			string_refused = true;
 		}
 	}
-	// v4 (#276): one rule for newlines in curated strings. A field whose daemon reads it as one
-	// line is refused here with both \n and \r, which removes the old LINE_RE/ONE_LINE_RE
-	// difference; a field that legitimately holds several lines opts out with
-	// "x-uapi-multiline": true (system.notes). Skipped when the pattern already refused the
-	// value, so one refusal per field. Per-field patterns keep the word, quote and glob rules.
+	// A daemon reads most fields as one line, and some end a line at \r too. Skipped when the
+	// pattern already refused the value, so that a field gets one refusal.
 	if (type(val) == "string" && !string_refused && spec["x-uapi-multiline"] !== true
 	    && (index(val, "\n") >= 0 || index(val, "\r") >= 0))
 		push(errs, { field: field_path, code: "invalid_format",
@@ -702,8 +699,7 @@ function patch_touched_fields(ops, patched) {
 		// A test op asserts a value without writing it, so it names nothing, even on the root.
 		if (type(op) == "object" && op.op == "test") continue;
 		if (type(op) != "object" || type(op.path) != "string" || op.path == "") return null;
-		// A move also removes the field that it reads from. Without it, a move out of `/mode` got
-		// past the refusal of a null mode on wireless/interfaces and stored mode ap.
+		// A move also removes the field that it reads from.
 		for (let p in (op.op == "move") ? [ op.path, op.from ] : [ op.path ]) {
 			let seg = split(p, "/")[1];
 			if (seg == null || seg == "") return null;
@@ -859,7 +855,7 @@ function make(resource, opts) {
 		return paginate(ctx, out, query, null, q.carry);
 	}
 
-	function get_one(conn, ctx, id, query) {
+	function get_one(conn, ctx, id) {
 		let s = load_section(conn, pkg, id);
 		if (!s || !type_predicate(s['.type']))
 			return errors.error(ctx, "not_found",
