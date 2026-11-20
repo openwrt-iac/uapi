@@ -872,6 +872,8 @@ const AUTH_EXACT_ROUTES = [
 	{ path: "/uapi/diagnostics", methods: ["GET"], not_allowed: "diagnostics only supports GET",
 	  scope: ["uapi", "diagnostics"], verb: "ro", scope_what: "reading uapi/diagnostics",
 	  fn: function(conn, ctx, token, parts, method, body, query, env) {
+		  if (query.validate != null && query.validate != "1")
+			  return errors.error(ctx, "bad_request", "validate must be 1");
 		  return diagnostics_response(ctx, conn, token.scopes, query.validate == "1");
 	  } },
 ];

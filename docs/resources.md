@@ -310,6 +310,7 @@ didn't author.
 `GET` on a collection includes both managed and unmanaged sections by default.
 Clients filter via `?managed=true` / `?managed=false` when they want one or the
 other. The `Link` to the next page keeps the filter.
+Another value answers 400 `bad_request`.
 
 ## Generic raw passthrough
 

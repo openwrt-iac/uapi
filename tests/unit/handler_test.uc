@@ -45,6 +45,15 @@ t.describe('handler.list', () => {
 		t.assert_equal(r.body[0].target, 'ACCEPT');
 	});
 
+	// 3.x ignored a managed other than true or false and listed every section.
+	t.it('answers 400 to a managed other than true or false', () => {
+		let c = with_zones();
+		let r = rules.list(c, ctx(), { managed: "yes" });
+		t.assert_deep_equal([ r.status, r.body.code ], [ 400, "bad_request" ]);
+		t.assert_equal(rules.list(c, ctx(), { managed: "True" }).status, 400);
+		t.assert_equal(rules.list(c, ctx(), { managed: "" }).status, 400);
+	});
+
 	t.it('filters by managed=true', () => {
 		let c = with_zones();
 		c._state.uci.firewall.cfg9 = { '.type': 'rule', '.anonymous': true, target: 'DROP', src: 'wan' };
@@ -130,6 +139,14 @@ t.describe('handler.list pagination', () => {
 		seed_many(c, 3);
 		let r = rules.list(c, ctx(), { cursor: "not-our-shape" });
 		t.assert_equal(r.body.code, "invalid_cursor");
+	});
+
+	// 3.x read an empty cursor as the first page, a value that the cursor pattern of the spec refuses.
+	t.it('rejects an empty cursor', () => {
+		let c = with_zones();
+		seed_many(c, 3);
+		let r = rules.list(c, ctx(), { cursor: "" });
+		t.assert_deep_equal([ r.status, r.body.code ], [ 400, "invalid_cursor" ]);
 	});
 
 	t.it('rejects limit outside 1..500', () => {

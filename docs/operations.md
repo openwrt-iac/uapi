@@ -501,7 +501,8 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 `GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section
 of every resource the token may read is run through the same path a write takes,
 and the ones that would be rejected are reported with the reason, together with
-the ones that hold a value that a write cannot add.
+the ones that hold a value that a write cannot add. A `validate` other than `1`
+answers 400 `bad_request`.
 
 ```json
 {
