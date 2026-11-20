@@ -62,6 +62,13 @@ function handler_key(v) {
 	return (type(v) == "string" && match(v, WG_KEY_RE)) ? v : null;
 }
 
+// The ucode handler skips a peer, or leaves out its preshared key, when the value does not match
+// its own pattern, so wg never reads it. A value that matches and is not a key that wg reads still
+// reaches wg, which refuses the whole config.
+function handler_drops_key(v) {
+	return ucode_handler() && !(type(v) == "string" && match(v, /^[A-Za-z0-9+\/]{43}=$/));
+}
+
 // The keepalive that the ucode handler gives wg: off in any case, or 0 to 65535 in at most five
 // digits, as uci holds it. -1 for any other value, which the handler leaves out, as it reads for a
 // value that wg refuses under wireguard.sh.
@@ -796,5 +803,5 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         keepalive, endpoint_port,
+         keepalive, endpoint_port, handler_drops_key,
          peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

@@ -1012,6 +1012,16 @@ t.describe('wg under the ucode handler', () => {
 		t.assert_equal(r.result, 'ok');
 		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
 	});
+	t.it('marks an error of a value that the handler leaves out as not live, so it does not keep the interface down', () => {
+		let view = { interface: 'wg1', public_key: 'not-a-key', endpoint_host: '192.0.2.1', endpoint_port: 0, persistent_keepalive: -1 };
+		let live = (peers) => map(peers.validate_new(view), (e) => [ e.field, e.live ]);
+		t.assert_deep_equal(live(t.load_with({ wg: uc }, [ '../resources/network.wireguard_peers' ])),
+		                    [ [ 'public_key', false ], [ 'endpoint_port', false ], [ 'persistent_keepalive', false ] ]);
+		t.assert_deep_equal(live(t.load_with({ wg }, [ '../resources/network.wireguard_peers' ])),
+		                    [ [ 'public_key', true ], [ 'endpoint_port', true ], [ 'persistent_keepalive', true ] ]);
+		view.public_key = replace(PK, /4=$/, '5=');
+		t.assert_deep_equal(live(t.load_with({ wg: uc }, [ '../resources/network.wireguard_peers' ]))[0], [ 'public_key', true ]);
+	});
 	t.it('leaves out the endpoint of a stored peer without a port, where wireguard.sh takes 51820', () => {
 		let s = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', endpoint_host: '192.0.2.1' });
 		t.assert_equal(uc.to_peer(s).endpoint_port, 0);
