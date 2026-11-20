@@ -1044,6 +1044,11 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 	function fields(r) {
 		return map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
 	}
+	// A stored error answers 422 on every write (#308), so only the sweep still shows whether the
+	// radio counts as on.
+	function live(c) {
+		return map(filter(ifaces.sweep(c)[0].errors, (e) => e.field == 'key'), (e) => e.live);
+	}
 
 	// v4 (#308): the stored bad value blocks the enable too, on a disabled or missing radio
 	// as anywhere else, and a new bad value is refused as well.
@@ -1078,10 +1083,13 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 	});
 
 	t.it('reads the disabled option of the radio as netifd does', () => {
-		for (let p in [ [ 'true', 422 ], [ '0', 422 ], [ 'yes', 422 ] ]) {
-			let c = box({ disabled: p[0] }, { w1: ssid({ disabled: '1', key: INJECTED }) });
-			t.assert_equal(ifaces.patch(c, ctx, 'w1', { disabled: false }).status, p[1], p[0]);
-		}
+		for (let p in [ [ 'true', false ], [ '0', true ], [ 'yes', true ] ])
+			t.assert_deep_equal(live(box({ disabled: p[0] }, { w1: ssid({ key: INJECTED }) })), [ p[1] ], p[0]);
+	});
+
+	t.it('the sweep counts an SSID live while one radio that it names, as words or as a list, is on', () => {
+		for (let p in [ [ 'radio1 radio0', true ], [ [ 'radio1', 'radio0' ], true ], [ 'radio1 radio9', false ], [ 'radio9', false ] ])
+			t.assert_deep_equal(live(box({ disabled: '1' }, { w1: ssid({ device: p[0], key: INJECTED }) })), [ p[1] ], p[0]);
 	});
 
 	t.it('the sweep lists the SSID once, live only on an enabled radio, and no radio', () => {
@@ -1161,6 +1169,11 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 			t.assert_deep_equal(fields(rr), [], none);
 			t.assert_equal(c._state.uci.wireless.radio1.type, 'mac80211', none);
 			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: 'radio0' })), [ [ 'key', 'invalid_format' ] ], none);
+
+			c = box({ type: none }, { w1: ssid({ key: INJECTED }) });
+			t.assert_deep_equal(live(c), [ false ], none);
+			t.assert_deep_equal(fields(radios.patch(c, ctx, 'radio1', { type: 'mac80211' })), [ [ 'disabled', 'conflict' ] ], none);
+			t.assert_deep_equal(c._state.uci.wireless.radio1.type, none, none);
 		}
 		let c = box({ type: null }, { w1: ssid({ key: INJECTED }) });
 		t.assert_deep_equal(map(filter(radios.sweep(c), (r) => r.id == 'radio1')[0].errors, (e) => e.field), [ 'type' ]);
