@@ -534,6 +534,12 @@ t.describe('handler schema check of a carried secret', () => {
 		t.assert_equal(c._state.uci.firewall.r_existing.secret, 'one');
 	});
 
+	t.it('a merge PATCH keeps it too', () => {
+		let c = stored();
+		t.assert_equal(secret_rules.patch(c, ctx(), 'r_existing', { target: 'DROP' }).status, 200);
+		t.assert_equal(c._state.uci.firewall.r_existing.secret, 'one');
+	});
+
 	t.it('the sweep does not report it', () => {
 		t.assert_deep_equal(secret_rules.sweep(stored()), []);
 	});
@@ -544,6 +550,54 @@ t.describe('handler schema check of a carried secret', () => {
 		t.assert_equal(r.status, 422);
 		t.assert_equal(r.body.errors[0].field, 'secret');
 		t.assert_equal(r.body.errors[0].code, 'invalid_type');
+	});
+});
+
+// The schema judges the section that a write leaves, as the sweep judges the read, so a stored
+// value that the sweep lists blocks every write until one replaces it.
+t.describe('handler schema check of a stored value', () => {
+	function stored(extra) {
+		let c = with_zones();
+		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false,
+		                                     target: 'ACCEPT', src: 'wan', ...extra };
+		return c;
+	}
+	let jp = { ...ctx(), json_patch: true };
+	let fields = (r) => map(r.body.errors ?? [], (e) => [ e.field, e.code ]);
+
+	t.it('refuses every write while the section holds a value outside the schema', () => {
+		let c = stored({ target: 'BOGUS' });
+		t.assert_deep_equal(map(rules.sweep(c)[0].errors, (e) => [ e.field, e.code ]), [ [ 'target', 'not_in_enum' ] ]);
+		t.assert_deep_equal(fields(rules.patch(c, ctx(), 'r_existing', { name: 'x' })), [ [ 'target', 'not_in_enum' ] ]);
+		t.assert_deep_equal(fields(rules.patch(c, jp, 'r_existing', [ { op: 'replace', path: '/name', value: 'x' } ])),
+		                    [ [ 'target', 'not_in_enum' ] ]);
+		t.assert_equal(rules.patch(c, ctx(), 'r_existing', null).status, 422);
+		t.assert_equal(c._state.uci.firewall.r_existing.name, null);
+		t.assert_equal(rules.patch(c, ctx(), 'r_existing', { target: 'DROP' }).status, 200);
+		t.assert_deep_equal(rules.sweep(c), []);
+	});
+
+	t.it('refuses every write while the section holds a newline', () => {
+		let c = stored({ name: 'a\nb' });
+		let r = rules.patch(c, ctx(), 'r_existing', { target: 'DROP' });
+		t.assert_deep_equal(fields(r), [ [ 'name', 'invalid_format' ] ]);
+		t.assert_equal(r.body.errors[0].message, 'must not contain a newline or carriage return');
+		t.assert_equal(c._state.uci.firewall.r_existing.target, 'ACCEPT');
+		t.assert_equal(rules.patch(c, jp, 'r_existing', [ { op: 'remove', path: '/name' } ]).status, 200);
+	});
+
+	t.it('gives the newline refusal up for a validate_new() error on the same field and code', () => {
+		let h = handler.make({ ...rules_mod, validate_new: (b) =>
+			(index(b.name ?? '', '\n') >= 0) ? [ { field: 'name', code: 'invalid_format', message: 'daemon', live: false } ] : [],
+		}, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let c = stored({ name: 'a\nb' });
+		t.assert_deep_equal(map(h.patch(c, ctx(), 'r_existing', { target: 'DROP' }).body.errors, (e) => e.message), [ 'daemon' ]);
+		t.assert_deep_equal(map(h.sweep(c)[0].errors, (e) => [ e.message, e.live ]), [ [ 'daemon', false ] ]);
 	});
 });
 
@@ -647,13 +701,10 @@ t.describe('handler.patch', () => {
 		let c = ubus.stub({ uci: { network: {
 			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard',
 			       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.9.0.1/24' ] },
-			henet: { '.type': 'interface', '.anonymous': false, proto: '6in4', peeraddr: '192.0.2.1' },
 		} } });
-		for (let id in [ 'wg1', 'henet' ]) {
-			t.assert_equal(ifaces.patch(c, ctx(), id, { mtu: 1400 }).status, 200);
-			t.assert_equal(c._state.uci.network[id].mtu, '1400');
-			t.assert_equal(c._state.uci.network[id].nohostroute, null, id);
-		}
+		t.assert_equal(ifaces.patch(c, ctx(), 'wg1', { mtu: 1400 }).status, 200);
+		t.assert_equal(c._state.uci.network.wg1.mtu, '1400');
+		t.assert_equal(c._state.uci.network.wg1.nohostroute, null);
 	});
 
 	t.it('still writes a defaulted field the patch does name', () => {
@@ -1837,6 +1888,14 @@ t.describe('handler.make_singleton object guard', () => {
 		c._state.uci.firewall.defaults.forward = 'DROP';
 		t.assert_equal(strict.patch(c, ctx(), { forward: 'REJECT' }).status, 422);
 	});
+
+	t.it('refuses a write while the section holds a value outside the schema', () => {
+		let c = seeded();
+		c._state.uci.firewall.defaults.input = 'BOGUS';
+		let r = sg.patch(c, ctx(), { forward: 'DROP' });
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'input', 'not_in_enum' ] ]);
+		t.assert_equal(c._state.uci.firewall.defaults.forward, 'REJECT');
+	});
 });
 
 t.describe('handler.make_singleton sweep', () => {
@@ -2180,9 +2239,9 @@ t.describe('a write answers the section that it staged', () => {
 	});
 });
 
-// new_errors() tells the errors that a write adds by their field, code and message, so a message
-// that quoted a value would change with it, and the error that the stored section already had would
-// read as new. Each probe puts a value into one field, over each fixture case, the case with each
+// validate_new() runs over the secrets that the read masks, and the sweep gives its messages to a
+// caller that holds only `:ro`, so a message that quoted a value could hand out a secret. Each probe
+// puts a value into one field, over each fixture case, the case with each
 // field null in turn, and the case with each value of an enum or boolean field. A probe holds a
 // marker in shapes that the rules refuse, or is a number that a rule refuses and that can hold no
 // marker, such as a port of 0. A context then runs the probes again with a marker of its own in

@@ -180,8 +180,8 @@ function validate(json) {
 }
 
 // A write takes only the plain forms, while uci can hold others from LuCI or a hand edit. An error
-// is live only for a value with which netifd drops the rule or the kernel refuses it, so enabling a
-// rule that netifd installs as it is stays possible. netifd installs no disabled rule.
+// is live only for a value with which netifd drops the rule or the kernel refuses it. netifd installs
+// no disabled rule.
 function validate_new(json) {
 	let errs = [];
 	let enabled = json.disabled !== true;
@@ -197,7 +197,7 @@ function validate_new(json) {
 		let live = enabled && !ipproto_installs(p);
 		if (type(p) != "int")
 			push(errs, { field: "ipproto", code: "invalid_type", live,
-			             message: "must be an integer, as LuCI writes it: a protocol name or another spelling that uci holds passes only unchanged" });
+			             message: "must be an integer, as LuCI writes it: replace a protocol name or another spelling that uci holds, such as tcp or 06, with its number" });
 		else if (p < 1 || p > 255)
 			push(errs, { field: "ipproto", code: "out_of_range", live,
 			             message: "must be from 1 to 255: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one" });
@@ -262,15 +262,15 @@ return {
 		mark:     { type: ["string", "null"],
 		            description: "Match fwmark (value or value/mask)" },
 		suppress_prefixlength: { type: ["integer", "null"], minimum: -2147483648, maximum: 2147483647, "x-uapi-write": { minimum: 0, maximum: 32 },
-		            description: "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and a write may send it back unchanged." },
+		            description: "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is, and a write answers 422 while the rule holds one." },
 		// The request schema refuses a null that its enum does not list, and a null clears the field.
 		tos:      { type: ["integer", "null"], minimum: -2147483648, maximum: 2147483647,
 		            "x-uapi-write": { enum: [ null, ...TOS_VALUES ] },
 		            description: "Match this TOS value. A write takes 0, 4, 8, 12, 16, 20, 24 or 28: netifd drops a rule whose tos is above 255, and the kernel refuses an IPv4 rule whose tos sets a bit outside 0x1c, so the rule is not installed. 0 matches every packet. A read reports what netifd reads, as for `suppress_prefixlength`, so the 10 that LuCI suggests reads 10." },
 		uidrange: { type: ["string", "null"], "x-uapi-write": { pattern: UID_PATTERN },
-		            description: "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write may send back unchanged a form that it refuses, such as `1000-1005x`, which netifd reads as 1000-1005." },
+		            description: "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write answers 422 while the rule holds a form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005." },
 		ipproto:  { type: ["integer", "string", "null"], minimum: 0, "x-uapi-write": { minimum: 1, maximum: 255 },
-		            description: "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write may send one back unchanged." },
+		            description: "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write answers 422 while the rule holds one." },
 		sport:    { type: ["string", "null"], "x-uapi-write": { pattern: PORT_PATTERN },
 		            description: "Match this source port, or a range of ports such as `1000-2000`, each from 1 to 65534. The kernel refuses a range that holds 0 or 65535 or runs backwards, as the `0-65535` that LuCI suggests does, and netifd wraps a larger number. A read reports the stored text, as for `uidrange`." },
 		dport:    { type: ["string", "null"], "x-uapi-write": { pattern: PORT_PATTERN },

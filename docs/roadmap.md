@@ -967,8 +967,9 @@ mechanisms, the evidence and the open questions live in the issues.
   `ap`](https://github.com/openwrt-iac/uapi/issues/307): a read today reports an
   access point that does not exist.
 - [Refuse a write for any stored error the section holds, as LuCI
-  does](https://github.com/openwrt-iac/uapi/issues/308): the `new_errors()`
-  model changes.
+  does](https://github.com/openwrt-iac/uapi/issues/308): the schema check and
+  every rule judge the section that a write leaves, so what the sweep lists
+  blocks the write.
 - [Retire `normalize_bool`, boolean reads follow the platform's
   reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is
   [reading libvalidate's accepted set out of

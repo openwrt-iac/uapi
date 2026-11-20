@@ -47,8 +47,7 @@ function validate(json, conn) {
 
 // snmpd.init skips an access that does not set each of these. It tests `context` unquoted, so an
 // empty one passes the test and writes an access line with a word missing, which snmpd drops.
-// LuCI leaves `context` optional and uapi required only `group`, so a stored access can lack one:
-// see new_errors() in the handler.
+// LuCI leaves `context` optional and uapi required only `group`, so a stored access can lack one.
 function validate_new(json) {
 	let errs = [];
 	for (let f in [ "context", "version", "level", "prefix", "read", "write", "notify" ])

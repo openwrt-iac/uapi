@@ -104,7 +104,7 @@ done
 wait_for "LuCI's rule left the kernel after the PUT" \
 	'has 30592 ".suppress_prefixlen == 0 and .tos == 16 and .ip_proto == 6 and .sport_range == [1000,2000] and .uid_range == [1000,1005]"'
 
-echo "--- a stored value that netifd drops or the kernel refuses reads as stored and blocks no write ---"
+echo "--- a stored value that netifd drops or the kernel refuses reads as stored and blocks every write until one replaces it ---"
 for p in 30593 30594 30595 30596 30597 30599; do
 	[ -z "$(kernel_rule $p)" ] || fail "the kernel holds rule $p: $(kernel_rule $p)"
 done
@@ -130,7 +130,7 @@ r=$(send PATCH network/rules/uapi59y '{"ipproto":17}')
 [ "$(status "$r")" = 200 ] || fail "PATCH ipproto 17 expected 200: $r"
 wait_for "the kernel did not take ipproto 17" 'has 30597 ".ip_proto == 17"'
 
-echo "--- enabling a rule refuses ipproto 0, which netifd drops, and takes the forms that netifd installs ---"
+echo "--- a stored ipproto 0 or hand-written form blocks every write of the rule, enabling and disabling too ---"
 r=$(send PATCH network/rules/uapi59x '{"disabled":true}')
 # v4 (#308): the stored ipproto 0 blocks every write of the rule, disabling included.
 [ "$(status "$r")" = 422 ] || fail "PATCH that disables the rule with ipproto 0 expected 422 on v4: $r"

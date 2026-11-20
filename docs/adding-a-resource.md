@@ -274,20 +274,20 @@ fixed set: `required`, `invalid_type`, `invalid_format`, `out_of_range`,
 `not_in_enum`, `conflict`, `read_only`.
 
 `json` is the post-image: the request body on a create, the body with the stored
-secrets
-carried in on a PUT, and the stored section with the request merged in on a
-PATCH.
-`delta` holds only what the request names: the body of a create or a PUT,
-a merge-patch body, or the paths of a JSON Patch without its `test`
-operations. Check a rule against `json` when it describes the section as
-stored, for example a required field or a reference to another section.
-Check it against `delta` when only the request can be at fault.
-`partial` is true for a PATCH, which keeps a stored option that the request
-leaves out, where a PUT removes it.
+secrets carried in on a PUT, and the stored section with the request merged in
+on a PATCH. Check each rule against `json`: a write is refused for each error
+that the section it leaves holds, a stored value too (see "Rules that a stored
+value can fail"). `delta` holds only what the request names: the body of a
+create or a PUT, a merge-patch body, or the paths of a JSON Patch without its
+`test` operations. Check a rule against `delta` only when it is about the
+request and not about the section that the write leaves. `partial` is true for
+a PATCH, which keeps a stored option that the request leaves out, where a PUT
+removes it.
 
 `network.interfaces` refuses a field that the proto does not take only when
 `delta` names it. A PATCH that switches the proto still carries the old
-proto's fields in `json`, and `toUci` drops them. `firewall.rules` checks
+proto's fields in `json`, and the write drops them, so the section that it
+leaves does not hold them. `firewall.rules` checks
 `json` instead, so a target switch has to send `null` for the old target's
 fields. The sweep behind `GET /uapi/diagnostics?validate=1` passes the `fromUci`
 read as `delta`, so an option that the read hides never flags. A PATCH that
@@ -340,66 +340,41 @@ string that holds several lines, such as `system.notes`, opts out with
 
 ### Rules that a stored value can fail
 
-`validate()` refuses a write whenever the section it leaves behind breaks a
-rule, so a stored
-value that a rule refuses blocks every write of the section until a write
-replaces it. That is
-right for most rules. It is wrong for a rule that LuCI, a shell or an older uapi
-can break in uci,
-when the section must stay writable: disabling an SSID that holds an injected
-key has to work. Put
-such rules in `validate_new(json, conn)`, which returns errors with a `live`
-flag: `false` when the
-daemon does not read the value yet, because the section is disabled, its mode
-does not use the
-field, or a section that it depends on is disabled, as the radio of an SSID can
-be. `conn` reads
-that section, and is null when a test calls the function directly. Report the
-error either way,
-because another writer can enable the section later, and
-report each problem of a value as its own error, so that one cannot hide
-another: the 422 keeps
-each of them, unless the schema check or `validate()` already reported its field
-and code.
+A write is refused for each error that the section it leaves holds, a stored
+value too, as LuCI refuses to save a form while one of its fields fails. The
+schema check, `validate()` and `validate_new()` all judge that whole section,
+for a PATCH of either kind as for a PUT. So a stored value that breaks a rule
+blocks every write of the section until a write replaces it or the change goes
+through `/raw`. A DELETE does not validate. The sweep behind
+`GET /uapi/diagnostics?validate=1` runs the same checks over each stored
+section, so each error that it lists blocks a write.
 
-The handler runs `validate_new()` on the section as it was and as the write
-leaves it, and
-refuses the write only for an error that it adds: one in a field that the write
-changes, one
-that the section did not have, by field, code and message, or one that was not
-live and is now.
-So a message names its rule and quotes no value: a message that quotes another
-field changes when
-that field changes, and the old error then reads as a new one. A property in
+Put a rule on a value that a daemon reads or misreads in
+`validate_new(json, conn)`, which returns errors with a `live` flag: `false`
+when the daemon does not read the value yet, because the section is disabled,
+its mode does not use the field, or a section that it depends on is disabled,
+as the radio of an SSID can be. `conn` reads that section, and is null when a
+test calls the function directly. Report the error either way, because another
+writer can enable the section later. `live` reaches the sweep only, and the
+write is refused for the error either way. Report each problem of a value as
+its own error, so that one cannot hide another: the 422 keeps each of them,
+unless the schema check or `validate()` already reported its field and code.
+The newline refusal of the schema check gives way to a `validate_new()` error
+on the same field and code, which says why the daemon cares and carries `live`.
+
+A message names its rule and quotes no value. `validate_new()` runs over the
+write-only secrets that the handler carries from uci, and the sweep gives its
+messages to a caller that holds only `:ro`. A property in
 `tests/unit/handler_test.uc` puts a marker into each field of the fixture cases
-and fails on a
-message that holds it.
-An option and the list of its words, split on whitespace as netifd splits it,
-are the same
-value. Two lists are the same only entry by entry, because a daemon can read
-each entry as a line
-of its own. So a write that leaves a field alone is refused for an error that
-the field already
-had only when the write makes the error live, for example by enabling the
-section. The sweep runs
-`validate_new()` on every stored section and lists its errors with their `live`
-flag, merged with
-the others as in a 422. A write of one resource can make the stored values of
-another live:
-`validate()` of `network/interfaces` runs `validate_new()` of
-`network/wireguard_peers` over the
-peers of an interface that a write switches to wireguard or enables, and refuses
-their live
-errors. `validate()` and the schema check run as before: `validate()` sees the
-whole section, and the schema check sees what the caller sent, which for a JSON
-Patch is each field
-that its operations name and leave in the document, as they leave it. The schema
-check does not see a write-only field that
-the handler carries from uci, because uci can hold it in a shape that the schema
-does not declare,
-such as an option where the schema says list, and the caller can neither see it
-nor send it.
-`validate()` sees it.
+and fails on a message that holds it. A write of one resource can make the
+stored values of another live: `validate()` of `network/interfaces` runs
+`validate_new()` of `network/wireguard_peers` over the peers of an interface
+that a write switches to wireguard or enables, and refuses their live errors.
+
+The schema check does not see a write-only field that the handler carries from
+uci. The read masks it, uci can hold it in a shape that the schema does not
+declare, such as an option where the schema says list, and the caller can
+neither see it nor send it. `validate()` and `validate_new()` see it.
 
 `openapi_required`, `openapi_conditional`, `openapi_runtime` are picked
 up by `build/gen_openapi.uc` and produce a richer machine-readable

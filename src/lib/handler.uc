@@ -217,6 +217,7 @@ function _format_want(want) {
 // clear-on-omit work depends on `default` NOT having runtime effect.
 let _check_value;
 let check_schema_types;
+const NEWLINE_REFUSAL = "must not contain a newline or carriage return";
 
 _check_value = function(spec, val, field_path, errs) {
 	let want = spec.type;
@@ -256,8 +257,7 @@ _check_value = function(spec, val, field_path, errs) {
 	// pattern already refused the value, so that a field gets one refusal.
 	if (type(val) == "string" && !string_refused && spec["x-uapi-multiline"] !== true
 	    && (index(val, "\n") >= 0 || index(val, "\r") >= 0))
-		push(errs, { field: field_path, code: "invalid_format",
-		             message: "must not contain a newline or carriage return" });
+		push(errs, { field: field_path, code: "invalid_format", message: NEWLINE_REFUSAL });
 	if (type(val) == "array" && spec.items != null) {
 		for (let i = 0; i < length(val); i++)
 			_check_value(spec.items, val[i],
@@ -301,64 +301,45 @@ check_schema_types = function(schema_properties, body, prefix) {
 	return errs;
 };
 
-// v4 (#308): LuCI's model. LuCI validates every visible field of a form at save, so a stored
-// value that breaks a rule blocks every save of the section until it is fixed. A write now
-// answers 422 for any error the resulting section holds, not only the ones the write adds.
-// Before v4 a write that left a stored value alone stayed possible, so a broken section could
-// still be disabled; now the fix comes first (or goes through /raw).
-function new_errors(resource, after, conn) {
-	let errs = resource.validate_new(after, conn) ?? [];
-	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
-	return map(errs, (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
-}
-
-// schema_body: type-checked by check_schema_types (the wire delta from the
-// client). validate_body: passed to resource.validate (the FULL post-merge
-// view for cross-field checks). For POST/PUT both are the same body. For
-// PATCH they differ: the merge inherits fromUci's view of existing options,
-// which uci returns as strings even for integer-typed schema fields, so type-
-// checking the merge would falsely 422 on any patch that didn't touch the
-// integer field. Schema-check the delta only.
+// LuCI validates every visible field of a form at save, so a value that breaks a rule blocks every
+// save of the section until a write fixes it or the change goes through /raw. Each check here
+// therefore judges the section as the write leaves it, a stored value too, and the sweep runs the
+// same checks over each stored section.
 //
-// `delta` is what the request itself named, for checks that must not fire on a field the caller
-// never sent: a PATCH that switches network/interfaces away from static still carries the old
-// addresses in its merged view, and refusing them there would make the switch impossible.
-// `partial` is true for a PATCH, which keeps a stored option that the request leaves out, where a
-// PUT removes it.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before, partial) {
+// schema_body is the section that check_schema_types judges. It leaves out the write-only secrets
+// that the write carries from uci: the read masks them, so the caller can neither see nor send
+// them, and the sweep judges the read. validate_body holds them, for validate() and
+// validate_new(). `delta` is what the request itself named, for a check of the request rather than
+// of the section: a PATCH that switches network/interfaces away from static still carries the old
+// addresses in its merged view, and the write drops them. `partial` is true for a PATCH, which
+// keeps a stored option that the request leaves out, where a PUT removes it.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, partial) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
-	//
-	// It has to test validate_body and not schema_body. At the two merge-patch call sites
-	// schema_body is the raw PATCH body, which is legitimately null when the request body
-	// is empty; check_schema_types already returns [] for a non-object, so such a PATCH is
-	// a no-op today, and guarding schema_body would start answering 422 instead.
 	if (type(validate_body) != "object")
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta, partial);
+	let val_errs = resource.validate(validate_body, conn, id, delta, partial) ?? [];
+	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
+	let daemon_errs = map((resource.validate_new != null) ? (resource.validate_new(validate_body, conn) ?? []) : [],
+	                      (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
+	// The newline refusal of the schema check gives way to a validate_new() error on its field and
+	// code, which says why the daemon cares and carries `live`. Two validate_new() rules on one field
+	// are two errors, so that one does not hide the other.
+	let daemon_keys = {};
+	for (let e in daemon_errs) daemon_keys[e.field + "|" + e.code] = true;
 	let seen = {};
 	let merged = [];
-	for (let e in type_errs) {
+	for (let e in [ ...type_errs, ...val_errs ]) {
 		let k = (e.field ?? "") + "|" + (e.code ?? "");
-		if (seen[k]) continue;
+		if (seen[k] || (e.message == NEWLINE_REFUSAL && daemon_keys[k])) continue;
 		seen[k] = true;
 		push(merged, e);
 	}
-	if (val_errs != null) {
-		for (let e in val_errs) {
-			let k = (e.field ?? "") + "|" + (e.code ?? "");
-			if (seen[k]) continue;
-			seen[k] = true;
-			push(merged, e);
-		}
-	}
-	// Two validate_new() rules on one field are two errors, so that one does not hide the other.
-	if (resource.validate_new != null)
-		for (let e in new_errors(resource, validate_body, conn))
-			if (!seen[e.field + "|" + e.code]) push(merged, e);
+	for (let e in daemon_errs)
+		if (!seen[e.field + "|" + e.code]) push(merged, e);
 	return merged;
 }
 
@@ -679,13 +660,6 @@ function carry_write_only(resource, body, existing) {
 	return out;
 }
 
-// Reduce a PATCH body against existing state to a post-image plus a schema-
-// validation target. Both flavours schema-check only the fields that the request names: the
-// whole post-image of a JSON Patch (RFC 6902) holds every stored value, so a peer key with a
-// backslash that another writer stored failed every JSON Patch of the peer, where a merge patch
-// (RFC 7396) of the same change passed. Returns either { ok: true, merged, schema_body, delta } or
-// an error result that the caller short-circuits with. `delta` holds only the fields the
-// request named, with their requested values.
 // The top-level fields a JSON Patch names, taken from the first segment of each op path. A
 // `merge_for_patch` hook needs to know which fields the caller actually named, and under
 // merge-patch that is simply the body's keys; JSON Patch has to be told. The mirrored-name
@@ -709,6 +683,11 @@ function patch_touched_fields(ops, patched) {
 	return out;
 }
 
+// Reduce a PATCH body against existing state to the section as the write leaves it. Returns
+// either { ok: true, merged, schema_body, delta } or an error result that the caller
+// short-circuits with. Both flavours schema-check the whole post-image, before the write-only
+// secrets come back from uci, as the sweep checks the read. `delta` holds only the fields the
+// request named, with their requested values.
 function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource) {
 	if (ctx != null && ctx.json_patch == true) {
 		let jp = jsonpatch.apply(existing_view, body);
@@ -732,12 +711,7 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		// From jp.value, not post: post carries the write-only secret back in from uci, which
 		// the caller did not send.
 		let delta = patch_touched_fields(body, jp.value) ?? jp.value;
-		// Only the fields that the operations leave in the document, which 3.2.0 checked whole, so an
-		// add and a remove of a field that the resource does not declare still passes.
-		let checked = {};
-		for (let k, v in delta)
-			if (exists(jp.value, k)) checked[k] = v;
-		return { ok: true, merged: post, schema_body: checked, delta };
+		return { ok: true, merged: post, schema_body: jp.value, delta };
 	}
 	// A merge patch is a partial object. Anything else used to be folded into the read
 	// view and answered 200 without writing anything, so a malformed body was
@@ -753,8 +727,8 @@ function apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource
 		return { ok: false, kind: "validation",
 		         errors: [ { field: "", code: "invalid_type",
 		                     message: "body must be a JSON object" } ] };
-	return { ok: true, merged: carry_write_only(resource, merge_fn(existing_view, body), existing),
-	         schema_body: body, delta: body ?? {} };
+	let view = merge_fn(existing_view, body);
+	return { ok: true, merged: carry_write_only(resource, view, existing), schema_body: view, delta: body ?? {} };
 }
 
 function default_merge_for_patch(existing_json, body) {
@@ -925,22 +899,14 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
-				let found = existing != null && type_predicate(existing['.type']);
-				let existing_view = (resource.validate_new != null && found) ? resource.fromUci(existing, conn) : null;
 				let write_body = carry_write_only(resource, body, existing);
-				let before = (existing_view != null) ? carry_write_only(resource, existing_view, existing) : null;
-				// The schema checks only what the caller sent. A carried secret is whatever uci
-				// holds, an option where the schema says list for instance, and the caller can
-				// neither see it nor send it.
-				let errs = _validate_with_schema(resource, body, write_body, c, id, body, before);
+				let errs = _validate_with_schema(resource, body, write_body, c, id, body);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (!found)
+				if (existing == null || !type_predicate(existing['.type']))
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				// wireless/interfaces reads with three ubus calls under the lock, so a view that
-				// validate_new() needed is read once.
-				if (existing_view == null) existing_view = resource.fromUci(existing, conn);
+				let existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
@@ -998,9 +964,7 @@ function make(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
-				                                 true);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1238,9 +1202,7 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
-				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
-				                                 true);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

@@ -48,9 +48,11 @@ t.describe('crontab.validate command', () => {
 		t.assert_equal(codes({ schedule: "* * * * *", command: "echo a#b" }).command, "invalid_format");
 	});
 
-	t.it('refuses a newline that would write a second line', () => {
-		t.assert_equal(codes({ schedule: "* * * * *", command: "true\n* * * * * evil" }).command,
-		               "invalid_format");
+	t.it('refuses a newline that would write a second line, with one error for each field', () => {
+		let errs = ct.validate({ schedule: "* * * * *\n", command: "true\n* * * * * evil" });
+		t.assert_deep_equal(map(errs, (e) => [ e.field, e.code ]),
+		                    [ [ 'schedule', 'invalid_format' ], [ 'command', 'invalid_format' ] ]);
+		t.assert_equal(errs[1].message, "must not contain control characters (newline, tab, NUL, etc.)");
 	});
 
 	t.it('refuses whitespace crond would strip', () => {

@@ -87,7 +87,7 @@ function command_problem(c) {
 }
 
 function validate(body) {
-	let errs = handler.check_schema_types(REQUEST_PROPERTIES, body);
+	let errs = [];
 	for (let field in ["schedule", "command"]) {
 		let v = body[field];
 		if (v == null || v === "")
@@ -97,7 +97,11 @@ function validate(body) {
 			if (p != null) push(errs, errors.field_error(field, "invalid_format", p));
 		}
 	}
-	return errs;
+	// The newline refusal of the schema check would be a second error on a field that the checks
+	// above refuse already, for the same newline.
+	let refused = {};
+	for (let e in errs) refused[e.field] = true;
+	return [ ...filter(handler.check_schema_types(REQUEST_PROPERTIES, body), (e) => !refused[e.field]), ...errs ];
 }
 
 function entry_of(schedule, command) {

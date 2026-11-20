@@ -72,7 +72,7 @@ function endpoint_host_problems(host) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn) {
 	let errs = [];
 
 	if (json.interface == null || json.interface == "")
@@ -89,35 +89,10 @@ function validate(json, conn, id, delta) {
 	// refused the bare form that `wg show` itself prints back. No allowed IP at all
 	// is valid too: LuCI leaves the list optional, and wireguard.sh and wg take it.
 	let aips = as_list(json.allowed_ips);
-	// wg refuses the whole config for one entry that it cannot parse, and wireguard.sh leaves a
-	// disabled peer out of that config, so a peer that stores such an entry can still be disabled.
-	if (json.disabled === true)
-		aips = as_list((delta ?? json).allowed_ips);
 	for (let i = 0; i < length(aips); i++) {
 		if (!is_valid_cidr_any(aips[i]) && !is_valid_ip(aips[i]))
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
 			             message: "must be an IPv4 or IPv6 address or CIDR" });
-	}
-
-	// toUci writes a 0 as "0", which wg takes as port 0, so a PUT of the read would turn a stored
-	// port that wg cannot resolve into one that it takes. A stored 0 is the only port that a write
-	// can send back as 0.
-	let stored = (conn != null && id != null) ? conn.uci_get("network", id, "endpoint_port") : null;
-	if ((delta ?? json).endpoint_port === 0 && wg.endpoint_port(stored) === 0
-	    && !match(replace(stored, /[[:space:]]/g, ""), /^[+-]?0+$/))
-		push(errs, { field: "endpoint_port", code: "conflict",
-		             message: "must be from 1 to 65535: uci holds a port that does not resolve, which reads 0, and a write of 0 would replace it with port 0, which wg takes" });
-
-	// The kernel apply gives wg an endpoint only with a port. A write that changes the host of an
-	// enabled peer whose port reads 0 would leave the kernel on the old endpoint, and one that changes
-	// the key sets the peer again, with no endpoint at all. Hosts compare as apply_peer reads them.
-	let strip = (v) => replace(config_get(v) ?? "", /[[:space:]]/g, "");
-	let host = strip(json.endpoint_host);
-	if (json.endpoint_port === 0 && json.disabled !== true && host != "" && conn != null && id != null) {
-		let old = conn.uci_get("network", id) ?? {};
-		if (host != strip(old.endpoint_host) || wg.kernel_key(json.public_key) != wg.kernel_key(old.public_key))
-			push(errs, { field: "endpoint_port", code: "out_of_range",
-			             message: "must be from 1 to 65535 in a write that changes endpoint_host or public_key: the port reads 0, and the kernel apply gives wg an endpoint only with a port" });
 	}
 
 	if (conn != null && json.interface != null && json.interface != "") {
@@ -134,10 +109,10 @@ function validate(json, conn, id, delta) {
 // The rules on what wireguard.sh hands to wg through printf %b, and on values that wg or the routes
 // of route_allowed_ips read in another way than the read, or cannot use. Another writer, such as
 // LuCI, can enable the peer later, so an error is reported whether the peer is enabled or not, and
-// marked `live: false` while the proto handler does not hand the value to wg: see new_errors() in the
-// handler. network/interfaces runs these rules over the peers that a write of the interface makes
-// live. The keys are checked here as well as by their schema pattern, because the schema sees only
-// what a PATCH sends, and a stored key reaches the same printf %b.
+// marked `live: false` while the proto handler does not hand the value to wg. network/interfaces
+// runs these rules over the peers that a write of the interface makes live. The keys are checked
+// here as well as by their schema pattern, because that run has no schema check, and the schema
+// never sees a stored preshared key, which the read masks.
 function validate_new(json) {
 	let errs = [];
 	let enabled = json.disabled !== true;
@@ -311,13 +286,13 @@ return {
 		                        description: "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it." },
 		has_preshared_key:    { type: "boolean", readOnly: true },
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
-		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one." },
+		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves must be an address or CIDR, on a disabled peer too. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one." },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
+		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write refuses a host with a backslash, a newline, a `#`, or a colon outside an IPv6 address, which can end in a %zone, on a disabled peer too." },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
-		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0." },
+		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
-		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value." },
+		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write answers 422 while the keepalive reads -1, on a disabled peer too." },
 		route_allowed_ips:    { type: "boolean", default: false,
 		                        description: "Auto-install routes for allowed_ips. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`." },
 		disabled:             { type: "boolean", default: false,

@@ -1035,7 +1035,7 @@ function build_paths() {
 	paths["/uapi/diagnostics"] = {
 		"get": {
 			"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
+			"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports each one that holds an error, also where the daemon does not read the value yet. Each write of such a section answers 422 until it fixes each error. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
 			"parameters": [
 				{ "name": "validate", "in": "query", "required": false,
 				  "schema": { "type": "string", "enum": ["1"] },
@@ -1435,7 +1435,7 @@ function build_schemas() {
 				// The three sweep fields appear together, and only with ?validate=1.
 				"invalid_sections": {
 					"type": "array",
-					"description": "Sections a write would reject today, and sections that hold a value that a write cannot add. Present only with ?validate=1.",
+					"description": "Sections that hold an error. Each write of such a section answers 422 until it fixes each error. Present only with ?validate=1.",
 					"items": {
 						"type": "object",
 						"required": ["resource", "id", "managed", "errors"],
@@ -1455,7 +1455,7 @@ function build_schemas() {
 									                      "read_only", "unreadable", "sweep_failed"] },
 									"message": { "type": "string" },
 									"live":    { "type": "boolean",
-									             "description": "Present on an error of a rule that a write applies only when it adds the error. false means that the daemon does not read the value yet, for example because the section is disabled." },
+									             "description": "Present on an error of a rule on what a daemon reads. false means that the daemon does not read the value yet, for example because the section is disabled. A write is refused for the error either way." },
 								},
 							} },
 						},
@@ -1783,7 +1783,7 @@ function build_doc() {
 				"Conflict":           { "description": "Conflict (codes: conflict, unmanaged_resource, idempotency_key_conflict)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 				"PreconditionFailed": { "description": "A precondition failed: If-Match did not match the current ETag, If-None-Match matched it (or was `*` against an existing resource), or a JSON-Patch test op failed. Preconditions are evaluated before the transaction runs, so a 412 means nothing was written", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 				"PayloadTooLarge":    { "description": "The request body is over 262144 bytes (256 KiB), its Content-Length is not a whole number from 0 to 262144, or it holds more than 2000 `{` and `[` characters. Checked before the bearer check (code: payload_too_large)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
-				"ValidationFailed":   { "description": "Request body failed validation (per-field errors in `errors[]`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+				"ValidationFailed":   { "description": "Request body failed validation (per-field errors in `errors[]`). A write of a uci section is checked as the section that it leaves, so a stored value that breaks a rule fails it too, until a write replaces the value or the change goes through `/raw`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
 				"Locked":             { "description": "Another write holds the same per-package lock; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
 				"TooManyRequests":    { "description": "Per-token rate limit exceeded; retry after Retry-After seconds", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }, "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } } },
 				"InternalError":      { "description": "Server error (codes: internal_error, reload_failed_restored, reload_failed_unrecovered)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
