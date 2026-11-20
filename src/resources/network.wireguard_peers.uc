@@ -1,4 +1,3 @@
-let fs = require('fs');
 let values = require('values');
 let wg = require('wg');
 let config_get = values.config_get;
@@ -14,10 +13,6 @@ function parent_from_type(t) {
 	return substr(t, 10);
 }
 
-function read_port(v) {
-	return values.service_port(v, () => fs.readfile("/etc/services"));
-}
-
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	let parent = parent_from_type(section['.type']);
@@ -30,8 +25,8 @@ function fromUci(section) {
 		has_preshared_key: (section.preshared_key != null && section.preshared_key != ""),
 		allowed_ips: wg.allowed_ips(section.allowed_ips),
 		endpoint_host: config_get(section.endpoint_host) ?? null,
-		endpoint_port: read_port(section.endpoint_port),
-		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
+		endpoint_port: wg.endpoint_port(section.endpoint_port),
+		persistent_keepalive: wg.keepalive(section.persistent_keepalive),
 		route_allowed_ips: wg.peer_flag(section.route_allowed_ips),
 		disabled: wg.peer_flag(section.disabled),
 		runtime: {},
@@ -108,7 +103,7 @@ function validate(json, conn, id, delta) {
 	// port that wg cannot resolve into one that it takes. A stored 0 is the only port that a write
 	// can send back as 0.
 	let stored = (conn != null && id != null) ? conn.uci_get("network", id, "endpoint_port") : null;
-	if ((delta ?? json).endpoint_port === 0 && read_port(stored) === 0
+	if ((delta ?? json).endpoint_port === 0 && wg.endpoint_port(stored) === 0
 	    && !match(replace(stored, /[[:space:]]/g, ""), /^[+-]?0+$/))
 		push(errs, { field: "endpoint_port", code: "conflict",
 		             message: "must be from 1 to 65535: uci holds a port that does not resolve, which reads 0, and a write of 0 would replace it with port 0, which wg takes" });
@@ -182,7 +177,7 @@ function validate_new(json) {
 		             message: "must be from 1 to 65535: wg cannot use port 0, which is also how a port name that /etc/services does not resolve reads" });
 	if (json.persistent_keepalive === -1)
 		push(errs, { field: "persistent_keepalive", code: "out_of_range", live,
-		             message: "must be from 0 to 65535: -1 is how a stored value that wg cannot read reads, and wg cannot bring the interface up with it" });
+		             message: "must be from 0 to 65535: -1 is how a stored value that wg cannot read reads" });
 
 	return errs;
 }
@@ -318,9 +313,9 @@ return {
 		endpoint_host:        { type: ["string", "null"],
 		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone" },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
-		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0." },
+		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
-		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value." },
+		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value." },
 		route_allowed_ips:    { type: "boolean", default: false,
 		                        description: "Auto-install routes for allowed_ips. A stored value other than `1` reads true only where netifd runs wireguard.sh, which also takes `on`, `true`, `yes` and `enabled`." },
 		disabled:             { type: "boolean", default: false,

@@ -605,17 +605,21 @@ guess is the opposite of what a major is for. See `docs/ucode-quirks.md`.
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as
-  [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511).
-  `wg syncconf` is all or nothing and the proto handler escalates any failure to
-  `proto_setup_failed`, so a peer whose endpoint hostname does not resolve stops
-  the interface coming up at all, healthy peers included. Measured: `up=false`,
-  zero peers, no addresses, netifd retrying and giving up.
+  [openwrt/openwrt#24511](https://github.com/openwrt/openwrt/issues/24511), and
+  fixed on OpenWrt main by ecd9120f04 (2026-11-18). `wg syncconf` is all or
+  nothing and the proto handler escalates any failure to `proto_setup_failed`,
+  so a peer whose endpoint hostname does not resolve stopped the interface
+  coming up at all, healthy peers included. Measured: `up=false`, zero peers,
+  no addresses, netifd retrying and giving up. The ucode handler of main now
+  leaves out the endpoint, preshared key or keepalive line that wg would
+  refuse, and the peer of a key that is not a WireGuard key, so the other peers
+  come up. An allowed IP that wg refuses still takes the tunnel down.
 
-  This is the half that still matters to us. The `wg set` apply protects the
-  *write*, not the *boot*: a peer whose endpoint resolves when written and stops
-  resolving later sits in uci, and the next reboot runs it through the proto
-  handler and drops the tunnel. No amount of local code fixes that, because the
-  platform owns the boot path.
+  25.12 keeps `wireguard.sh`, where the half that matters to us remains: the
+  `wg set` apply protects the *write*, not the *boot*. A peer whose endpoint
+  resolves when written and stops resolving later sits in uci, and the next
+  reboot runs it through the proto handler and drops the tunnel. No amount of
+  local code fixes that, because the platform owns the boot path.
 
   The **peer change detection** half needs nothing from us. It was reported
   twice, on the devel list in 2023 and as

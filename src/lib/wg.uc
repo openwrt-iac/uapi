@@ -42,8 +42,11 @@ function run(argv) {
 // netifd of OpenWrt main replaced wireguard.sh with a ucode proto handler. It gives wg each value as
 // uci holds it, with no printf %b, takes a list of allowed IPs as its entries and an option as its
 // words, routes each of them, leaves out a peer without a key with its routes, and reads disabled
-// and route_allowed_ips as on only when they hold "1". uapi reads, sets and routes a peer as the
-// handler that netifd runs.
+// and route_allowed_ips as on only when they hold "1". Since openwrt ecd9120f04 it also checks a
+// value against wg's grammar as uci holds it, and leaves out what wg would refuse: the peer for a
+// public key, and the line for a preshared key, an endpoint or a keepalive. wg refused the whole
+// config before, so one such value kept the interface down. uapi reads, sets and routes a peer as
+// the handler that netifd runs.
 const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
 const SETTLE_S = 8;
 
@@ -53,6 +56,35 @@ function ucode_handler() {
 
 function peer_flag(v) {
 	return ucode_handler() ? v === "1" : values.shell_bool(values.config_get(v), false);
+}
+
+function handler_key(v) {
+	return (type(v) == "string" && match(v, WG_KEY_RE)) ? v : null;
+}
+
+// The keepalive that the ucode handler gives wg: off in any case, or 0 to 65535 in at most five
+// digits, as uci holds it. -1 for any other value, which the handler leaves out, as it reads for a
+// value that wg refuses under wireguard.sh.
+function keepalive(v) {
+	if (!ucode_handler()) return values.wg_keepalive(v);
+	if (v == null || v == "") return null;
+	if (type(v) == "string" && lc(v) == "off") return 0;
+	return (type(v) == "string" && match(v, /^[0-9]{1,5}$/) && int(v) <= 65535) ? int(v) : -1;
+}
+
+// The endpoint port that the ucode handler gives wg: 1 to 65535 in digits, or the first field of a
+// /udp line of /etc/services, as uci holds it. 0 for any other value, for which the handler leaves
+// the endpoint out, as a port that wireguard.sh cannot resolve reads.
+function endpoint_port(v) {
+	if (!ucode_handler()) return values.service_port(v, () => fs.readfile("/etc/services"));
+	if (v == null || v == "") return null;
+	if (type(v) != "string") return 0;
+	if (match(v, /^[0-9]+$/)) return (int(v) >= 1 && int(v) <= 65535) ? int(v) : 0;
+	for (let line in split(fs.readfile("/etc/services") ?? "", "\n")) {
+		let f = split(trim(line), /[[:space:]]+/);
+		if (length(f) >= 2 && f[0] == v && match(f[1], /\/udp$/)) return int(substr(f[1], 0, index(f[1], "/")));
+	}
+	return 0;
 }
 
 function handler_entries(v) {
@@ -112,17 +144,18 @@ function printf_b(s) {
 function config_lines(v) {
 	let s = values.config_get(v);
 	if (type(s) != "string") return { lines: [], stopped: false };
-	let x = (index(s, "\\") < 0 || ucode_handler()) ? { text: s, stopped: false }
+	let x = (index(s, "\\") < 0) ? { text: s, stopped: false }
 		: (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
 	if (x == null) return null;
 	return { lines: map(split(x.text, "\n"), (l) => values.wg_line(l)), stopped: x.stopped };
 }
 
-// A stored key as wg reads it: the first line. null when that is not a WireGuard key, so the
-// kernel can hold no such peer. false when the value gives wg more config than the key, in a later
+// A stored key as wg reads it: the first line, or under the ucode handler the whole value. null
+// when that is not a WireGuard key, so the kernel can hold no such peer. false when the value gives wg more config than the key, in a later
 // line or by ending the config with `\c`, or is not expanded: `wg set` cannot give the kernel what
 // ifup gave it then.
 function kernel_key(v) {
+	if (ucode_handler()) return handler_key(v);
 	let c = config_lines(v);
 	if (c == null) return false;
 	let first = c.lines[0];
@@ -134,6 +167,7 @@ function kernel_key(v) {
 // sets a key too, of this peer or of a peer that a `[Peer]` line before it adds. false for a value
 // that is not expanded.
 function kernel_keys(v) {
+	if (ucode_handler()) return filter([ handler_key(v) ], (k) => k != null);
 	let c = config_lines(v);
 	if (c == null) return false;
 	let out = [];
@@ -173,10 +207,11 @@ function to_peer(section) {
 		public_key: section.public_key,
 		allowed_ips: allowed_ips(section.allowed_ips) ?? [],
 		endpoint_host: values.config_get(section.endpoint_host),
-		endpoint_port: values.service_port(section.endpoint_port, () => fs.readfile("/etc/services")),
+		// The ucode handler leaves the endpoint out without a port, where wireguard.sh takes 51820.
+		endpoint_port: endpoint_port(section.endpoint_port) ?? (ucode_handler() ? 0 : null),
 		// Read as wg reads it, since a stored value reaches here from uci without passing through
 		// validate(), and set_peer_argv() gives it to `wg set` with %d.
-		persistent_keepalive: values.wg_keepalive(section.persistent_keepalive),
+		persistent_keepalive: keepalive(section.persistent_keepalive),
 		preshared_key: section.preshared_key,
 	};
 }
@@ -379,7 +414,7 @@ function route_entries(v) {
 }
 
 function peer_routes(section) {
-	if (ucode_handler() && !section.public_key) return [];
+	if (ucode_handler() && !kernel_key(section.public_key)) return [];
 	return routes_from(route_entries(section.allowed_ips) ?? [], peer_flag(section.route_allowed_ips));
 }
 
@@ -468,10 +503,14 @@ function apply_routes(conn, iface, wanted, previous) {
 
 function apply_peer(iface, peer) {
 	let key = kernel_key(peer.public_key);
+	// The ucode handler leaves out such a peer, and its restart left the kernel without it.
+	if (key === null && ucode_handler())
+		return null;
 	if (!key)
 		return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
+	// The ucode handler runs such a peer without its preshared key, which the /dev/null set gives.
 	let psk = kernel_key(peer.preshared_key);
-	if (!psk && peer.preshared_key != null && peer.preshared_key != "")
+	if (!psk && peer.preshared_key != null && peer.preshared_key != "" && !ucode_handler())
 		return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
 	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
 	// what the peer already holds, or refuses the command for one marked -. Stored values reach
@@ -657,14 +696,15 @@ function reconcile(conn, interfaces, ops) {
 
 		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it, and
 		// the kernel holds no peer under a key that wg cannot read. A preshared key that wg cannot read
-		// makes wg refuse the whole config at ifup, so wg never sets that peer without it: set with
-		// /dev/null here, the peer would lose the key that the kernel holds. So the peer stays as the
-		// kernel holds it, which restores it only when the request did not set or remove it and the
-		// kernel holds it. Otherwise it fails the restore, once the other peers are set.
+		// makes wg refuse the whole config of wireguard.sh at ifup, so wg never sets that peer without
+		// it: set with /dev/null here, the peer would lose the key that the kernel holds. So the peer
+		// stays as the kernel holds it, which restores it only when the request did not set or remove
+		// it and the kernel holds it. Otherwise it fails the restore, once the other peers are set. The
+		// ucode handler runs the peer without the key, so apply_peer() sets it so.
 		for (let s in sections) {
 			let key = kernel_key(s.public_key);
 			if (!key) continue;
-			if (kernel_key(s.preshared_key) === null && (s.preshared_key ?? "") != "") {
+			if (kernel_key(s.preshared_key) === null && (s.preshared_key ?? "") != "" && !ucode_handler()) {
 				if (named[iface + "|" + key] || current?.[key] == null)
 					missing = sprintf("not restoring a peer with a malformed preshared key on %s", iface);
 				continue;
@@ -756,4 +796,5 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
+         keepalive, endpoint_port,
          peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
