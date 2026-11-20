@@ -83,10 +83,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preshared key, an endpoint or a keepalive that wg would refuse, where wg
   refused the whole config before. uapi still read and set such values as
   before: a write to another field of such a peer answered 500, the restore
-  reported a peer with an unreadable preshared key as not restored, and a read
-  gave the keepalive or the port that wg reads instead of what the handler
-  leaves out. The read, the kernel apply and the restore now follow the handler.
-  25.12 is unchanged. (#398)
+  reported a peer with an unreadable preshared key as not restored, a read gave
+  the keepalive or the port that wg reads instead of what the handler leaves
+  out, and a switch to wireguard or an enable of the interface was refused for
+  such a stored value, which no longer keeps the interface down. The read, the
+  kernel apply, the restore and that refusal now follow the handler. 25.12 is
+  unchanged. (#398)
 - **The `Link` to the next page of a curated list keeps `managed`.** The link
   is relative, so it replaced the whole query, and the second page of
   `?managed=false` listed the managed sections too. (#399)

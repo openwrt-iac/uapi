@@ -134,7 +134,7 @@ function validate(json, conn, id, delta) {
 // The rules on what wireguard.sh hands to wg through printf %b, and on values that wg or the routes
 // of route_allowed_ips read in another way than the read, or cannot use. Another writer, such as
 // LuCI, can enable the peer later, so an error is reported whether the peer is enabled or not, and
-// marked `live: false` while wireguard.sh does not hand the value to wg: see new_errors() in the
+// marked `live: false` while the proto handler does not hand the value to wg: see new_errors() in the
 // handler. network/interfaces runs these rules over the peers that a write of the interface makes
 // live. The keys are checked here as well as by their schema pattern, because the schema sees only
 // what a PATCH sends, and a stored key reaches the same printf %b.
@@ -151,7 +151,7 @@ function validate_new(json) {
 	for (let k in [ "public_key", "preshared_key" ]) {
 		let key = config_get(json[k]);
 		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0 || !match(values.wg_line(key), WG_KEY_RE)))
-			push(errs, { field: k, code: "invalid_format", live,
+			push(errs, { field: k, code: "invalid_format", live: live && !wg.handler_drops_key(json[k]),
 			             message: "must be a WireGuard key as wg genkey prints it, on one line and without a backslash" });
 	}
 
@@ -171,12 +171,14 @@ function validate_new(json) {
 			push(errs, { field: "endpoint_host", code: "invalid_format", message, live });
 
 	// The schema allows 0 and -1 because a read reports a port that /etc/services does not resolve
-	// as 0, and a keepalive that wg refuses as -1. wireguard.sh writes the port only with a host.
+	// as 0, and a keepalive that wg refuses as -1. wireguard.sh writes the port only with a host. The
+	// ucode handler of OpenWrt main leaves both out, since openwrt ecd9120f04, so wg never reads them.
+	let handled = wg.ucode_handler();
 	if (json.endpoint_port === 0)
-		push(errs, { field: "endpoint_port", code: "out_of_range", live: live && type(host) == "string" && host != "",
+		push(errs, { field: "endpoint_port", code: "out_of_range", live: live && type(host) == "string" && host != "" && !handled,
 		             message: "must be from 1 to 65535: wg cannot use port 0, which is also how a port name that /etc/services does not resolve reads" });
 	if (json.persistent_keepalive === -1)
-		push(errs, { field: "persistent_keepalive", code: "out_of_range", live,
+		push(errs, { field: "persistent_keepalive", code: "out_of_range", live: live && !handled,
 		             message: "must be from 0 to 65535: -1 is how a stored value that wg cannot read reads" });
 
 	return errs;
