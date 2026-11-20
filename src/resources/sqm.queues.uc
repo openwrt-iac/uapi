@@ -12,8 +12,9 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		// sqm-scripts starts a queue only when `[ "$(config_get "$section" enabled)" -eq 1 ]`
-		// holds (src/run-openwrt.sh), so an absent value, or yes, on or true, leaves it off.
-		enabled: match(values.config_get(section.enabled) ?? "", /^0*1$/) != null,
+		// holds (src/run-openwrt.sh), so an absent value, or yes, on or true, leaves it off. The
+		// `test` of busybox parses the number with strtoll and skips trailing spaces, so ` +01 ` is 1.
+		enabled: match(values.config_get(section.enabled) ?? "", /^\s*\+?0*1\s*$/) != null,
 		interface: section.interface ?? null,
 		download: as_int(section.download),
 		upload: as_int(section.upload),
