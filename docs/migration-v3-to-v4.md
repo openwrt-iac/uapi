@@ -91,19 +91,34 @@ section, for a PATCH of either kind as for a PUT:
 - the rules on what a daemon reads, whose errors carry `live` in the sweep,
 - the other rules of each resource, also the ones that 3.x applied only to the
   fields that a request named: the `allowed_ips` of a disabled
-  `network/wireguard_peers`, a `network/interfaces.listen_port` that reads -1,
-  and the `proto` of an interface that uapi does not write, such as the `6in4`
-  that LuCI writes.
+  `network/wireguard_peers`, and a `network/interfaces.listen_port` that reads
+  -1.
 
 Before v4 a write that left a stored value alone answered 200, so a broken
 section could still be disabled. Now the fix comes first, or goes through
 `/raw`. A DELETE does not validate. `GET /diagnostics?validate=1` runs the same
 checks over each stored section and lists each error that it finds, so each
-error that it lists now blocks every write of its section. On 3.x it is the
-pre-flight check before the upgrade, with one gap: it does not list what a rule
-new in v4 refuses, such as a newline in a string that 3.x took (#276). In v4 the
-same sweep is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid
-value for each listed field fixes the section in one write.
+error that it lists now blocks every write of its section. In v4 the same sweep
+is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid value for each
+listed field fixes the section in one write.
+
+Two values that the platform takes are no error, so they block no write and the
+v4 sweep does not list them: the `proto` of an interface that uapi does not
+model, such as the `6in4` that LuCI writes or the `qmi` that an LTE router
+ships, and a list that uci holds for a `wireless/interfaces` text option. Only
+a write that sends such a proto, or such a list where a string is due, answers
+422. On 3.x the sweep is the pre-flight check before the upgrade, with two gaps:
+it does not list what a rule new in v4 refuses, such as a newline in a string
+that 3.x took (#276), and it lists these two values.
+
+## `wireless/interfaces` declares the lists that a read gives
+
+`device`, `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder`
+read a list that uci holds as an array, which the v3 response schema did not
+declare. The response schema now declares a string or an array for each. A
+request may send `device` and `network` as a string or a list, since netifd
+takes either, and the other four only as a string. A client generated from the
+schema must take an array where the field held a string.
 
 ## Boolean reads follow the reader of their daemon
 

@@ -287,13 +287,16 @@ removes it.
 `network.interfaces` refuses a field that the proto does not take only when
 `delta` names it. A PATCH that switches the proto still carries the old
 proto's fields in `json`, and the write drops them, so the section that it
-leaves does not hold them. `firewall.rules` checks
-`json` instead, so a target switch has to send `null` for the old target's
-fields. The sweep behind `GET /uapi/diagnostics?validate=1` passes the `fromUci`
-read as `delta`, so an option that the read hides never flags. A PATCH that
-switches to wireguard keeps a `listen_port` that the read of the old proto
-hides, so `network.interfaces` checks the stored option only when `partial`
-is true.
+leaves does not hold them. `firewall.rules` checks `json` instead, so a target
+switch has to send `null` for the old target's fields. A value that the
+platform takes but that uapi does not write is no error of the section either:
+`network.interfaces` refuses a `proto` that it does not model, and
+`wireless.interfaces` a list for `ssid`, `nasid`, `mobility_domain` or
+`r1_key_holder`, only where `delta` holds it. The sweep behind
+`GET /uapi/diagnostics?validate=1` judges no request, so it passes an empty
+`delta`, and lists none of these. A PATCH that switches to wireguard keeps a
+`listen_port` that the read of the old proto hides, so `network.interfaces`
+checks the stored option only when `partial` is true.
 
 `schema_properties` is the source of truth for type/enum/min/max/pattern/items
 shape checks - the central `handler.check_schema_types` walks this on every

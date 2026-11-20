@@ -311,8 +311,9 @@ check_schema_types = function(schema_properties, body, prefix) {
 // them, and the sweep judges the read. validate_body holds them, for validate() and
 // validate_new(). `delta` is what the request itself named, for a check of the request rather than
 // of the section: a PATCH that switches network/interfaces away from static still carries the old
-// addresses in its merged view, and the write drops them. `partial` is true for a PATCH, which
-// keeps a stored option that the request leaves out, where a PUT removes it.
+// addresses in its merged view, and the write drops them, and a proto that uapi does not write is
+// refused only where a request sends it. The sweep passes an empty one. `partial` is true for a
+// PATCH, which keeps a stored option that the request leaves out, where a PUT removes it.
 function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, partial) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
@@ -325,16 +326,19 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
 	let daemon_errs = map((resource.validate_new != null) ? (resource.validate_new(validate_body, conn) ?? []) : [],
 	                      (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
-	// The newline refusal of the schema check gives way to a validate_new() error on its field and
-	// code, which says why the daemon cares and carries `live`. Two validate_new() rules on one field
-	// are two errors, so that one does not hide the other.
+	// The newline refusal of the schema check gives way to a validate_new() error with its code on
+	// its field, or on the list that holds it, which a daemon reads as its joined entries: that error
+	// says why the daemon cares and carries `live`. Two validate_new() rules on one field are two
+	// errors, so that one does not hide the other.
 	let daemon_keys = {};
 	for (let e in daemon_errs) daemon_keys[e.field + "|" + e.code] = true;
 	let seen = {};
 	let merged = [];
 	for (let e in [ ...type_errs, ...val_errs ]) {
 		let k = (e.field ?? "") + "|" + (e.code ?? "");
-		if (seen[k] || (e.message == NEWLINE_REFUSAL && daemon_keys[k])) continue;
+		if (seen[k] || (e.message == NEWLINE_REFUSAL
+		                && (daemon_keys[k] || daemon_keys[replace(e.field, /\[[0-9]+\]$/, "") + "|" + e.code])))
+			continue;
 		seen[k] = true;
 		push(merged, e);
 	}
@@ -1087,7 +1091,9 @@ function make(resource, opts) {
 	// whole class of tightening while looking thorough.
 	//
 	// The schema check runs over the read view and not over the carried secrets, as on a write:
-	// a stored secret is whatever uci holds, and validate() is what judges it.
+	// a stored secret is whatever uci holds, and validate() is what judges it. The sweep judges
+	// no request, so the delta is empty: a rule on what a request may send, such as the proto of
+	// network/interfaces, lists no stored value.
 	//
 	// carry_write_only makes this the only path that puts a real secret into a body
 	// whose error messages are returned to a caller holding just `:ro`, which the
@@ -1102,7 +1108,7 @@ function make(resource, opts) {
 			try {
 				view = resource.fromUci(s, conn);
 				errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
-				                             conn, id, view);
+				                             conn, id, {});
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
@@ -1228,7 +1234,7 @@ function make_singleton(resource, opts) {
 		try {
 			view = resource.fromUci(s, conn);
 			errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
-			                             conn, id, view);
+			                             conn, id, {});
 		} catch (e) {
 			errs = [ { field: "", code: "unreadable", message: "" + e } ];
 		}

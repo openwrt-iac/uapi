@@ -245,7 +245,7 @@ space-separated string that the 3.1 spec declared; v4 removed it. A type in
 because a null removes the field. The merge-patch body below says which fields.
 
 A request can also be narrower than the response, since 3.2.0, where a read
-returns a value that the request schema does not take. Three kinds of value
+returns a value that the request schema does not take. Four kinds of value
 qualify:
 
 - a stored option that the daemon ignores or cannot use, such as `mtu` below 68
@@ -255,13 +255,18 @@ qualify:
   `listen_port` -1 for a
   service name that /etc/services does not know,
 - a `network/interfaces.proto` that uapi does not model, such as the `6in4` that
-  LuCI writes.
+  LuCI writes,
+- a list that uci holds for a `wireless/interfaces` text option that a write
+  takes only as a string, such as `ssid`.
 
 The response declares what a read can return, and the request declares what a
 write can send, so a read-modify-write of such a value fails against the request
-schema. The server refuses it too, and refuses every other write of the section
-while it holds such a value, a PATCH that leaves the field out included. A
-module declares the difference with `x-uapi-write`, and
+schema. The server refuses it too. For the first two kinds, it refuses every
+other write of the section while it holds such a value, a PATCH that leaves the
+field out included. The last two are values that the platform takes, so they
+are no error of the section: only a write that sends one is refused, and the
+validation sweep does not list them. A module declares the difference with
+`x-uapi-write`, and
 `tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
 in `validate()`.
 

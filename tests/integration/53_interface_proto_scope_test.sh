@@ -135,17 +135,20 @@ r=$(send PUT /uapi53d "$(body "$(call "$URL/network/interfaces/uapi53d")")")
 [ "$(status "$r")" = 200 ] && [ -z "$(uci_get uapi53d.netmask)" ] && [ -z "$(uci_get uapi53d.ipaddr)" ] \
 	|| fail "a PUT of the read kept static options on dhcp: $r"
 
-echo "--- on a proto uapi does not model, a read shows what uci stores and every write is refused on proto ---"
+echo "--- on a proto uapi does not model, a read shows what uci stores, a PATCH refuses nothing and the sweep skips it ---"
 # No 6in4 handler on the box, so netifd leaves the section down whatever it holds.
 $SSH "uci set network.uapi53t=interface; uci set network.uapi53t.proto=6in4; uci set network.uapi53t.auto=0;
 	uci set network.uapi53t.ipaddr=192.0.2.1; uci set network.uapi53t.ip6prefix=2001:db8:53::/48; uci commit network"
 read_back=$(body "$(call "$URL/network/interfaces/uapi53t")")
 printf '%s' "$read_back" | jq -e '.ipaddr == "192.0.2.1" and .ip6prefix == ["2001:db8:53::/48"] and (has("hostname") | not)' \
 	>/dev/null || fail "a 6in4 read did not show what uci stores: $read_back"
-before=$($SSH 'uci show network.uapi53t')
+sweep=$(body "$(call "$URL/uapi/diagnostics?validate=1")")
+printf '%s' "$sweep" | jq -e '.invalid_sections | tostring | contains("uapi53t") | not' >/dev/null \
+	|| fail "the sweep listed a 6in4 section: $sweep"
 r=$(send PATCH /uapi53t '{"ip6prefix":["2001:db8:54::/48"],"nohostroute":true}')
-[ "$(status "$r")" = 422 ] && body "$r" | jq -e '.errors | length == 1 and .[0].field == "proto" and .[0].code == "not_in_enum"' >/dev/null \
-	&& [ "$($SSH 'uci show network.uapi53t')" = "$before" ] || fail "a PATCH of a 6in4 section was not refused on proto alone: $r"
+[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53t.ip6prefix)" = 2001:db8:54::/48 ] && [ "$(uci_get uapi53t.nohostroute)" = 1 ] \
+	&& [ "$(uci_get uapi53t.ipaddr)" = 192.0.2.1 ] || fail "a PATCH on a 6in4 section was refused or lost ipaddr: $r"
+before=$($SSH 'uci show network.uapi53t')
 r=$(send PUT /uapi53t "$(body "$(call "$URL/network/interfaces/uapi53t")" | jq -c 'del(.id, .managed, .ipaddr, .has_private_key, .runtime)')")
 [ "$(status "$r")" = 422 ] && body "$r" | jq -e '.errors | length == 1 and .[0].field == "proto" and .[0].code == "not_in_enum"' >/dev/null \
 	&& [ "$($SSH 'uci show network.uapi53t')" = "$before" ] || fail "a PUT of a 6in4 read was not refused on proto alone: $r"
