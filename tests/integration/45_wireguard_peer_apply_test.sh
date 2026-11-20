@@ -759,7 +759,12 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 [ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of a peer with a stored port of 0: $(body_of "$r")"
 has_peer "$PEER3" && fail "the disabled peer is still in the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":false}')
-[ "$(status_of "$r")" = "422" ] || fail "enabling a peer with a stored port of 0 expected 422, got $(status_of "$r"): $(body_of "$r")"
+if wg_ucode_platform; then
+	# The handler leaves the port and the keepalive out, so enabling the peer keeps no interface down.
+	[ "$(status_of "$r")" = "200" ] || fail "enabling a peer whose port and keepalive the handler leaves out expected 200, got $(status_of "$r"): $(body_of "$r")"
+else
+	[ "$(status_of "$r")" = "422" ] || fail "enabling a peer with a stored port of 0 expected 422, got $(status_of "$r"): $(body_of "$r")"
+fi
 call -X DELETE "$URL/network/wireguard_peers/$kept" >/dev/null
 
 # wireguard.sh gives every enabled peer to one `wg syncconf`, so one stored peer that wg refuses
