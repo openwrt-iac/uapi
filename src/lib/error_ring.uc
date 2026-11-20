@@ -1,7 +1,7 @@
 let fs = require('fs');
 let state_dir = require('state_dir');
 
-// Last 20 error envelopes surfaced via /diagnostics.
+// Last 20 error envelopes surfaced via /uapi/diagnostics.
 // Best-effort: any fs failure is swallowed because logging must never
 // disrupt the actual response.
 const DIR = state_dir.DIRS.error_ring;
@@ -30,7 +30,7 @@ function append(entry) {
 		let existing = read();
 		let m = entry.message;
 		if (length(m) > MAX_MESSAGE) {
-			// A cut inside a UTF-8 sequence would make /diagnostics serve text that is not UTF-8.
+			// A cut inside a UTF-8 sequence would make /uapi/diagnostics serve text that is not UTF-8.
 			let cut = MAX_MESSAGE;
 			while (cut > 0 && (ord(m, cut) & 0xC0) == 0x80) cut--;
 			m = substr(m, 0, cut) + "...";

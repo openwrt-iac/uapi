@@ -58,7 +58,7 @@ state=$(curl -sS -H "$ADMIN" "$URL/firewall/rules/$id" \
 	| sed -n 's/.*"enabled": *\(true\|false\).*/\1/p' | head -1)
 [ "$state" = "true" ] || fail "test failure must not change state; saw enabled=$state"
 
-echo "--- /batch happy path: 2 sub-requests return 207 Multi-Status ---"
+echo "--- /uapi/batch happy path: 2 sub-requests return 207 Multi-Status ---"
 status=$(curl -sS -o /tmp/uapi_batch_ok.json -w '%{http_code}' \
 	-H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/uapi/batch" -d '{
@@ -74,7 +74,7 @@ grep -q '"X-Request-Id"' /tmp/uapi_batch_ok.json || fail "batch result headers l
 
 # A pure-read batch takes no lock and runs no transaction, so there is no reload outcome to
 # report and no header, which is what a read on any other endpoint does.
-echo "--- /batch read-only: no transaction headers ---"
+echo "--- /uapi/batch read-only: no transaction headers ---"
 curl -sS -o /dev/null -D /tmp/uapi_batch_ro_h -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/uapi/batch" -d '{"operations":[{"path":"/system","method":"GET"}]}'
 tr -d '\r' < /tmp/uapi_batch_ro_h | grep -qi '^X-Reload-Status:' \
@@ -83,7 +83,7 @@ tr -d '\r' < /tmp/uapi_batch_ro_h | grep -qi '^X-Reload-Status:' \
 # A write batch commits and reloads once for the whole set, and the 207 is the only place
 # the aggregate outcome can be reported. Each result also carries the headers of its own
 # sub-response, so a per-operation outcome such as the ETag survives inside a batch.
-echo "--- /batch write: the 207 carries the transaction headers ---"
+echo "--- /uapi/batch write: the 207 carries the transaction headers ---"
 zid=$(curl -sS -H "$ADMIN" -H 'Content-Type: application/json' -X POST "$URL/firewall/zones" \
 	-d '{"name":"bhdr","input":"ACCEPT","output_policy":"ACCEPT","forward":"REJECT"}' \
 	| grep -oE '"id": "[^"]+"' | head -1 | sed 's/^"id": "//; s/"$//')
@@ -95,7 +95,7 @@ echo "$hdrs" | grep -qi '^X-Reload-Services:.*firewall' || fail "batch write 207
 grep -q '"ETag"' /tmp/uapi_batch_w.json || fail "batch write result lacks the sub-response ETag: $(cat /tmp/uapi_batch_w.json)"
 curl -sS -o /dev/null -H "$ADMIN" -X DELETE "$URL/firewall/zones/$zid"
 
-echo "--- /batch abort: failing sub-request reverts all writes ---"
+echo "--- /uapi/batch abort: failing sub-request reverts all writes ---"
 # Sub 1 creates a rule; sub 2 references a missing resource (404).
 # Expect the rule to NOT exist after the batch.
 status=$(curl -sS -o /tmp/uapi_batch_abort.json -w '%{http_code}' \
@@ -126,7 +126,7 @@ list=$(curl -sS -H "$ADMIN" "$URL/firewall/rules")
 echo "$list" | grep -q '"name": "batch-rule-1"' \
 	&& fail "batch abort did not revert the create (rule found)" || true
 
-echo "--- /batch rejects oversized operations array ---"
+echo "--- /uapi/batch rejects oversized operations array ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/uapi/batch" -d '{"operations": []}')

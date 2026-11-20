@@ -441,7 +441,7 @@ function attach_reload_headers(resp, result) {
 //
 // Its structural limit, stated because it is easy to expect more: if the write really
 // does strand the caller, this response never arrives. It informs the survivable cases,
-// which are the majority, and `/diagnostics` carries the same information ahead of a
+// which are the majority, and `/uapi/diagnostics` carries the same information ahead of a
 // write for anyone who wants to check first.
 // Which device a write aims at, for the resources matched by device rather than by
 // interface name. The module names its own field because that is where the field names
@@ -823,7 +823,7 @@ function make(resource, opts) {
 	// it is about to remove, and the preshared key has to come from the uci options
 	// because the read view masks it. The array is handed to the transaction before
 	// fn runs and read after the commit, so fn filling it in between is the whole
-	// point. /batch passes its own sink in ctx so every sub-request accumulates
+	// point. /uapi/batch passes its own sink in ctx so every sub-request accumulates
 	// into one ordered list applied once. A PUT or a PATCH that wrote nothing
 	// collects nothing: the ops come from opts, which it builds either way, and a
 	// peer without an endpoint is removed and set again, which resets its session.
@@ -837,7 +837,7 @@ function make(resource, opts) {
 	// `read_runtime` is a runtime that a GET reads and a write does not, such as the `wg show` of
 	// network/wireguard_peers. Read in a write, it would run under the package lock and come from
 	// before the kernel apply, so the write would answer as drift what its apply then changes. A GET
-	// in a /batch that writes runs before the apply of the batch too.
+	// in a /uapi/batch that writes runs before the apply of the batch too.
 	function read_view(s, conn, ctx) {
 		let r = resource.fromUci(s, conn);
 		if (resource.read_runtime != null && !ctx.batch_writes) r.runtime = resource.read_runtime(s, conn);

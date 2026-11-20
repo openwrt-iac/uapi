@@ -98,7 +98,7 @@ then ack once. Locked design (see `docs/roadmap.md`):
   scoped for 2.4.0, which passed without it.
 - Body names curated **resources/scopes, never raw packages**; uapi derives
   the package set and reload-service union from `RESOURCE_SOURCES` (the same
-  fold `/batch` does).
+  fold `/uapi/batch` does).
 - Returns the same `ConfirmWindow` 202 body; ack/rollback/status/list reuse
   the existing `/confirm` endpoints unchanged.
 
@@ -161,15 +161,15 @@ before anything depends on it.
 
 `GET /confirm` and `GET /confirm/<token>` return a token, a deadline and a
 package list, never configured values, so there is nothing to filter the way
-`/diagnostics?validate=1` has to filter findings. An operator needs to see that
-a window is armed even when it guards packages they cannot write.
+`/uapi/diagnostics?validate=1` has to filter findings. An operator needs to see
+that a window is armed even when it guards packages they cannot write.
 
 ### Implementation note
 
 Nothing new is required. The derived package set is the same fold over
-`RESOURCE_SOURCES` that `/batch` already does, and the per-resource check is
-`scope.permits(scopes, split(key, ":"), "rw")` across both registries, which is
-what the `?validate=1` sweep does. The cost of this decision is a loop, not a
+`RESOURCE_SOURCES` that `/uapi/batch` already does, and the per-resource check
+is `scope.permits(scopes, split(key, ":"), "rw")` across both registries, which
+is what the `?validate=1` sweep does. The cost of this decision is a loop, not a
 mechanism.
 
 ### What this closes

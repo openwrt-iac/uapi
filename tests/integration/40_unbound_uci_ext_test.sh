@@ -101,16 +101,16 @@ $SSH "grep -q uapi-test-unknown-directive /etc/unbound/unbound_srv.conf" \
 	&& fail "the refused line is still in unbound_srv.conf"
 unbound_running || fail "unbound is not running after the restore"
 
-echo "--- the same refusal through /batch ---"
+echo "--- the same refusal through /uapi/batch ---"
 resp=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d '{"operations": [
 	{"method": "PATCH", "path": "/unbound/ext", "body": {"enabled": true, "ext_line": ["uapi-test-unknown-clause:"]}}
 ]}')
 status=$(echo "$resp" | tail -1)
 body=$(echo "$resp" | sed '$d')
-[ "$status" = "500" ] || fail "expected 500 from /batch, got $status: $body"
-echo "$body" | grep -q '"code": "reload_failed_restored"' || fail "expected reload_failed_restored from /batch: $body"
+[ "$status" = "500" ] || fail "expected 500 from /uapi/batch, got $status: $body"
+echo "$body" | grep -q '"code": "reload_failed_restored"' || fail "expected reload_failed_restored from /uapi/batch: $body"
 [ "$($SSH "uci -q get unbound_ext.main.enabled")" = "0" ] || fail "unbound_ext.main.enabled not restored"
-unbound_running || fail "unbound is not running after the /batch restore"
+unbound_running || fail "unbound is not running after the /uapi/batch restore"
 
 echo "--- PATCH /unbound/ext writes a forward-zone clause ---"
 resp=$(call -X PATCH -H 'Content-Type: application/json' "$URL/unbound/ext" -d '{

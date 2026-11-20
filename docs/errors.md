@@ -45,7 +45,7 @@ header but no body.
 | 401  | `unauthorized`                  | No `Authorization` header                                    |
 | 401  | `invalid_token`                 | Token not in store, expired, or source IP not in `allowed_cidrs` (either address family) |
 | 403  | `insufficient_scope`            | Token valid, scopes don't cover this verb/path               |
-| 403  | `scope_escalation_blocked`      | `POST /tokens` requested scopes outside the caller's         |
+| 403  | `scope_escalation_blocked`      | `POST /uapi/tokens` requested scopes outside the caller's    |
 | 403  | `tls_required`                  | Non-localhost client over plain HTTP                         |
 | 404  | `not_found`                     | Resource does not exist                                      |
 | 405  | `method_not_allowed`            | Verb not supported on this resource                          |
@@ -150,7 +150,7 @@ Every response carries:
 | Header                       | When                                | Notes                                                                  |
 |------------------------------|-------------------------------------|------------------------------------------------------------------------|
 | `X-Request-Id`               | always                              | ULID for log correlation.                                              |
-| `Content-Type: application/json` | always (except 204 no-content / `/metrics` text) | -                                                                      |
+| `Content-Type: application/json` | always (except 204 no-content / `/uapi/metrics` text) | -                                                                      |
 | `Strict-Transport-Security`  | 200 and error responses (see below) | 1 year, includeSubDomains.                                             |
 | `X-Content-Type-Options`     | 200 and error responses (see below) | `nosniff`.                                                             |
 | `Referrer-Policy`            | 200 and error responses (see below) | `no-referrer` (request_id appears in URLs).                            |
@@ -171,7 +171,7 @@ Every response carries:
 The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than
 "writes" because that is measured, not assumed: raw passthrough (`/raw/...`) and
-the non-uci writes (`/packages/...`, `/tokens`, `/system/password`,
+the non-uci writes (`/packages/...`, `/uapi/tokens`, `/system/password`,
 `/system/authorized_keys`, `/system/cron_jobs`) never reach
 `attach_reload_headers` and return none of them. `/system/cron_jobs` does reload
 cron, but reports the outcome in its body as `runtime.crond_running`, because
@@ -198,7 +198,7 @@ The four security headers (`Strict-Transport-Security`,
 `X-Content-Type-Options`, `Referrer-Policy`, `Cache-Control`) come from the
 shared envelope builder, so they ride every response whose body it builds and
 are absent from the ones assembled by hand: `204 No Content`, the `POST
-/uapi/batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A `304 Not
+/uapi/batch` 207, `/healthz`, `/uapi/metrics` and `/openapi.json`. A `304 Not
 Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
 it replaces, and nothing else.
 

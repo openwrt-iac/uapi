@@ -63,7 +63,7 @@ because something restarts it or the ubus call fails, does not count, and a
 daemon that stops later than 2 s still answers 2xx.
 
 dnsmasq is checked by its config. A write to `dhcp/servers`, `dhcp/hosts`,
-`dhcp/dnsmasq`, `dhcp/odhcpd`, the raw `dhcp` package, or a `/batch` that
+`dhcp/dnsmasq`, `dhcp/odhcpd`, the raw `dhcp` package, or a `/uapi/batch` that
 commits `dhcp`, reloads `dnsmasq` while procd runs it, and then uapi runs the
 command of each dnsmasq instance with `--test` on the config that dnsmasq.init
 just wrote. If dnsmasq refuses it, the write answers
@@ -307,9 +307,9 @@ in-memory ring quickly.
 
 ## Metrics
 
-`GET /api/v3/metrics` returns Prometheus 0.0.4 text. Scope: `uapi:metrics:ro`
-(covered by `*:ro`). Counters and histograms are file-backed under
-`/var/run/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
+`GET /api/v3/uapi/metrics` returns Prometheus 0.0.4 text. Scope:
+`uapi:metrics:ro` (covered by `*:ro`). Counters and histograms are file-backed
+under `/var/run/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
 operational counters; aggregate longer-term retention server-side).
 A package install or upgrade resets them too, and Prometheus reads that
 as a counter reset.
@@ -388,7 +388,7 @@ Sample Prometheus scrape config:
 scrape_configs:
   - job_name: uapi
     scrape_interval: 30s
-    metrics_path: /api/v3/metrics
+    metrics_path: /api/v3/uapi/metrics
     scheme: https
     authorization:
       type: Bearer
@@ -456,11 +456,11 @@ config limits
   after which the write answers `X-Reload-Status: unverified` instead of
   waiting longer.
 
-`GET /diagnostics` reports the effective values under `limits`.
+`GET /uapi/diagnostics` reports the effective values under `limits`.
 
 ## Diagnostics
 
-`GET /api/v3/diagnostics` returns version, uptime, loaded resources,
+`GET /api/v3/uapi/diagnostics` returns version, uptime, loaded resources,
 the uapi lock files present under `/var/lock`, whether uapi uses each
 state directory under `/var/run`, the effective request limits, and the
 last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
@@ -553,8 +553,8 @@ Three things worth knowing:
   `network`. The cost therefore scales with the number of sections in the
   configuration, not with a fixed overhead: 44 resources over a stock-sized
   configuration measured about 90 ms, and a router with a large firewall will be
-  slower. `/diagnostics` is what a monitoring system polls on an interval, so
-  without `?validate=1` the response is unchanged and costs nothing extra.
+  slower. `/uapi/diagnostics` is what a monitoring system polls on an interval,
+  so without `?validate=1` the response is unchanged and costs nothing extra.
 - **Scoped per resource.** The endpoint needs `uapi:diagnostics:ro`, and each
   resource is included only if the token also permits `:ro` on it, because the
   findings name sections and quote configured values. A token with only
@@ -614,7 +614,7 @@ keep no new entry. What `false` costs while it lasts:
 |---|---|
 | `/var/run/uapi-ratelimit` | The rate limiter allows every request. |
 | `/var/run/uapi-idempotency` | A request with an `Idempotency-Key` replays nothing, so a retry runs again. |
-| `/var/run/uapi-metrics` | `/metrics` records no series. |
+| `/var/run/uapi-metrics` | `/uapi/metrics` records no series. |
 | `/var/run/uapi-error-ring` | `recent_errors` stays empty. |
 | `/var/run/uapi-token-update` | No request stamps `last_used_at`. |
 

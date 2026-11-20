@@ -423,7 +423,7 @@ calls it for a GET
 and a list, and puts what it returns in `runtime`, while `fromUci` returns
 `runtime: {}`. So a write
 answers `{}` and runs nothing under the lock for it, and so does a GET in a
-`/batch` that writes,
+`/uapi/batch` that writes,
 whose sub-requests run before the apply of the batch: `main.uc` marks them with
 `batch_writes`. `network/wireguard_peers` reads `wg show` this
 way: read in a write, it would come from before the apply, and a POST would
@@ -443,7 +443,7 @@ When the daemon a write feeds does not converge from uci on its own: a netifd
 reload of the `network` package leaves a peer edit out of the kernel, and the
 module declares `kernel_ops(kind, opts, sec_type, existing, staged)`.
 `handler.make` collects what it returns into the request's kernel sink (shared
-with `/batch`, so sub-requests accumulate into one ordered apply), and the
+with `/uapi/batch`, so sub-requests accumulate into one ordered apply), and the
 transaction applies the ops after the commit and reports the outcome in
 `X-Kernel-Status` / `X-Kernel-Applied`. `opts` is the `toUci` output, `existing`
 the raw section before the write, `staged` the section as the write leaves it,

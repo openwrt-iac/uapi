@@ -9,7 +9,7 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 SSH="tests/vm/ssh.sh"
 fail() { echo "FAIL: $*"; exit 1; }
 
-echo "--- /diagnostics reports the compiled defaults without a config section ---"
+echo "--- /uapi/diagnostics reports the compiled defaults without a config section ---"
 curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" -o /tmp/uapi_diag0.json
 grep -q '"max_body_bytes": 262144' /tmp/uapi_diag0.json || fail "default max_body_bytes not reported: $(cat /tmp/uapi_diag0.json)"
 grep -q '"reload_budget_s": 20' /tmp/uapi_diag0.json || fail "default reload_budget_s not reported"

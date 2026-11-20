@@ -12,7 +12,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 # interface from the running box rather than assume one, because which interface carries
 # the test's own connection depends on how the VM is reached.
 
-echo "--- /diagnostics reports which interface this request arrived through ---"
+echo "--- /uapi/diagnostics reports which interface this request arrived through ---"
 diag=$(curl -sS -H "$ADMIN" "$URL/uapi/diagnostics")
 echo "$diag" | jq -e '.management_path' >/dev/null \
 	|| fail "diagnostics carries no management_path"

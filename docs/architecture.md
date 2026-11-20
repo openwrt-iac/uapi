@@ -81,7 +81,7 @@ Two flock files, used in three patterns:
 | Token last-used stamp (rides on an authed request, throttled to 60s) | SH | EX on `uapi` |
 | uci write (any one pkg) | SH | EX on that one pkg                     |
 | uci write that restarts unbound (`unbound_srv`, `unbound_ext`), or that can reload it (`dhcp`, and `system` but not `system/timeservers`, while `/etc/init.d/unbound` exists) | SH | EX on that pkg and on `unbound` |
-| uci write (multi pkg, /batch) | SH | EX on each, sorted lexicographic order |
+| uci write (multi pkg, /uapi/batch) | SH | EX on each, sorted lexicographic order |
 | Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
 
 The interactions:
@@ -196,7 +196,7 @@ without uci state change.
    only a GET runs (`read_runtime`), so a write answers `runtime: {}` and reads
    no kernel state under the lock. Read in `fn`, it would come from before the
    kernel apply of step 7, and the write would answer as drift what the apply
-   then changes. A GET in a `/batch` that writes answers `{}` for the same
+   then changes. A GET in a `/uapi/batch` that writes answers `{}` for the same
    reason, since every sub-request runs before the apply of the batch.
 5. **Snapshot and commit.** `uci_export(<package>)` captures the package file
    into an in-memory string, the snapshot that step 8 restores. When the request
@@ -524,7 +524,7 @@ An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also
 what keeps a peer orphaned by deleting its parent interface deletable.
 
-## Multi-package transactions (`/batch`)
+## Multi-package transactions (`/uapi/batch`)
 
 `POST /uapi/batch` composes N sub-requests under one combined snapshot/restore:
 
@@ -830,7 +830,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Metrics counters             | `/var/run/uapi-metrics/`                    | Until reboot. A token's series fold into `token_id="-retired"` at the first mint or revoke after it is revoked or expires. A token that revokes itself, or that has a request in flight at its revoke, keeps that series until the next |
 | Recent errors                | `/var/run/uapi-error-ring/`                 | The last 20, until reboot |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
-| Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is named by the pid and the start time of its request process, and removed when its write returns. A write that throws or is killed keeps it, because its commit may have landed. A record whose process is gone, or whose pid another process now holds, is reported by `/diagnostics` under `interrupted_writes` |
+| Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is named by the pid and the start time of its request process, and removed when its write returns. A write that throws or is killed keeps it, because its commit may have landed. A record whose process is gone, or whose pid another process now holds, is reported by `/uapi/diagnostics` under `interrupted_writes` |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
