@@ -129,7 +129,7 @@ function record_request(method, path_template, status, duration_ms, token_id) {
 function path_label(parts, routes) {
 	let n = length(parts), segs = [];
 	for (let i = 0; i < n; i++) {
-		let named = i == 0 || (i == 1 && parts[0] != "tokens") || (i == 3 && parts[i] == "adopt");
+		let named = i < 2 || (i == 3 && parts[i] == "adopt");
 		push(segs, named ? parts[i] : ":id");
 	}
 	let label = "/" + join("/", segs);

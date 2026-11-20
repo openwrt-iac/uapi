@@ -4,7 +4,7 @@ let ph = loadfile('tests/property_harness.uc')();
 
 // Walked rather than listed: the hand-kept list left unbound.srv and unbound.ext unfuzzed,
 // though both are writable. A read-only collection, which main.uc tells by the same test when
-// it leaves one out of /batch, has no validate() to fuzz. Any other module without one fails
+// it leaves one out of /uapi/batch, has no validate() to fuzz. Any other module without one fails
 // below, so the skip cannot widen in silence.
 let RESOURCES = [];
 let unfuzzable = [];

@@ -7,7 +7,7 @@ let state_dir = require('state_dir');
 // under the package lock, so the record and the commit are ordered together. Removed at the end
 // of the recipe when it returns, and kept when it throws, as when uhttpd kills it (SIGKILL after
 // the commit, or script_timeout): a record whose process is gone is stale by definition, and
-// /diagnostics reports it as such.
+// /uapi/diagnostics reports it as such.
 const DIR = state_dir.DIRS.interrupted_writes;
 
 let current = null, current_path = null;

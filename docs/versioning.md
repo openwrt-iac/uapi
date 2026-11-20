@@ -272,7 +272,7 @@ a value that breaks the pattern, such as a `clientid` with dashes, so a pattern
 in the response
 would be a promise that a GET breaks. The request half keeps every pattern, and
 the sweep of
-`/diagnostics?validate=1` lists a stored value that breaks one.
+`/uapi/diagnostics?validate=1` lists a stored value that breaks one.
 
 The merge-patch body of a PATCH requires nothing, since 3.2.0. The server
 type-checks that body

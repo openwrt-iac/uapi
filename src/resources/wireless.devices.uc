@@ -154,6 +154,6 @@ return {
 		legacy_rates: { type: "boolean", default: false,
 		            description: "Allow the legacy 802.11b rates" },
 		disabled: { type: "boolean", default: false,
-		            description: "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio" },
+		            description: "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /uapi/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio" },
 	},
 };

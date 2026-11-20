@@ -12,7 +12,7 @@ SSH="tests/vm/ssh.sh"
 # Wipe per-test state so a previous run doesn't poison this one.
 $SSH 'rm -rf /var/run/uapi-metrics /var/run/uapi-idempotency /var/run/uapi-ratelimit /var/run/uapi-error-ring /var/run/uapi-token-update /var/run/uapi-interrupted-writes' >/dev/null 2>&1 || true
 
-echo "--- /metrics returns Prometheus text under *:ro ---"
+echo "--- /uapi/metrics returns Prometheus text under *:ro ---"
 # Generate a couple of requests so there's data to scrape.
 curl -sS -o /dev/null -H "$ADMIN" "$URL/firewall/rules"
 curl -sS -o /dev/null -H "$ADMIN" "$URL/system"
@@ -21,7 +21,7 @@ echo "$body" | grep -q 'uapi_requests_total{' || fail "metrics: uapi_requests_to
 echo "$body" | grep -q 'uapi_request_duration_seconds_bucket' || fail "metrics: histogram missing"
 echo "$body" | grep -q 'path="/firewall/rules",status="200"' || fail "metrics: a route lost its path label"
 
-echo "--- /metrics gives one path label to every path that no route serves ---"
+echo "--- /uapi/metrics gives one path label to every path that no route serves ---"
 curl -sS -o /dev/null "$URL/nope_$(date +%s)_a/x"
 curl -sS -o /dev/null "$URL/raw/nope_$(date +%s)_b/x"
 curl -sS -o /dev/null -H "$ADMIN" "$URL/firewall/nope_$(date +%s)_c"
@@ -32,14 +32,14 @@ echo "$body" | grep -q 'path="unmatched",status="401",token_id="-"} 2$' \
 echo "$body" | grep -q 'path="unmatched",status="404",token_id="test_admin"} 1$' \
 	|| fail "metrics: the unknown path with a token is not one unmatched series"
 
-echo "--- /metrics rejected with insufficient_scope when token lacks ro ---"
+echo "--- /uapi/metrics rejected with insufficient_scope when token lacks ro ---"
 # A token with only firewall:ro should NOT be able to read metrics.
 status=$(curl -sS -o /tmp/uapi_metrics_403.json -w '%{http_code}' \
 	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/uapi/metrics")
 [ "$status" = "403" ] || fail "metrics scope check failed, got $status"
 grep -q 'insufficient_scope' /tmp/uapi_metrics_403.json || fail "expected insufficient_scope"
 
-echo "--- /diagnostics returns version + uptime + resources_loaded ---"
+echo "--- /uapi/diagnostics returns version + uptime + resources_loaded ---"
 status=$(curl -sS -o /tmp/uapi_diag.json -w '%{http_code}' -H "$ADMIN" "$URL/uapi/diagnostics")
 [ "$status" = "200" ] || fail "diagnostics expected 200, got $status"
 grep -q '"version"'           /tmp/uapi_diag.json || fail "diag missing version"
@@ -48,7 +48,7 @@ grep -q '"resources_loaded"'  /tmp/uapi_diag.json || fail "diag missing resource
 grep -q '"lock_state"'        /tmp/uapi_diag.json || fail "diag missing lock_state"
 grep -q '"firewall:rules"'    /tmp/uapi_diag.json || fail "diag missing firewall:rules in resources"
 
-echo "--- /diagnostics denied for token without uapi:diagnostics:ro ---"
+echo "--- /uapi/diagnostics denied for token without uapi:diagnostics:ro ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-H "Authorization: Bearer $FW_RO_TOKEN" "$URL/uapi/diagnostics")
 [ "$status" = "403" ] || fail "diag scope check failed, got $status"
@@ -128,12 +128,12 @@ for d in $dirs; do $SSH "test -d $d" || fail "$d is missing"; done
 wrong=$($SSH "find $dirs \( -type f ! -perm 600 \) -o \( -type d ! -perm 700 \)")
 [ -z "$wrong" ] || fail "these are not 0700 or 0600: $wrong"
 
-echo "--- /diagnostics reports that uapi uses each state directory ---"
+echo "--- /uapi/diagnostics reports that uapi uses each state directory ---"
 used=$(curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -cS .state_dirs)
 [ "$used" = '{"/var/run/uapi-error-ring":true,"/var/run/uapi-idempotency":true,"/var/run/uapi-interrupted-writes":true,"/var/run/uapi-metrics":true,"/var/run/uapi-ratelimit":true,"/var/run/uapi-token-update":true}' ] \
 	|| fail "state_dirs reads $used"
 
-echo "--- /diagnostics reports a state directory as it finds it, and creates or narrows none ---"
+echo "--- /uapi/diagnostics reports a state directory as it finds it, and creates or narrows none ---"
 idem() { curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -c '.state_dirs["/var/run/uapi-idempotency"]'; }
 $SSH 'rm -rf /var/run/uapi-idempotency'
 [ "$(idem)" = "null" ] || fail "a missing idempotency directory reads $(idem), expected null"

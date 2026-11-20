@@ -17,8 +17,8 @@ What uapi defends against, what it doesn't, and what the operator should do.
    operator exactly once at creation. A linear scan through the token store
    on each request is acceptable: tokens are few, hashes are fast, and
    compromising the server's `/etc/config/uapi` exposes only hashes.
-4. **Privilege escalation via HTTP token-mint.** `POST /tokens` is gated by
-   `uapi:tokens:rw`, AND the requested scopes must be covered by the caller's
+4. **Privilege escalation via HTTP token-mint.** `POST /uapi/tokens` is gated
+   by `uapi:tokens:rw`, AND the requested scopes must be covered by the caller's
    own, equal or narrower - escalation returns `403 scope_escalation_blocked`. A
    compromised low-privilege token cannot mint an admin token over the API.
 5. **Stolen-token reuse from elsewhere.** Optional `allowed_cidrs` on a
@@ -203,7 +203,7 @@ Two design candidates that would seem natural but are explicitly rejected:
   failure mode for "session expired vs token revoked." uapi's bearer-token model
   is simpler at the cost of forcing the operator to mint tokens out of band.
 - **No HTTP login endpoint.** Tokens are minted via the `uapi-token` CLI on the
-  router or via `POST /tokens` (which itself requires a token with
+  router or via `POST /uapi/tokens` (which itself requires a token with
   `uapi:tokens:rw`). There is no bootstrap "POST /login with username+password
   to get a token" path. The first token is always minted locally; everything
   after composes from that.
@@ -311,9 +311,9 @@ config token 'ci_bot'
 ```
 
 - Cleartext token is shown exactly once at creation (`uapi-token create`
-  CLI or `POST /tokens` HTTP). Never logged. A `POST /tokens` that carries an
-  `Idempotency-Key` returns it again to a retry with the same key and body,
-  see `docs/tokens.md`.
+  CLI or `POST /uapi/tokens` HTTP). Never logged. A `POST /uapi/tokens` that
+  carries an `Idempotency-Key` returns it again to a retry with the same key and
+  body, see `docs/tokens.md`.
 - Salt is 64 random bits (16 hex chars); hash is `sha256(salt || ":" || token)`.
 - `/etc/config/uapi` has mode 0600, which the install hook sets, and is no
   file of the package, so apk keeps it across upgrades and removal.
@@ -382,7 +382,7 @@ uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
    address
    family would be a worse failure than one that denies.
 5. **Set token expiry.** `--expires-in 90d` on every minted token forces
-   rotation. The HTTP rotation endpoint (`POST /tokens`, which takes
+   rotation. The HTTP rotation endpoint (`POST /uapi/tokens`, which takes
    `expires_in_seconds`) makes this ergonomic from automation.
 6. **Use mutual TLS** for service-account workloads (CI, Terraform). It's
    an independent factor on top of bearer auth and prevents a stolen

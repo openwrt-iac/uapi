@@ -35,7 +35,7 @@ Consequences:
   single-package uci writes; it takes SH on the global lock + EX on the
   per-package lock. Use `transaction.with_lock()` for non-uci writes; it takes
   EX on the global. Use `transaction.multi_transaction()` for cross-package
-  atomic writes (`/batch`).
+  atomic writes (`/uapi/batch`).
 - **Use file-backed state for cross-request data.** The token-bucket rate
   limiter writes to `/var/run/uapi-ratelimit/<token>.txt`, where `<token>` is
   the token name, or its sha256 for a name longer than 63 characters. The
@@ -158,7 +158,7 @@ Practical guidance for operators driving large same-package fleets:
 - Cross-package fleets (mixing firewall + dhcp + network) parallelise
   cleanly at the default and need no tuning.
 
-## Lock ordering for `/batch`
+## Lock ordering for `/uapi/batch`
 
 `multi_transaction` acquires per-package EX locks in sorted (lexicographic)
 order. This is the standard deadlock-avoidance pattern: two batches touching the
