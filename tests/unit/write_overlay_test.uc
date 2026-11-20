@@ -72,6 +72,8 @@ function probes(keyword, bound) {
 	case "maximum":   return { code: "out_of_range", past: [ bound + 1 ], at: [ bound ] };
 	case "maxLength": return { code: "out_of_range", past: [ chars(bound + 1) ], at: [ chars(bound) ] };
 	case "enum":      return { code: "not_in_enum", past: [ "uapi_not_listed" ], at: bound };
+	// The one type that a request half leaves out today is the array that a read gives for a list.
+	case "type":      return { code: "invalid_type", past: (index(bound, "array") < 0) ? [ [ "x" ] ] : [], at: [] };
 	// No value can be derived from a regex that it accepts, so the module's own tests carry those.
 	// The probes are the candidates that the regex itself refuses: a newline alone would only test
 	// a control-character check, which a validate() could keep after it stopped applying the pattern.
