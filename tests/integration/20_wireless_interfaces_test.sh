@@ -184,8 +184,11 @@ call -X DELETE "$URL/wireless/interfaces/$nid2" | tail -1 | grep -q '^204$' || f
 call -X DELETE "$URL/wireless/interfaces/$stid" | tail -1 | grep -q '^204$' || fail "station DELETE expected 204"
 
 # netifd converts a number with ucode's `+v`, and validate.uc stops the setup of the radio for a
-# reassociation_deadline outside 1000 to 65535 on any enabled SSID.
+# reassociation_deadline outside 1000 to 65535 on any enabled SSID. wifi-scripts validates only an
+# SSID that it sets up, and it sets up none without a mode (#307), so the section gets one first.
 echo "--- a stored reassociation_deadline reads as wifi-scripts reads it, and one out of range stops the radio ---"
+r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/wireless/interfaces/$nid" -d '{"mode":"ap"}')
+echo "$r" | tail -1 | grep -q '^200$' || fail "PATCH of mode ap expected 200: $r"
 refused() { $SSH logread | grep -c 'reassociation_deadline: 500 is lower than the minimum value' || true; }
 before=$(refused)
 $SSH "uci set wireless.$nid.reassociation_deadline=' 500'; uci commit wireless; ubus call network reload"
