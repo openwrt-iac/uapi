@@ -37611,17 +37611,13 @@
 						"default": false
 					},
 					"family": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": "string",
 						"enum": [
 							"ipv4",
-							"ipv6",
-							null
+							"ipv6"
 						],
 						"default": "ipv4",
-						"description": "Address family this interface tracks. Reads ipv4 when the option is unset, which is what mwan3 does. A null on write removes the option."
+						"description": "Address family this interface tracks. Reads ipv4 when the option is unset or empty, as mwan3 does. A null in a merge patch removes the option."
 					},
 					"track_ip": {
 						"type": [
@@ -37793,7 +37789,8 @@
 				},
 				"required": [
 					"id",
-					"runtime"
+					"runtime",
+					"family"
 				]
 			},
 			"Mwan3InterfacesRequest": {
@@ -37810,17 +37807,13 @@
 						"default": false
 					},
 					"family": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": "string",
 						"enum": [
 							"ipv4",
-							"ipv6",
-							null
+							"ipv6"
 						],
 						"default": "ipv4",
-						"description": "Address family this interface tracks. Reads ipv4 when the option is unset, which is what mwan3 does. A null on write removes the option."
+						"description": "Address family this interface tracks. Reads ipv4 when the option is unset or empty, as mwan3 does. A null in a merge patch removes the option."
 					},
 					"track_ip": {
 						"type": [
