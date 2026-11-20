@@ -94,13 +94,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only the errors the write adds. The schema check (type, enum, bound, pattern
   and the newline rule) judges the section that a PATCH of either kind leaves,
   as for a PUT, and so do the rules that 3.x applied only to the fields a
-  request named: the `allowed_ips` of a disabled `network/wireguard_peers`, a
-  `network/interfaces.listen_port` that reads -1, and the `proto` of an
-  interface that uapi does not write, such as `6in4`. Before v4 a write that
-  left a stored value alone answered 200, so a broken section could still be
+  request named: the `allowed_ips` of a disabled `network/wireguard_peers` and
+  a `network/interfaces.listen_port` that reads -1. Before v4 a write that left
+  a stored value alone answered 200, so a broken section could still be
   disabled. Now the fix comes first, or goes through `/raw`. Each error that
-  `GET /uapi/diagnostics?validate=1` lists blocks the write. Announced in 3.4.0
-  (#308), migration note in `docs/migration-v3-to-v4.md`. (#350) (#405)
+  `GET /uapi/diagnostics?validate=1` lists blocks the write. A value that the
+  platform takes is no error: the `proto` of an interface that uapi does not
+  model, such as `6in4` or `qmi`, blocks no write and leaves the sweep, and only
+  a request that sends it answers 422. Announced in 3.4.0 (#308), migration note
+  in `docs/migration-v3-to-v4.md`. (#350) (#405)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
   `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)
@@ -257,6 +259,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   PUT that sends back the `id` of an interface that LuCI named, such as `4g`,
   passes. A fix that would read another value, such as a firewall verdict in
   lower case, waits for v4. (#410)
+- **`wireless/interfaces` declares the lists that its read gives.** `device`,
+  `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
+  that uci holds as an array while the response schema said string, so the
+  server broke its own schema for a reachable configuration, such as a
+  multi-radio SSID whose `device` is a list: carve-out (b) of
+  `docs/versioning.md`. The response now declares a string or an array, and a
+  stored list is no error. A request takes `device` and `network` as a list too,
+  since netifd reads either form, and the other four only as a string. A
+  client fails loudly where it does not take the array. (#405)
 - **On OpenWrt main, wireguard peers follow the proto handler that leaves out a
   value wg would refuse.** Since openwrt ecd9120f04, the ucode handler of main
   leaves out a peer whose key is not a WireGuard key, and the line of a

@@ -578,10 +578,8 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		c = stored({ ssid: "Bob's" });
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'mesh' }).body.errors, (e) => e.field), [ 'ssid' ]);
 		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
-		// A list reads as one, which the string schema of ssid refuses as well.
 		c = stored({ mode: 'monitor', ssid: [ 'home', "Bob's" ], disabled: '1' });
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
-		                    [ [ 'ssid', 'invalid_type' ], [ 'ssid', 'invalid_format' ] ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'ssid' ]);
 	});
 
 	// LuCI's Enable writes only disabled=0, so a value stored on a disabled SSID becomes live later.
@@ -679,10 +677,9 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(length(h().sweep(c)), 1);
 		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
 		t.assert_equal(r.status, 422, r.body);
-		// The list reads as one, which the string schema of nasid refuses as well.
-		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'nasid', 'invalid_type' ], [ 'nasid', 'invalid_format' ] ]);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
-		                    [ [ 'nasid', 'invalid_type' ], [ 'nasid', 'invalid_format' ] ]);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'nasid' ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
+		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.live ]), [ [ 'nasid', false ] ]);
 		let eight = [ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'x\nssid2="x"' ];
 		t.assert_deep_equal(map(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).body.errors,
 		                        (e) => [ e.field, e.code ]), [ [ 'key', 'invalid_format' ] ]);
@@ -1087,10 +1084,35 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 			let c = box({ disabled: '1' }, { w1: ssid({ device: p, disabled: '1', key: INJECTED }) });
 			let r = ifaces.patch(c, ctx, 'w1', { disabled: false });
 			t.assert_equal(r.status, 422, p);
-			// A list reads as one, which the string schema of device refuses as well.
-			t.assert_deep_equal(fields(r), (type(p) == 'array') ? [ [ 'device', 'invalid_type' ], [ 'key', 'invalid_format' ] ]
-			                                                    : [ [ 'key', 'invalid_format' ] ], p);
+			t.assert_deep_equal(fields(r), [ [ 'key', 'invalid_format' ] ], p);
 		}
+	});
+
+	t.it('a multi-radio SSID stored as lists reads them as arrays, takes a write, and is no error', () => {
+		let c = box({}, { w1: ssid({ device: [ 'radio1', 'radio0' ], network: [ 'lan', 'guest' ] }) });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+		let read = ifaces.get_one(c, ctx, 'w1').body;
+		t.assert_deep_equal([ read.device, read.network ], [ [ 'radio1', 'radio0' ], [ 'lan', 'guest' ] ]);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { ssid: 'home2' }).status, 200);
+		t.assert_deep_equal(c._state.uci.wireless.w1.device, [ 'radio1', 'radio0' ]);
+		for (let k in [ 'id', 'managed', 'runtime', 'has_key', 'has_r0kh', 'has_r1kh' ]) delete read[k];
+		t.assert_equal(ifaces.replace(c, ctx, 'w1', { ...read, device: [ 'radio0' ] }).status, 200);
+		t.assert_deep_equal(c._state.uci.wireless.w1.device, [ 'radio0' ]);
+		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: [] })), [ [ 'device', 'required' ] ]);
+	});
+
+	// wifi-scripts makes one text of a list that uci holds for these, so a write sends that text.
+	t.it('a text option stored as a list is no error, and a write that sends a list is refused', () => {
+		let c = box({}, { w1: ssid({ nasid: [ 'ap', '1' ], ssid: [ 'home', 'net' ] }) });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { hidden: true }).status, 200);
+		t.assert_deep_equal(c._state.uci.wireless.w1.nasid, [ 'ap', '1' ]);
+		for (let p in [ [ 'ssid', 'ab' ], [ 'nasid', 'ab' ], [ 'mobility_domain', '4f57' ], [ 'r1_key_holder', '02aabbccddee' ] ])
+			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { [p[0]]: [ p[1] ] })), [ [ p[0], 'invalid_type' ] ], p[0]);
+		let read = ifaces.get_one(c, ctx, 'w1').body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_key', 'has_r0kh', 'has_r1kh' ]) delete read[k];
+		t.assert_deep_equal(fields(ifaces.replace(c, ctx, 'w1', read)), [ [ 'ssid', 'invalid_type' ], [ 'nasid', 'invalid_type' ] ]);
+		t.assert_equal(ifaces.replace(c, ctx, 'w1', { ...read, ssid: 'home net', nasid: 'ap 1' }).status, 200);
 	});
 
 	t.it('reads the disabled option of the radio as netifd does', () => {

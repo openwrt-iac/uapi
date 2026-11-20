@@ -285,18 +285,20 @@ function validate(json, conn, id, delta, partial) {
 
 	values.require_present(errs, json, "proto");
 
-	// Here rather than as an enum in schema_properties, which the Response would then declare
-	// although a read answers any proto that uci stores. LuCI does not edit an interface whose
-	// protocol it does not support either.
-	if (type(json.proto) == "string" && !VALID_PROTOS[json.proto])
-		push(errs, { field: "proto", code: "not_in_enum",
-		             message: sprintf("must be one of %s: uapi does not write proto %s. Change such an interface through /raw",
-		                              join(", ", keys(VALID_PROTOS)), json.proto) });
 	// Only what the request named, which is not what the write leaves: a PATCH that switches proto
 	// still carries the old proto's fields in its merged view, and the write drops them. The
 	// read-only twins never write, and an empty value asks for nothing, as a module that writes
 	// `cond ? [...] : []` sends.
 	let named = delta ?? json;
+	// Here rather than as an enum in schema_properties, which the Response would then declare
+	// although a read answers any proto that uci stores. netifd takes such a proto, as the qmi wan
+	// that config_generate writes on an LTE router, so a stored one is no error of the section, and
+	// a PATCH that leaves it out keeps the options of its handler, which toUci cannot emit. A PUT
+	// sends the proto, and would delete those options.
+	if (named.proto != null && type(json.proto) == "string" && !VALID_PROTOS[json.proto])
+		push(errs, { field: "proto", code: "not_in_enum",
+		             message: sprintf("must be one of %s: uapi does not write proto %s. A PATCH that leaves proto out keeps the options that its handler reads",
+		                              join(", ", keys(VALID_PROTOS)), json.proto) });
 	if (type(json.proto) == "string")
 		for (let field, v in named) {
 			if (v == null || v === "" || (type(v) == "array" && length(v) == 0)
@@ -549,7 +551,7 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
-		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes. A write takes only the protos that the request schema lists, so it answers 422 for an interface on another proto, also when it leaves `proto` out: /raw changes such an interface. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface." },
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
 		device:    { type: ["string", "null"],

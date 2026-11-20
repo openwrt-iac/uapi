@@ -727,7 +727,7 @@ t.describe('network.interfaces proto scope', () => {
 		for (let k in [ 'ipaddr', 'netmask', 'addresses', 'private_key' ])
 			t.assert_false(exists(u, k), k);
 	});
-	t.it('on a proto uapi does not model, reads what uci stores and refuses the proto in every write', () => {
+	t.it('on a proto uapi does not model, reads what uci stores and refuses the proto only where a write names it', () => {
 		let v = interfaces.fromUci({ '.name': 'henet', proto: '6in4', ipaddr: '192.0.2.1', ip6addr: '2001:db8::2/64',
 			ip6prefix: '2001:db8:1::/48', nohostroute: '1', metric: '3' });
 		t.assert_equal(v.ipaddr, '192.0.2.1');
@@ -746,9 +746,9 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_equal(u.nohostroute, '1');
 		t.assert_deep_equal(codes(interfaces.validate({ proto: '6in4', broadcast_flag: true }, null), 'broadcast_flag'), [ 'conflict' ]);
 		t.assert_deep_equal(codes(interfaces.validate(body, null, null, body), 'proto'), [ 'not_in_enum' ]);
-		t.assert_deep_equal(codes(interfaces.validate(body, null, 'henet', { mtu: 1400 }), 'proto'), [ 'not_in_enum' ]);
+		t.assert_deep_equal(codes(interfaces.validate(body, null, 'henet', { mtu: 1400 }), 'proto'), []);
 	});
-	t.it('refuses a PUT of a 6in4 read and a PATCH of either kind, and keeps the options of its handler', () => {
+	t.it('refuses a PUT of a 6in4 read, and a PATCH of either kind keeps the options of its handler', () => {
 		let ifh = handler.make(interfaces, {
 			tx: {
 				acquire: function() { return {}; }, release: function() {},
@@ -767,14 +767,37 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_deep_equal(map(put.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ]);
 		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
 
-		let r = ifh.patch(c, ctx, 'henet', { mtu: 1400 });
-		t.assert_equal(r.status, 422);
-		t.assert_deep_equal(map(r.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ]);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+		t.assert_equal(c._state.uci.network.henet.mtu, '1400');
 		t.assert_equal(ifh.patch(c, { ...ctx, json_patch: true }, 'henet',
-			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 422);
-		t.assert_equal(c._state.uci.network.henet.mtu, null);
+			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 200);
+		t.assert_equal(c._state.uci.network.henet.mtu, '1380');
 		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
-		t.assert_equal(c._state.uci.network.henet.ip6prefix, '2001:db8:46::/48');
+	});
+	// config_generate writes such a wan on an LTE router, and netifd takes it.
+	t.it('a stored qmi wan is no error: a PATCH of another field passes, the sweep skips it, and a request for qmi is refused', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { network: {
+			wan: { '.type': 'interface', '.anonymous': false, proto: 'qmi', device: '/dev/cdc-wdm0',
+			       apn: 'internet', pdptype: 'ipv4' },
+			lan: { '.type': 'interface', '.anonymous': false, proto: 'dhcp', device: 'br-lan' },
+		} } });
+		t.assert_deep_equal(ifh.sweep(c), []);
+		t.assert_equal(ifh.patch(c, ctx, 'wan', { metric: 10 }).status, 200);
+		t.assert_deep_equal([ c._state.uci.network.wan.metric, c._state.uci.network.wan.apn, c._state.uci.network.wan.pdptype ],
+		                    [ '10', 'internet', 'ipv4' ]);
+		for (let id in [ 'wan', 'lan' ]) {
+			let r = ifh.patch(c, ctx, id, { proto: 'qmi' });
+			t.assert_equal(r.status, 422, id);
+			t.assert_deep_equal(map(r.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ], id);
+		}
+		t.assert_equal(c._state.uci.network.lan.proto, 'dhcp');
 	});
 	t.it('on a proto that uapi does not model, stores one value as an option and refuses several where the handler reads one', () => {
 		let ifh = handler.make(interfaces, {
