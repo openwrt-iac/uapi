@@ -1,9 +1,10 @@
 # Migration v3 to v4
 
 What changes between the v3 and v4 majors of the API, and what a client must do.
-The deprecation window for each item ran from the 3.x release that announced it,
-not from v4; the announcing releases and migration notes are in
-`docs/deprecations.md`.
+The deprecation window of each change ran from the 3.x release that announced
+it, not from v4. Each section names that release, and the `docs/deprecations.md`
+of that release holds the announcement. The last section lists the reads that
+change at the upgrade, and what that does to ETags and to a plan made on 3.x.
 
 ## The mount moves to `/api/v4`
 
@@ -14,39 +15,68 @@ generated client takes the new base URL from the v4 spec's `servers` block.
 ## The special endpoints move under `/uapi/...`
 
 The authenticated special endpoints now live under the domain their scopes
-already named (announced in 3.4.1, #319): `/tokens` becomes `/uapi/tokens` (and
+already named (announced in 3.X.Y, #319): `/tokens` becomes `/uapi/tokens` (and
 `/tokens/<id>` becomes `/uapi/tokens/<id>`), `/metrics` becomes `/uapi/metrics`,
 `/diagnostics` becomes `/uapi/diagnostics`, `/batch` becomes `/uapi/batch`, and
 `/auth/whoami` becomes `/uapi/whoami`. The scopes are unchanged (`uapi:tokens`,
 `uapi:metrics`, `uapi:diagnostics`). The unauthenticated trio stays at the top
 level: `/healthz`, `/openapi.json`, `/schema/*`. The old top-level paths answer
 404. The Prometheus `path` label of the moved endpoints changes with them (e.g.
-`path="/uapi/tokens"`).
+`path="/uapi/tokens"`). A 422 from the token mint counts in
+`uapi_validate_errors_total` with `resource="uapi.tokens"`, where 3.x used
+`resource="tokens"`. The path in the syslog audit and access lines moves too, so
+a token mint logs `POST /uapi/tokens`. A dashboard, alert or log filter on an
+old path or label stops matching.
 
 ## `dhcp/leases6` merges into `dhcp/leases`
 
-The `/dhcp/leases6` endpoint is removed (announced in 3.4.1, #320). `GET
+The `/dhcp/leases6` endpoint is removed (announced in 3.X.Y, #320). `GET
 /dhcp/leases` still returns the IPv4 leases, and `GET /dhcp/leases?family=v6`
 returns the IPv6 ones from odhcpd's statefile. The entry id is the MAC for v4
 entries and the IP for v6 ones, so `GET /dhcp/leases/<ip>?family=v6` looks a v6
-entry up. The `dhcp:leases6` scope is gone with the endpoint. 3.x ignored
-`family`, so any value listed the IPv4 leases. Now a value other than `v4` or
-`v6` answers 400 `bad_request`.
+entry up. The `Link` to the next page keeps `family`. 3.x ignored `family`, so
+any value listed the IPv4 leases. Now a value other than `v4` or `v6` answers
+400 `bad_request` (announced in 3.X.Y, #391).
 
-## One documented `runtime` envelope on every resource
+The items do not change, but one schema now describes both families. A v4 entry
+has `mac`, and a v6 entry has `iaid`, `interface`, `ia_type` and
+`prefix_length` instead. For a client generated from the v3 `dhcp/leases`
+schema, `expires_at` can now be `null`: a v6 lease that does not expire reads
+`null`, and a v4 one still reads `0`. For a client of the v3 `dhcp/leases6`
+schema, `duid` can now be `null`, but a v6 entry always has one, and `ia_type`
+no longer lists `IA_TA`, which uapi never returned.
 
-`runtime` is now always present in a resource response and declared in every
-response schema: `id` and `runtime` are in the `required` list of every CRUD and
-singleton resource, and each schema documents the block (the four resources that
-had a hand-written `openapi_runtime` keep it; the rest get the documented
-empty-object shape). Read-only collections (item lists like `dhcp/leases`) have
-no envelope and are unchanged (announced in 3.4.1, #322).
+The upgrade keeps each stored token and its scopes. A token that holds
+`dhcp:leases` now also reads the IPv6 leases, with their DUIDs, host names and
+addresses. 3.x kept those behind `dhcp:leases6`. A token that holds only
+`dhcp:leases6` still authenticates, but that scope grants nothing now, so
+`?family=v6` answers 403 `insufficient_scope`. `uapi-token create` refuses
+`dhcp:leases6` as an unknown path. `POST /uapi/tokens` still accepts it, and it
+grants nothing to the new token. A scope on all of `dhcp`, such as `dhcp:ro`,
+reads both families before and after the upgrade.
+
+Before the upgrade, run `uapi-token list` to find the tokens that hold either
+scope. For a client that reads the IPv6 leases, mint a token on 3.x with both
+`dhcp:leases` and `dhcp:leases6`, and revoke the old one. The new token reads
+both families before and after the upgrade. v4 has no scope for the IPv4 leases
+alone, so a client that must not see the IPv6 leases cannot keep `dhcp:leases`.
+
+## `id` and `runtime` are required in every resource response
+
+The response body does not change: v3 already returned `id` and `runtime` on
+every CRUD and singleton resource. The v4 spec now puts both in the `required`
+list of each of these response schemas (announced in 3.X.Y, #322). The four
+resources that document their `runtime` fields keep that shape. The others
+declare `runtime` as an object with a common description, and it holds `{}`
+when the resource reads no live state. A generated client can now type both
+fields as always present. Read-only collections such as `dhcp/leases` have no
+envelope and do not change.
 
 ## `unsupported_media_type` leaves the error enum
 
 The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415),
 which was reserved and never emitted: uapi never rejects a body on
-`Content-Type` (announced in 3.4.1, #323). Clients branching on it must drop
+`Content-Type` (announced in 3.X.Y, #323). Clients branching on it must drop
 that branch.
 
 ## A write is refused for any stored error the section holds
@@ -67,31 +97,45 @@ The readers whose daemon goes through libvalidate's `:bool:` or
 `enable_server`, `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`,
 `assoc_steering`) and the `dropbear/instances` flags (`password_auth`,
 `root_password_auth`, `root_login`, `gateway_ports`). `enabled` now reads
-`true` and `disabled` reads `false` there, where v3 answered the default. Two
-defaults follow the daemon too: an absent `log_remote` reads `true`, as
-log.init takes it (`log_remote:bool:1`), and an absent usteer `syslog` reads
-`false`, as usteer's `set_config` resets it. A section whose read changes gets
-a new ETag once at the upgrade, so a write that sends an `If-Match` from before
-it answers 412: read the section again first. fw4's `parse_bool` keeps its
-eight spellings. Evidence: ubox `6f78fa4`, pinned in `docs/ucode-quirks.md`
-(#312).
+`true` and `disabled` reads `false` there, where v3 answered the default.
+fw4's `parse_bool` keeps its eight spellings. Evidence: ubox `6f78fa4`, pinned
+in `docs/ucode-quirks.md` (#312).
+
+Two defaults follow the daemon too. The 3.4.0 announcement named only the
+spellings, and 3.X.Y announced these defaults (#369). An absent `log_remote`
+reads `true`, as log.init takes it (`log_remote:bool:1`). A stock
+`/etc/config/system` holds no `log_remote`, so this read changes on a stock
+router. An absent usteer `syslog` reads `false`, as usteer's `set_config` resets
+it.
+
+Where one of these reads changed, a plan that holds the 3.x read now writes it,
+and the daemon then does what that read said. With `log_ip` set and no
+`log_remote`, log.init sends the log to `log_ip`, so a plan that holds
+`log_remote = false` stops it. A dropbear flag stored as `disabled` read `true`
+in 3.x, so a plan that holds `true` turns password or root login back on.
 
 `sqm/queues.enabled` reads `true` only for a value that sqm-scripts takes as on:
 its `run-openwrt.sh` starts a queue only when `[ "$(config_get "$section"
 enabled)" -eq 1 ]` holds. An absent `enabled`, or `yes`, `on` or `true` written
 by hand, read `true` in v3 for a queue that sqm left off, and now reads `false`
-(announced in 3.x, #372). A queue that LuCI made holds `1` or `0` and reads the
-same. A plan that sets `enabled = true` on such a queue now writes `1`, which
-starts SQM there.
+(announced in 3.X.Y, #372). A queue that LuCI made holds `1` or `0` and reads
+the same. A plan that sets `enabled = true` on such a queue now writes `1`,
+which starts SQM there.
 
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips
 an absent mode as it skips an unknown one), so the read now answers `null`
 instead of `"ap"` (announced in 3.4.0, #307). The write side changes the same
-way: a `null` mode is accepted and removes the option, leaving a section that
-sets up nothing. A create or PUT that sends no mode
-stores none.
+way (announced in 3.X.Y, #376): a `null` mode is accepted and removes the
+option, leaving a section that sets up nothing. A create or PUT that sends no
+mode stores none, so a client that creates an access point must send
+`mode: "ap"`.
+
+A plan that holds `mode = "ap"` from a 3.x read of such a section now writes
+`ap`, and wifi-scripts then sets up an access point that did not run before.
+With no `encryption` stored, that access point is open. Before you apply, set
+`mode` to `null` to keep the SSID down, or set its `encryption` and `key`.
 
 ## `mwan3/interfaces.family` reads `ipv4` when unset
 
@@ -99,7 +143,8 @@ stores none.
 read now answers `"ipv4"` instead of `null` for a section that stores none
 (announced in 3.4.0, #306). `family` is no longer in the request schema's
 `required`: a write may omit it, and a `null` removes the option, after which
-the read answers `ipv4` again.
+the read answers `ipv4` again. A plan that holds `null` there sees `ipv4` at
+each read, so make it hold `ipv4`. mwan3 does the same either way.
 
 ## Curated string fields refuse newlines and carriage returns
 
@@ -108,7 +153,7 @@ write (announced in 3.4.0, #276), so the refusal no longer depends on the
 per-field `LINE_RE`/`ONE_LINE_RE` patterns, which had disagreed about `\r`. The
 only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several
 lines on purpose. Free-text fields such as descriptions that no daemon reads as
-one line are refused too; that is the announced breaking part. Per-field
+one line are refused too. That is the announced breaking part. Per-field
 `pattern`s keep their word, quote and glob rules.
 
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
@@ -128,3 +173,38 @@ since 3.2.0, removed in v4, #241). Send an array, which is also what the read
 has returned since 3.2.0. A one-element array is still stored as a scalar, which
 netifd, 6rd, map and 464xlat read the same way, so the stored form does not
 change.
+
+## Reads that change at the upgrade
+
+The upgrade keeps `/etc/config`, the token store and every id as they are. Of
+the stored scopes, only `dhcp:leases` and `dhcp:leases6` change what they grant,
+as the `dhcp/leases` section says. Some reads now answer another value for the
+same stored option, to follow what the daemon does:
+
+| Resource | Field | The read changes when the option is |
+|---|---|---|
+| `system` | `log_remote` | absent, `enabled` or an unknown word |
+| `system/timeservers` | `enabled`, `use_dhcp` | `disabled` |
+| `system/timeservers` | `enable_server` | `enabled` |
+| `usteer/config` | `syslog` | absent, `disabled` or an unknown word |
+| `usteer/config` | `ipv6`, `assoc_steering` | `enabled` |
+| `dropbear/instances` | `password_auth`, `root_password_auth`, `root_login` | `disabled` |
+| `dropbear/instances` | `gateway_ports` | `enabled` |
+| `sqm/queues` | `enabled` | absent, or not `1`, `0`, `off`, `false` or `no` |
+| `wireless/interfaces` | `mode` | absent |
+| `mwan3/interfaces` | `family` | absent |
+
+A section whose read changes gets a new ETag once, at the upgrade. A write that
+sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.
+Read the section again and send its new ETag.
+
+A plan that sets one of these fields to its 3.x read shows a diff after the
+upgrade. Its apply writes that value, and the daemon then does what the 3.x read
+said, which it did not do before. Refresh the state and check each such diff
+before you apply. The sections above name the cases that matter most.
+
+The spec `default` of five fields changes with the read: `system.log_remote` is
+`true`, `usteer/config.syslog` and `sqm/queues.enabled` are `false`,
+`mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` has none. A
+client that sends the spec default for a field that its user left out now sends
+the new one.
