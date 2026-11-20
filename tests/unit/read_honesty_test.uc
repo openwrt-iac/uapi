@@ -280,10 +280,6 @@ const NULL_SEEDS = {
 	"network.interfaces.uc/wg0": { nohostroute: "1" },
 };
 
-// A field that the Request requires and that a null removes, which the spec cannot say, because
-// v4 (#306): no field is required-and-null-removable anymore; mwan3's family reads ipv4 when unset.
-const REQUIRED_NULL_REMOVES = {};
-
 function cleared(v) { return v == null || (type(v) == "array" && length(v) == 0); }
 
 t.describe('property: a null that a merge-patch body takes removes the field', () => {
@@ -341,7 +337,7 @@ t.describe('property: a null that a merge-patch body takes removes the field', (
 					if (!ph.json_eq(before[o], v)) push(wrong, sprintf("%J wrote %s: %J -> %J", body, o, before[o], v));
 			}
 			t.assert_deep_equal(wrong, []);
-			t.assert_deep_equal(kept_removed, REQUIRED_NULL_REMOVES[c.file + "/" + c.id] ?? []);
+			t.assert_deep_equal(kept_removed, []);
 		});
 	}
 });

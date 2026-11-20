@@ -15,9 +15,9 @@ function fromUci(section) {
 		// absent option means off. Declaring true here reported an interface mwan3 ignores as
 		// enabled, and any PATCH persisted that read view as `enabled='1'`, switching it on.
 		enabled:                shell_bool(section.enabled, false),
-		// mwan3.sh and mwan3track both default an unset family to ipv4, so the read follows
-		// the daemon: reporting null made a PATCH of null look like a change mwan3 ignores.
-		family:                 section.family ?? "ipv4",
+		// mwan3.sh and mwan3track read it with `config_get family ... ipv4`, whose `${...:-ipv4}`
+		// takes an empty value as unset too.
+		family:                 section.family || "ipv4",
 		track_ip:               as_list_or_null(section.track_ip),
 		track_method:           section.track_method ?? null,
 		reliability:            as_int(section.reliability),
@@ -88,10 +88,11 @@ return {
 	validate: validate,
 	openapi_singular: "mwan3 interface",
 	id_prefix: "i",
+	openapi_read_required: ["family"],
 	schema_properties: {
 		enabled:               { type: "boolean", default: false },
-		family:                { type: ["string", "null"], enum: [ ...keys(VALID_FAMILY), null ], default: "ipv4",
-		                         description: "Address family this interface tracks. Reads ipv4 when the option is unset, which is what mwan3 does. A null on write removes the option." },
+		family:                { type: "string", enum: keys(VALID_FAMILY), default: "ipv4",
+		                         description: "Address family this interface tracks. Reads ipv4 when the option is unset or empty, as mwan3 does. A null in a merge patch removes the option." },
 		track_ip:              { type: ["array", "null"], items: { type: "string" },
 		                         description: "List of IPs to ping for reachability." },
 		track_method:          { type: ["string", "null"], enum: ["ping", "arping", "httping", "nping-tcp", "nping-udp", null] },
