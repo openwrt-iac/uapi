@@ -30934,7 +30934,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -30943,7 +30943,7 @@
 						],
 						"minimum": -1,
 						"maximum": 65535,
-						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",
@@ -31080,7 +31080,7 @@
 						],
 						"minimum": 1,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as wg resolves it. 0 reads when the name does not resolve, and then wg cannot bring the interface up. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -31089,7 +31089,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value, and then wg cannot bring the interface up. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",

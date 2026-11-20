@@ -231,17 +231,11 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",
 	    \"endpoint_port\":51820}")
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
-# 25.12 refuses the peer in uapi's own wg set, so the 500 carries the
-# resolver's words; on main the platform's re-apply refuses the peer first,
-# the settle timeout fails the write, and the 500 names the setup that
-# never ended. The restore and the tunnel checks below hold on both.
-if wg_ucode_platform; then
-	echo "$(body_of "$r")" | grep -q 'never ended after the reload' \
-		|| fail "expected the settle error to be reported: $(body_of "$r")"
-else
-	echo "$(body_of "$r")" | grep -q 'does not resolve' \
-		|| fail "expected the resolver error to be reported: $(body_of "$r")"
-fi
+# uapi's own wg set refuses the peer, so the 500 carries the resolver's words. The ucode handler of
+# main leaves the endpoint out and keeps the interface up since openwrt ecd9120f04, where it kept
+# the interface down before, so the restore and the tunnel checks below hold on both.
+echo "$(body_of "$r")" | grep -q 'does not resolve' \
+	|| fail "expected the resolver error to be reported: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel was torn down by a bad peer"
 [ "$(kernel_peers | wc -l)" = "$before" ] \
 	|| fail "healthy peers changed: was $before, now $(kernel_peers | wc -l)"
@@ -262,16 +256,9 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_pee
 endpoint=$(wg_show endpoints | awk -v k="$SIB" '$1 == k { print $2 }')
 $SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove 2>/dev/null || true"
 $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
-if wg_ucode_platform; then
-	# The platform's re-apply reads the peers with wg's config parser, which
-	# refuses a keepalive that its command-line parser takes as 0, so the
-	# interface cannot come back while the canary sits in uci (#359): the
-	# endpoint never lands, and the canary still runs nothing.
-	[ "$endpoint" = "" ] \
-		|| fail "the canary keepalive let the platform set the interface up: $endpoint"
-else
-	[ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
-fi
+# The ucode handler of main leaves out the keepalive that wg's config parser refuses, and resolves
+# the port name from /etc/services as wireguard.sh does.
+[ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
 
 # The restore gives a hand-written endpoint_host to `wg set`, which must read it as one argument, as
 # the write path above does. It runs alone, because the restore stops at the first peer that wg
@@ -330,10 +317,12 @@ body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore d
 [ "$noips" = "(none)" ] || fail "the peer without allowed IPs holds '$noips' in the kernel, not (none)"
 [ "$after" = "yes" ] || fail "the restore did not set the peer after the peer without a key"
 
-# ifup sets no peer at all for a preshared key that wg cannot read, because wg refuses the whole
-# config. The restore refused such a peer and set none of the peers after it. Set with /dev/null, the
-# peer would lose the key that the kernel holds, so the restore keeps it as the kernel holds it, and
-# fails, after it set the other peers, only when the kernel does not hold it.
+# Under wireguard.sh, ifup sets no peer at all for a preshared key that wg cannot read, because wg
+# refuses the whole config. The restore refused such a peer and set none of the peers after it. Set
+# with /dev/null, the peer would lose the key that the kernel holds, so the restore keeps it as the
+# kernel holds it, and fails, after it set the other peers, only when the kernel does not hold it.
+# The ucode handler of main runs the peer without the key since openwrt ecd9120f04, and so does the
+# restore there.
 echo "--- a restore keeps a peer whose stored preshared key wg cannot read as the kernel holds it, and sets the peers after it ---"
 BADPSK=$($SSH 'wg genkey | wg pubkey')
 AFTER2=$($SSH 'wg genkey | wg pubkey')
@@ -367,14 +356,7 @@ if wg_ucode_platform; then
 else
 	[ "$psk" = "$($SSH 'cat /tmp/uapi45psk')" ] || fail "the restore changed the preshared key that the kernel holds to '$psk'"
 fi
-if wg_ucode_platform; then
-	# The config parser refuses the malformed preshared key the same way, so
-	# the interface never settles and nothing after the section is applied
-	# (#359); the kernel keeps the key it held.
-	[ "$after" = "no" ] || fail "the platform set the peer after the malformed preshared key"
-else
-	[ "$after" = "yes" ] || fail "the restore did not set the peer after the peer with a malformed preshared key"
-fi
+[ "$after" = "yes" ] || fail "the restore did not set the peer after the peer with a malformed preshared key"
 # A batch that sets the peer before a later operation fails leaves the kernel with the key that it
 # set, which the restore cannot take back, so it must not answer that it restored the peer.
 PSK2=$($SSH 'wg genpsk')
@@ -387,15 +369,12 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/batch" -d "{\"operati
 psk=$($SSH "wg show $IFACE preshared-keys" | awk -v k="$BADPSK" '$1 == k { print $2 }')
 [ "$(status_of "$r")" = "500" ] || fail "batch with a bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
 if wg_ucode_platform; then
-	# The batch's kernel apply never ran: the reload's re-apply refuses the
-	# restored 'not-a-key' section, the interface never settles, and the
-	# restore recovers the uci state without touching the kernel (#359).
+	# The restart of the restore recreates the netdev from uci, where the handler runs the peer
+	# without the 'not-a-key' preshared key, and the reconcile sets it so: the kernel is what uci holds.
 	body_of "$r" | grep -q '"code": "reload_failed_restored"' \
 		|| fail "the batch restore did not recover: $(body_of "$r")"
-	# The hand-set key is long gone: the restarts of the section above wiped
-	# it (#359), and the batch's own apply never ran to put anything back.
 	[ "$psk" = "" ] \
-		|| fail "the kernel holds a preshared key nothing set after the batch: '$psk'"
+		|| fail "the kernel holds the preshared key of the failed batch: '$psk'"
 else
 	body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' \
 		|| fail "the restore answered that it restored a peer that the batch set: $(body_of "$r")"
@@ -409,18 +388,17 @@ held=$(has_peer "$BADPSK" && echo yes || echo no)
 $SSH "uci delete network.uapi45badpsk; uci delete network.uapi45after2; uci commit network; rm -f /tmp/uapi45psk
 	wg set $IFACE peer '$AFTER2' remove 2>/dev/null || true; wg set $IFACE peer '$BADPSK' remove 2>/dev/null || true"
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+[ "$after" = "yes" ] || fail "the restore did not set the peer after the peer that the kernel does not hold"
 if wg_ucode_platform; then
-	# The reconcile cannot run on an interface the platform refuses to set
-	# up, so no peer is left out of a restore that never applied (#359).
+	# The handler and the restore run the peer without its preshared key.
 	body_of "$r" | grep -q '"code": "reload_failed_restored"' \
 		|| fail "the restore did not recover: $(body_of "$r")"
-	[ "$after" = "no" ] || fail "the platform set the peer after the peer that the kernel does not hold"
+	[ "$held" = "yes" ] || fail "the restore did not set the peer that the handler runs without its preshared key"
 else
 	body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' && body_of "$r" | grep -q 'malformed preshared key' \
 		|| fail "the restore did not report the peer that it left out: $(body_of "$r")"
-	[ "$after" = "yes" ] || fail "the restore did not set the peer after the peer that the kernel does not hold"
+	[ "$held" = "no" ] || fail "the restore set the peer with a malformed preshared key"
 fi
-[ "$held" = "no" ] || fail "the restore set the peer with a malformed preshared key"
 
 # Rotating a key leaves the kernel holding the previous peer under the old key
 # unless the old one is removed first, which would keep its access alive.
@@ -546,8 +524,8 @@ has_peer "$WORDS_PEER" && fail "the hand-written peer is still in the kernel aft
 [ -z "$(static_routes)" ] || fail "routes left behind by the DELETE: $(static_routes)"
 
 # wireguard.sh hands its config to wg through printf %b, so ifup gives wg a public_key that ends in
-# `\075` with an `=` there. The ucode handler of OpenWrt main gives wg the value as it is, which
-# wg refuses with the whole config, so the interface never comes up there. A write refuses such a
+# `\075` with an `=` there. The ucode handler of OpenWrt main leaves out a peer whose key, as it
+# is, is not a WireGuard key, since openwrt ecd9120f04, and sets the others. A write refuses such a
 # key, and one written by hand keeps it. On an up interface, the write that disabled such a peer
 # and its DELETE answered 500, and so did the restore of any failed write of the interface.
 echo "--- a hand-written key with an escape: the read follows the handler, and a write restores around, refuses and deletes the peer ---"
@@ -557,8 +535,8 @@ $SSH "uci set network.uapi45esc=wireguard_$IFACE; uci set network.uapi45esc.publ
 sleep 5
 if wg_ucode_platform; then
 	has_peer "$ESC_PEER" && fail "the platform set a peer for a key with an escape"
-	[ "$(read_peer uapi45esc .runtime)" = '{}' ] \
-		|| fail "the read reports the kernel of an interface that never comes up: $(read_peer uapi45esc .runtime)"
+	[ "$(read_peer uapi45esc .runtime.in_kernel)" = false ] \
+		|| fail "the read does not report the peer that the handler leaves out: $(read_peer uapi45esc .runtime)"
 else
 	has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
 	[ "$(read_peer uapi45esc '[.runtime.in_kernel, .runtime.allowed_ips]')" = '[true,["10.98.99.70/32"]]' ] \
@@ -572,15 +550,10 @@ else
 fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
 	-d '[{"op":"replace","path":"/description","value":"esc"}]')
+[ "$(status_of "$r")" = "200" ] || fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")"
 if wg_ucode_platform; then
-	# The handler refuses the stored key with the whole config, so the interface never settles, before
-	# the write or after it. Read pending at the deadline, it fails the write, and read down, it skips.
-	case "$(status_of "$r")" in
-		200|500) ;;
-		*) fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")" ;;
-	esac
+	has_peer "$ESC_PEER" && fail "the JSON Patch set the peer that the handler leaves out"
 else
-	[ "$(status_of "$r")" = "200" ] || fail "JSON Patch of another field of the peer with an escape: $(body_of "$r")"
 	has_peer "$ESC_PEER" || fail "the JSON Patch removed the peer with an escape from the kernel"
 fi
 r=$(call -X PATCH -H 'Content-Type: application/json-patch+json' "$URL/network/wireguard_peers/uapi45esc" \
@@ -765,22 +738,19 @@ kept=$(id_of "$r")
 $SSH "uci set network.$kept.endpoint_port=0; uci set network.$kept.persistent_keepalive=25x; uci commit network"
 for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}'; do
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
-	# On main the commit by hand restarts the interface, and the handler refuses 25x with the whole
-	# config, so the write fails or skips as for the stored key with an escape above.
-	case "$(status_of "$r"):$(wg_ucode_platform && echo ucode)" in
-		200:*|500:ucode) ;;
-		*) fail "PATCH $body of a peer with a stored port of 0: $(body_of "$r")" ;;
-	esac
+	[ "$(status_of "$r")" = "200" ] || fail "PATCH $body of a peer with a stored port of 0: $(body_of "$r")"
 done
-# On main the commit by hand above restarts the interface, and wg's config parser refuses 25x, so
-# the interface holds no peer to check (#24511).
-if ! wg_ucode_platform; then
-	endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
+if wg_ucode_platform; then
+	# The commit by hand restarts the interface on main, and the handler leaves out the port 0 and
+	# the keepalive 25x since openwrt ecd9120f04, so the peer runs without them.
+	[ "$endpoint $keepalive" = "(none) off" ] || fail "the kernel holds endpoint '$endpoint' and keepalive '$keepalive'"
+else
 	[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
-	keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
 	[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
-	$SSH "wg show $IFACE allowed-ips" | grep -q '10.98.99.36/32' || fail "the PATCH of allowed_ips did not reach the kernel"
 fi
+$SSH "wg show $IFACE allowed-ips" | grep -q '10.98.99.36/32' || fail "the PATCH of allowed_ips did not reach the kernel"
 [ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
 	|| fail "a PATCH rewrote the stored port or keepalive"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d '{"disabled":true}')

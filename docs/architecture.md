@@ -309,8 +309,11 @@ without uci state change.
    apart, skips. A setup that never settles fails the write with a restore, so
    the caller gets the 500 for a peer that the platform refuses. The same 500
    answers a write to an interface that another stored peer already keeps
-   from settling (openwrt/openwrt#24511): the platform sets all the peers or
-   none, and uapi cannot tell the two cases apart. wireguard.sh restarts
+   from settling: the platform sets all the peers or none, and uapi cannot
+   tell the two cases apart. Since openwrt ecd9120f04, which fixed
+   openwrt/openwrt#24511, the handler leaves out a key, a preshared key, an
+   endpoint or a keepalive that wg would refuse, so only an allowed IP that wg
+   refuses still keeps the interface from settling. wireguard.sh restarts
    nothing on a peer change, and its failed setup reads pending until the
    stored config changes, so on 25.12 the check reads the status once. Runs
    only after the reload returned zero, and reports the same way, so a failure
@@ -468,16 +471,21 @@ on the reconcile that follows a rollback, so a route uapi did not install is not
 at risk.
 
 OpenWrt main replaced `wireguard.sh` with a ucode proto handler,
-`/lib/netifd/proto/wireguard.uc`. `wg.uc` follows the handler that netifd
-runs, and it finds which one by the presence of that file. The ucode handler
-gives wg each value as uci holds it, with no printf %b. It takes a list of
-allowed IPs as its entries and an option as its words, and it routes each of
-them. A route takes the address before the first `/` and the length that
-ucode's `int()` reads after it. The handler leaves out a peer without a key,
-with its routes, and takes `disabled` and `route_allowed_ips` as on only when
-they hold `1`. The read, the kernel apply, the routes and the reconcile take
-these rules from `wg.uc`. So on main a GET reports an entry that wg refuses
-as that one entry, not as the prefixes that `wireguard.sh` made of it.
+`/lib/netifd/proto/wireguard.uc`. `wg.uc` follows the handler that netifd runs,
+and it finds which one by the presence of that file. The ucode handler gives wg
+each value as uci holds it, with no printf %b. It takes a list of allowed IPs as
+its entries and an option as its words, and it routes each of them. A route
+takes the address before the first `/` and the length that ucode's `int()` reads
+after it. The handler leaves out a peer without a key, with its routes, and
+takes `disabled` and `route_allowed_ips` as on only when they hold `1`. Since
+openwrt ecd9120f04 it also checks a peer value against the grammar of wg, as uci
+holds it, and leaves out what wg would refuse: the peer, with its routes, for a
+key that is not a WireGuard key, and the line for a preshared key, an endpoint
+or a keepalive. An endpoint port is 1 to 65535 in digits or the first field of a
+`/udp` line of `/etc/services`, and a peer with a host and no port gets no
+endpoint. The read, the kernel apply, the routes and the reconcile take these
+rules from `wg.uc`. So on main a GET reports an entry that wg refuses as that
+one entry, not as the prefixes that `wireguard.sh` made of it.
 
 One consequence to know: netifd reports the routes it installs in
 `network.interface.<name> status`, and routes installed here are not in that
@@ -505,13 +513,16 @@ reads as the key alone. It refuses any other value, and the reconcile refuses it
 before it changes the kernel of the interface, as it refuses a stored
 `preshared_key` that wg reads as more than the key alone. The reconcile skips a
 peer whose stored key wg cannot read, because the kernel holds no peer under it.
-It does not set a peer whose stored `preshared_key` wg cannot read either: wg
-refuses the whole config at ifup, so it never gets that peer without its key,
+It does not set a peer whose stored `preshared_key` wg cannot read either:
+under `wireguard.sh`, wg refuses the whole config at ifup, so it never gets that
+peer without its key,
 and a set with `/dev/null` would take the key that the kernel holds from the
 peer. The kernel keeps the peer as it holds it, and the reconcile sets the peers
 after it. That restores the peer only when the kernel holds it and no operation
 of the request set or removed it, so the reconcile takes the operations of the
-request, and fails otherwise.
+request, and fails otherwise. The ucode handler of OpenWrt main runs such a peer
+without its preshared key, so there the reconcile sets it with `/dev/null`, as
+the restart of the restore left it.
 
 An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also

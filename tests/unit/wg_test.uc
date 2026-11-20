@@ -966,15 +966,56 @@ t.describe('wg IPv6 endpoint bracketing', () => {
 
 // The ucode proto handler of OpenWrt main gives wg each value as uci holds it, routes each entry of
 // allowed_ips with the length that int() reads, leaves out a peer without a key with its routes, and
-// takes a flag only as "1".
+// takes a flag only as "1". Since openwrt ecd9120f04 it leaves out a value that wg would refuse: the
+// peer for its key, the line for a preshared key, an endpoint or a keepalive.
+const SERVICES = "https\t\t443/tcp\nhttps\t\t443/udp\nopenvpn\t\t1194/udp\t\tovpn\n";
+let ucs = loadstring("return require('harness').load_with_fs({ ...require('fs'), access: (p) => p == '/lib/netifd/proto/wireguard.uc' || require('fs').access(p), readfile: (p) => (p == '/etc/services') ? " + sprintf("%J", SERVICES) + " : require('fs').readfile(p) }, [ 'wg' ])")();
+
 t.describe('wg under the ucode handler', () => {
 	let prefixes = (entries) => map(uc.route_prefixes(entries, true), (r) => r.prefix);
 
-	t.it('expands no escape in a key', () => {
-		t.assert_equal(uc.kernel_key(substr(PK, 0, 43) + '\\075'), null);
-		t.assert_equal(uc.kernel_key(PK + ' # peer B'), PK);
-		t.assert_equal(uc.kernel_key(PK + '\nPublicKey=' + PK2), false);
+	t.it('reads a key as the whole value, and none from a value that is not a WireGuard key', () => {
+		t.assert_equal(uc.kernel_key(PK), PK);
+		for (let v in [ substr(PK, 0, 43) + '\\075', PK + ' # peer B', ' ' + PK, PK + '\nPublicKey=' + PK2, [ PK ] ])
+			t.assert_equal(uc.kernel_key(v), null, v);
+		t.assert_deep_equal(uc.kernel_keys(PK), [ PK ]);
 		t.assert_deep_equal(uc.kernel_keys(PK + '\\nPublicKey=' + PK2), []);
+		t.assert_deep_equal(uc.kernel_keys(PK + ' # peer B'), []);
+		t.assert_equal(wg.kernel_key(PK + ' # peer B'), PK);
+	});
+	t.it('reads a keepalive as the handler gives it to wg, and -1 for one that it leaves out', () => {
+		let v = [ 'off', 'OFF', '0', '025', '65535', '65536', '25 # x', ' 25', 'abc', [ '25' ], '', null ];
+		t.assert_deep_equal(map(v, (k) => uc.keepalive(k)), [ 0, 0, 0, 25, 65535, -1, -1, -1, -1, -1, null, null ]);
+		t.assert_equal(wg.keepalive('25 # x'), 25);
+	});
+	t.it('reads a port as the handler gives it to wg, and 0 for one that it leaves the endpoint out for', () => {
+		let v = [ '51820', '051820', '0', '65536', '+51820', ' 51820', 'https', 'openvpn', 'ovpn', 'nosuch', '', null ];
+		t.assert_deep_equal(map(v, (p) => ucs.endpoint_port(p)), [ 51820, 51820, 0, 0, 0, 0, 443, 1194, 0, 0, null, null ]);
+	});
+	t.it('sets nothing for a peer whose stored key is not a WireGuard key, and sets the others', () => {
+		let ops = [ { iface: 'wg1', action: 'set', public_key: PK + ' # peer B', allowed_ips: [ '10.0.0.2/32' ] },
+		            { iface: 'wg1', action: 'set', public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] } ];
+		let r = run_wg({ network: { wg1: WG1 } }, sprintf("wg.apply(c, %J)", ops), null, null, UCODE_WG);
+		t.assert_equal(r.result, 'ok');
+		t.assert_deep_equal(filter(r.commands, (l) => index(l, '|peer|' + PK) >= 0), []);
+		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+		t.assert_true(index(run_wg({ network: { wg1: WG1 } }, sprintf("wg.apply(c, %J)", ops)).commands, set_of(PK, '10.0.0.2/32')) >= 0);
+	});
+	t.it('sets a peer whose stored preshared key is not a WireGuard key without one, in an apply and a restore', () => {
+		let a = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' });
+		let uci = { network: { wg1: WG1, a, b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } };
+		let r = run_wg(uci, "wg.reconcile(c, [ 'wg1' ])", null, null, UCODE_WG);
+		t.assert_equal(r.result, 'ok');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
+		r = run_wg(uci, sprintf("wg.apply(c, [ { iface: 'wg1', action: 'set', ...wg.to_peer(%J) } ])", a), null, null, UCODE_WG);
+		t.assert_equal(r.result, 'ok');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
+	});
+	t.it('leaves out the endpoint of a stored peer without a port, where wireguard.sh takes 51820', () => {
+		let s = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', endpoint_host: '192.0.2.1' });
+		t.assert_equal(uc.to_peer(s).endpoint_port, 0);
+		t.assert_equal(wg.to_peer(s).endpoint_port, null);
 	});
 	t.it('reads a list entry as one entry and an option as its words, and expands no escape', () => {
 		t.assert_deep_equal(uc.allowed_ips([ '10.0.0.0/24 10.0.1.7' ]), [ '10.0.0.0/24 10.0.1.7' ]);
