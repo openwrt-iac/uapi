@@ -106,7 +106,7 @@ const RANGES = { radio: [ 0, null, false ], channel: [ 0, 233, false ], txpower:
                  cell_density: [ 0, 3, true ] };
 
 // A read gives what wifi-scripts reads from the stored text, which can be outside the range that a
-// write takes, so a write that leaves such a value as it is passes.
+// write takes.
 function validate_new(json) {
 	let errs = [];
 	for (let f, r in RANGES) {

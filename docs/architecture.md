@@ -169,13 +169,12 @@ without uci state change.
    from that copy, so a commit by LuCI or a shell in between was invisible to
    the
    write.
-3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id,
-   delta, partial)`
-   run inside the lock, and `validate_new(json, conn)` where a resource has one,
-   which refuses only
-   the errors that the write adds (`docs/adding-a-resource.md`). Any field error
-   → `422 validation_failed` with the
-   full set of field errors (not fail-fast); no uci change.
+3. **Validate.** `check_schema_types`, the resource's `validate(json, conn, id,
+   delta, partial)` and `validate_new(json, conn)` where a resource has one run
+   inside the lock over the section as the write leaves it, so a stored value
+   that breaks a rule fails the write too (`docs/adding-a-resource.md`). Any
+   field error → `422 validation_failed` with the full set of field errors (not
+   fail-fast), and uci does not change.
 4. **Stage.** `uci_set` / `uci_create_section` / `uci_delete` mutate the
    cursor's copy of the package, and `bus.uc` keeps the writes in order.
    Nothing is staged outside the request process (see below). A PUT and a
@@ -591,19 +590,16 @@ walks it on every write to enforce:
   `tags[1]`)
 - `properties` (nested object recursion)
 
-A PATCH schema-checks only the fields that the request names: the body of a
-merge PATCH, and the fields that the paths of a JSON Patch name and leave in the
-document, without its `test` operations, with their values after the
-operations. The post-image
-merged with the stored section inherits fromUci's string-form view of
-integer-typed fields, so type-checking it would falsely 422 on
-integer-untouched patches. It also holds every stored value, so a JSON Patch
-failed on a stored value that breaks a pattern, such as a WireGuard key with a
-backslash that another writer stored, where a merge PATCH of the same change
-passed. A JSON Patch with an operation on the whole document names every field.
-The full merged body still goes through `resource.validate()` for cross-field
-logic, next to the fields that the request names, so a rule can blame only what
-the request sent. `docs/adding-a-resource.md` says when to use which.
+A PATCH schema-checks the section that it leaves, as a PUT does: the read of
+the stored section with the request merged in, for a merge PATCH and a JSON
+Patch alike. That is the read that the sweep checks, so a stored value that
+breaks a type, an enum, a bound, a pattern or the newline rule fails the write
+as it fails the sweep, whichever fields the request names. The write-only
+secrets that the handler carries from uci are left out, because the read masks
+them. The full merged body, secrets included, goes through
+`resource.validate()` and `validate_new()`, next to the fields that the request
+names, for a rule about the request rather than the section.
+`docs/adding-a-resource.md` says when to use which.
 
 ### Unmodeled uci options: PUT replaces, PATCH preserves
 
@@ -638,8 +634,10 @@ that wants to preserve unmodeled state must use PATCH.
 Field errors are deduped by `(field, code)`. Schema errors win over
 validator errors for the same (field, code) tuple. A `validate_new()` error is
 dropped only when one of them has its (field, code): each of its rules on a
-field is its own error, so that one cannot hide another. The 422 body carries
-the full set; clients fix everything in one round trip.
+field is its own error, so that one cannot hide another. The newline refusal of
+the schema check gives way to a `validate_new()` error with its (field, code),
+which says why the daemon cares and carries `live`. The 422 body carries the
+full set, so a client fixes everything in one round trip.
 
 ## ETag derivation
 

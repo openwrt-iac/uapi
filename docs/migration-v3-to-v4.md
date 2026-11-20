@@ -82,12 +82,28 @@ that branch.
 ## A write is refused for any stored error the section holds
 
 Like LuCI, which validates every visible field of a form at save, a write now
-answers 422 for any error the resulting section holds, not only the ones the
-write adds (announced in 3.4.0, #308). Before v4 a write that left a stored
-value alone answered 200, so a broken section could still be disabled; now the
-fix comes first, or goes through `/raw`. On 3.x, `GET /diagnostics?validate=1`
-already lists these stored errors, which makes it the pre-flight check before
-the upgrade. In v4 the same sweep is `GET /uapi/diagnostics?validate=1`.
+answers 422 for any error that the section it leaves holds, not only the ones
+that the write adds (announced in 3.4.0, #308). Each check judges that whole
+section, for a PATCH of either kind as for a PUT:
+
+- the schema check: a type, an enum, a bound, a pattern, and the newline rule
+  of #276 below,
+- the rules on what a daemon reads, whose errors carry `live` in the sweep,
+- the other rules of each resource, also the ones that 3.x applied only to the
+  fields that a request named: the `allowed_ips` of a disabled
+  `network/wireguard_peers`, a `network/interfaces.listen_port` that reads -1,
+  and the `proto` of an interface that uapi does not write, such as the `6in4`
+  that LuCI writes.
+
+Before v4 a write that left a stored value alone answered 200, so a broken
+section could still be disabled. Now the fix comes first, or goes through
+`/raw`. A DELETE does not validate. `GET /diagnostics?validate=1` runs the same
+checks over each stored section and lists each error that it finds, so each
+error that it lists now blocks every write of its section. On 3.x it is the
+pre-flight check before the upgrade, with one gap: it does not list what a rule
+new in v4 refuses, such as a newline in a string that 3.x took (#276). In v4 the
+same sweep is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid
+value for each listed field fixes the section in one write.
 
 ## Boolean reads follow the reader of their daemon
 
@@ -162,7 +178,8 @@ write (announced in 3.4.0, #276), so the refusal no longer depends on the
 per-field `LINE_RE`/`ONE_LINE_RE` patterns, which had disagreed about `\r`. The
 only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several
 lines on purpose. Free-text fields such as descriptions that no daemon reads as
-one line are refused too. That is the announced breaking part. Per-field
+one line are refused too. That is the announced breaking part. A stored one
+blocks every write of its section, as the #308 section above says. Per-field
 `pattern`s keep their word, quote and glob rules.
 
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write

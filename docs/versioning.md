@@ -258,16 +258,12 @@ qualify:
   LuCI writes.
 
 The response declares what a read can return, and the request declares what a
-write can send,
-so a read-modify-write of such a value fails against the request schema. The
-server refuses it
-too, except where the rule is in `validate_new()`, such as the -1 of
-`network/wireguard_peers.persistent_keepalive`: there the server takes a write
-that leaves the
-stored value as it is. A module declares the difference with `x-uapi-write`, and
+write can send, so a read-modify-write of such a value fails against the request
+schema. The server refuses it too, and refuses every other write of the section
+while it holds such a value, a PATCH that leaves the field out included. A
+module declares the difference with `x-uapi-write`, and
 `tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
-in
-`validate()`.
+in `validate()`.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a
@@ -275,15 +271,14 @@ write may send, and a read returns a value as uci holds it. uci, LuCI or an
 older uapi can store
 a value that breaks the pattern, such as a `clientid` with dashes, so a pattern
 in the response
-would be a promise that a GET breaks. The request half keeps every pattern, and
-the sweep of
-`/uapi/diagnostics?validate=1` lists a stored value that breaks one.
+would be a promise that a GET breaks. The request half keeps every pattern, the
+sweep of `/uapi/diagnostics?validate=1` lists a stored value that breaks one,
+and each write of its section answers 422 while it holds one.
 
 The merge-patch body of a PATCH requires nothing, since 3.2.0. The server
-type-checks that body
-and merges it into the stored section. It checks the required fields on the
-result, so a body can
-leave out a field that a create requires.
+merges that body into the stored section and type-checks the result, as the
+sweep checks a read. It checks the required fields on the result too, so a body
+can leave out a field that a create requires.
 
 - The `application/json` body of a PATCH is `<Name>Patch`, on a CRUD resource
   and on a

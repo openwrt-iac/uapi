@@ -156,8 +156,7 @@ t.describe('network.wireguard_peers.validate', () => {
 		for (let h in [ '192.0.2.1\\0072443', '[fd00::1]', 'fd00::1]', 'vpn.example.com#x',
 		                '192.0.2.1:51820', 'vpn:1', 'fd00::1x%eth1' ])
 			t.assert_deep_equal(map(host_errs(h), (e) => e.code), [ 'invalid_format' ], h);
-		// A newline is refused by the default type-gate rule (#276) and again by the
-		// endpoint_host checks in validate(), so it carries two errors.
+		// The schema check and validate_new() both refuse a newline, and a 422 keeps only the second.
 		t.assert_deep_equal(map(host_errs('vpn.example.com\nx'), (e) => e.code),
 		                    [ 'invalid_format', 'invalid_format' ]);
 		// Each problem is its own error.
@@ -363,16 +362,12 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(p.r.status, 422);
 		t.assert_deep_equal(fields_of(p.r), [ [ 'persistent_keepalive', 'out_of_range' ] ]);
 		t.assert_equal(p.c._state.uci.network.g_existing.persistent_keepalive, '25x');
-		p = put_read(UNUSABLE[1]);
-		t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'conflict' ], [ 'endpoint_port', 'out_of_range' ] ]);
-		t.assert_equal(p.c._state.uci.network.g_existing.endpoint_port, 'nosuchservice');
-		for (let stored in [ ' 70000', '  ' ])
-			t.assert_deep_equal(fields_of(put_read({ endpoint_host: '192.0.2.1', endpoint_port: stored }).r),
-			                    [ [ 'endpoint_port', 'conflict' ], [ 'endpoint_port', 'out_of_range' ] ], stored);
-		for (let stored in [ UNUSABLE[2], { endpoint_host: '192.0.2.1', endpoint_port: ' +00' } ]) {
+		for (let stored in [ UNUSABLE[1], UNUSABLE[2], { endpoint_host: '192.0.2.1', endpoint_port: ' 70000' },
+		                     { endpoint_host: '192.0.2.1', endpoint_port: '  ' }, { endpoint_host: '192.0.2.1', endpoint_port: ' +00' } ]) {
 			p = put_read(stored);
 			t.assert_equal(p.r.status, 422, stored);
 			t.assert_deep_equal(fields_of(p.r), [ [ 'endpoint_port', 'out_of_range' ] ], stored);
+			t.assert_equal(p.c._state.uci.network.g_existing.endpoint_port, stored.endpoint_port, stored);
 		}
 	});
 
@@ -388,11 +383,15 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { route_allowed_ips: true }).status, 422);
 	});
 
-	t.it('a stored key with whitespace, which wg reads, does not block enabling the peer', () => {
+	// wg reads such a key, so the rules of what wg reads take it, and the schema pattern, which LuCI's
+	// form also applies at save, refuses it.
+	t.it('a stored key with whitespace, which wg reads, blocks every write until a write replaces it', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.public_key = PK + ' ';
 		c._state.uci.network.g_existing.disabled = '1';
-		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
+		t.assert_deep_equal(wgp.validate_new({ public_key: PK + ' ' }), []);
+		t.assert_deep_equal(fields_of(make_handler().patch(c, ctx(), 'g_existing', { disabled: false })), [ [ 'public_key', 'invalid_format' ] ]);
+		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false, public_key: PK }).status, 200);
 	});
 
 	t.it('refuses a key whose unused bits are not zero, which wg refuses', () => {
@@ -401,19 +400,20 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(r.status, 422);
 	});
 
-	// allowed_ips keeps the rule it had on main for a peer that the write leaves enabled: the write
-	// checks it, so the peer answers 422 rather than letting wg refuse it with a 500.
-	t.it('a stored invalid allowed IP blocks every write that leaves the peer enabled until one replaces it', () => {
+	// The write checks a stored allowed IP, so the peer answers 422 rather than letting wg refuse it
+	// with a 500.
+	t.it('a stored invalid allowed IP blocks every write of the peer until one replaces it', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.allowed_ips = [ '::/0\\n[Peer]\\nPublicKey=K\\nAllowedIPs=0.0.0.0\\0570' ];
 		let h = make_handler();
 		t.assert_equal(length(h.sweep(c)), 1);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 422);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '10.42.0.2/32' ] }).status, 200);
 	});
 
-	// An error that the host already had is new when the write changes the host, so swapping one
-	// injection for another is refused. wireguard.sh reads a list option as its words joined.
+	// A write that swaps one injection for another is refused. wireguard.sh reads a list option as
+	// its words joined.
 	t.it('a write that changes a broken host, or enables a peer with a list key, is refused', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.endpoint_host = 'a\nb';
@@ -597,12 +597,11 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 	});
 
 	// netifd cannot bring the interface up with a listen port that /etc/services does not resolve.
-	t.it('a write that brings up an interface with a stored listen_port that reads -1 is refused for it', () => {
+	t.it('a stored listen_port that reads -1 blocks every write of the interface', () => {
 		let ports = (r) => filter(errs(r), (e) => e[0] == 'listen_port');
-		t.assert_deep_equal(ports(h.patch(world({ ...WG, listen_port: '65536', disabled: '1' }), ctx(), 'wg1', { disabled: false })),
-		                    [ [ 'listen_port', 'out_of_range' ] ]);
-		t.assert_equal(h.patch(world({ ...WG, listen_port: '65536' }), ctx(), 'wg1', { mtu: 1400 }).status, 200);
-		t.assert_equal(h.patch(world({ ...WG, listen_port: '65536', disabled: '1' }), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+		for (let p in [ [ { disabled: '1' }, { disabled: false } ], [ {}, { mtu: 1400 } ], [ { disabled: '1' }, { mtu: 1400 } ] ])
+			t.assert_deep_equal(ports(h.patch(world({ ...WG, listen_port: '65536', ...p[0] }), ctx(), 'wg1', p[1])),
+			                    [ [ 'listen_port', 'out_of_range' ] ], p);
 	});
 
 	// The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
@@ -614,7 +613,7 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		let r = h.patch(c, ctx(), 'wg1', TO_WG);
 		t.assert_deep_equal(errs(r), [ [ 'listen_port', 'conflict' ] ]);
 		let m = r.body.errors[0].message;
-		t.assert_true(index(m, 'disabled true') >= 0 && index(m, 'null') >= 0 && index(m, 'nosuchservice') < 0, m);
+		t.assert_true(index(m, 'null') >= 0 && index(m, 'nosuchservice') < 0, m);
 		t.assert_equal(c._state.uci.network.wg1.proto, 'static');
 		let jp = { ...ctx(), json_patch: true };
 		t.assert_deep_equal(errs(h.patch(world(HAND), jp, 'wg1', [ { op: 'replace', path: '/proto', value: 'wireguard' },
@@ -632,12 +631,10 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_equal(c._state.uci.network.wg1.listen_port, '51820');
 	});
 
-	t.it('the switch passes with disabled true, and the interface is enabled once the port is sent', () => {
+	t.it('a switch with disabled true is refused too, since the interface would hold the port', () => {
 		let c = world(HAND);
-		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...TO_WG, disabled: true }).status, 200);
-		t.assert_deep_equal(errs(h.patch(c, ctx(), 'wg1', { disabled: false })), [ [ 'listen_port', 'out_of_range' ] ]);
-		t.assert_equal(h.patch(c, ctx(), 'wg1', { disabled: false, listen_port: null }).status, 200);
-		t.assert_false(exists(c._state.uci.network.wg1, 'listen_port'));
+		t.assert_deep_equal(errs(h.patch(c, ctx(), 'wg1', { ...TO_WG, disabled: true })), [ [ 'listen_port', 'conflict' ] ]);
+		t.assert_equal(c._state.uci.network.wg1.proto, 'static');
 	});
 
 	// A PUT removes every option that it does not write, so it does not bring up the stored value.
@@ -1003,11 +1000,11 @@ t.describe('network.wireguard_peers reads allowed_ips as wg gets them', () => {
 
 	// wireguard.sh writes `AllowedIPs=` for such a value, and wg refuses the line, so the interface
 	// did not come up while every write of the peer passed.
-	t.it('a value that wg reads as nothing refuses a write that leaves the peer enabled, and takes one that disables it', () => {
+	t.it('a value that wg reads as nothing blocks every write of the peer, one that disables it too', () => {
 		for (let aips in [ '#c', '\\04310.42.0.2/32' ]) {
 			let r = h.patch(stored(aips), ctx(), 'g_existing', { description: 'x' });
 			t.assert_deep_equal(map(r.body?.errors ?? [], (e) => [ e.field, e.code ]), [ [ 'allowed_ips[0]', 'invalid_format' ] ], aips);
-			t.assert_equal(h.patch(stored(aips), ctx(), 'g_existing', { disabled: true }).status, 200, aips);
+			t.assert_equal(h.patch(stored(aips), ctx(), 'g_existing', { disabled: true }).status, 422, aips);
 		}
 	});
 
@@ -1017,16 +1014,18 @@ t.describe('network.wireguard_peers reads allowed_ips as wg gets them', () => {
 		t.assert_deep_equal(c._state.uci.network.g_existing.allowed_ips, [ '10.42.0.2/32', '10.42.1.0/24' ]);
 	});
 
-	t.it('a write that disables the peer passes, and one that leaves it enabled or sends the entry does not', () => {
+	t.it('the entry blocks every write of the peer, enabled or disabled, until a write replaces it', () => {
 		let aips = '10.42.0.2/32\t10.42.1.0/24';
 		let c = stored(aips);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 200);
-		t.assert_deep_equal([ c._state.uci.network.g_existing.disabled, c._state.uci.network.g_existing.allowed_ips ], [ '1', aips ]);
-		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: true }).status, 422);
+		c._state.uci.network.g_existing.disabled = '1';
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x' }).status, 422);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ aips ] }).status, 422);
 		t.assert_equal(h.replace(c, ctx(), 'g_existing', body_of(c)).status, 422);
 		t.assert_equal(h.patch(c, ctx(), 'g_existing', { disabled: false }).status, 422);
+		t.assert_equal(c._state.uci.network.g_existing.allowed_ips, aips);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { allowed_ips: [ '10.42.0.2/32', '10.42.1.0/24' ] }).status, 200);
 	});
 });
 
