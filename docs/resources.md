@@ -7,21 +7,15 @@ router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
 `GET /schema/<package>/<resource>` serves a module's declared properties as one
-set, without the
-request and response split the OpenAPI document makes. It is the module's own
-view: a property
-marked `readOnly` there is absent from that resource's `*Request` schema, a
-property marked
-`x-uapi-read-nullable` has `null` added to its type (and to its `enum`) in both
-halves, as the
-next paragraph explains, a property marked `x-uapi-write-string` keeps `string`
-in its type only
-in the `*Request` schema, the keywords under a property's `x-uapi-write` (such
-as `minimum: 68`
-on `mtu`) apply only in the `*Request` schema, and `id`, `managed` and `runtime`
-are stamped by
-the framework rather than declared by the module. For the two halves, read
-`build/openapi.json`.
+set, without the request and response split the OpenAPI document makes. It is
+the module's own view: a property marked `readOnly` there is absent from that
+resource's `*Request` schema, a property marked `x-uapi-read-nullable` has
+`null` added to its type (and to its `enum`) in both halves, as the next
+paragraph explains, the keywords under a property's `x-uapi-write` (such as
+`minimum: 68` on `mtu`) apply only in the `*Request` schema, a string marked
+`x-uapi-multiline` takes a newline on write, and `id`, `managed` and `runtime`
+are stamped by the framework rather than declared by the module. For the two
+halves, read `build/openapi.json`.
 
 `x-uapi-read-nullable` marks a property a read can answer null for, and widens
 its type (and

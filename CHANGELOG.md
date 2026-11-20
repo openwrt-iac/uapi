@@ -108,8 +108,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   absent usteer `syslog` reads `false`, as usteer's `set_config` resets it. A
   section whose read changes gets a new ETag once at the upgrade, and a write
   with an If-Match from before it answers 412. fw4's `parse_bool` readers keep
-  `normalize_bool`, and so does `sqm/queues.enabled`, against what sqm-scripts
-  reads (#372). Announced in 3.4.0 (#310, evidence #312, ubox `6f78fa4`).
+  `normalize_bool`. `sqm/queues.enabled` reads as sqm-scripts does (#383).
+  Announced in 3.4.0 (#310, evidence #312, ubox `6f78fa4`).
   Migration note in `docs/migration-v3-to-v4.md`. (#348) (#365)
 - **BREAKING: a `wireless/interfaces` section with no `mode` reads `null`.**
   wifi-scripts sets up nothing for such a section, so the read no longer reports
