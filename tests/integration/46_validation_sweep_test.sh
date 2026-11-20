@@ -9,7 +9,7 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 fail() { echo "FAIL: $*"; exit 1; }
 SSH="tests/vm/ssh.sh"
 
-echo "--- /diagnostics without ?validate=1 carries none of the sweep keys ---"
+echo "--- /uapi/diagnostics without ?validate=1 carries none of the sweep keys ---"
 curl -sS -o /tmp/uapi_sweep_off.json -H "$ADMIN" "$URL/uapi/diagnostics" >/dev/null
 grep -q '"version"' /tmp/uapi_sweep_off.json || fail "plain diagnostics broken"
 for k in invalid_sections swept_resources skipped_for_scope; do

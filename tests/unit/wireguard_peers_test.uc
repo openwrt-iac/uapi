@@ -872,7 +872,7 @@ t.describe('network.wireguard_peers kernel apply', () => {
 		t.assert_equal(length(ops), 0);
 	});
 
-	// /batch runs handlers in bare mode, which returns before any commit, so the
+	// /uapi/batch runs handlers in bare mode, which returns before any commit, so the
 	// apply cannot happen per sub-request. Sub-requests accumulate into one
 	// ordered sink that the outer multi_transaction applies once.
 	t.it('bare-mode writes accumulate in order into one shared sink', () => {
@@ -1215,7 +1215,7 @@ t.describe('network.wireguard_peers runtime', () => {
 		t.assert_deep_equal(rt.d, {});
 	});
 
-	// A /batch runs every sub-request before its commit and its kernel apply, so a GET in a batch that
+	// A /uapi/batch runs every sub-request before its commit and its kernel apply, so a GET in a batch that
 	// writes would answer as drift what the apply of the batch then changes. A batch of reads has no apply.
 	t.it('a GET in a batch that writes answers an empty runtime and reads no kernel state', () => {
 		let k = kernel({ wg1: wgif, a: peer('wg1', STORED) }, { wg1: dump([ peer_line(PK, '(none)', '10.0.0.2/32', 'off') ]) });

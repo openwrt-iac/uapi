@@ -14,14 +14,16 @@ is client-agnostic.
 
 - Direct-to-bus: runs as a uhttpd-mod-ucode handler. No daemon, no
   `/etc/config/` file mangling.
-- Atomic transactions (single AND multi-package via `POST /batch`): validate,
-  stage, snapshot, commit, reload, restore-on-failure in a single request.
+- Atomic transactions (single AND multi-package via `POST /uapi/batch`):
+  validate, stage, snapshot, commit, reload, restore-on-failure in a single
+  request.
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side
-  rotation (`POST /tokens`).
+  rotation (`POST /uapi/tokens`).
 - 45 curated resources plus a generic `/raw/<package>/<id>` passthrough for the
   long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags
-  + `If-Match`, JSON Patch (RFC 6902), Prometheus `/metrics`, `/diagnostics`.
+  + `If-Match`, JSON Patch (RFC 6902), Prometheus `/uapi/metrics`,
+  `/uapi/diagnostics`.
 - OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at
   `/api/v3/openapi.json`.
 
@@ -109,7 +111,7 @@ wire:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v3/tokens \
+     -X POST https://<router>/api/v3/uapi/tokens \
      -d '{ "name": "ci-bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
 ```
 
@@ -121,7 +123,7 @@ Requested scopes must be a strict subset of the caller's (escalation returns
 ```sh
 TOKEN=<value-from-above>
 curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/system
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/auth/whoami
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/uapi/whoami
 ```
 
 ## Quick demo: add a firewall rule
@@ -150,8 +152,8 @@ Operator-facing:
   scoping + per-token rate.
 - `docs/errors.md`: error envelope, response codes, field-level error codes,
   response headers.
-- `docs/operations.md`: NTP, persistent syslog, `/metrics`, `/diagnostics`, rate
-  limiting.
+- `docs/operations.md`: NTP, persistent syslog, `/uapi/metrics`,
+  `/uapi/diagnostics`, rate limiting.
 - `docs/raw.md`: `/raw/<package>/<id>` semantics and stability disclaimer.
 - `docs/resources.md`: curated resource catalog.
 - `docs/non-uci-state.md`: resources whose source of truth is not

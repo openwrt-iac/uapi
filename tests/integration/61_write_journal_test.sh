@@ -9,7 +9,7 @@ ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 SSH="tests/vm/ssh.sh"
 fail() { echo "FAIL: $*"; exit 1; }
 
-echo "--- /diagnostics reports no interrupted write on a clean box ---"
+echo "--- /uapi/diagnostics reports no interrupted write on a clean box ---"
 curl -sS -H "$ADMIN" "$URL/uapi/diagnostics" | jq -c '.interrupted_writes' | grep -q '^\[\]$' \
 	|| fail "expected empty interrupted_writes"
 

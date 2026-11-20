@@ -93,9 +93,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   value that breaks a rule now blocks every write of the section with 422, not
   only the errors the write adds. Before v4 a write that left a stored value
   alone answered 200, so a broken section could still be disabled; now the fix
-  comes first (or goes through `/raw`). `GET /diagnostics?validate=1` already
-  lists these stored errors. Announced in 3.4.0 (#308); migration note in
-  `docs/migration-v3-to-v4.md`. (#350)
+  comes first (or goes through `/raw`). `GET /uapi/diagnostics?validate=1`
+  already lists these stored errors. Announced in 3.4.0 (#308); migration note
+  in `docs/migration-v3-to-v4.md`. (#350)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
   `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)

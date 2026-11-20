@@ -87,7 +87,7 @@ const SINGLETONS = {
 	"usteer:config":      handler.make_singleton(load_resource("usteer:config")),
 };
 
-// BARE variants run inside /batch's outer multi_transaction (skip own lock,
+// BARE variants run inside /uapi/batch's outer multi_transaction (skip own lock,
 // snapshot, commit, reload). Read-only collections have no toUci and are
 // excluded.
 const BARE_RESOURCES = {};
@@ -103,7 +103,7 @@ let raw = loadfile("/usr/share/uapi/raw.uc", { raw_mode: true })();
 
 // The non-uci special endpoints (packages/*, system/password, authorized_keys,
 // cron_jobs) as route handlers. Deliberately not in RESOURCE_SOURCES: /schema,
-// /diagnostics and the metric labels must not see them.
+// /uapi/diagnostics and the metric labels must not see them.
 const NONUCI = {};
 for (let k in nonuci) NONUCI[k] = handler.make_nonuci(nonuci[k]);
 
@@ -132,7 +132,6 @@ const REASON = {
 	"404": "Not Found",
 	"405": "Method Not Allowed",
 	"409": "Conflict",
-	"415": "Unsupported Media Type",
 	"422": "Unprocessable Entity",
 	"423": "Locked",
 	"500": "Internal Server Error",
@@ -711,7 +710,7 @@ function metrics_response(ctx) {
 
 // Opt-in because it walks every section of every package the caller may read and
 // runs the write path's validation over each, which is real work on constrained
-// hardware and /diagnostics is what a monitoring system polls on an interval.
+// hardware and /uapi/diagnostics is what a monitoring system polls on an interval.
 //
 // Scoped per resource, not just by uapi:diagnostics:ro: the findings carry
 // section names and validation messages that quote configured values, so a
@@ -1152,7 +1151,7 @@ function dispatch(env, start) {
 			                            "Idempotency-Key was previously used with a different body") };
 	}
 
-	// The method first, as before the route table: a POST to /metrics from a token without the
+	// The method first, as before the route table: a POST to /uapi/metrics from a token without the
 	// scope answers 405, not 403.
 	for (let r in AUTH_EXACT_ROUTES) {
 		if (path != r.path) continue;

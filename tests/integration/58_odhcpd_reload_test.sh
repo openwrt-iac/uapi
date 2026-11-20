@@ -129,7 +129,7 @@ await_ndp "the raw PATCH" "$(echo "$body" | jq -c '.reload_services')"
 	|| fail "expected the raw PATCH to name dnsmasq and odhcpd: $body"
 [ "$($SSH 'uci -q get dhcp.tdhcp6.ra')" = "disabled" ] || fail "uci does not hold ra=disabled"
 
-echo "--- a /batch PATCH of ra reloads odhcpd, and its 207 names it ---"
+echo "--- a /uapi/batch PATCH of ra reloads odhcpd, and its 207 names it ---"
 mark batch
 hdrs=$(mktemp)
 status=$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
@@ -164,7 +164,7 @@ await_ndp "the system PATCH" "$services"
 
 # odhcpd reads the network config, and its procd trigger on network does not fire for a commit
 # through libuci either. dnsmasq and unbound are left out on purpose, as docs/raw.md says.
-echo "--- a network write, curated, raw or in a /batch, reloads odhcpd and neither dnsmasq nor unbound ---"
+echo "--- a network write, curated, raw or in a /uapi/batch, reloads odhcpd and neither dnsmasq nor unbound ---"
 mark network
 hdrs=$(mktemp)
 r=$(curl -sS -D "$hdrs" -H "$ADMIN" -w "\n%{http_code}" -X PATCH -H 'Content-Type: application/json' \
@@ -215,4 +215,4 @@ patch_system uapi-t58-2
 dnsmasq_listed && fail "the system write started the dnsmasq that was stopped"
 $SSH '/etc/init.d/dnsmasq start'
 
-echo "dhcp/servers, raw dhcp, /batch, system and network writes reload odhcpd, and dhcp and system writes leave a stopped dnsmasq stopped, ok."
+echo "dhcp/servers, raw dhcp, /uapi/batch, system and network writes reload odhcpd, and dhcp and system writes leave a stopped dnsmasq stopped, ok."

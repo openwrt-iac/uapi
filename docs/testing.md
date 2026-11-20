@@ -262,10 +262,10 @@ the spec, and the Python check runs no ucode.
 A fifth property (3.3.0+), in `tests/unit/bus_test.uc`, runs each seed through
 the real bus and the fake libuci: **a PUT of the read commits nothing, reloads
 nothing and collects no kernel operation**, a singleton with the PATCH of its
-read, and so does a `/batch` of such PUTs. A PUT stores some reads in another
-form, such as a list that uci holds as an option, a number in hex or a legacy
-option name, so the first PUT of the read must commit nothing only when it
-leaves the package as it was, and the PUT of the read after it must commit
+read, and so does a `/uapi/batch` of such PUTs. A PUT stores some reads in
+another form, such as a list that uci holds as an option, a number in hex or a
+legacy option name, so the first PUT of the read must commit nothing only when
+it leaves the package as it was, and the PUT of the read after it must commit
 nothing in every case. A PUT does not write a default that the section does not
 hold, which two more cases check, a peer that LuCI wrote without its flags and a
 rule that a POST created: their first PUT of the read commits nothing. Validated
