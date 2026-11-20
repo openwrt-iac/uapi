@@ -601,7 +601,7 @@ for (let p in paths) {
 			let present = [];
 			for (let n in TX_HEADERS) if (exists(h, n)) push(present, n);
 			let where = sprintf("%s %s %s", uc(verb), p, code);
-			// /batch commits and reloads once for the whole set, so its 207 carries the same
+			// /uapi/batch commits and reloads once for the whole set, so its 207 carries the same
 			// four headers, aggregated. It is not a curated-resource path, so it needs naming
 			// here rather than falling into the "emits none of them" branch below.
 			if (p == "/uapi/batch") {

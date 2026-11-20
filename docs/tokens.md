@@ -16,11 +16,11 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
 - `--name`: human-readable label. Must be unique: a name that another section of
   `/etc/config/uapi` already holds is refused. Must match `[A-Za-z0-9_]+` (uci
   section-name charset; use underscores instead of hyphens). Surfaces in the
-  audit log on every authed request. `POST /tokens` takes at most 63 characters,
-  and the CLI takes any length. A longer name keeps its rate-limit bucket and
-  its last-used marker in a file named by the sha256 of the name, because a file
-  name holds 255 bytes. A name longer than 238 characters gets no series in
-  `/metrics`, whose files are named by their labels.
+  audit log on every authed request. `POST /uapi/tokens` takes at most 63
+  characters, and the CLI takes any length. A longer name keeps its rate-limit
+  bucket and its last-used marker in a file named by the sha256 of the name,
+  because a file name holds 255 bytes. A name longer than 238 characters gets no
+  series in `/uapi/metrics`, whose files are named by their labels.
 - `--scope`: at least one. May repeat. Validated against the known scope tree
   (see below); `--force` bypasses.
 - `--expires-in`: optional duration. Suffix is one of `s`/`m`/`h`/`d`. The token
@@ -63,7 +63,7 @@ wire:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v3/tokens \
+     -X POST https://router/api/v3/uapi/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],
@@ -102,7 +102,7 @@ lose the bearer of a token that exists. `uapi-token create` cleans up the same
 way, then
 commits, then prints the bearer.
 
-uapi keeps no cleartext bearer, with one exception. A `POST /tokens` that
+uapi keeps no cleartext bearer, with one exception. A `POST /uapi/tokens` that
 carries an
 `Idempotency-Key` is cached with its response, bearer included, for 24 h, in a
 file of mode 0600
@@ -113,9 +113,9 @@ no bearer
 either.
 
 ```sh
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/tokens
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/tokens/ci_bot
-curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v3/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/uapi/tokens
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/uapi/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v3/uapi/tokens/ci_bot
 ```
 
 GET responses never include `salt` or `hash`.
@@ -143,7 +143,7 @@ Common failure responses:
 | 401  | `unauthorized`             | missing or malformed Authorization header         | `WWW-Authenticate: Bearer` |
 | 401  | `invalid_token`            | bearer not in store, or expired, or wrong source IP | `WWW-Authenticate: Bearer` |
 | 403  | `insufficient_scope`       | token's scopes don't cover the request            | -               |
-| 403  | `scope_escalation_blocked` | `POST /tokens` requested scopes outside caller's  | -               |
+| 403  | `scope_escalation_blocked` | `POST /uapi/tokens` requested scopes outside caller's | -               |
 | 429  | `too_many_requests`        | per-token rate limit exceeded                     | `Retry-After: <seconds>` |
 
 ## Scope syntax
@@ -241,7 +241,7 @@ Or via HTTP:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v3/tokens \
+     -X POST https://router/api/v3/uapi/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],

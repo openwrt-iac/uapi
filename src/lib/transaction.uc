@@ -444,7 +444,7 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, reques
 	let snapshot = conn.uci_export(pkg);
 	// The journal record is written before the commit and under the lock, so the record and the
 	// commit are ordered together: a request that uhttpd kills after the commit leaves the
-	// record behind, and /diagnostics reports it as an interrupted write.
+	// record behind, and /uapi/diagnostics reports it as an interrupted write.
 	let staged = [];
 	conn.uci_foreach(pkg, null, function(s) { push(staged, s['.name']); });
 	write_journal.record_start([pkg], request_id, staged);
@@ -523,7 +523,7 @@ function transaction(conn, params) {
 	              budget: { ms: limits.reload_budget_ms(conn) } };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
-	// snapshot, committing, or reloading. Used by /batch to compose many
+	// snapshot, committing, or reloading. Used by /uapi/batch to compose many
 	// handler-level writes under a single outer multi_transaction lock+commit.
 	if (params.bare === true)
 		return fn(conn, pkg);

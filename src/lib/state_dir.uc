@@ -39,7 +39,7 @@ function used() {
 }
 
 // uapi-token takes a name of any length, and a file name holds 255 bytes. A name longer than the 63
-// characters that POST /tokens takes is named by its sha256, whose 64 characters no shorter name
+// characters that POST /uapi/tokens takes is named by its sha256, whose 64 characters no shorter name
 // has. ucode-mod-digest is a dependency of the package, and the unit hosts lack it, so there such a
 // name has no file.
 function token_file(name) {

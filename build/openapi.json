@@ -30887,7 +30887,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "What the kernel holds for the peer, read-only. It is never part of the desired state or of a plan diff: it shows what the kernel holds beside the fields that uci holds, so that a client can report the difference, which a peer that `wg` changed by hand or a failed apply leaves. uapi compares nothing and corrects nothing. A GET reads it with one `wg show <interface> dump` for each interface of the peers that it reads. A write answers {} and reads no kernel state: read in a write, it would come from before the kernel apply, and `X-Kernel-Status` says whether the apply landed. A GET in a `/batch` that writes answers {} too, since it runs before the apply of the batch. Also {} when uapi did not read the kernel, because netifd does not report the interface up, wg fails, or wg prints a dump in a shape that uapi does not read, so that a failed read never looks like a missing peer. Also {} when the stored `public_key` gives wg more than a key through the escapes of printf %b, a second line or the end of the config, or holds a backslash and is longer than 512 bytes, which uapi does not expand: uapi then does not match the value to a peer of the kernel.",
+						"description": "What the kernel holds for the peer, read-only. It is never part of the desired state or of a plan diff: it shows what the kernel holds beside the fields that uci holds, so that a client can report the difference, which a peer that `wg` changed by hand or a failed apply leaves. uapi compares nothing and corrects nothing. A GET reads it with one `wg show <interface> dump` for each interface of the peers that it reads. A write answers {} and reads no kernel state: read in a write, it would come from before the kernel apply, and `X-Kernel-Status` says whether the apply landed. A GET in a `/uapi/batch` that writes answers {} too, since it runs before the apply of the batch. Also {} when uapi did not read the kernel, because netifd does not report the interface up, wg fails, or wg prints a dump in a shape that uapi does not read, so that a failed read never looks like a missing peer. Also {} when the stored `public_key` gives wg more than a key through the escapes of printf %b, a second line or the end of the config, or holds a backslash and is longer than 512 bytes, which uapi does not expand: uapi then does not match the value to a peer of the kernel.",
 						"properties": {
 							"in_kernel": {
 								"type": "boolean",
@@ -31278,7 +31278,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
+						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /uapi/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
 					},
 					"runtime": {
 						"type": "object",
@@ -31404,7 +31404,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /api/v3/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
+						"description": "Disable this radio at boot. wifi-scripts sets up no SSID of a disabled radio, or of one without a `type`. A write that turns the radio on, such as a create without `disabled: true` or a write that gives the radio its type, is refused with `conflict` while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the fields of wireless/interfaces describe. The error names each such SSID and its fields, and `GET /uapi/diagnostics?validate=1` lists them. Such a write is also refused for a stored `cell_density` outside 0 to 3, for which wifi-scripts stops the radio"
 					}
 				},
 				"required": [

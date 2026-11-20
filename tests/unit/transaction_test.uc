@@ -859,7 +859,7 @@ t.describe('transaction, config pre-flight', () => {
 
 t.describe('transaction, lock release', () => {
 	// A kill after the commit leaves the record, and a throw is the same case: the commit may
-	// have landed, so /diagnostics must still report the write.
+	// have landed, so /uapi/diagnostics must still report the write.
 	t.it('keeps the journal record when the recipe throws, and clears it when it returns', () => {
 		let calls = [];
 		let tx2 = t.load_with({ write_journal: { record_start: () => push(calls, "start"),

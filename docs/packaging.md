@@ -57,7 +57,7 @@ Runtime files created on first use (tmpfs, reset on reboot):
 /var/run/uapi-ratelimit/<token>.txt          per-token bucket state
 /var/run/uapi-idempotency/<sha>.json         per-key cached POST responses (24h TTL)
 /var/run/uapi-metrics/<series>/<labels>.txt  Prometheus counter/histogram store
-/var/run/uapi-error-ring/ring.json           the last 20 errors, for /diagnostics
+/var/run/uapi-error-ring/ring.json           the last 20 errors, for /uapi/diagnostics
 /var/run/uapi-token-update/<token>           last-used throttle sentinel
 /var/lock/uapi.lock                          global flock (SH for uci tx, EX for non-uci)
 /var/lock/uapi.pkg.<package>.lock            per-package EX flock
