@@ -36,6 +36,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: a query parameter value outside its declared set answers 400.**
+  3.x ignores it. A `managed` other than `true` or `false` on a curated list
+  lists every section, a `validate` other than `1` on `/uapi/diagnostics` skips
+  the sweep, and an empty `cursor` reads the first page. v4 answers 400
+  `bad_request` for `managed` and `validate`, and 400 `invalid_cursor` for the
+  empty cursor. The `Link` to the next page of a curated list now keeps
+  `managed`. Announcement in 3.x pending. Migration note in
+  `docs/migration-v3-to-v4.md`. (#403)
 - **BREAKING: `dhcp/leases` refuses a `family` other than `v4` or `v6`.** 3.x
   ignores the parameter, so any value lists the IPv4 leases. v4 answers 400
   `bad_request`, as the `getDHCPLeases` call of LuCI refuses an unknown family.
