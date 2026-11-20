@@ -329,7 +329,8 @@ const CASES = [
 	},
 	{
 		file: "snmpd.accesses.uc", id: "ac1", pkg: "snmpd",
-		section: { '.type': 'access', group: 'grp', context: 'none', version: 'any', level: 'noauth', prefix: 'exact', read: 'all' },
+		section: { '.type': 'access', group: 'grp', context: 'none', version: 'any', level: 'noauth', prefix: 'exact', read: 'all',
+		           write: 'none', notify: 'none' },
 	},
 	{
 		file: "snmpd.system.uc", id: "sys", pkg: "snmpd",
