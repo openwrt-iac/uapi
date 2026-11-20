@@ -91,11 +91,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **BREAKING: a write is refused for any stored error the section holds, as LuCI
   does.** LuCI validates every visible field of a form at save, so a stored
   value that breaks a rule now blocks every write of the section with 422, not
-  only the errors the write adds. Before v4 a write that left a stored value
-  alone answered 200, so a broken section could still be disabled; now the fix
-  comes first (or goes through `/raw`). `GET /uapi/diagnostics?validate=1`
-  already lists these stored errors. Announced in 3.4.0 (#308); migration note
-  in `docs/migration-v3-to-v4.md`. (#350)
+  only the errors the write adds. The schema check (type, enum, bound, pattern
+  and the newline rule) judges the section that a PATCH of either kind leaves,
+  as for a PUT, and so do the rules that 3.x applied only to the fields a
+  request named: the `allowed_ips` of a disabled `network/wireguard_peers`, a
+  `network/interfaces.listen_port` that reads -1, and the `proto` of an
+  interface that uapi does not write, such as `6in4`. Before v4 a write that
+  left a stored value alone answered 200, so a broken section could still be
+  disabled. Now the fix comes first, or goes through `/raw`. Each error that
+  `GET /uapi/diagnostics?validate=1` lists blocks the write. Announced in 3.4.0
+  (#308), migration note in `docs/migration-v3-to-v4.md`. (#350) (#405)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
   `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)
