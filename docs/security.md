@@ -66,13 +66,13 @@ What uapi defends against, what it doesn't, and what the operator should do.
     item 12 there is a legitimate version of the write: renumbering the
     management VLAN or moving to an out-of-band path. A `network/interfaces`
     write that moves the inbound interface's `disabled`, `proto`, `ipaddrs` or
-    `netmask` returns `X-Mgmt-Path-Warning`, and so does a `network/devices`
-    or `network/bridge_vlans` write naming the caller's device or the bridge
-    it is a port of. `GET /uapi/diagnostics` reports `management_path` so a caller
-    can check before writing. Firewall lockout is
-    deliberately not covered: it would need fw4 ordering modelled, and the
-    requesting connection survives the reload by design, so uapi cannot detect
-    it by observation either. See `docs/operations.md`.
+    `netmask` returns `X-Mgmt-Path-Warning`, and so does a `network/devices` or
+    `network/bridge_vlans` write naming the caller's device or the bridge it is
+    a port of. `GET /uapi/diagnostics` reports `management_path` so a caller can
+    check before writing. Firewall lockout is deliberately not covered: it would
+    need fw4 ordering modelled, and the requesting connection survives the
+    reload by design, so uapi cannot detect it by observation either. See
+    `docs/operations.md`.
 
 ### Out of scope (not defended)
 

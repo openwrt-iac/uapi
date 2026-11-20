@@ -293,11 +293,12 @@ with
 the
 section.
 
-Since v4 (#310), `system.log_remote`, `system/timeservers` and dropbear's flags read
-with `shell_bool`, as `dropbear/instances.enable` already did, and so do the
-`usteer/config` booleans, which usteer.init reads with `config_get_bool`. Before, they
-read with `normalize_bool`, which misses `enabled` and `disabled`. The v4 announcement
-in `docs/deprecations.md` cites these two pins as the evidence.
+Since v4 (#310), `system.log_remote`, `system/timeservers` and dropbear's flags
+read with `shell_bool`, as `dropbear/instances.enable` already did, and so do
+the `usteer/config` booleans, which usteer.init reads with `config_get_bool`.
+Before, they read with `normalize_bool`, which misses `enabled` and `disabled`.
+The v4 announcement in `docs/deprecations.md` cites these two pins as the
+evidence.
 
 Writes still emit `"1"` / `"0"`, which every reader above accepts.
 

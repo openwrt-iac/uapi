@@ -64,19 +64,19 @@ header but no body.
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
 | 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /uapi/batch` answers 503 for a DELETE there too, because it commits as one write |
 
-`unsupported_media_type` was reserved and never emitted: uapi never rejects a body on
-`Content-Type` (the header only switches a PATCH into RFC 6902 mode). It left the published
-`ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1. Clients branching on it must drop
-that branch.
-`unsupported_media_type` is reserved and never emitted. uapi never rejects a body
-on `Content-Type`; the header is read for one thing only, switching a PATCH into
-RFC 6902 mode on `application/json-patch+json`. `text/plain`, or no header, is accepted
-and the write takes effect, so nothing can reach a 415. The code stays in the
-published `ErrorEnvelope.code` enum so a client that already branches on it does
-not have the value disappear, and no operation declares a 415 response. Enforcing
-it later would reject bodies that work today, which makes it a breaking change
-rather than a fix, and `POST /uapi/batch` sub-requests carry no per-item media type,
-so any rule could only apply to the outer request.
+`unsupported_media_type` was reserved and never emitted: uapi never rejects a
+body on `Content-Type` (the header only switches a PATCH into RFC 6902 mode). It
+left the published `ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1.
+Clients branching on it must drop that branch. `unsupported_media_type` is
+reserved and never emitted. uapi never rejects a body on `Content-Type`; the
+header is read for one thing only, switching a PATCH into RFC 6902 mode on
+`application/json-patch+json`. `text/plain`, or no header, is accepted and the
+write takes effect, so nothing can reach a 415. The code stays in the published
+`ErrorEnvelope.code` enum so a client that already branches on it does not have
+the value disappear, and no operation declares a 415 response. Enforcing it
+later would reject bodies that work today, which makes it a breaking change
+rather than a fix, and `POST /uapi/batch` sub-requests carry no per-item media
+type, so any rule could only apply to the outer request.
 
 `batch_partial_failure` is special: it appears only in the body of a
 `POST /uapi/batch` abort response, with the HTTP status taken from the failing
@@ -122,9 +122,10 @@ In `errors[].code` (only inside `422 validation_failed`):
 | `read_only`      | Field is computed/runtime and can't be set. In `/raw/`, a `.type` or `id` that differs from the section |
 | `unknown_field`  | No such field on this resource. `id`, `managed` and `runtime` are tolerated at the top level so a read-modify-write cycle can send the response back unchanged |
 
-Two more appear only inside `invalid_sections` in `GET /uapi/diagnostics?validate=1`, never in a
-request rejection, because they describe a section the sweep could not judge rather than a
-field the caller got wrong:
+Two more appear only inside `invalid_sections` in `GET
+/uapi/diagnostics?validate=1`, never in a request rejection, because they
+describe a section the sweep could not judge rather than a field the caller got
+wrong:
 
 | `code`           | Meaning                                                       |
 |------------------|---------------------------------------------------------------|
@@ -169,54 +170,56 @@ Every response carries:
 
 The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than
-"writes" because that is
-measured, not assumed: raw passthrough (`/raw/...`) and the non-uci writes
-(`/packages/...`, `/tokens`, `/system/password`, `/system/authorized_keys`,
-`/system/cron_jobs`) never reach `attach_reload_headers` and return none of
-them.
-`/system/cron_jobs` does reload cron, but reports the outcome in its body as
-`runtime.crond_running`, because the init script exits 0 even when crond stops. Until 2.5.0 the OpenAPI document declared
-the reload pair on those responses anyway, which is why the wording here matters: a client
-generated from the spec was told to expect a header that was never going to arrive.
-`POST /uapi/batch` does not reach `attach_reload_headers` either, but since 3.0.0 its 207
-carries the same four headers from the batch handler's own aggregation: a batch commits
-and reloads once for the whole set, so there is one outcome to report rather than one per
+"writes" because that is measured, not assumed: raw passthrough (`/raw/...`) and
+the non-uci writes (`/packages/...`, `/tokens`, `/system/password`,
+`/system/authorized_keys`, `/system/cron_jobs`) never reach
+`attach_reload_headers` and return none of them. `/system/cron_jobs` does reload
+cron, but reports the outcome in its body as `runtime.crond_running`, because
+the init script exits 0 even when crond stops. Until 2.5.0 the OpenAPI document
+declared the reload pair on those responses anyway, which is why the wording
+here matters: a client generated from the spec was told to expect a header that
+was never going to arrive. `POST /uapi/batch` does not reach
+`attach_reload_headers` either, but since 3.0.0 its 207 carries the same four
+headers from the batch handler's own aggregation: a batch commits and reloads
+once for the whole set, so there is one outcome to report rather than one per
 sub-request. A pure-read batch runs no transaction and carries none of them.
 
-Each entry of the batch `results` array also has a `headers` object, with the headers of the
-response of its own sub-request. It always holds `X-Request-Id`, as `<request_id>.<index>`.
-On a 200 it also holds `Content-Type`, the four security headers below and the `ETag` of the
-body, and on a GET of a collection that has more than 100 items, `Link` and `X-Next-Cursor`. It
-never holds the four transaction headers, because a sub-request runs no commit and no reload of
-its own. It never holds `X-Mgmt-Path-Warning` either: a sub-request has no `remote_addr`, so the
-guard finds no management path, and a batch cannot warn that it moved the caller's own path.
+Each entry of the batch `results` array also has a `headers` object, with the
+headers of the response of its own sub-request. It always holds `X-Request-Id`,
+as `<request_id>.<index>`. On a 200 it also holds `Content-Type`, the four
+security headers below and the `ETag` of the body, and on a GET of a collection
+that has more than 100 items, `Link` and `X-Next-Cursor`. It never holds the
+four transaction headers, because a sub-request runs no commit and no reload of
+its own. It never holds `X-Mgmt-Path-Warning` either: a sub-request has no
+`remote_addr`, so the guard finds no management path, and a batch cannot warn
+that it moved the caller's own path.
 
-The four security headers (`Strict-Transport-Security`, `X-Content-Type-Options`,
-`Referrer-Policy`, `Cache-Control`) come from the shared envelope builder, so they ride
-every response whose body it builds and are absent from the ones assembled by hand:
-`204 No Content`, the `POST /uapi/batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A
-`304 Not Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
+The four security headers (`Strict-Transport-Security`,
+`X-Content-Type-Options`, `Referrer-Policy`, `Cache-Control`) come from the
+shared envelope builder, so they ride every response whose body it builds and
+are absent from the ones assembled by hand: `204 No Content`, the `POST
+/uapi/batch` 207, `/healthz`, `/metrics` and `/openapi.json`. A `304 Not
+Modified` carries `X-Request-Id`, `ETag` and the `Cache-Control` of the response
 it replaces, and nothing else.
 
 Every writable resource outside `dhcp` declares a reload service that it always
-runs, so
-`X-Reload-Status: no_reload` and `X-Kernel-Status: no_kernel` on a WireGuard
-peer mean that
-the write changed nothing in uci, and uapi then ran no init script and nothing
-in the kernel. A
-`dhcp` write reloads dnsmasq, odhcpd and unbound only while procd runs them, so
-it also answers
-`no_reload` when none of them runs. A PUT or a PATCH
-writes only the options that it changes, and no default that the read fills in for an option
-that uci does not hold, so a PATCH that names no field, or a PUT or a PATCH that sends what uci
-already holds, commits nothing. So does the adopt of an anonymous section that another writer
-named while the request waited for its lock. Such a PUT or PATCH still answers `409 conflict`
-when another writer deleted the section during the request. A PUT of the read still writes what
-it stores in another form than uci holds, such as a list that uci holds as an option, and the PUT
-of the read after it commits nothing. A POST or DELETE always writes. A `POST /uapi/batch` reloads the
-services of the packages that its writes changed, and none when they changed nothing. In 3.1.0 such a PATCH reloaded the daemon anyway
-and answered `ok`, and on a WireGuard peer without an endpoint the kernel apply removed the
-peer and set it again, which reset its session. In 3.2.0 such a PUT still did.
+runs, so `X-Reload-Status: no_reload` and `X-Kernel-Status: no_kernel` on a
+WireGuard peer mean that the write changed nothing in uci, and uapi then ran no
+init script and nothing in the kernel. A `dhcp` write reloads dnsmasq, odhcpd
+and unbound only while procd runs them, so it also answers `no_reload` when none
+of them runs. A PUT or a PATCH writes only the options that it changes, and no
+default that the read fills in for an option that uci does not hold, so a PATCH
+that names no field, or a PUT or a PATCH that sends what uci already holds,
+commits nothing. So does the adopt of an anonymous section that another writer
+named while the request waited for its lock. Such a PUT or PATCH still answers
+`409 conflict` when another writer deleted the section during the request. A PUT
+of the read still writes what it stores in another form than uci holds, such as
+a list that uci holds as an option, and the PUT of the read after it commits
+nothing. A POST or DELETE always writes. A `POST /uapi/batch` reloads the
+services of the packages that its writes changed, and none when they changed
+nothing. In 3.1.0 such a PATCH reloaded the daemon anyway and answered `ok`, and
+on a WireGuard peer without an endpoint the kernel apply removed the peer and
+set it again, which reset its session. In 3.2.0 such a PUT still did.
 
 ## Retry-After
 

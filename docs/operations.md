@@ -498,10 +498,10 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 
 ### Finding sections a write would reject (`?validate=1`)
 
-`GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section of
-every resource the token may read is run through the same path a write takes, and
-the ones that would be rejected are reported with the reason, together with the
-ones that hold a value that a write cannot add.
+`GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section
+of every resource the token may read is run through the same path a write takes,
+and the ones that would be rejected are reported with the reason, together with
+the ones that hold a value that a write cannot add.
 
 ```json
 {
@@ -629,8 +629,8 @@ things to do, and because LuCI warns rather than blocking on the same condition.
 
 Two places report it, and they answer different questions.
 
-`GET /uapi/diagnostics` carries `management_path`, which names the interface this request
-arrived through:
+`GET /uapi/diagnostics` carries `management_path`, which names the interface
+this request arrived through:
 
 ```json
 { "management_path": { "address": "192.168.0.236", "device": "eth1", "interface": "wan" } }
