@@ -189,6 +189,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The docs and two spec descriptions name the `/uapi/...` paths.** The
+  README, the operator docs and the descriptions of `wireless/devices.disabled`
+  and `network/wireguard_peers.runtime` still named `/tokens`, `/metrics`,
+  `/diagnostics`, `/batch` and `/auth/whoami`. These paths answer 404 in v4, so
+  the token mint and whoami examples and the sample Prometheus scrape config
+  failed. `docs/migration-v1-to-v2.md` and the shipped sections of
+  `docs/roadmap.md` name the 2.x and 3.x paths again. (#400)
 - **On OpenWrt main, wireguard peers follow the proto handler that leaves out a
   value wg would refuse.** Since openwrt ecd9120f04, the ucode handler of main
   leaves out a peer whose key is not a WireGuard key, and the line of a
