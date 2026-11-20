@@ -561,8 +561,12 @@ r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_pe
 [ "$(status_of "$r")" = "200" ] || fail "PATCH disabled of the peer with an escape: $(body_of "$r")"
 has_peer "$ESC_PEER" && fail "the disabled peer with an escape is still in the kernel"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45esc" -d '{"disabled":false}')
-[ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
-if ! wg_ucode_platform; then
+if wg_ucode_platform; then
+	# The handler leaves the peer out, so its key keeps no interface down and enabling it passes.
+	[ "$(status_of "$r")" = "200" ] || fail "enabling the peer that the handler leaves out expected 200, got $(status_of "$r"): $(body_of "$r")"
+	has_peer "$ESC_PEER" && fail "the platform set the enabled peer with an escape"
+else
+	[ "$(status_of "$r")" = "422" ] || fail "enabling the peer with an escape expected 422, got $(status_of "$r"): $(body_of "$r")"
 	$SSH "uci set network.uapi45esc.disabled=0; uci commit network; ifup $IFACE"
 	sleep 5
 	has_peer "$ESC_PEER" || fail "ifup did not set the re-enabled peer with an escape: $(kernel_peers)"
