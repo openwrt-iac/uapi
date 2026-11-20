@@ -360,7 +360,7 @@ const Q_LIMIT = {
 const Q_CURSOR = {
 	"name": "cursor", "in": "query", "required": false,
 	"schema": { "type": "string", "pattern": CURSOR_PATTERN },
-	"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`.",
+	"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`.",
 };
 const Q_IDEMPOTENCY_KEY = {
 	"name": "idempotency_key", "in": "query", "required": false,
@@ -527,7 +527,7 @@ function build_crud_paths(ep) {
 			"parameters": [
 				{ "name": "managed", "in": "query", "required": false,
 				  "schema": { "type": "string", "enum": ["true", "false"] },
-				  "description": "Filter by managed flag" },
+				  "description": "Filter by managed flag. Another value answers 400." },
 				Q_LIMIT, Q_CURSOR,
 			],
 			"responses": responses("get", {
@@ -1047,7 +1047,7 @@ function build_paths() {
 			"parameters": [
 				{ "name": "validate", "in": "query", "required": false,
 				  "schema": { "type": "string", "enum": ["1"] },
-				  "description": "Set to `1` to include the validation sweep. Any other value is ignored." },
+				  "description": "Set to `1` to include the validation sweep. Another value answers 400." },
 			],
 			"responses": responses("get", {
 				"200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosticsResponse" } } } },

@@ -16,6 +16,14 @@ for k in invalid_sections swept_resources skipped_for_scope; do
 	grep -q "\"$k\"" /tmp/uapi_sweep_off.json && fail "plain diagnostics leaked $k"
 done
 
+echo "--- a validate other than 1 answers 400, where 3.x ignored it ---"
+for v in 0 true ""; do
+	status=$(curl -sS -o /tmp/uapi_sweep_bad_value.json -w '%{http_code}' -H "$ADMIN" \
+		"$URL/uapi/diagnostics?validate=$v")
+	[ "$status" = "400" ] || fail "validate=$v expected 400, got $status"
+	grep -q '"bad_request"' /tmp/uapi_sweep_bad_value.json || fail "validate=$v: no bad_request"
+done
+
 echo "--- ?validate=1 sweeps and reports what it swept ---"
 status=$(curl -sS -o /tmp/uapi_sweep_on.json -w '%{http_code}' -H "$ADMIN" \
 	"$URL/uapi/diagnostics?validate=1")
