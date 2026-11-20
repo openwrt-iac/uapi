@@ -86,10 +86,10 @@ jobs:
     steps:
       # The OpenWrt series that the VM and SDK jobs run on. v4 runs on both the stable release
       # and the main snapshot, because it ships on both. Only #311 depends on the netifd of main,
-      # and it is conditional. Every other ref, tags included, runs on stable. The stable SDK is pinned by checksum in build/sdk.sha256. A
-      # snapshot has no filename to pin (the gcc version is part of it), so the main series
-      # verifies against the sha256sums published beside the tarball. Both paths live in
-      # tools/openwrt-sdk.sh.
+      # and it is conditional. Every other ref, tags included, runs on stable. The stable SDK is
+      # pinned by checksum in build/sdk.sha256. A snapshot has no filename to pin (the gcc
+      # version is part of it), so the main series verifies against the sha256sums published
+      # beside the tarball. Both paths live in tools/openwrt-sdk.sh.
       - name: Which OpenWrt series?
         id: series
         run: |
@@ -192,7 +192,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bench-run-${{ matrix.series }}
+          name: ${{ matrix.series == 'stable' && 'bench-run' || format('bench-run-{0}', matrix.series) }}
           path: bench/run-*.json
           if-no-files-found: ignore
 
