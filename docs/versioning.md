@@ -190,9 +190,10 @@ annotations beyond the OpenAPI baseline shape:
 Both annotations are enforced by `make lint-defaults`. See
 `docs/adding-a-resource.md` for the authoring rules.
 
-Source-only markers, stripped from both halves by `build/gen_openapi.uc` and
-never published (`lint-openapi-shape` fails the build if one leaks into the
-spec):
+Source-only markers, stripped from both halves by `build/gen_openapi.uc`, so
+they are not in the OpenAPI document (`lint-openapi-shape` fails the build if
+one leaks into the spec). `GET /schema/<package>/<resource>` serves them as the
+module declares them:
 
 - **`x-uapi-read-nullable`**: a read can answer null for this property, so the
   response half widens `type` and `enum` with null while the request half keeps
@@ -201,10 +202,13 @@ spec):
   half, for a value a read can return but a write refuses (a stored `mtu` below
   68, a route `table` of 0). `tests/unit/write_overlay_test.uc` ties each
   keyword to a refusal in `validate()`.
+- **`x-uapi-multiline`**: the type gate takes a newline and a carriage return in
+  this string, such as `system.notes`, and refuses them in every other curated
+  string (#276).
 
 `x-uapi-write-string` marked a write form kept while a read answered an array,
-as `ip6prefix` until 3.2.0; v4 removed it together with the last write form it
-marked (#241, #329).
+as `ip6prefix` from 3.2.0 until v4, which removed it together with the last
+write form it marked (#241, #329).
 
 ## What the request and response halves guarantee
 

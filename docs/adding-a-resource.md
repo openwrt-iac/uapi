@@ -332,6 +332,12 @@ element has no probe and fails the test. A rule that depends on another field,
 such as the pppd range of `mtu` on proto `ppp`,
 goes in `openapi_write_conditional`.
 
+The type gate refuses a newline and a carriage return in every string of
+`schema_properties`, nested ones too, because most daemons read a value as one
+line, and a newline there starts a second line that the write never showed. A
+string that holds several lines, such as `system.notes`, opts out with
+`"x-uapi-multiline": true`. The generator strips the marker from both halves.
+
 ### Rules that a stored value can fail
 
 `validate()` refuses a write whenever the section it leaves behind breaks a
