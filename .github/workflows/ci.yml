@@ -17,7 +17,7 @@ on:
     # this a patch on an old major reached its tag having never been built: the tag run is
     # the first CI it sees, and by then the tag exists.
     # `v4` rides the push trigger too, so every rebase of the branch runs the
-    # suite against the OpenWrt main snapshot (OPENWRT_SERIES below).
+    # suite against both OpenWrt series (the `series` output of lint).
     branches: [main, v4, 'release/*.x']
     tags: ['v*']
   pull_request:
@@ -39,7 +39,7 @@ permissions:
 # with no logs retained, and hours were spent proving the branches were fine. These budgets
 # are roughly 2-3x the observed maxima (lint 0.5m, unit 1.5m, integration 9.3m,
 # verify-arch-build 9.6m), with extra room for a cold SDK cache. Integration on the
-# OpenWrt main snapshot of v4 takes about 30m: every peer write restarts the
+# OpenWrt main snapshot takes about 30m: every peer write restarts the
 # wireguard interface there, and the wireguard tests wait each restart out. Package
 # there takes about 60m on a cold cache: the snapshot SDK download alone took 27m,
 # and the build of the dependencies about 30m. A PR to v4 restores the SDK that the
@@ -51,13 +51,6 @@ concurrency:
         && github.event_name != 'workflow_dispatch' }}
 
 env:
-  # v4 tracks OpenWrt main: the change it still waits for (#311) needs the netifd
-  # the next major will ship. Every other ref, tags included, tests the stable
-  # series. The stable SDK is pinned by checksum in build/sdk.sha256; a snapshot
-  # has no filename to pin (the gcc version is part of it), so the main series
-  # verifies against the sha256sums published beside the tarball. Both paths
-  # live in tools/openwrt-sdk.sh.
-  OPENWRT_SERIES: ${{ (github.ref_name == 'v4' || github.base_ref == 'v4') && 'main' || 'stable' }}
   OPENWRT_VERSION: 25.12.6
   OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.6-x86-64-ext4-combined
 
@@ -89,7 +82,18 @@ jobs:
       image: alpine:3.24
     outputs:
       package_changed: ${{ steps.package.outputs.changed }}
+      series: ${{ steps.series.outputs.list }}
     steps:
+      # The OpenWrt series that the VM and SDK jobs run on. v4 runs on both the stable release
+      # and the main snapshot, because it ships on both. Only #311 depends on the netifd of main,
+      # and it is conditional. Every other ref, tags included, runs on stable. The stable SDK is pinned by checksum in build/sdk.sha256. A
+      # snapshot has no filename to pin (the gcc version is part of it), so the main series
+      # verifies against the sha256sums published beside the tarball. Both paths live in
+      # tools/openwrt-sdk.sh.
+      - name: Which OpenWrt series?
+        id: series
+        run: |
+          echo 'list=${{ (github.ref_name == 'v4' || github.base_ref == 'v4') && '["stable","main"]' || '["stable"]' }}' >> "$GITHUB_OUTPUT"
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
@@ -127,9 +131,17 @@ jobs:
         run: make stage
 
   integration:
+    # The stable leg keeps the plain name, which the rulesets require.
+    name: ${{ matrix.series == 'stable' && 'integration' || format('integration ({0})', matrix.series) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [unit, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        series: ${{ fromJSON(needs.lint.outputs.series) }}
+    env:
+      OPENWRT_SERIES: ${{ matrix.series }}
     steps:
       - uses: actions/checkout@v7
 
@@ -180,7 +192,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bench-run
+          name: bench-run-${{ matrix.series }}
           path: bench/run-*.json
           if-no-files-found: ignore
 
@@ -212,6 +224,13 @@ jobs:
     # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
     # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        series: ${{ fromJSON(needs.lint.outputs.series) }}
+    env:
+      OPENWRT_SERIES: ${{ matrix.series }}
     steps:
       - uses: actions/checkout@v7
 
@@ -262,9 +281,16 @@ jobs:
 
   # A job apart from release-apk so that a pull request builds under the read-only token.
   package:
+    name: ${{ matrix.series == 'stable' && 'package' || format('package ({0})', matrix.series) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: [unit, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        series: ${{ fromJSON(needs.lint.outputs.series) }}
+    env:
+      OPENWRT_SERIES: ${{ matrix.series }}
     if: >-
       startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
       || needs.lint.outputs.package_changed == 'true'
@@ -358,7 +384,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: uapi-apk
+          name: ${{ matrix.series == 'stable' && 'uapi-apk' || format('uapi-apk-{0}', matrix.series) }}
           path: ${{ steps.find_apk.outputs.apk }}
 
       # SBOM (SPDX 2.3). Generated against the staged tree, with the built
@@ -371,7 +397,7 @@ jobs:
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v7
         with:
-          name: uapi-sbom
+          name: ${{ matrix.series == 'stable' && 'uapi-sbom' || format('uapi-sbom-{0}', matrix.series) }}
           path: build/sbom.spdx.json
 
       # Smoke test the built APK in a fresh VM before publishing anywhere.

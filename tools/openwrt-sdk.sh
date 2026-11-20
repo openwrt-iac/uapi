@@ -7,7 +7,7 @@
 #   tools/openwrt-sdk.sh fetch <target> [dest]   download, verify, extract into dest
 #
 # target is an OpenWrt target path, e.g. x86/64 or armsr/armv8. The series comes
-# from $OPENWRT_SERIES (stable by default, main on the v4 line) and the stable
+# from $OPENWRT_SERIES (stable by default, both in CI on the v4 line) and the stable
 # version from $OPENWRT_VERSION.
 #
 # The stable series pins the tarball by checksum in build/sdk.sha256: a version
