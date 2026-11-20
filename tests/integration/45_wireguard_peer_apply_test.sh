@@ -727,11 +727,10 @@ for want in '10.98.130.0/24' '10.98.131.9/32' 'fd00:98:aa::/64' 'fd00:98:bb::5/1
 done
 call -X DELETE "$URL/network/wireguard_peers/$ds" >/dev/null
 
-# A write refuses to change a port to 0 or a keepalive to -1, and LuCI's form takes port 0. A
-# write that leaves them as uci holds them passes, sets the rest of the peer, and leaves the kernel
-# its endpoint and keepalive. Enabling such a peer is refused, because wireguard.sh would then give
-# the value to wg.
-echo "--- v4 (#308): a stored port of 0 and an unreadable keepalive block every write of the peer ---"
+# A write refuses a port of 0 and a keepalive that reads -1, and LuCI's form takes port 0. Such a
+# stored value blocks every write of the peer, and the refused write leaves the kernel its endpoint
+# and keepalive.
+echo "--- a stored port of 0 and an unreadable keepalive block every write of the peer ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.35/32\"],
 	    \"endpoint_host\":\"198.51.100.7\",\"endpoint_port\":51820,\"persistent_keepalive\":25}")
@@ -824,8 +823,8 @@ else
 	sleep 10
 	up2 && fail "$IFACE2 came up with the tab, so wg took what the read gives as one entry"
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45tab" -d '{"disabled":true}')
-	[ "$(status_of "$r")" = "200" ] || fail "disabling the peer expected 200, got $(status_of "$r"): $(body_of "$r")"
-	$SSH "ifup $IFACE2"
+	[ "$(status_of "$r")" = "422" ] || fail "disabling a peer that stores the tab expected 422, got $(status_of "$r"): $(body_of "$r")"
+	$SSH "uci set network.uapi45tab.disabled=1; uci commit network; ifup $IFACE2"
 	n=0
 	until up2; do
 		n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the tab peer disabled"; sleep 1
@@ -834,7 +833,7 @@ fi
 call -X DELETE "$URL/network/wireguard_peers/uapi45tab" >/dev/null
 
 # wireguard.sh writes `AllowedIPs=` for a value that is not empty, and wg refuses the line when the cut
-# at `#` leaves nothing. The read gave no allowed IPs, so a write that left the peer enabled passed.
+# at `#` leaves nothing. The read gave no allowed IPs, so every write of the peer passed.
 echo "--- an allowed_ips that wg reads as an empty line reads as one empty entry, which a write refuses and wg refuses at ifup ---"
 HASH_PEER=$($SSH 'wg genkey | wg pubkey')
 $SSH "uci set network.uapi45hash=wireguard_$IFACE2; uci set network.uapi45hash.public_key='$HASH_PEER'
@@ -848,8 +847,8 @@ sleep 10
 $SSH "ubus call network.interface.$IFACE2 status" | grep -q '"up": true' \
 	&& fail "$IFACE2 came up with the empty line, so wg took what the read gives as an empty entry"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45hash" -d '{"disabled":true}')
-[ "$(status_of "$r")" = "200" ] || fail "disabling the peer expected 200, got $(status_of "$r"): $(body_of "$r")"
-$SSH "ifup $IFACE2"
+[ "$(status_of "$r")" = "422" ] || fail "disabling a peer that stores the empty line expected 422, got $(status_of "$r"): $(body_of "$r")"
+$SSH "uci set network.uapi45hash.disabled=1; uci commit network; ifup $IFACE2"
 n=0
 until $SSH "ubus call network.interface.$IFACE2 status" 2>/dev/null | grep -q '"up": true'; do
 	n=$((n + 1)); [ $n -lt 20 ] || fail "$IFACE2 did not come up with the peer disabled"; sleep 1
@@ -868,7 +867,7 @@ $SSH "uci set network.uapi45mark=wireguard_$IFACE2; uci set network.uapi45mark.p
 view=$(body_of "$(call "$URL/network/wireguard_peers/uapi45mark")")
 [ "$(printf '%s' "$view" | jq -c '.allowed_ips')" = '["+10.98.94.2/32"]' ] || fail "the marker entry read wrong: $view"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45mark" -d '{"description":"x"}')
-[ "$(status_of "$r")" = "200" ] || fail "a write that leaves the peer disabled expected 200, got $(status_of "$r"): $(body_of "$r")"
+[ "$(status_of "$r")" = "422" ] || fail "a write that leaves the peer disabled expected 422, got $(status_of "$r"): $(body_of "$r")"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/uapi45mark" -d '{"disabled":false}')
 [ "$(status_of "$r")" = "422" ] || fail "a write that enables the peer expected 422, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -qF '"field": "allowed_ips[0]"' || fail "the 422 is not on allowed_ips[0]: $(body_of "$r")"

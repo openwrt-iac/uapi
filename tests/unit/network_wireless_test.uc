@@ -448,7 +448,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 	// Another writer, such as LuCI, can switch the mode or the encryption later, so the value is
 	// refused whatever reads it now. Only a newline ends a line in the daemons' config readers.
 	t.it('refuses a newline in a key, nasid or key holder entry that a write sends', () => {
-		// A newline is refused by the default type-gate rule (#276) and again by validate().
+		// The schema check and validate_new() both refuse a newline, and a 422 keeps only the second.
 		for (let b in [ { encryption: 'psk2' }, { encryption: 'wpa2' }, { mode: 'sta', encryption: 'psk2' },
 		                { mode: 'mesh', encryption: 'sae' }, { encryption: 'none' } ])
 			t.assert_deep_equal(codes({ ...b, key: 'abcdefgh\nssid2="x"' }, 'key'),
@@ -469,7 +469,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(codes({ nasid: bytes(1024) }, 'nasid'), []);
 		t.assert_deep_equal(codes({ nasid: bytes(1025) }, 'nasid'), [ 'out_of_range' ]);
 		t.assert_deep_equal(codes({ nasid: 'é' + bytes(1023) }, 'nasid'), [ 'out_of_range' ]);
-		// The newline is refused by the default type-gate rule (#276) on top of the length checks.
+		// The schema check and validate_new() both refuse the newline, and a 422 keeps only the second.
 		t.assert_deep_equal(codes({ nasid: bytes(1025) + '\n' }, 'nasid'),
 		                    [ 'invalid_format', 'out_of_range', 'invalid_format' ]);
 		for (let enc in [ 'psk2', 'sae', 'wpa2' ]) {
@@ -578,8 +578,10 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		c = stored({ ssid: "Bob's" });
 		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'mesh' }).body.errors, (e) => e.field), [ 'ssid' ]);
 		t.assert_equal(c._state.uci.wireless.w1.mode, 'ap');
+		// A list reads as one, which the string schema of ssid refuses as well.
 		c = stored({ mode: 'monitor', ssid: [ 'home', "Bob's" ], disabled: '1' });
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'ssid' ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'ssid', 'invalid_type' ], [ 'ssid', 'invalid_format' ] ]);
 	});
 
 	// LuCI's Enable writes only disabled=0, so a value stored on a disabled SSID becomes live later.
@@ -677,8 +679,10 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(length(h().sweep(c)), 1);
 		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
 		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'nasid' ]);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'nasid' ]);
+		// The list reads as one, which the string schema of nasid refuses as well.
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'nasid', 'invalid_type' ], [ 'nasid', 'invalid_format' ] ]);
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'nasid', 'invalid_type' ], [ 'nasid', 'invalid_format' ] ]);
 		let eight = [ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'x\nssid2="x"' ];
 		t.assert_deep_equal(map(h().patch(stored({ disabled: '1', key: eight }), CTX, 'w1', { disabled: false }).body.errors,
 		                        (e) => [ e.field, e.code ]), [ [ 'key', 'invalid_format' ] ]);
@@ -860,7 +864,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'out_of_range' ], [ m, enc, k ]);
 				for (let k in [ bytes(8) + '\t', bytes(8) + '\x7f' ])
 					t.assert_deep_equal(codes({ mode: m, encryption: enc, key: k }, 'key'), [ 'invalid_format' ], [ m, enc, k ]);
-				// A carriage return is refused by the default type-gate rule (#276) and again by validate().
+				// The schema check refuses a carriage return, and a 422 keeps only the error of validate_new().
 				t.assert_deep_equal(codes({ mode: m, encryption: enc, key: bytes(8) + '\r' }, 'key'),
 				                    [ 'invalid_format', 'invalid_format' ], [ m, enc ]);
 				for (let k in [ bytes(8), bytes(63), 'pässwörd', 'a b c d e' ])
@@ -940,9 +944,8 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(live({ ...FT, ft_psk_generate_local: true, r0_key_lifetime: -1 }, 'r0_key_lifetime'), [ false ]);
 	});
 
-	// The form of mobility_domain and r1_key_holder was a schema pattern, which a PUT or a JSON Patch
-	// checked on a stored value that it kept, and which hid a newline in the sweep. v4 (#308): the
-	// stored other form blocks every write of the section meanwhile.
+	// The form of mobility_domain and r1_key_holder is a rule of validate_new() rather than a schema
+	// pattern, so a newline does not hide it, and the sweep marks each error live or not.
 	t.it('a write is refused for a stored mobility_domain or r1_key_holder in another form', () => {
 		let c = stored({ encryption: 'sae', mobility_domain: 'xyz', r1_key_holder: 'xyz', disabled: '1' });
 		let body = read_back(c);
@@ -957,8 +960,13 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		                        (e) => e.field + ' ' + e.code)),
 		                    sort([ 'mobility_domain invalid_format', 'r1_key_holder invalid_format' ]));
 		c = stored({ mobility_domain: '4f5\n', r1_key_holder: '02aabbccdde\n' });
-		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code ]),
-		                    [ [ 'mobility_domain', 'invalid_format' ], [ 'r1_key_holder', 'invalid_format' ] ]);
+		t.assert_deep_equal(map(h().sweep(c)[0].errors, (e) => [ e.field, e.code, e.live ]),
+		                    [ [ 'mobility_domain', 'invalid_format', false ], [ 'mobility_domain', 'invalid_format', false ],
+		                      [ 'r1_key_holder', 'invalid_format', false ], [ 'r1_key_holder', 'invalid_format', false ] ]);
+		let r = h().patch(c, CTX, 'w1', { ieee80211r: true, mobility_domain: '4f5\n' });
+		t.assert_deep_equal(map(filter(r.body.errors, (e) => e.field == 'mobility_domain'), (e) => e.message),
+		                    [ 'must not contain a newline: wifi-scripts writes it into the daemon\'s config as one line',
+		                      'must be 4 hex digits: hostapd refuses its whole config for another mobility domain' ]);
 	});
 });
 
@@ -1003,9 +1011,10 @@ t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
 	});
 
 	// A 6 GHz radio on channel 233 comes up, and so does a radio with a power above 30, which iw
-	// clamps. Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc.
-	// v4 (#308): the stored values block every write of the radio meanwhile.
-	t.it('refuses a write while the radio stores a value outside the write range, unless wifi-scripts stops it', () => {
+	// clamps. Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc. A
+	// stored value outside the write range blocks every write of the radio, whether it stops the
+	// radio or not.
+	t.it('refuses a write while the radio stores a value outside the write range', () => {
 		t.assert_equal(h.patch(radio({ band: '6g', channel: '233', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 200);
 		let r = h.patch(radio({ txpower: '40', disabled: '1' }), ctx, 'radio0', { disabled: false });
 		t.assert_equal(r.status, 422, r.body);
@@ -1078,7 +1087,9 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 			let c = box({ disabled: '1' }, { w1: ssid({ device: p, disabled: '1', key: INJECTED }) });
 			let r = ifaces.patch(c, ctx, 'w1', { disabled: false });
 			t.assert_equal(r.status, 422, p);
-			t.assert_deep_equal(fields(r), [ [ 'key', 'invalid_format' ] ], p);
+			// A list reads as one, which the string schema of device refuses as well.
+			t.assert_deep_equal(fields(r), (type(p) == 'array') ? [ [ 'device', 'invalid_type' ], [ 'key', 'invalid_format' ] ]
+			                                                    : [ [ 'key', 'invalid_format' ] ], p);
 		}
 	});
 

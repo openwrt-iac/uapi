@@ -499,10 +499,10 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 ### Finding sections a write would reject (`?validate=1`)
 
 `GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section
-of every resource the token may read is run through the same path a write takes,
-and the ones that would be rejected are reported with the reason, together with
-the ones that hold a value that a write cannot add. A `validate` other than `1`
-answers 400 `bad_request`.
+of every resource the token may read is run through the same checks as a write,
+and each section that holds an error is reported with the reason. Each write of
+such a section answers `422` until it fixes each error, or the change goes
+through `/raw`. A `validate` other than `1` answers 400 `bad_request`.
 
 ```json
 {
@@ -523,27 +523,19 @@ is already broken on the router: the rule above is already matching a whole
 protocol rather than a port. The sweep is the first time anyone is told.
 
 One finding is not a break. An interface on a proto that uapi does not model,
-such as
-the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`, because a
-PUT of
-it is refused: a PUT replaces the section and would delete the options of the
-tunnel.
-The tunnel itself works, and a PATCH that leaves `proto` out is accepted.
+such as the `6in4` that LuCI writes, is listed with `proto` and `not_in_enum`,
+because uapi does not write such an interface: every write of it is refused, as
+LuCI does not edit an interface whose protocol it does not support. The tunnel
+itself works, and `/raw` changes it.
 
 A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break either,
-until the
-daemon reads the value. Another writer can store a value that such a rule
-refuses, and
-the sweep lists it whether the daemon reads it yet or not: the section can be
-disabled,
-its mode can leave the field unused, or the radio of an SSID can be disabled. A
-write is
-refused for such a value only when it
-adds the error, for example when it changes the field or enables the section.
-The sweep
-lists the section because another writer, such as LuCI, can enable it later.
-Each error of such
-a rule has `live`, which is `false` when the daemon does not read the value yet.
+until the daemon reads the value. Another writer can store a value that such a
+rule refuses, and the sweep lists it whether the daemon reads it yet or not: the
+section can be disabled, its mode can leave the field unused, or the radio of an
+SSID can be disabled. Each error of such a rule has `live`, which is `false`
+when the daemon does not read the value yet. A write of the section is refused
+for the error either way, because another writer, such as LuCI, can enable the
+section later.
 
 Three things worth knowing:
 

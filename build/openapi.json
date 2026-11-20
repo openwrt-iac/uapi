@@ -24524,7 +24524,7 @@
 		"/uapi/diagnostics": {
 			"get": {
 				"summary": "Operational snapshot (lock state, uptime, loaded resources)",
-				"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports the ones a write would reject, and the ones that hold a value that a write cannot add, also where the daemon does not read it yet. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
+				"description": "Scope: uapi:diagnostics:ro (or *:ro). With `?validate=1` the response also carries the validation sweep, which walks every section the token may read and reports each one that holds an error, also where the daemon does not read the value yet. Each write of such a section answers 422 until it fixes each error. The sweep is opt-in because it reads the whole configuration and this endpoint is normally polled.",
 				"parameters": [
 					{
 						"name": "validate",
@@ -25547,7 +25547,7 @@
 					},
 					"invalid_sections": {
 						"type": "array",
-						"description": "Sections a write would reject today, and sections that hold a value that a write cannot add. Present only with ?validate=1.",
+						"description": "Sections that hold an error. Each write of such a section answers 422 until it fixes each error. Present only with ?validate=1.",
 						"items": {
 							"type": "object",
 							"required": [
@@ -25606,7 +25606,7 @@
 											},
 											"live": {
 												"type": "boolean",
-												"description": "Present on an error of a rule that a write applies only when it adds the error. false means that the daemon does not read the value yet, for example because the section is disabled."
+												"description": "Present on an error of a rule on what a daemon reads. false means that the daemon does not read the value yet, for example because the section is disabled. A write is refused for the error either way."
 											}
 										}
 									}
@@ -28093,7 +28093,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads. A write that switches an enabled interface to wireguard answers 422 while a stored `network/wireguard_peers` of the interface holds a value for which a peer write refuses to enable the peer, such as one that makes wg refuse the whole interface."
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes. A write takes only the protos that the request schema lists, so it answers 422 for an interface on another proto, also when it leaves `proto` out: /raw changes such an interface. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface."
 					},
 					"dns": {
 						"type": [
@@ -28163,7 +28163,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer."
+						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface."
 					},
 					"ip4table": {
 						"type": [
@@ -28357,7 +28357,7 @@
 						],
 						"minimum": -1,
 						"maximum": 65535,
-						"description": "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write of -1 answers 422. A PATCH that switches an enabled interface to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it."
+						"description": "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it."
 					},
 					"nohostroute": {
 						"type": "boolean",
@@ -28737,7 +28737,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads. A write that switches an enabled interface to wireguard answers 422 while a stored `network/wireguard_peers` of the interface holds a value for which a peer write refuses to enable the peer, such as one that makes wg refuse the whole interface.",
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes. A write takes only the protos that the request schema lists, so it answers 422 for an interface on another proto, also when it leaves `proto` out: /raw changes such an interface. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface.",
 						"enum": [
 							"static",
 							"dhcp",
@@ -28817,7 +28817,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer."
+						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface."
 					},
 					"ip4table": {
 						"type": [
@@ -28939,7 +28939,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write of -1 answers 422. A PATCH that switches an enabled interface to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it."
+						"description": "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it."
 					},
 					"nohostroute": {
 						"type": "boolean",
@@ -30244,7 +30244,7 @@
 						],
 						"minimum": -2147483648,
 						"maximum": 2147483647,
-						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and a write may send it back unchanged."
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is, and a write answers 422 while the rule holds one."
 					},
 					"tos": {
 						"type": [
@@ -30260,7 +30260,7 @@
 							"string",
 							"null"
 						],
-						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write may send back unchanged a form that it refuses, such as `1000-1005x`, which netifd reads as 1000-1005."
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write answers 422 while the rule holds a form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005."
 					},
 					"ipproto": {
 						"type": [
@@ -30269,7 +30269,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write may send one back unchanged."
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write answers 422 while the rule holds one."
 					},
 					"sport": {
 						"type": [
@@ -30433,7 +30433,7 @@
 						],
 						"minimum": 0,
 						"maximum": 32,
-						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and a write may send it back unchanged."
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is, and a write answers 422 while the rule holds one."
 					},
 					"tos": {
 						"type": [
@@ -30460,7 +30460,7 @@
 							"string",
 							"null"
 						],
-						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write may send back unchanged a form that it refuses, such as `1000-1005x`, which netifd reads as 1000-1005.",
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write answers 422 while the rule holds a form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005.",
 						"pattern": "^[0-9]{1,10}(-[0-9]{1,10})?$"
 					},
 					"ipproto": {
@@ -30470,7 +30470,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write may send one back unchanged.",
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write answers 422 while the rule holds one.",
 						"maximum": 255
 					},
 					"sport": {
@@ -30848,14 +30848,14 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves must be an address or CIDR, on a disabled peer too. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
 					},
 					"endpoint_host": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone"
+						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write refuses a host with a backslash, a newline, a `#`, or a colon outside an IPv6 address, which can end in a %zone, on a disabled peer too."
 					},
 					"endpoint_port": {
 						"type": [
@@ -30864,7 +30864,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -30873,7 +30873,7 @@
 						],
 						"minimum": -1,
 						"maximum": 65535,
-						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write answers 422 while the keepalive reads -1, on a disabled peer too."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",
@@ -30996,14 +30996,14 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves on an enabled peer must be an address or CIDR, and a write that leaves the peer disabled checks only the entries that it sends. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry wherever it leaves the peer enabled, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
+						"description": "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves must be an address or CIDR, on a disabled peer too. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one."
 					},
 					"endpoint_host": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write that changes the host, or enables the peer, refuses a backslash, a newline, a `#`, and a colon outside an IPv6 address, which can end in a %zone"
+						"description": "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write refuses a host with a backslash, a newline, a `#`, or a colon outside an IPv6 address, which can end in a %zone, on a disabled peer too."
 					},
 					"endpoint_port": {
 						"type": [
@@ -31012,7 +31012,7 @@
 						],
 						"minimum": 1,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write that changes the port to 0 answers 422, and so does a write that sends back the 0 of a name that does not resolve, because it would store port 0 in its place. A write that leaves a stored port as it is passes, unless it enables the peer, or changes the host or the key of an enabled peer, while the port reads 0."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -31021,7 +31021,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write that changes the keepalive to -1 answers 422. A write that leaves such a stored value as it is passes, unless it enables the peer, and a PUT that sends the -1 back stores -1, which wg refuses as it refuses the stored value."
+						"description": "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write answers 422 while the keepalive reads -1, on a disabled peer too."
 					},
 					"route_allowed_ips": {
 						"type": "boolean",
@@ -31561,14 +31561,14 @@
 							"mesh",
 							null
 						],
-						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up."
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write answers 422 while the section holds it."
 					},
 					"ssid": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to"
+						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote"
 					},
 					"encryption": {
 						"type": "string",
@@ -31705,21 +31705,21 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it with 802.11r, for example by setting the SSID up or turning ieee80211r on"
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r"
 					},
 					"nasid": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. A write that leaves nasid as it is is refused for a problem that nasid already had only when it sets the SSID up or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma"
 					},
 					"reassociation_deadline": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"description": "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write that leaves a stored value as it is is refused for it only when it sets the SSID up or moves it into one of these modes"
+						"description": "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write refuses such a value also on a disabled SSID or in another mode"
 					},
 					"r0_key_lifetime": {
 						"type": [
@@ -31733,7 +31733,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ft_psk_generate_local off"
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it"
 					},
 					"pmk_r1_push": {
 						"type": "boolean",
@@ -31808,7 +31808,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it sets the SSID up or changes its mode or encryption"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -31869,14 +31869,14 @@
 							"mesh",
 							null
 						],
-						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up."
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write answers 422 while the section holds it."
 					},
 					"ssid": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to",
+						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote",
 						"maxLength": 32
 					},
 					"encryption": {
@@ -32014,7 +32014,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it with 802.11r, for example by setting the SSID up or turning ieee80211r on",
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r",
 						"pattern": "^[0-9A-Fa-f]{4}$"
 					},
 					"nasid": {
@@ -32022,7 +32022,7 @@
 							"string",
 							"null"
 						],
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. A write that leaves nasid as it is is refused for a problem that nasid already had only when it sets the SSID up or changes its mode, encryption or ieee80211r. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma",
 						"maxLength": 1024
 					},
 					"reassociation_deadline": {
@@ -32030,7 +32030,7 @@
 							"integer",
 							"null"
 						],
-						"description": "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write that leaves a stored value as it is is refused for it only when it sets the SSID up or moves it into one of these modes",
+						"description": "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write refuses such a value also on a disabled SSID or in another mode",
 						"minimum": 1000,
 						"maximum": 65535
 					},
@@ -32047,7 +32047,7 @@
 							"string",
 							"null"
 						],
-						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, so a write that leaves a stored value as it is is refused for its form only when it makes hostapd read it, for example by setting the SSID up or turning ft_psk_generate_local off",
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it",
 						"pattern": "^[0-9A-Fa-f]{12}$"
 					},
 					"pmk_r1_push": {
@@ -32058,7 +32058,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it sets the SSID up or changes its mode or encryption"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -40753,7 +40753,7 @@
 				}
 			},
 			"ValidationFailed": {
-				"description": "Request body failed validation (per-field errors in `errors[]`)",
+				"description": "Request body failed validation (per-field errors in `errors[]`). A write of a uci section is checked as the section that it leaves, so a stored value that breaks a rule fails it too, until a write replaces the value or the change goes through `/raw`.",
 				"content": {
 					"application/json": {
 						"schema": {

@@ -148,9 +148,7 @@ function validate(json, conn) {
 }
 
 // LuCI's form takes any entry, and dnsmasq does not start on an address option in which an address
-// is followed by a second option, so uapi refuses here what LuCI stores. LuCI and 3.1.0 can store
-// such an entry, so a write that leaves the list as it is still passes: see new_errors() in the
-// handler.
+// is followed by a second option, so uapi refuses here what LuCI and 3.1.0 can store.
 // dnsmasq.init writes no option of an ignored section. It also skips a section whose interface has
 // no device or is not static, which netifd decides at the reload, and uapi does not model that.
 function validate_new(json) {

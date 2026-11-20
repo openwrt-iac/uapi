@@ -271,11 +271,13 @@ PATCH of what uci holds answer `409 conflict` when another writer deleted the
 section during the request, which fails when the commit replays no check of the
 section.
 
-A sixth property (3.3.0+), in `tests/unit/handler_test.uc`, guards what
-`new_errors()` assumes: **no message of `validate_new()` quotes a value of the
-section.** For each seed of a resource with `validate_new()`, it puts a probe
-into one field at a time, over the seed, the seed with each field null, and the
-seed with each value of each enum and boolean field. A probe is a marker as a
+A sixth property (3.3.0+), in `tests/unit/handler_test.uc`, guards the sweep,
+which runs `validate_new()` over the secrets that a read masks and gives its
+messages to a caller that holds only `:ro`: **no message of `validate_new()`
+quotes a value of the section.** For each seed of a resource with
+`validate_new()`, it puts a probe into one field at a time, over the seed, the
+seed with each field null, and the seed with each value of each enum and boolean
+field. A probe is a marker as a
 plain string, as a string with the characters that the rules refuse, as one of
 64 bytes and one over 1024 bytes, or as a list of one of these, or it is a
 number that a rule refuses: two out of every range, 0 and -1. A number holds no

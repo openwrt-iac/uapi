@@ -727,7 +727,7 @@ t.describe('network.interfaces proto scope', () => {
 		for (let k in [ 'ipaddr', 'netmask', 'addresses', 'private_key' ])
 			t.assert_false(exists(u, k), k);
 	});
-	t.it('on a proto uapi does not model, reads what uci stores and refuses the proto only where a write names it', () => {
+	t.it('on a proto uapi does not model, reads what uci stores and refuses the proto in every write', () => {
 		let v = interfaces.fromUci({ '.name': 'henet', proto: '6in4', ipaddr: '192.0.2.1', ip6addr: '2001:db8::2/64',
 			ip6prefix: '2001:db8:1::/48', nohostroute: '1', metric: '3' });
 		t.assert_equal(v.ipaddr, '192.0.2.1');
@@ -745,9 +745,9 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_equal(u.nohostroute, '1');
 		t.assert_deep_equal(codes(interfaces.validate({ proto: '6in4', broadcast_flag: true }, null), 'broadcast_flag'), [ 'conflict' ]);
 		t.assert_deep_equal(codes(interfaces.validate(body, null, null, body), 'proto'), [ 'not_in_enum' ]);
-		t.assert_deep_equal(codes(interfaces.validate(body, null, 'henet', { mtu: 1400 }), 'proto'), []);
+		t.assert_deep_equal(codes(interfaces.validate(body, null, 'henet', { mtu: 1400 }), 'proto'), [ 'not_in_enum' ]);
 	});
-	t.it('refuses a PUT of a 6in4 read, and a PATCH of either kind keeps the options of its handler', () => {
+	t.it('refuses a PUT of a 6in4 read and a PATCH of either kind, and keeps the options of its handler', () => {
 		let ifh = handler.make(interfaces, {
 			tx: {
 				acquire: function() { return {}; }, release: function() {},
@@ -766,12 +766,14 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_deep_equal(map(put.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ]);
 		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
 
-		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
-		t.assert_equal(c._state.uci.network.henet.mtu, '1400');
+		let r = ifh.patch(c, ctx, 'henet', { mtu: 1400 });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field + ':' + e.code), [ 'proto:not_in_enum' ]);
 		t.assert_equal(ifh.patch(c, { ...ctx, json_patch: true }, 'henet',
-			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 200);
-		t.assert_equal(c._state.uci.network.henet.mtu, '1380');
+			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 422);
+		t.assert_equal(c._state.uci.network.henet.mtu, null);
 		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
+		t.assert_equal(c._state.uci.network.henet.ip6prefix, '2001:db8:46::/48');
 	});
 	t.it('checks only what the request named, and never the read-only twins', () => {
 		let merged = { proto: 'dhcp', ipaddr: '10.0.0.1', ipaddrs: [ '10.0.0.1/24' ], netmask: 'junk', has_private_key: true };
@@ -1355,10 +1357,10 @@ t.describe('network.interfaces listen_port', () => {
 		let merged = { ...wg, proto: 'dhcp', listen_port: -1 };
 		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { proto: 'dhcp' }), 'listen_port'), []);
 	});
-	t.it('refuses -1 only in a request that sends it, so a PATCH that leaves a stored name passes', () => {
+	t.it('refuses a stored -1 in a PATCH that leaves it', () => {
 		let merged = { ...wg, listen_port: -1 };
-		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { mtu: 1400 }), 'listen_port'), []);
-		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { disabled: true }), 'listen_port'), []);
+		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', { mtu: 1400 }), 'listen_port'), [ 'out_of_range' ]);
+		t.assert_deep_equal(field_codes(interfaces.validate({ ...merged, disabled: true }, null, 'w', { disabled: true }), 'listen_port'), [ 'out_of_range' ]);
 		t.assert_deep_equal(field_codes(interfaces.validate(merged, null, 'w', merged), 'listen_port'), [ 'out_of_range' ]);
 	});
 });

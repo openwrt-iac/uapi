@@ -263,19 +263,18 @@ function validate(json, conn, id, delta, partial) {
 
 	values.require_present(errs, json, "proto");
 
-	// Only what the request named: a PATCH that switches proto still carries the old proto's
-	// fields in its merged view, and toUci drops them. The read-only twins never write, and an
-	// empty value asks for nothing, as a module that writes `cond ? [...] : []` sends.
-	let named = delta ?? json;
 	// Here rather than as an enum in schema_properties, which the Response would then declare
-	// although a read answers any proto that uci stores. Only a request that names the proto is
-	// refused, so a PATCH of either kind that leaves it out keeps the options of the handler,
-	// which toUci cannot emit. The sweep passes the read as delta and still lists the section,
-	// because a PUT of it is refused.
-	if (named.proto != null && type(json.proto) == "string" && !VALID_PROTOS[json.proto])
+	// although a read answers any proto that uci stores. LuCI does not edit an interface whose
+	// protocol it does not support either.
+	if (type(json.proto) == "string" && !VALID_PROTOS[json.proto])
 		push(errs, { field: "proto", code: "not_in_enum",
-		             message: sprintf("must be one of %s: uapi does not write proto %s. A PATCH that leaves proto out keeps the options that its handler reads",
+		             message: sprintf("must be one of %s: uapi does not write proto %s. Change such an interface through /raw",
 		                              join(", ", keys(VALID_PROTOS)), json.proto) });
+	// Only what the request named, which is not what the write leaves: a PATCH that switches proto
+	// still carries the old proto's fields in its merged view, and the write drops them. The
+	// read-only twins never write, and an empty value asks for nothing, as a module that writes
+	// `cond ? [...] : []` sends.
+	let named = delta ?? json;
 	if (type(json.proto) == "string")
 		for (let field, v in named) {
 			if (v == null || v === "" || (type(v) == "array" && length(v) == 0)
@@ -392,27 +391,22 @@ function validate(json, conn, id, delta, partial) {
 	// conn still holds the section as it was, because validation runs before the write is staged.
 	// A name that the server generates has no stored options and no peers.
 	let name = id ?? json.id;
-	let goes_live = false, enabling = false, old = null;
-	if (json.proto == "wireguard" && json.disabled !== true && conn != null && name != null) {
-		old = conn.uci_get(PKG, name);
-		goes_live = old?.proto != "wireguard" || strict_bool(old.disabled);
-		enabling = old?.proto == "wireguard";
-	}
+	let old = (json.proto == "wireguard" && conn != null && name != null) ? conn.uci_get(PKG, name) : null;
+	let enabling = old?.proto == "wireguard";
+	let goes_live = json.proto == "wireguard" && json.disabled !== true && conn != null && name != null
+	                && (!enabling || strict_bool(old.disabled));
 	// The schema allows -1 because a read reports a port name that /etc/services does not resolve
-	// as -1. A request that sends it is refused, so a PUT of the read is refused rather than store
-	// -1, and so is a write that brings up the interface with a value that its read shows. A PATCH
-	// that leaves the stored name on a live or disabled interface passes.
-	if (ok("listen_port") && (named.listen_port === -1 || (goes_live && json.listen_port === -1)))
+	// as -1.
+	if (ok("listen_port") && json.listen_port === -1)
 		push(errs, { field: "listen_port", code: "out_of_range",
 		             message: "must be from 0 to 65535: -1 is how a port name that /etc/services does not resolve reads, and wg cannot bring the interface up with it" });
 	// A PATCH keeps an option that it leaves out, and the read of a proto without listen_port hides
-	// it, so the check above cannot see a hand-written value that a switch brings up. LuCI saves such
-	// a switch and refuses the value at the next save of its wireguard form: uapi refuses the switch,
-	// which is the write that makes wg fail.
-	if (partial && goes_live && !exists(json, "listen_port") && !exists(named, "listen_port")
+	// it, so the check above cannot see a hand-written value that a switch to wireguard keeps. LuCI
+	// saves such a switch and refuses the value at the next save of its wireguard form.
+	if (partial && old != null && !exists(json, "listen_port") && !exists(named, "listen_port")
 	    && values.service_port(old.listen_port, () => fs.readfile("/etc/services"), -1) === -1)
 		push(errs, { field: "listen_port", code: "conflict",
-		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null, or switch with disabled true and send a port or null before enabling the interface" });
+		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
 	    && !is_valid_ipv6_cidr(json.reqprefix))
@@ -516,7 +510,7 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
-		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes, while a write takes only the protos that the request schema lists. On another proto, a PATCH that leaves `proto` out keeps the options that its handler reads. A write that switches an enabled interface to wireguard answers 422 while a stored `network/wireguard_peers` of the interface holds a value for which a peer write refuses to enable the peer, such as one that makes wg refuse the whole interface." },
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes. A write takes only the protos that the request schema lists, so it answers 422 for an interface on another proto, also when it leaves `proto` out: /raw changes such an interface. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
 		device:    { type: ["string", "null"],
@@ -554,13 +548,13 @@ return {
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
-		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer." },
+		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface." },
 		addresses: { type: ["array", "null"], items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it." },
 		has_private_key: { type: "boolean", readOnly: true },
 		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
-		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write of -1 answers 422. A PATCH that switches an enabled interface to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },
+		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the implicit host-route for wireguard endpoint" },
 		ip4table:     { type: ["string", "null"],

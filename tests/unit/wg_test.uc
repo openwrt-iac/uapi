@@ -712,10 +712,10 @@ t.describe('a peer write on an up interface, against logging wg and ip', () => {
 	                                  a: peer({ public_key: substr(PK, 0, 43) + '\\075', allowed_ips: [ '10.0.0.2/32' ] }),
 	                                  b: peer({ public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] }) } });
 
-	// The kernel holds the peer under the key that wireguard.sh gave wg. v4 (#308): LuCI's
-	// model, the stored escape blocks the PATCH, which answers 422 and changes nothing in the
-	// kernel; the DELETE path does not validate, so it removes the peer and the key wg read.
-	t.it('disables and deletes a peer whose stored key holds an escape, and removes the key that wg read', () => {
+	// The kernel holds the peer under the key that wireguard.sh gave wg. The stored escape blocks
+	// the PATCH, which changes nothing in the kernel, and a DELETE, which does not validate,
+	// removes the peer and the key that wg read.
+	t.it('refuses to disable a peer whose stored key holds an escape, and deletes it with the key that wg read', () => {
 		let r = peer_write(escaped(), "patch(c, " + CTX + ", 'a', { disabled: true })", false);
 		t.assert_equal(r.result, '422 validation_failed');
 		t.assert_deep_equal(filter(r.commands, (l) => substr(l, 0, 3) == 'wg|'), []);
