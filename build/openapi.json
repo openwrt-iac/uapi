@@ -389,7 +389,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -410,7 +410,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -1059,7 +1059,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -1080,7 +1080,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -1729,7 +1729,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -1750,7 +1750,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -2399,7 +2399,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -2420,7 +2420,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -3069,7 +3069,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -3090,7 +3090,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -3921,7 +3921,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -3942,7 +3942,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -4603,7 +4603,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -4624,7 +4624,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -5285,7 +5285,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -5306,7 +5306,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -5955,7 +5955,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -5976,7 +5976,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -6625,7 +6625,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -6646,7 +6646,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -7307,7 +7307,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -7328,7 +7328,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -7985,7 +7985,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -8117,7 +8117,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -8138,7 +8138,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -8787,7 +8787,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -8808,7 +8808,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -9457,7 +9457,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -9478,7 +9478,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -10135,7 +10135,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					},
 					{
 						"name": "family",
@@ -10289,7 +10289,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -10310,7 +10310,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -11505,7 +11505,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -11526,7 +11526,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -12175,7 +12175,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -12196,7 +12196,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -12845,7 +12845,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -12866,7 +12866,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -13515,7 +13515,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -13536,7 +13536,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -14731,7 +14731,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -14752,7 +14752,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -15401,7 +15401,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -15422,7 +15422,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -16071,7 +16071,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -16092,7 +16092,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -16741,7 +16741,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -16762,7 +16762,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -17411,7 +17411,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -17432,7 +17432,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -18991,7 +18991,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -19012,7 +19012,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -19661,7 +19661,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -19682,7 +19682,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -20331,7 +20331,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -20352,7 +20352,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -21001,7 +21001,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -21022,7 +21022,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -21853,7 +21853,7 @@
 								"false"
 							]
 						},
-						"description": "Filter by managed flag"
+						"description": "Filter by managed flag. Another value answers 400."
 					},
 					{
 						"name": "limit",
@@ -21874,7 +21874,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
 					}
 				],
 				"responses": {
@@ -24536,7 +24536,7 @@
 								"1"
 							]
 						},
-						"description": "Set to `1` to include the validation sweep. Any other value is ignored."
+						"description": "Set to `1` to include the validation sweep. Another value answers 400."
 					}
 				],
 				"responses": {

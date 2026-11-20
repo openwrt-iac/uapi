@@ -208,3 +208,12 @@ The spec `default` of five fields changes with the read: `system.log_remote` is
 `mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` has none. A
 client that sends the spec default for a field that its user left out now sends
 the new one.
+
+## A query parameter value outside its declared set answers 400
+
+3.x ignored a value that a query parameter does not declare. A `managed` other
+than `true` or `false` on a curated list listed every section, a `validate`
+other than `1` on `/uapi/diagnostics` skipped the sweep, and an empty `cursor`
+read the first page. v4 answers 400 `bad_request` for `managed` and `validate`,
+and 400 `invalid_cursor` for the empty cursor. Send only the values that the
+spec declares, and leave out a parameter instead of sending it empty.
