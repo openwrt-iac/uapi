@@ -412,9 +412,7 @@ function admits_null(s) {
 }
 
 // Kept fields follow nullable_properties in build/gen_openapi.uc, and each openapi_patch_non_null field is listed here.
-const PATCH_NULL_KEPT = {
-	"WirelessInterfacesPatch": { "mode": "validate() refuses a null mode with 422" },
-};
+const PATCH_NULL_KEPT = {};
 
 let null_fields = 0;
 function check_null(where, props, req_props, keep, request) {

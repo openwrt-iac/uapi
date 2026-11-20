@@ -244,22 +244,16 @@ that sets the field to null, and compares the section with the section after an
 empty PATCH. Where the Patch takes the null, the PATCH must answer 422, or
 remove each stored option that `toUci` leaves out for the null and write nothing
 else. A field that keeps its Request type, by the rule of `nullable_properties`
-in `build/gen_openapi.uc`, must answer 422 or remove nothing.
-`mwan3/interfaces.family` is the one exception: the Request requires it, but its
-`validate()` does not, so a null removes it. The test lists it and fails when
-that changes. Four seeds store an option for this property only, because no seed
-stored it in a form whose null the server takes: `firewall/nat.target` as
-`ACCEPT` without `snat_ip`, the `match.family` of a rule and of a redirect, and
-`nohostroute` of a wireguard interface. Validated three times. An openvpn
-`merge_for_patch` that skips a null fails it with `{"enabled": null} left
-enabled: "1"`. Without `mode` in `openapi_patch_non_null` of
-`wireless/interfaces`, `{"mode": null}` wrote `mode: "sta" -> "ap"`, and
-`lint-openapi-shape` and `tests/merge_patch_bodies.py` failed too. Since
-`validate()` refuses a null `mode`, the property takes the 422 there, and only
-the other two fail. An empty exception list fails it on
-`mwan3/interfaces.family`. `lint-openapi-shape` and
-`tests/merge_patch_bodies.py` send no null to the server: the lint reads only
-the spec, and the Python check runs no ucode.
+in `build/gen_openapi.uc`, must answer 422 or remove nothing. Four seeds store
+an option for this property only, because no seed stored it in a form whose null
+the server takes: `firewall/nat.target` as `ACCEPT` without `snat_ip`, the
+`match.family` of a rule and of a redirect, and `nohostroute` of a wireguard
+interface. Validated twice. An openvpn `merge_for_patch` that skips a null fails
+it with `{"enabled": null} left enabled: "1"`. A `wireless/interfaces` `toUci`
+that stores `ap` for a null mode fails it with `{"mode": null} wrote mode:
+"sta" -> "ap"`. `lint-openapi-shape` and `tests/merge_patch_bodies.py` send no
+null to the server: the lint reads only the spec, and the Python check runs no
+ucode.
 
 A fifth property (3.3.0+), in `tests/unit/bus_test.uc`, runs each seed through
 the real bus and the fake libuci: **a PUT of the read commits nothing, reloads

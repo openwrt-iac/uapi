@@ -325,23 +325,12 @@ null does not remove them:
 - A write-only secret, such as `wireless/interfaces.key`. A null keeps the
   stored secret.
 - A field that `<Name>Request` requires, such as `network/interfaces.proto` or
-  the `match` of
-  `firewall/redirects`. The merged section needs it, so the server refuses its
-  null with 422.
-  The one exception is `mwan3/interfaces.family`, which `validate()` does not
-  require, so a null
-  removes it. Some of these fields take null in `<Name>Request`, because a read
-  can return null
-  for them, such as `firewall/rules.target` and `mwan3/interfaces.family`. The
-  merge-patch body
-  takes that null too.
-- `wireless/interfaces.mode`. The server refuses its null with 422, because
-  wifi-scripts sets up
-  no interface without a mode, and storing `ap` would turn a station into an
-  access point. A
-  create or a PUT that leaves `mode` out stores `ap`. The module names such a
-  field in
-  `openapi_patch_non_null`.
+  the `match` of `firewall/redirects`. The merged section needs it, so the
+  server refuses its null with 422. Some of these fields take null in
+  `<Name>Request`, because a read can return null for them, such as
+  `firewall/rules.target`. The merge-patch body takes that null too.
+- A field that the module names in `openapi_patch_non_null`, because
+  `validate()` refuses its null although `<Name>Request` does not require it.
 
 This changes no `<Name>Request` and no `<Name>Response`.
 

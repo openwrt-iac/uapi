@@ -16,7 +16,7 @@ schemas = spec["components"]["schemas"]
 registry = Registry().with_resource("urn:spec", Resource(contents=spec, specification=DRAFT202012))
 
 # Kept fields follow nullable_properties in build/gen_openapi.uc, and each openapi_patch_non_null field is listed here.
-NULL_KEPT = {"WirelessInterfacesPatch": {"mode"}}
+NULL_KEPT = {}
 
 
 def errors(pointer, instance):
