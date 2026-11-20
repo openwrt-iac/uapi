@@ -62,6 +62,22 @@ t.describe('handler.list', () => {
 		t.assert_equal(length(r.body), 1);
 		t.assert_false(r.body[0].managed);
 	});
+
+	// The link to the next page dropped managed, so the second page listed the managed sections too.
+	t.it('keeps managed in the link to the next page', () => {
+		let c = with_zones();
+		c._state.uci.firewall.cfg01 = { '.type': 'rule', '.anonymous': true, target: 'DROP', src: 'wan' };
+		c._state.uci.firewall.r_a   = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
+		c._state.uci.firewall.cfg02 = { '.type': 'rule', '.anonymous': true, target: 'REJECT', src: 'wan' };
+		let r = rules.list(c, ctx(), { managed: "false", limit: "1" });
+		t.assert_equal(r.headers["Link"], '<?cursor=c_cfg01&limit=1&managed=false>; rel="next"');
+		let next = {};
+		for (let kv in split(match(r.headers["Link"], /^<\?([^>]*)>/)[1], "&")) {
+			let p = split(kv, "=", 2);
+			next[p[0]] = p[1];
+		}
+		t.assert_deep_equal(map(rules.list(c, ctx(), next).body, (s) => s.id), [ "cfg02" ]);
+	});
 });
 
 t.describe('handler.list pagination', () => {
