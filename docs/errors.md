@@ -67,16 +67,7 @@ header but no body.
 `unsupported_media_type` was reserved and never emitted: uapi never rejects a
 body on `Content-Type` (the header only switches a PATCH into RFC 6902 mode). It
 left the published `ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1.
-Clients branching on it must drop that branch. `unsupported_media_type` is
-reserved and never emitted. uapi never rejects a body on `Content-Type`; the
-header is read for one thing only, switching a PATCH into RFC 6902 mode on
-`application/json-patch+json`. `text/plain`, or no header, is accepted and the
-write takes effect, so nothing can reach a 415. The code stays in the published
-`ErrorEnvelope.code` enum so a client that already branches on it does not have
-the value disappear, and no operation declares a 415 response. Enforcing it
-later would reject bodies that work today, which makes it a breaking change
-rather than a fix, and `POST /uapi/batch` sub-requests carry no per-item media
-type, so any rule could only apply to the outer request.
+Clients branching on it must drop that branch.
 
 `batch_partial_failure` is special: it appears only in the body of a
 `POST /uapi/batch` abort response, with the HTTP status taken from the failing
