@@ -807,7 +807,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(codes({ ssid: bytes(32) }, 'ssid'), []);
 		t.assert_deep_equal(codes({ ssid: 'é' + bytes(30) }, 'ssid'), []);
 		t.assert_deep_equal(codes({ ssid: 'é' + bytes(31) }, 'ssid'), [ 'out_of_range' ]);
-		t.assert_deep_equal(live({ ssid: [ bytes(16), bytes(16) ] }, 'ssid'), [ true ]);
+		t.assert_deep_equal(live({ mode: 'ap', ssid: [ bytes(16), bytes(16) ] }, 'ssid'), [ true ]);
 		for (let m in [ 'ap', 'sta', 'adhoc' ])
 			t.assert_deep_equal(live({ mode: m, ssid: bytes(33) }, 'ssid'), [ true ], m);
 		for (let b in [ { mode: 'monitor' }, { mode: 'mesh' }, { mode: 'ap', disabled: true } ])
@@ -1135,6 +1135,15 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 			let c = box({ disabled: '1' }, ssids);
 			t.assert_equal(radios.patch(c, ctx, 'radio1', { disabled: false }).status, 200, sprintf("%J", ssids));
 		}
+	});
+
+	t.it('an SSID without a mode, which wifi-scripts does not set up, blocks no radio enable and has no live error', () => {
+		let c = box({ disabled: '1' }, { w1: ssid({ mode: null, key: 'short' }) });
+		t.assert_equal(radios.patch(c, ctx, 'radio1', { disabled: false }).status, 200);
+		t.assert_deep_equal(map(ifaces.sweep(c), (s) => [ s.id, map(s.errors, (e) => [ e.field, e.live ]) ]),
+		                    [ [ 'w1', [ [ 'key', false ] ] ] ]);
+		c = box({ disabled: '1' }, { w1: ssid({ key: 'short' }) });
+		t.assert_deep_equal(fields(radios.patch(c, ctx, 'radio1', { disabled: false })), [ [ 'disabled', 'conflict' ] ]);
 	});
 
 	t.it('a write that leaves a radio on, or off, is not checked against its SSIDs', () => {

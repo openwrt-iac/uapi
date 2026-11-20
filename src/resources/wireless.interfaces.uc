@@ -87,8 +87,7 @@ function base_encryption(e) {
 
 // iface_roaming() in wifi-scripts runs in mode ap from WPA2 up, and writes the key holder lists
 // only when ft_psk_generate_local is off, which is its default for every mode but psk, psk2 and
-// psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
-// write that sends no mode is validated as mode ap, as the rules below read it.
+// psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid.
 const BELOW_WPA2 = { "none": true, "wep": true, "wep-open": true, "wep-shared": true, "psk": true, "wpa": true };
 const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
@@ -253,7 +252,9 @@ function validate(json, conn, id, delta) {
 // takes any domain, so the form of 4 hex digits is live only with 802.11r.
 function rules(json, radio_on, conn) {
 	let errs = [];
-	let on = radio_on && json.disabled !== true;
+	// A section with no mode is checked as mode ap, which LuCI and `wifi config` write, but
+	// wifi-scripts sets up nothing for it, so none of its errors is live.
+	let on = radio_on && json.disabled !== true && json.mode != null;
 	let mode = json.mode ?? "ap";
 	let base = base_encryption(json.encryption);
 	let r = roaming(json);
