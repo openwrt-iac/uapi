@@ -614,10 +614,11 @@ bodies failed.
 
 - Every commit/PR: unit suite + lint.
 - The OpenWrt that the VM and SDK jobs use follows the ref: `v4` (the branch or
-  a PR base) runs against the OpenWrt main snapshot, verified against the
-  `sha256sums` published beside each artifact because a moving target has no
-  filename to pin; every other ref, tags included, runs against the stable
-  release, pinned by checksum in `build/sdk.sha256`. `tools/openwrt-sdk.sh`
+  a PR base) runs them on both the stable release and the OpenWrt main
+  snapshot, and every other ref, tags included, on the stable release alone.
+  The stable release is pinned by checksum in `build/sdk.sha256`. The snapshot
+  is verified against the `sha256sums` published beside each artifact, because
+  a moving target has no filename to pin. `tools/openwrt-sdk.sh`
   resolves both, and `tests/vm/setup.sh` picks the image the same way.
 - Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails
   when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's

@@ -4,8 +4,8 @@ Boots a real OpenWrt x86_64 QEMU VM for integration testing.
 
 ## Pinned versions
 
-Two series run, selected by `OPENWRT_SERIES` (`stable` by default, `main` on the
-v4 line, where CI sets it from the ref):
+Two series run, selected by `OPENWRT_SERIES` (`stable` by default). CI runs both
+on the v4 line and `stable` alone on every other ref:
 
 - **stable**: OpenWrt release **25.12.6**, image
   `openwrt-25.12.6-x86-64-generic-ext4-combined.img.gz` from
