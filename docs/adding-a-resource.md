@@ -465,12 +465,35 @@ consumer. The other hooks have more users: `openvpn/instances` declares
 Per CLAUDE.md:
 
 - `snake_case` field names.
-- Stable `id` at top level (set by the dispatcher; your `fromUci` provides it from `section['.name']`).
-- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put it in `schema_properties`: the generator stamps it into the response schema and keeps it out of the request one, and declaring it in the module would also enrol it in the runtime type checker, turning `managed: "true"` from a 200 into a 422.
-- Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with the helper that matches the parser the option's own reader uses, which is not the same for every option and not even for every section type.** `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal compare against `1`, `platform_bool` for netifd's blob converter (`1` and `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for `get_bool` in `/lib/functions.sh` and for a libvalidate `:bool:`, which add `enabled`/`disabled`. Picking the wide one where the reader is narrow reports a section as configured when the daemon ignored the value, which is the read-honesty failure principle 4 exists to prevent. `network/interfaces.disabled` and `network/routes.disabled` are the same option name on the same package needing two different helpers, with the measurement in the module comments. Integers and lists that netifd reads go through the same converter: read them with `netifd_int` and `as_word_list_or_null`, as the table in `docs/ucode-quirks.md` says.
-- Lift single-value uci list options to JSON arrays (a uci list with one element comes through as a string from `cursor.get`; coerce to an array).
-- Nest related fields where it improves readability. `firewall.rules` uses `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This pays off in the Terraform mapping.
-- Runtime/computed fields go under `runtime: {...}`. Currently empty for most resources; populate when ubus exposes useful data.
+- Stable `id` at top level (set by the dispatcher; your `fromUci` provides it
+  from `section['.name']`).
+- `managed: bool` at top level. Derive from `!section['.anonymous']`. Do not put
+  it in `schema_properties`: the generator stamps it into the response schema
+  and keeps it out of the request one, and declaring it in the module would also
+  enrol it in the runtime type checker, turning `managed: "true"` from a 200
+  into a 422.
+- Emit `"1"`/`"0"` for booleans on the way in. **On the way out, read it with
+  the helper that matches the parser the option's own reader uses, which is not
+  the same for every option and not even for every section type.**
+  `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal
+  compare against `1`, `platform_bool` for netifd's blob converter (`1` and
+  `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for
+  `get_bool` in `/lib/functions.sh` and for a libvalidate `:bool:`, which add
+  `enabled`/`disabled`. Picking the wide one where the reader is narrow reports
+  a section as configured when the daemon ignored the value, which is the
+  read-honesty failure principle 4 exists to prevent.
+  `network/interfaces.disabled` and `network/routes.disabled` are the same
+  option name on the same package needing two different helpers, with the
+  measurement in the module comments. Integers and lists that netifd reads go
+  through the same converter: read them with `netifd_int` and
+  `as_word_list_or_null`, as the table in `docs/ucode-quirks.md` says.
+- Lift single-value uci list options to JSON arrays (a uci list with one element
+  comes through as a string from `cursor.get`; coerce to an array).
+- Nest related fields where it improves readability. `firewall.rules` uses
+  `match: {src_zone, dest_zone, src_ip, ...}` rather than a flat top-level. This
+  pays off in the Terraform mapping.
+- Runtime/computed fields go under `runtime: {...}`. Currently empty for most
+  resources; populate when ubus exposes useful data.
 
 ### Where snake_case stops
 
@@ -544,11 +567,11 @@ Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.
 
 **Never interpolate a write-only value into a `validate()` message.** The
-validation sweep behind `GET /uapi/diagnostics?validate=1` restores masked secrets
-before validating, because otherwise every section holding one reports its own
-secret as missing. That makes error messages the one channel where a real secret
-can reach a caller who holds only `:ro` on the resource and can never see it
-through a `GET`. Name the field and describe the expected shape
+validation sweep behind `GET /uapi/diagnostics?validate=1` restores masked
+secrets before validating, because otherwise every section holding one reports
+its own secret as missing. That makes error messages the one channel where a
+real secret can reach a caller who holds only `:ro` on the resource and can
+never see it through a `GET`. Name the field and describe the expected shape
 ("must be a 44-char base64 WireGuard private key"), never the value.
 
 ### One uci option, one wire name
@@ -621,8 +644,8 @@ The module declares:
   that matches, so a value that two items share hides the second one from this
   read. `network/wireguard_kernel_peers` uses the first 12 hex characters of a
   sha256 of the interface and the public key, which no two peers share.
-  `id_field` can also be a function of the query: `dhcp/leases` uses the MAC
-  for the IPv4 leases, where dnsmasq can give one MAC two leases, and the IP with
+  `id_field` can also be a function of the query: `dhcp/leases` uses the MAC for
+  the IPv4 leases, where dnsmasq can give one MAC two leases, and the IP with
   `family=v6`.
 - `cursor_field` (optional): the item field that pagination puts in the cursor.
   The default is `id_field`. Every item must have it and no two items can share

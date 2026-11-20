@@ -69,13 +69,50 @@ investigate before pushing.
 2. **Happy-path write.** PUT → 200 → GET reflects new state → audit log line in
    syslog.
 3. **Validation failure.** Bad payload → 422 with field errors → no uci change.
-4. **Reload failure rollback.** Construct a config uci accepts but the daemon rejects → 500 `reload_failed_restored` → uci back to prior state.
-5. **Auth paths.** Missing/bad token → 401. Insufficient scope → 403. Plain HTTP from remote → 403 `tls_required`.
-6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT denied with `unmanaged_resource` → `POST .../adopt` → writable.
-7. **APK install smoke test.** Fresh OpenWrt 25.12 → align the uhttpd packages on the feed, as `docs/installation.md` asks → `apk add uapi` → the uci-defaults hook wires uhttpd and creates the token store → curl works. It also upgrades from 3.2.0, the last release whose package shipped `/etc/config/uapi`: with tokens, which the store keeps, with the store as shipped, which the hook creates again, and with `--purge`, which loses the tokens. Each time it checks that no `.apk-new` is left and that `sysupgrade -l` lists the store. CI runs it in the `package` job, on the APK that the job builds with the pinned SDK: on a release tag, on `workflow_dispatch`, and on a pull request that changes what goes into the APK, how it is built, or this test, by the list of paths in the `lint` job of `.github/workflows/ci.yml`. The list holds `src/`, because the test runs `uapi-token` and the API from the APK, and both load the modules of `src/lib`. A pull request that changes none of these paths, such as one of docs only, runs none of this, because the integration suite copies the source files into the VM and installs no APK.
-8. **Stock-config compatibility round-trip** (`tests/integration/44_stock_config_test.sh`, 2.3.0+). For every curated CRUD resource whose package ships in the bare OpenWrt image: `GET` the section, adopt it if `managed: false`, `PUT` the body back verbatim, then `GET` again and diff the persistable shape. Singletons follow the same pattern with `PATCH` instead of `PUT` (singletons don't expose PUT, per `handler.make_singleton`). A 422 or a diff surfaces a regression where uapi rejects (or silently mutates) what OpenWrt itself ships. Catches the validation-stricter-than-the-platform class. Scope is every curated resource whose package is on the box: the bare-image ones (firewall, network, dhcp, dropbear, system) plus lldpd and vnstat, which `install_uapi` installs at bootstrap. The families still outside the image are listed under "Which resources a daemon has to be installed to test" below. No test numbered after this one may depend on pristine stock config, because PUT-self cumulatively rewrites the VM's `/etc/config/*` (`toUci` drops options not in `schema_properties`) and a later test reading a stock value would see drift.
+4. **Reload failure rollback.** Construct a config uci accepts but the daemon
+   rejects → 500 `reload_failed_restored` → uci back to prior state.
+5. **Auth paths.** Missing/bad token → 401. Insufficient scope → 403. Plain HTTP
+   from remote → 403 `tls_required`.
+6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT
+   denied with `unmanaged_resource` → `POST .../adopt` → writable.
+7. **APK install smoke test.** Fresh OpenWrt 25.12 → align the uhttpd packages
+   on the feed, as `docs/installation.md` asks → `apk add uapi` → the
+   uci-defaults hook wires uhttpd and creates the token store → curl works. It
+   also upgrades from 3.2.0, the last release whose package shipped
+   `/etc/config/uapi`: with tokens, which the store keeps, with the store as
+   shipped, which the hook creates again, and with `--purge`, which loses the
+   tokens. Each time it checks that no `.apk-new` is left and that `sysupgrade
+   -l` lists the store. CI runs it in the `package` job, on the APK that the job
+   builds with the pinned SDK: on a release tag, on `workflow_dispatch`, and on
+   a pull request that changes what goes into the APK, how it is built, or this
+   test, by the list of paths in the `lint` job of `.github/workflows/ci.yml`.
+   The list holds `src/`, because the test runs `uapi-token` and the API from
+   the APK, and both load the modules of `src/lib`. A pull request that changes
+   none of these paths, such as one of docs only, runs none of this, because the
+   integration suite copies the source files into the VM and installs no APK.
+8. **Stock-config compatibility round-trip**
+   (`tests/integration/44_stock_config_test.sh`, 2.3.0+). For every curated CRUD
+   resource whose package ships in the bare OpenWrt image: `GET` the section,
+   adopt it if `managed: false`, `PUT` the body back verbatim, then `GET` again
+   and diff the persistable shape. Singletons follow the same pattern with
+   `PATCH` instead of `PUT` (singletons don't expose PUT, per
+   `handler.make_singleton`). A 422 or a diff surfaces a regression where uapi
+   rejects (or silently mutates) what OpenWrt itself ships. Catches the
+   validation-stricter-than-the-platform class. Scope is every curated resource
+   whose package is on the box: the bare-image ones (firewall, network, dhcp,
+   dropbear, system) plus lldpd and vnstat, which `install_uapi` installs at
+   bootstrap. The families still outside the image are listed under "Which
+   resources a daemon has to be installed to test" below. No test numbered after
+   this one may depend on pristine stock config, because PUT-self cumulatively
+   rewrites the VM's `/etc/config/*` (`toUci` drops options not in
+   `schema_properties`) and a later test reading a stock value would see drift.
 
-9. **Read-honesty round-trip** (`tests/integration/47_read_honesty_test.sh`, 2.5.0+). The resources layer 8 cannot reach (wireguard interface and peer, wireless, plus the `ipaddr` / `ipaddrs` pair), round-tripped both verbatim and with one field changed, with the masked credential read back out of uci and the address list checked on the netdev. See the section below for why each part is there.
+9. **Read-honesty round-trip** (`tests/integration/47_read_honesty_test.sh`,
+   2.5.0+). The resources layer 8 cannot reach (wireguard interface and peer,
+   wireless, plus the `ipaddr` / `ipaddrs` pair), round-tripped both verbatim
+   and with one field changed, with the masked credential read back out of uci
+   and the address list checked on the netdev. See the section below for why
+   each part is there.
 
 ## The no-partial-state property
 
@@ -290,13 +327,13 @@ that is a curation-completeness question, and layer 8 is what answers it.
 ## Every gate ships with a demonstrated failure
 
 `make gate-selftest` breaks each gate on purpose and asserts it says so.
-Fifty-one probes across fourteen gates: the eleven `lint` sub-targets,
+Fifty-four probes across fifteen gates: the twelve `lint` sub-targets,
 `openapi-check`, `coverage` and `stage`, with each distinct rejection shape
 probed separately (twenty-three for `lint-openapi-shape`, seven for
-`lint-doc-refs`, six for `lint-lock-audit`, three for `lint-defaults`, two each
-for `lint-reserved` and `coverage`). It also makes one well-formed change that a
-gate must let through. It deprecates a CRUD field with a reason, and
-`lint-openapi-shape` must pass.
+`lint-doc-refs`, six for `lint-lock-audit`, three each for `lint-defaults` and
+`lint-conflict-markers`, two each for `lint-reserved` and `coverage`). It also
+makes one well-formed change that a gate must let through. It deprecates a CRUD
+field with a reason, and `lint-openapi-shape` must pass.
 
 It exists because `lint-emdash` shipped for several releases without ever
 running in CI. It lists tracked files with `git ls-files`, the CI container
@@ -342,19 +379,123 @@ dead export is now reported, and all 135 real exports still pass.
 
 `make lint` chains these sub-targets:
 
-- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule, enforced).
-- `lint-conflict-markers`: forbids merge conflict markers in tracked files. Rebases of v4 onto main committed them into `CHANGELOG.md` and the migration guide, where no other gate looked.
+- `lint-emdash`: forbids em-dashes in tracked sources (CLAUDE.md style rule,
+  enforced).
+- `lint-md-lines`: fails on a prose line over 80 columns in a tracked Markdown
+  file, the markdownlint MD013 limit a reviewer's editor flags. Code blocks,
+  tables, headings, link definitions and single-token lines (long URLs) are
+  exempt, and `CHANGELOG.md` is checked only above its first released section,
+  which a release never edits.
+- `lint-conflict-markers`: forbids merge conflict markers in tracked files.
+  Rebases of v4 onto main committed them into `CHANGELOG.md` and the migration
+  guide, where no other gate looked.
 - `lint-syntax`: `ucode -c` on every `.uc` file in `src/`, `cli/`, `tests/`.
-- `lint-reserved`: fails on schema property names that collide with Terraform meta-arguments or HCL block keywords.
-- `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json` and fails on dangling targets.
-- `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json` that a conformance validator does not make, because the shapes are legal JSON Schema and merely useless to a generator: a schema `required` naming a property the schema does not declare, an `if` with no `then` or `else` (and the reverse), an empty or non-array `enum`, and any value that is the string `"NaN"`. The NaN one exists because ucode's `+` on two arrays yields NaN rather than concatenating, which is how an `enum` of `"NaN"` reached the published spec. It also checks that emitted response headers are declared on the responses that can carry them and nowhere else: the four transaction headers (`X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status`, `X-Kernel-Applied`) appear as a complete set on every curated-resource write and on the `POST /uapi/batch` 207, which commits and reloads once for the whole set and reports them aggregated, and on nothing else, `ETag` appears on exactly the curated CRUD and singleton reads and writes that call `set_etag_header` (which excludes the collection-kind lease views, curated but bare), and `X-Mgmt-Path-Warning` appears on exactly the collection POST 200 and the item PUT 200, PATCH 200 and DELETE 204 of each resource whose module sets `mgmt_path_guard` (the create arm is there because a new section can claim the management device). The curated path set is derived from the generator's own `ENDPOINTS` catalog and the guarded set from `src/resources/`, so neither is kept by hand and a new resource is covered the day it is added. The reverse error is the one that motivated them: three headers were emitted and declared nowhere at all, which a generated client cannot see. It also requires every `deprecated: true` property to carry a description opening with `Deprecated`: the flag tells codegen a field is going away, and only the text tells an operator why, which is what a provider prints in a plan warning. Eight fields shipped the flag with no reason attached. The match is case-insensitive because `network/interfaces.name` predated the convention and opened `DEPRECATED in 2.2.0`; 3.0.0 removed every deprecated property, so the rule currently guards the next one rather than an existing field. It also checks the merge-patch body of every PATCH. That body must not declare `required` or `allOf`. The server type-checks the body, but it checks the required fields on the merged section. Each `<Name>Patch` must equal `<Name>Request` without these two keywords. A nested object also loses its `required`, because `default_merge_for_patch` merges it into the stored one. The comparison ignores descriptions, examples, defaults and null. Each field of a curated merge-patch body must take null, nested fields too, because the server removes a field for a null. Where a null does not remove the field, the field must take null exactly when `<Name>Request` does. That is `id`, a write-only secret, a field that the Request requires, and a field in the lint's `PATCH_NULL_KEPT`, which lists each such field of a module's `openapi_patch_non_null` with what its null does. Before the merge-patch bodies took null, the rule found 100 fields.
-- `lint-doc-refs` (2.5.0+): walks `docs/*.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md` and `.github/workflows/ci.yml`, and fails on a reference that does not resolve: a repo path that is not there, a `module.export` a module does not export, a backticked `make <target>` the Makefile does not define, a `claims "..."` string no test prints, an active `docs/deprecations.md` row the spec's own description does not announce, and an error code documented as returned that nothing in `src/` emits (plus the reverse, a published enum code absent from `docs/errors.md`). Waivers live in `tests/lint_doc_refs.uc::WAIVERS`, keyed by the reference with the reason as the value, because some references are deliberately unresolvable: `bench/baseline.json` is cited precisely because it does not exist. What it does not catch is stated in its own header and is the larger half: "this job proves X" where the job exists and does something adjacent, and modal invariants like `never` or `atomic`. Both of those shapes shipped false claims that had to be caught by reading.
-- `lint-lock-audit`: runs the reproduction command of `docs/lock-state-audit.md`, taken from the doc itself, and fails when a site it prints falls in no row of the Sites table or in two rows, when a row's range holds no site, when a "covers all N sites" count in that doc or in `CLAUDE.md` is not the number of sites, and when the command exits non-zero, which is how an empty result shows. A row only has to contain its sites, so an edit that moves a site within its range passes and one that moves it out fails, naming the site's line and enclosing function. The count is what catches a new site added inside a range that already holds one. It exists because the doc said "17 sites audited" while its own command found 36, and nothing read the table.
-- `lint-wire-names` (2.5.0+): every API field whose name is not the uci option it writes has to be accounted for, with the reason as the value. Three shapes hide here and only one is a defect. A **rename** is one API name for one uci key spelled to the wire's conventions (`resource_limits` for uci's `resource`, `sys_location` for `sysLocation`), and stays. An **alias** is two API names for the same key, which is what a major removes: it makes a round-trip ambiguous, forces a merge hook to decide which name the caller meant, and cannot be expressed once request and response schemas split. 3.0.0 removed all three aliases that existed when this lint was written, so it currently guards an empty set. That is the point: it exists so a fourth cannot arrive unnoticed and force the next major to repeat the removal. A **proto-disjoint pair** is two API names for one uci key that never appear on the same section, because the key means different things under different values of another field. `network/interfaces.broadcast_flag` is the one case: uci `broadcast` is a flag on proto dhcp and an address on proto static, and each section reads and writes only one of the two names, so the round trip stays unambiguous. The lint checks only that each such field has a waiver with a reason, not that the two names stay disjoint, so the resource's own tests carry that.
-- `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies a matching `default:` annotation in `schema_properties`; for every `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ?? null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`, and the schema type includes `"null"`.
-- `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a bare section, and once per value of a Request `proto` enum, and fails when a field that comes back null is not null-permitted in the Response schema.
+- `lint-reserved`: fails on schema property names that collide with Terraform
+  meta-arguments or HCL block keywords.
+- `lint-refs`: walks every `$ref` under `#/components/` in `build/openapi.json`
+  and fails on dangling targets.
+- `lint-openapi-shape` (2.4.0+): structural checks over `build/openapi.json`
+  that a conformance validator does not make, because the shapes are legal JSON
+  Schema and merely useless to a generator: a schema `required` naming a
+  property the schema does not declare, an `if` with no `then` or `else` (and
+  the reverse), an empty or non-array `enum`, and any value that is the string
+  `"NaN"`. The NaN one exists because ucode's `+` on two arrays yields NaN
+  rather than concatenating, which is how an `enum` of `"NaN"` reached the
+  published spec. It also checks that emitted response headers are declared on
+  the responses that can carry them and nowhere else: the four transaction
+  headers (`X-Reload-Status`, `X-Reload-Services`, `X-Kernel-Status`,
+  `X-Kernel-Applied`) appear as a complete set on every curated-resource write
+  and on the `POST /uapi/batch` 207, which commits and reloads once for the
+  whole set and reports them aggregated, and on nothing else, `ETag` appears on
+  exactly the curated CRUD and singleton reads and writes that call
+  `set_etag_header` (which excludes the collection-kind lease views, curated but
+  bare), and `X-Mgmt-Path-Warning` appears on exactly the collection POST 200
+  and the item PUT 200, PATCH 200 and DELETE 204 of each resource whose module
+  sets `mgmt_path_guard` (the create arm is there because a new section can
+  claim the management device). The curated path set is derived from the
+  generator's own `ENDPOINTS` catalog and the guarded set from `src/resources/`,
+  so neither is kept by hand and a new resource is covered the day it is added.
+  The reverse error is the one that motivated them: three headers were emitted
+  and declared nowhere at all, which a generated client cannot see. It also
+  requires every `deprecated: true` property to carry a description opening with
+  `Deprecated`: the flag tells codegen a field is going away, and only the text
+  tells an operator why, which is what a provider prints in a plan warning.
+  Eight fields shipped the flag with no reason attached. The match is
+  case-insensitive because `network/interfaces.name` predated the convention and
+  opened `DEPRECATED in 2.2.0`; 3.0.0 removed every deprecated property, so the
+  rule currently guards the next one rather than an existing field. It also
+  checks the merge-patch body of every PATCH. That body must not declare
+  `required` or `allOf`. The server type-checks the body, but it checks the
+  required fields on the merged section. Each `<Name>Patch` must equal
+  `<Name>Request` without these two keywords. A nested object also loses its
+  `required`, because `default_merge_for_patch` merges it into the stored one.
+  The comparison ignores descriptions, examples, defaults and null. Each field
+  of a curated merge-patch body must take null, nested fields too, because the
+  server removes a field for a null. Where a null does not remove the field, the
+  field must take null exactly when `<Name>Request` does. That is `id`, a
+  write-only secret, a field that the Request requires, and a field in the
+  lint's `PATCH_NULL_KEPT`, which lists each such field of a module's
+  `openapi_patch_non_null` with what its null does. Before the merge-patch
+  bodies took null, the rule found 100 fields.
+- `lint-doc-refs` (2.5.0+): walks `docs/*.md`, `CLAUDE.md`, `README.md`,
+  `CONTRIBUTING.md` and `.github/workflows/ci.yml`, and fails on a reference
+  that does not resolve: a repo path that is not there, a `module.export` a
+  module does not export, a backticked `make <target>` the Makefile does not
+  define, a `claims "..."` string no test prints, an active
+  `docs/deprecations.md` row the spec's own description does not announce, and
+  an error code documented as returned that nothing in `src/` emits (plus the
+  reverse, a published enum code absent from `docs/errors.md`). Waivers live in
+  `tests/lint_doc_refs.uc::WAIVERS`, keyed by the reference with the reason as
+  the value, because some references are deliberately unresolvable:
+  `bench/baseline.json` is cited precisely because it does not exist. What it
+  does not catch is stated in its own header and is the larger half: "this job
+  proves X" where the job exists and does something adjacent, and modal
+  invariants like `never` or `atomic`. Both of those shapes shipped false claims
+  that had to be caught by reading.
+- `lint-lock-audit`: runs the reproduction command of
+  `docs/lock-state-audit.md`, taken from the doc itself, and fails when a site
+  it prints falls in no row of the Sites table or in two rows, when a row's
+  range holds no site, when a "covers all N sites" count in that doc or in
+  `CLAUDE.md` is not the number of sites, and when the command exits non-zero,
+  which is how an empty result shows. A row only has to contain its sites, so an
+  edit that moves a site within its range passes and one that moves it out
+  fails, naming the site's line and enclosing function. The count is what
+  catches a new site added inside a range that already holds one. It exists
+  because the doc said "17 sites audited" while its own command found 36, and
+  nothing read the table.
+- `lint-wire-names` (2.5.0+): every API field whose name is not the uci option
+  it writes has to be accounted for, with the reason as the value. Three shapes
+  hide here and only one is a defect. A **rename** is one API name for one uci
+  key spelled to the wire's conventions (`resource_limits` for uci's `resource`,
+  `sys_location` for `sysLocation`), and stays. An **alias** is two API names
+  for the same key, which is what a major removes: it makes a round-trip
+  ambiguous, forces a merge hook to decide which name the caller meant, and
+  cannot be expressed once request and response schemas split. 3.0.0 removed all
+  three aliases that existed when this lint was written, so it currently guards
+  an empty set. That is the point: it exists so a fourth cannot arrive unnoticed
+  and force the next major to repeat the removal. A **proto-disjoint pair** is
+  two API names for one uci key that never appear on the same section, because
+  the key means different things under different values of another field.
+  `network/interfaces.broadcast_flag` is the one case: uci `broadcast` is a flag
+  on proto dhcp and an address on proto static, and each section reads and
+  writes only one of the two names, so the round trip stays unambiguous. The
+  lint checks only that each such field has a waiver with a reason, not that the
+  two names stay disjoint, so the resource's own tests carry that.
+- `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies
+  a matching `default:` annotation in `schema_properties`; for every
+  `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ??
+  null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`, and the schema
+  type includes `"null"`.
+- `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a
+  bare section, and once per value of a Request `proto` enum, and fails when a
+  field that comes back null is not null-permitted in the Response schema.
 
-Outside `make lint`, `50_response_conformance_test.sh` (3.0.0+) validates live response bodies against their published 200 schemas, and asserts the served `openapi.json` matches the tree's. The document-only gates cannot see an `allOf` whose branches are each valid but whose composition nothing can satisfy; that shape shipped twice, in `TokenMetadata` and in the `wireless/interfaces` `key` conditional.
+Outside `make lint`, `50_response_conformance_test.sh` (3.0.0+) validates live
+response bodies against their published 200 schemas, and asserts the served
+`openapi.json` matches the tree's. The document-only gates cannot see an `allOf`
+whose branches are each valid but whose composition nothing can satisfy; that
+shape shipped twice, in `TokenMetadata` and in the `wireless/interfaces` `key`
+conditional.
 
 ### Asserting that a write reached the daemon
 
@@ -527,7 +668,12 @@ give.
 
 ## Curl example suite
 
-In-repo at `examples/curl/`, sixteen files covering a subset of the curated resources rather than all of them, one per distinct shape: plain collections, a singleton, an adopt flow, a masked credential, a non-uci resource and the raw passthrough. Doubles as documentation and seed for provider contract tests. `adopt.sh` was added in 2.5.0 after an audit found the flow every operator meets on pre-existing config had no runnable example at all.
+In-repo at `examples/curl/`, sixteen files covering a subset of the curated
+resources rather than all of them, one per distinct shape: plain collections, a
+singleton, an adopt flow, a masked credential, a non-uci resource and the raw
+passthrough. Doubles as documentation and seed for provider contract tests.
+`adopt.sh` was added in 2.5.0 after an audit found the flow every operator meets
+on pre-existing config had no runnable example at all.
 
 ## Coverage gates
 

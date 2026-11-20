@@ -8,23 +8,129 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **`/diagnostics` reports interrupted writes.** A write now records itself in `/var/run/uapi-interrupted-writes/` before the commit, under the package lock so the record and the commit are ordered together, and removes the record when the recipe ends on any path the request can still reach. When uhttpd kills the request process after the commit (client disconnect or `script_timeout`), the record survives: `GET /diagnostics` lists it under `interrupted_writes` with the packages, the request id, the staged sections and whether the reload had started. Report only; uapi still never finishes or restores another request's write. Additive. (#341)
-- **Request bounds are configurable from `config limits` in `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers` (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time constants; they are now read per request, with the compiled values as defaults and accepted ranges that ignore out-of-bounds values. An option can lower a bound and not raise it above its default: the body is parsed before the bearer check, so a raised body bound let a request without a token make the parse take hundreds of MB, and the time bounds at their defaults already fill uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`. Additive. (#339) (#374)
-- **`POST /batch` results carry per-operation headers.** Each entry of the 207 `results` array now has a `headers` object with the headers of the sub-request's own response: its own `X-Request-Id`, and on a 200 the `ETag` of the body, so a client can chain an `If-Match` after a batch. The reload and kernel outcome stays on the 207, one for the whole batch, because a sub-request runs no commit and no reload of its own. Additive. (#338)
+- **`/diagnostics` reports interrupted writes.** A write now records itself in
+  `/var/run/uapi-interrupted-writes/` before the commit, under the package lock
+  so the record and the commit are ordered together, and removes the record when
+  the recipe ends on any path the request can still reach. When uhttpd kills the
+  request process after the commit (client disconnect or `script_timeout`), the
+  record survives: `GET /diagnostics` lists it under `interrupted_writes` with
+  the packages, the request id, the staged sections and whether the reload had
+  started. Report only; uapi still never finishes or restores another request's
+  write. Additive. (#341)
+- **Request bounds are configurable from `config limits` in
+  `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers`
+  (2000), `body_read_s` (10) and `reload_budget_s` (20) were compile-time
+  constants; they are now read per request, with the compiled values as defaults
+  and accepted ranges that ignore out-of-bounds values. An option can lower a
+  bound and not raise it above its default: the body is parsed before the bearer
+  check, so a raised body bound let a request without a token make the parse
+  take hundreds of MB, and the time bounds at their defaults already fill
+  uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`.
+  Additive. (#339) (#374)
+- **`POST /batch` results carry per-operation headers.** Each entry of the 207
+  `results` array now has a `headers` object with the headers of the
+  sub-request's own response: its own `X-Request-Id`, and on a 200 the `ETag` of
+  the body, so a client can chain an `If-Match` after a batch. The reload and
+  kernel outcome stays on the 207, one for the whole batch, because a
+  sub-request runs no commit and no reload of its own. Additive. (#338)
 
 ### Changed
 
-- **BREAKING: `dhcp/leases` refuses a `family` other than `v4` or `v6`.** 3.x ignores the parameter, so any value lists the IPv4 leases. v4 answers 400 `bad_request`, as the `getDHCPLeases` call of LuCI refuses an unknown family. The `Link` to the next page now keeps the `family`, so the second page of `?family=v6` lists IPv6 leases. The spec declares `family` on both GETs, and the lease schema gains the v6 fields `iaid`, `interface`, `ia_type` and `prefix_length`, with `expires_at` null for a v6 lease that does not expire, where a v4 one reads 0. Announced in 3.4.1 (#320, #391); migration note in `docs/migration-v3-to-v4.md`. (#390)
-- **BREAKING: `sqm/queues.enabled` reads `true` only where sqm-scripts starts the queue.** sqm-scripts (`src/run-openwrt.sh` at `77cf89e`) starts a queue only when `enabled` is the number 1. uapi read an absent value, or `yes`, `on` or `true`, as `true` with `normalize_bool`, for a queue that sqm leaves off. The read now follows sqm-scripts, and the schema default is `false`. A queue that LuCI made holds `1` or `0` and reads the same. A plan that sets `enabled = true` on a queue read `false` now writes `1`, which starts SQM there. Announced in 3.x. (#372) (#383)
-- **On OpenWrt main, a wireguard peer write waits for netifd to restart the interface.** The ucode proto handler of OpenWrt main restarts a wireguard interface on every peer change, and the kernel apply ran during that restart, so it skipped the interface: a peer that wg refuses was committed with a 200, and the interface stayed down. The apply now waits up to 8 s for the restart to end, and a restart that does not end fails the write with 500 `reload_failed_restored` and a restore. The handler sets all the peers of an interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down (#370). The 200 that this replaces left a peer committed and the interface down, a state that no caller could rely on, which is the carve-out of `docs/versioning.md` for a tightening in a patch. OpenWrt 25.12 is unchanged. (#366)
-- **BREAKING: one documented `runtime` envelope on every resource.** `runtime` is now always present in a resource response and declared in every response schema: `id` and `runtime` joined the `required` list of every CRUD and singleton resource, the four hand-written `openapi_runtime` blocks are kept, and the rest get the documented empty-object shape. Read-only collections are item lists and unchanged. Announced in 3.4.1 (#322); migration note in `docs/migration-v3-to-v4.md`. (#354)
-- **BREAKING: the special endpoints move under `/uapi/...`.** `/tokens` (and `/tokens/<id>`), `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami` become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and `/uapi/whoami`, matching the scopes that already existed. The scopes are unchanged, the public trio `/healthz`, `/openapi.json`, `/schema/*` stays at the top level, the old top-level paths answer 404, and the Prometheus `path` labels move with them. Announced in 3.4.1 (#319); migration note in `docs/migration-v3-to-v4.md`. (#352)
-- **BREAKING: a write is refused for any stored error the section holds, as LuCI does.** LuCI validates every visible field of a form at save, so a stored value that breaks a rule now blocks every write of the section with 422, not only the errors the write adds. Before v4 a write that left a stored value alone answered 200, so a broken section could still be disabled; now the fix comes first (or goes through `/raw`). `GET /diagnostics?validate=1` already lists these stored errors. Announced in 3.4.0 (#308); migration note in `docs/migration-v3-to-v4.md`. (#350)
-- **BREAKING: boolean reads follow the reader of their daemon.** `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`, `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`) and the `dropbear/instances` flags (`password_auth`, `root_password_auth`, `root_login`, `gateway_ports`) read with `shell_bool`, because their init scripts read them through libvalidate's `:bool:` or `config_get_bool`, which take ten spellings: `enabled` now reads `true` and `disabled` reads `false`, where v3 answered the default. Two defaults follow the daemon too: an absent `log_remote` reads `true`, as log.init takes it (`log_remote:bool:1`), and an absent usteer `syslog` reads `false`, as usteer's `set_config` resets it. A section whose read changes gets a new ETag once at the upgrade, and a write with an If-Match from before it answers 412. fw4's `parse_bool` readers keep `normalize_bool`, and so does `sqm/queues.enabled`, against what sqm-scripts reads (#372). Announced in 3.4.0 (#310, evidence #312, ubox `6f78fa4`). Migration note in `docs/migration-v3-to-v4.md`. (#348) (#365)
-- **BREAKING: a `wireless/interfaces` section with no `mode` reads `null`.** wifi-scripts sets up nothing for such a section, so the read no longer reports an access point that does not exist. The write side changes the same way: a `null` mode is accepted and removes the option, and a create or PUT that sends no mode stores none. Announced in 3.4.0 (#307); migration note in `docs/migration-v3-to-v4.md`. (#347)
-- **BREAKING: `mwan3/interfaces.family` reads `ipv4` when the option is unset.** `mwan3.sh` and `mwan3track` both default an unset family to ipv4, so the read now follows the daemon instead of answering null; `family` leaves the request schema's `required`, and a `null` on write removes the option, after which the read answers `ipv4`. Announced in 3.4.0 (#306); migration note in `docs/migration-v3-to-v4.md`. (#346)
-- **BREAKING: curated string fields refuse a newline and a carriage return on write.** One check in the type gate (`check_schema_types`) refuses them in every curated string, so the refusal no longer depends on the per-field `LINE_RE`/`ONE_LINE_RE` patterns, which had disagreed about `\r`; the only opt-out is `system.notes`, marked `x-uapi-multiline`. Free-text fields such as descriptions are refused too. Announced in 3.4.0 (#276); migration note in `docs/migration-v3-to-v4.md`. (#344)
-- **BREAKING: `network/routes.table` and `network/rules.lookup` accept a table name on write.** The request type of both is now a union of integer and string. A name is resolved exactly as netifd resolves it (number, then `default`/`main`/`local`, then `/etc/iproute2/rt_tables`) and stored as its id; a name that does not resolve answers 422 `invalid_format`, and an id of 0 answers 422 `out_of_range`. The read still answers the id, so a plan stays stable when `rt_tables` changes, and a name stored by hand or by LuCI still reads as its id. Announced in 3.4.0 (#240). Migration note in `docs/migration-v3-to-v4.md`. (#343)
+- **BREAKING: `dhcp/leases` refuses a `family` other than `v4` or `v6`.** 3.x
+  ignores the parameter, so any value lists the IPv4 leases. v4 answers 400
+  `bad_request`, as the `getDHCPLeases` call of LuCI refuses an unknown family.
+  The `Link` to the next page now keeps the `family`, so the second page of
+  `?family=v6` lists IPv6 leases. The spec declares `family` on both GETs, and
+  the lease schema gains the v6 fields `iaid`, `interface`, `ia_type` and
+  `prefix_length`, with `expires_at` null for a v6 lease that does not expire,
+  where a v4 one reads 0. Announced in 3.4.1 (#320, #391); migration note in
+  `docs/migration-v3-to-v4.md`. (#390)
+- **BREAKING: `sqm/queues.enabled` reads `true` only where sqm-scripts starts
+  the queue.** sqm-scripts (`src/run-openwrt.sh` at `77cf89e`) starts a queue
+  only when `enabled` is the number 1. uapi read an absent value, or `yes`, `on`
+  or `true`, as `true` with `normalize_bool`, for a queue that sqm leaves off.
+  The read now follows sqm-scripts, and the schema default is `false`. A queue
+  that LuCI made holds `1` or `0` and reads the same. A plan that sets `enabled
+  = true` on a queue read `false` now writes `1`, which starts SQM there.
+  Announced in 3.x. (#372) (#383)
+- **On OpenWrt main, a wireguard peer write waits for netifd to restart the
+  interface.** The ucode proto handler of OpenWrt main restarts a wireguard
+  interface on every peer change, and the kernel apply ran during that restart,
+  so it skipped the interface: a peer that wg refuses was committed with a 200,
+  and the interface stayed down. The apply now waits up to 8 s for the restart
+  to end, and a restart that does not end fails the write with 500
+  `reload_failed_restored` and a restore. The handler sets all the peers of an
+  interface or none, so the same 500 answers a write to an interface that
+  another stored peer already keeps down (#370). The 200 that this replaces left
+  a peer committed and the interface down, a state that no caller could rely on,
+  which is the carve-out of `docs/versioning.md` for a tightening in a patch.
+  OpenWrt 25.12 is unchanged. (#366)
+- **BREAKING: one documented `runtime` envelope on every resource.** `runtime`
+  is now always present in a resource response and declared in every response
+  schema: `id` and `runtime` joined the `required` list of every CRUD and
+  singleton resource, the four hand-written `openapi_runtime` blocks are kept,
+  and the rest get the documented empty-object shape. Read-only collections are
+  item lists and unchanged. Announced in 3.4.1 (#322); migration note in
+  `docs/migration-v3-to-v4.md`. (#354)
+- **BREAKING: the special endpoints move under `/uapi/...`.** `/tokens` (and
+  `/tokens/<id>`), `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami`
+  become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and
+  `/uapi/whoami`, matching the scopes that already existed. The scopes are
+  unchanged, the public trio `/healthz`, `/openapi.json`, `/schema/*` stays at
+  the top level, the old top-level paths answer 404, and the Prometheus `path`
+  labels move with them. Announced in 3.4.1 (#319); migration note in
+  `docs/migration-v3-to-v4.md`. (#352)
+- **BREAKING: a write is refused for any stored error the section holds, as LuCI
+  does.** LuCI validates every visible field of a form at save, so a stored
+  value that breaks a rule now blocks every write of the section with 422, not
+  only the errors the write adds. Before v4 a write that left a stored value
+  alone answered 200, so a broken section could still be disabled; now the fix
+  comes first (or goes through `/raw`). `GET /diagnostics?validate=1` already
+  lists these stored errors. Announced in 3.4.0 (#308); migration note in
+  `docs/migration-v3-to-v4.md`. (#350)
+- **BREAKING: boolean reads follow the reader of their daemon.**
+  `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
+  `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)
+  and the `dropbear/instances` flags (`password_auth`, `root_password_auth`,
+  `root_login`, `gateway_ports`) read with `shell_bool`, because their init
+  scripts read them through libvalidate's `:bool:` or `config_get_bool`, which
+  take ten spellings: `enabled` now reads `true` and `disabled` reads `false`,
+  where v3 answered the default. Two defaults follow the daemon too: an absent
+  `log_remote` reads `true`, as log.init takes it (`log_remote:bool:1`), and an
+  absent usteer `syslog` reads `false`, as usteer's `set_config` resets it. A
+  section whose read changes gets a new ETag once at the upgrade, and a write
+  with an If-Match from before it answers 412. fw4's `parse_bool` readers keep
+  `normalize_bool`, and so does `sqm/queues.enabled`, against what sqm-scripts
+  reads (#372). Announced in 3.4.0 (#310, evidence #312, ubox `6f78fa4`).
+  Migration note in `docs/migration-v3-to-v4.md`. (#348) (#365)
+- **BREAKING: a `wireless/interfaces` section with no `mode` reads `null`.**
+  wifi-scripts sets up nothing for such a section, so the read no longer reports
+  an access point that does not exist. The write side changes the same way: a
+  `null` mode is accepted and removes the option, and a create or PUT that sends
+  no mode stores none. Announced in 3.4.0 (#307); migration note in
+  `docs/migration-v3-to-v4.md`. (#347)
+- **BREAKING: `mwan3/interfaces.family` reads `ipv4` when the option is unset.**
+  `mwan3.sh` and `mwan3track` both default an unset family to ipv4, so the read
+  now follows the daemon instead of answering null; `family` leaves the request
+  schema's `required`, and a `null` on write removes the option, after which the
+  read answers `ipv4`. Announced in 3.4.0 (#306); migration note in
+  `docs/migration-v3-to-v4.md`. (#346)
+- **BREAKING: curated string fields refuse a newline and a carriage return on
+  write.** One check in the type gate (`check_schema_types`) refuses them in
+  every curated string, so the refusal no longer depends on the per-field
+  `LINE_RE`/`ONE_LINE_RE` patterns, which had disagreed about `\r`; the only
+  opt-out is `system.notes`, marked `x-uapi-multiline`. Free-text fields such as
+  descriptions are refused too. Announced in 3.4.0 (#276); migration note in
+  `docs/migration-v3-to-v4.md`. (#344)
+- **BREAKING: `network/routes.table` and `network/rules.lookup` accept a table
+  name on write.** The request type of both is now a union of integer and
+  string. A name is resolved exactly as netifd resolves it (number, then
+  `default`/`main`/`local`, then `/etc/iproute2/rt_tables`) and stored as its
+  id; a name that does not resolve answers 422 `invalid_format`, and an id of 0
+  answers 422 `out_of_range`. The read still answers the id, so a plan stays
+  stable when `rt_tables` changes, and a name stored by hand or by LuCI still
+  reads as its id. Announced in 3.4.0 (#240). Migration note in
+  `docs/migration-v3-to-v4.md`. (#343)
 
 ### Deprecated
 
@@ -53,9 +159,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- **BREAKING: `dhcp/leases6` merges into `dhcp/leases`.** The endpoint is gone; `GET /dhcp/leases` still returns the IPv4 leases and `GET /dhcp/leases?family=v6` the IPv6 ones from odhcpd's statefile. The entry id is the MAC for v4 and the IP for v6, so a v6 entry is looked up as `GET /dhcp/leases/<ip>?family=v6`. The `dhcp:leases6` scope leaves the scope tree with the endpoint. Announced in 3.4.1 (#320); migration note in `docs/migration-v3-to-v4.md`. (#351)
-- **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.** It was reserved and never emitted (uapi never rejects a body on `Content-Type`); the audit of emitted vs declared codes found it the only dead one. Announced in 3.4.1 (#323); clients branching on 415 must drop that branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
-- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated string on write.** The request type is array-only in both directions; a string answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`, moved to "Removed in past releases" under 4.0.0, and the entry left the spec's "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the remaining `x-uapi-*` markers are documented once in `docs/versioning.md` (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
+- **BREAKING: `dhcp/leases6` merges into `dhcp/leases`.** The endpoint is gone;
+  `GET /dhcp/leases` still returns the IPv4 leases and `GET
+  /dhcp/leases?family=v6` the IPv6 ones from odhcpd's statefile. The entry id is
+  the MAC for v4 and the IP for v6, so a v6 entry is looked up as `GET
+  /dhcp/leases/<ip>?family=v6`. The `dhcp:leases6` scope leaves the scope tree
+  with the endpoint. Announced in 3.4.1 (#320); migration note in
+  `docs/migration-v3-to-v4.md`. (#351)
+- **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.**
+  It was reserved and never emitted (uapi never rejects a body on
+  `Content-Type`); the audit of emitted vs declared codes found it the only dead
+  one. Announced in 3.4.1 (#323); clients branching on 415 must drop that
+  branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
+- **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated
+  string on write.** The request type is array-only in both directions; a string
+  answers 422 `invalid_type`. Announced since 3.2.0 in `docs/deprecations.md`,
+  moved to "Removed in past releases" under 4.0.0, and the entry left the spec's
+  "Upcoming in v4" block. The `x-uapi-write-string` marker is gone with it; the
+  remaining `x-uapi-*` markers are documented once in `docs/versioning.md`
+  (#329). Migration note in `docs/migration-v3-to-v4.md`. (#342)
 
 ### Fixed
 

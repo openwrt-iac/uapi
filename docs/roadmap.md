@@ -196,12 +196,13 @@ Committed, in rough dependency order:
      enabled-but-failed, which is the case an operator most needs told apart. If
      the wait runs long enough to hurt, this is the option to revisit first.
 
-4. **Validation sweep on `/uapi/diagnostics?validate=1`** (#47). Done. Reports the
-   sections a write would now reject, before a write finds them one at a time.
+4. **Validation sweep on `/uapi/diagnostics?validate=1`** (#47). Done. Reports
+   the sections a write would now reject, before a write finds them one at a
+   time.
 
 5. **Advisory management-path guard.** Done. The cheap protection against the
-   lockout class commit-confirm was meant to cover: `GET /uapi/diagnostics` reports
-   `management_path`, the interface this request arrived through, and a
+   lockout class commit-confirm was meant to cover: `GET /uapi/diagnostics`
+   reports `management_path`, the interface this request arrived through, and a
    `network/interfaces` write that moves that interface's `disabled`, `proto`,
    `ipaddrs` or `netmask`, or deletes it, carries `X-Mgmt-Path-Warning`.
 
@@ -292,24 +293,29 @@ record; this is the engineering one.
   the removed
   surface under v3 semantics.
 
-**Additive, and the one item that was never announced because it did not need to be:**
+**Additive, and the one item that was never announced because it did not need to
+be:**
 
-- `POST /uapi/batch` reports its transaction outcome on the 207, aggregated over the sub-writes.
-  It cannot be per-operation, because the batch commits and reloads once for the whole set.
-  Since [#325](https://github.com/openwrt-iac/uapi/issues/325) each result also carries the
-  headers of its own sub-response, such as its `ETag`, but none of the transaction headers. The
-  management-path guard is inert inside a batch, because a sub-request has no caller address.
+- `POST /uapi/batch` reports its transaction outcome on the 207, aggregated over
+  the sub-writes. It cannot be per-operation, because the batch commits and
+  reloads once for the whole set. Since
+  [#325](https://github.com/openwrt-iac/uapi/issues/325) each result also
+  carries the headers of its own sub-response, such as its `ETag`, but none of
+  the transaction headers. The management-path guard is inert inside a batch,
+  because a sub-request has no caller address.
 
-**Simplification the removals unlocked**, all dead code once the mirrored names were gone:
-`merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and `network/interfaces`,
-`equal_list`, the mirrored-pair conflict rules in both `validate`s, and the
-`resolve_for_replace` seam in `handler.uc` along with its contract in
-`docs/adding-a-resource.md`.
+**Simplification the removals unlocked**, all dead code once the mirrored names
+were gone: `merge_for_patch` and `resolve_for_replace` on both `dhcp/hosts` and
+`network/interfaces`, `equal_list`, the mirrored-pair conflict rules in both
+`validate`s, and the `resolve_for_replace` seam in `handler.uc` along with its
+contract in `docs/adding-a-resource.md`.
 
-**Partly done in v4 (#310):** the readers of sysntpd, logd, usteer and dropbear moved to the
-helper of their reader, after #312 read libvalidate's set out of ubox. fw4's `parse_bool` keeps
-`normalize_bool`, which matches it. `sqm/queues.enabled` reads as sqm-scripts does, on only for
-`1` (#372). `unbound/servers` still uses `normalize_bool`, and its consumer has not been read yet. See `docs/ucode-quirks.md`.
+**Partly done in v4 (#310):** the readers of sysntpd, logd, usteer and dropbear
+moved to the helper of their reader, after #312 read libvalidate's set out of
+ubox. fw4's `parse_bool` keeps `normalize_bool`, which matches it.
+`sqm/queues.enabled` reads as sqm-scripts does, on only for `1` (#372).
+`unbound/servers` still uses `normalize_bool`, and its consumer has not been
+read yet. See `docs/ucode-quirks.md`.
 
 ## Shipped in 3.1.0
 
@@ -367,20 +373,23 @@ helper of their reader, after #312 read libvalidate's set out of ubox. fw4's `pa
   `ip6hint` and `ip6ifaceid`, apply to every proto, and `sourcefilter`,
   `ip6class`, `ip6weight`
   and `broadcast_flag` are new.
-- **A write that the daemon refuses or ignores no longer answers 200.** An `mtu` that netifd or
-  pppd does not apply, table 0, a `goto` that the kernel refuses and a raw option that uci
-  cannot store answer 422, and a package with no file under `/etc/config/` answers
-  `503 config_missing`. A commit that libuci refuses answers an error, and a `POST /uapi/batch` then
-  restores what it committed and runs no reload and no kernel apply (#277). A `dhcp_option`
-  entry in which an address is followed by whitespace and a second option answers 422, and a
-  write whose generated config `dnsmasq --test` refuses answers `500 reload_failed_restored`
-  and restores the previous config (#279). The request schemas declare the bounds that a write
-  accepts, through `x-uapi-write`. A write to `dhcp/servers`, `dhcp/hosts` or the raw `dhcp`
-  package reloads odhcpd too, and one to `dhcp/odhcpd` reloads dnsmasq too, while procd runs
-  that daemon, so neither daemon keeps its old config after a write that answered 200 (#280).
-- **A PUT of the read of a radio or an SSID keeps its hardware binding and its 802.11r group.**
-  Before, the first apply that changed a radio removed its `path`, and the radio stayed down
-  with all its SSIDs.
+- **A write that the daemon refuses or ignores no longer answers 200.** An `mtu`
+  that netifd or pppd does not apply, table 0, a `goto` that the kernel refuses
+  and a raw option that uci cannot store answer 422, and a package with no file
+  under `/etc/config/` answers `503 config_missing`. A commit that libuci
+  refuses answers an error, and a `POST /uapi/batch` then restores what it
+  committed and runs no reload and no kernel apply (#277). A `dhcp_option` entry
+  in which an address is followed by whitespace and a second option answers 422,
+  and a write whose generated config `dnsmasq --test` refuses answers `500
+  reload_failed_restored` and restores the previous config (#279). The request
+  schemas declare the bounds that a write accepts, through `x-uapi-write`. A
+  write to `dhcp/servers`, `dhcp/hosts` or the raw `dhcp` package reloads odhcpd
+  too, and one to `dhcp/odhcpd` reloads dnsmasq too, while procd runs that
+  daemon, so neither daemon keeps its old config after a write that answered 200
+  (#280).
+- **A PUT of the read of a radio or an SSID keeps its hardware binding and its
+  802.11r group.** Before, the first apply that changed a radio removed its
+  `path`, and the radio stayed down with all its SSIDs.
 - **Raw writes answer with what uci stored**, refuse what uci cannot store, and
   remove an option
   for `null` and `""`. Every write reads the package only after it takes the
@@ -931,26 +940,53 @@ mechanisms, the evidence and the open questions live in the issues.
 
 **Merged into the `v4` branch, and closed:**
 
-- [Routes `table` and rules `lookup` accept table names on write](https://github.com/openwrt-iac/uapi/issues/240): the type becomes a string or a union, breaking.
-- [`network/interfaces.ip6prefix` stops taking a string on write](https://github.com/openwrt-iac/uapi/issues/241): announced since 3.2.0, the only open deprecation window.
-- [One rule for newlines in curated strings](https://github.com/openwrt-iac/uapi/issues/276): a default refusal in `check_schema_types`, with an opt-out for `system.notes`.
-- [`mwan3/interfaces.family` is required, or an unset one reads `ipv4`](https://github.com/openwrt-iac/uapi/issues/306): either way breaking.
-- [A `wireless/interfaces` section with no `mode` reads null instead of `ap`](https://github.com/openwrt-iac/uapi/issues/307): a read today reports an access point that does not exist.
-- [Refuse a write for any stored error the section holds, as LuCI does](https://github.com/openwrt-iac/uapi/issues/308): the `new_errors()` model changes.
-- [Retire `normalize_bool`, boolean reads follow the platform's reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is [reading libvalidate's accepted set out of ubox](https://github.com/openwrt-iac/uapi/issues/312), shipped in 3.4.0.
-- [Group the special endpoints under `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and the scopes disagree today, breaking.
-- [Merge `dhcp/leases6` into `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint less, breaking.
-- [One documented runtime envelope on every resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources document their runtime today, breaking.
-- [Prune dead error codes from the enum](https://github.com/openwrt-iac/uapi/issues/323): `unsupported_media_type` is the documented-dead one, breaking for generated clients.
-- [Consolidate the `x-uapi-*` marker namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor markers, one of which dies with #241, internal.
+- [Routes `table` and rules `lookup` accept table names on
+  write](https://github.com/openwrt-iac/uapi/issues/240): the type becomes a
+  string or a union, breaking.
+- [`network/interfaces.ip6prefix` stops taking a string on
+  write](https://github.com/openwrt-iac/uapi/issues/241): announced since 3.2.0,
+  the only open deprecation window.
+- [One rule for newlines in curated
+  strings](https://github.com/openwrt-iac/uapi/issues/276): a default refusal in
+  `check_schema_types`, with an opt-out for `system.notes`.
+- [`mwan3/interfaces.family` is required, or an unset one reads
+  `ipv4`](https://github.com/openwrt-iac/uapi/issues/306): either way breaking.
+- [A `wireless/interfaces` section with no `mode` reads null instead of
+  `ap`](https://github.com/openwrt-iac/uapi/issues/307): a read today reports an
+  access point that does not exist.
+- [Refuse a write for any stored error the section holds, as LuCI
+  does](https://github.com/openwrt-iac/uapi/issues/308): the `new_errors()`
+  model changes.
+- [Retire `normalize_bool`, boolean reads follow the platform's
+  reader](https://github.com/openwrt-iac/uapi/issues/310): prerequisite is
+  [reading libvalidate's accepted set out of
+  ubox](https://github.com/openwrt-iac/uapi/issues/312), shipped in 3.4.0.
+- [Group the special endpoints under
+  `/uapi/...`](https://github.com/openwrt-iac/uapi/issues/319): the paths and
+  the scopes disagree today, breaking.
+- [Merge `dhcp/leases6` into
+  `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint
+  less, breaking.
+- [One documented runtime envelope on every
+  resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources
+  document their runtime today, breaking.
+- [Prune dead error codes from the
+  enum](https://github.com/openwrt-iac/uapi/issues/323):
+  `unsupported_media_type` is the documented-dead one, breaking for generated
+  clients.
+- [Consolidate the `x-uapi-*` marker
+  namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor
+  markers, one of which dies with #241, internal.
 
 ## Out of scope by design
 
-- **Dropping `managed` and the adopt flow** ([#321](https://github.com/openwrt-iac/uapi/issues/321), withdrawn before v4).
-  libuci names an anonymous section at each load from its ordinal in the package and a hash of
-  its type, so the name moves to another section when an earlier one is deleted. A client that
-  stored such a name and wrote or deleted through it reached another section with a 2xx. `adopt`
-  is how a client gets a name that holds, and `managed` is how it knows that it needs one.
+- **Dropping `managed` and the adopt flow**
+  ([#321](https://github.com/openwrt-iac/uapi/issues/321), withdrawn before v4).
+  libuci names an anonymous section at each load from its ordinal in the package
+  and a hash of its type, so the name moves to another section when an earlier
+  one is deleted. A client that stored such a name and wrote or deleted through
+  it reached another section with a 2xx. `adopt` is how a client gets a name
+  that holds, and `managed` is how it knows that it needs one.
 - **Localization of error `message` strings.** English-only; codes are
   stable and translatable client-side.
 - **Async/parallel ubus.** `conn.call()` only, by design (see
