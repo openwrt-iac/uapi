@@ -565,7 +565,7 @@ function batch_run_one(conn, sub_ctx, op) {
 		return errors.error(sub_ctx, "method_not_allowed",
 			sprintf("Method %s not allowed on %s", m, op.path));
 	}
-	if (m == "GET")    return tgt.h.get_one(conn, sub_ctx, id, {});
+	if (m == "GET")    return tgt.h.get_one(conn, sub_ctx, id);
 	if (m == "PUT")    return tgt.h.replace(conn, sub_ctx, id, op.body);
 	if (m == "PATCH")  return tgt.h.patch(conn, sub_ctx, id, op.body);
 	if (m == "DELETE") return tgt.h.remove(conn, sub_ctx, id);

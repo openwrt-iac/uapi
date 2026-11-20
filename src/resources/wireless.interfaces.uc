@@ -188,8 +188,8 @@ function toUci(json) {
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.network != null) out.network = json.network;
-	// v4 (#307): no mode is stored as none. wifi-scripts sets up no interface for a section
-	// with no mode, and the read answers null.
+	// Storing ap for a missing mode would turn a station into an access point that broadcasts
+	// the station's SSID and key.
 	if (json.mode != null) out.mode = json.mode;
 	if (json.ssid != null) out.ssid = json.ssid;
 	if (json.encryption != null) out.encryption = json.encryption;
@@ -212,14 +212,10 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json) {
 	let errs = [];
 
 	values.require_present(errs, json, "device");
-
-	// v4 (#307): a null mode removes the option, and wifi-scripts sets up nothing for the
-	// section, so the read then answers null. Refusing the null used to force storing ap,
-	// which turned a station into an access point broadcasting the station's SSID and key.
 
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",
