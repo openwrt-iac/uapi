@@ -37,7 +37,7 @@ uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
 echo 'https://openwrt-iac.github.io/feed/packages/all/uapi/packages.adb' \
     > /etc/apk/repositories.d/uapi.list
 apk update
-# uhttpd and its plugins must come from one build; the feed is newer than the image
+# uhttpd and its plugins must come from one build, and the feed is newer than the image
 apk upgrade uhttpd uhttpd-mod-ubus uhttpd-mod-ucode uhttpd-mod-lua
 apk add uapi
 ```
