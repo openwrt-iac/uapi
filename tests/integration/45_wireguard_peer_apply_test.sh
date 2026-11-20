@@ -347,12 +347,10 @@ after=$(has_peer "$AFTER2" && echo yes || echo no)
 [ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore stopped at the malformed preshared key: $(body_of "$r")"
 if wg_ucode_platform; then
-	# Every restart of the platform's retry loop deletes and recreates the
-	# netdev, so the kernel state is re-derived from uci each cycle: a
-	# preshared key set by hand, which no section holds, does not survive
-	# the first one (#359).
-	[ "$psk" = "" ] \
-		|| fail "a hand-set preshared key survived the platform's restart: '$psk'"
+	# The restart recreates the netdev from uci, so a preshared key set by hand, which no section
+	# holds, does not survive it, and the handler runs the peer without the 'not-a-key' one.
+	[ "$psk" = "(none)" ] \
+		|| fail "the peer does not run without a preshared key after the platform's restart: '$psk'"
 else
 	[ "$psk" = "$($SSH 'cat /tmp/uapi45psk')" ] || fail "the restore changed the preshared key that the kernel holds to '$psk'"
 fi
@@ -373,8 +371,8 @@ if wg_ucode_platform; then
 	# without the 'not-a-key' preshared key, and the reconcile sets it so: the kernel is what uci holds.
 	body_of "$r" | grep -q '"code": "reload_failed_restored"' \
 		|| fail "the batch restore did not recover: $(body_of "$r")"
-	[ "$psk" = "" ] \
-		|| fail "the kernel holds the preshared key of the failed batch: '$psk'"
+	[ "$psk" = "(none)" ] \
+		|| fail "the peer does not run without a preshared key after the failed batch: '$psk'"
 else
 	body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' \
 		|| fail "the restore answered that it restored a peer that the batch set: $(body_of "$r")"
