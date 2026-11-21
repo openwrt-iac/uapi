@@ -87,16 +87,31 @@ the escalation check, so such a scope answers 422 and not 403
 `scope_escalation_blocked`. A stored token that holds such a scope keeps it and
 still authenticates. `docs/tokens.md` lists the scope tree.
 
-## `id` and `runtime` are required in every resource response
+## `runtime` is required in every resource response
 
-The response body does not change: v3 already returned `id` and `runtime` on
-every CRUD and singleton resource. The v4 spec now puts both in the `required`
-list of each of these response schemas (announced in 3.5.0, #322). The four
-resources that document their `runtime` fields keep that shape. The others
+Every resource now answers `runtime`, an object that its response schema
+requires (announced in 3.5.0, #322). The four resources that document their
+`runtime` fields keep that shape: `network/interfaces`,
+`network/wireguard_peers`, `wireless/interfaces` and `dhcp/servers`. The others
 declare `runtime` as an object with a common description, and it holds `{}`
-when the resource reads no live state. A generated client can now type both
-fields as always present. Read-only collections such as `dhcp/leases` have no
-envelope and do not change.
+when the resource reads no live state. The schemas of the 42 curated CRUD and
+singleton resources also require `id`. A generated client can now type both
+fields as always present.
+
+The body of the curated resources and of `system/cron_jobs` does not change,
+because v3 already returned `runtime` there. These responses change:
+
+- Each key of `system/authorized_keys` now holds `runtime: {}`, in the response
+  of every GET, POST and PUT.
+- Each item of the read-only collections `dhcp/leases` and
+  `network/wireguard_kernel_peers` now holds `runtime: {}`. The item is itself
+  the live state, so its `runtime` stays empty.
+- `packages/installed` and `packages/feeds` already returned `runtime: {}`, and
+  their schemas now require it.
+
+A client that refuses an unknown key sees a new one in the first two. `/raw`
+answers the uci section and no `runtime`, and the special endpoints under
+`/uapi/` are not resources.
 
 ## `unsupported_media_type` leaves the error enum
 

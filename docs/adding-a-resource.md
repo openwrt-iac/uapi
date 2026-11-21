@@ -658,7 +658,10 @@ The module declares:
   the enum with 400 `bad_request`, keeps the parameter in the `Link` to the next
   page, and the generator declares it on both GETs. `dhcp/leases` declares
   `family`.
-- `schema_properties`: the item shape, published under `/schema/...`.
+- `schema_properties`: the item shape, published under `/schema/...`. The
+  handler adds `runtime: {}` to each item and the generator declares and
+  requires it, since every resource answers `runtime` (#322), so the module
+  declares no `runtime`.
 
 Register with `handler.make_collection(load_resource(...))` like any other
 resource. The handler answers GET list (paginated) and GET one, and 405

@@ -121,7 +121,7 @@ function write_keys(parsed_keys) {
 }
 
 function key_view(k) {
-	return { id: k.id, type: k.type, comment: k.comment };
+	return { id: k.id, type: k.type, comment: k.comment, runtime: {} };
 }
 
 function list_keys(ctx) {

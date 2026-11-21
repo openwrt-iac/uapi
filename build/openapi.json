@@ -24874,7 +24874,8 @@
 				"required": [
 					"id",
 					"name",
-					"installed"
+					"installed",
+					"runtime"
 				],
 				"properties": {
 					"id": {
@@ -24900,6 +24901,7 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				}
@@ -24920,7 +24922,8 @@
 				"type": "object",
 				"required": [
 					"id",
-					"url"
+					"url",
+					"runtime"
 				],
 				"properties": {
 					"id": {
@@ -24947,6 +24950,7 @@
 					},
 					"runtime": {
 						"type": "object",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				}
@@ -24992,7 +24996,8 @@
 				"type": "object",
 				"required": [
 					"id",
-					"type"
+					"type",
+					"runtime"
 				],
 				"properties": {
 					"id": {
@@ -25007,6 +25012,11 @@
 					"comment": {
 						"type": "string",
 						"description": "Optional comment (trailing text on the key line)"
+					},
+					"runtime": {
+						"type": "object",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"readOnly": true
 					}
 				}
 			},
@@ -25943,7 +25953,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -26479,7 +26489,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -26804,7 +26814,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -27335,7 +27345,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -27693,7 +27703,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -27879,7 +27889,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -29644,7 +29654,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -29945,7 +29955,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -30281,7 +30291,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -30707,7 +30717,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -31156,8 +31166,16 @@
 						"type": "integer",
 						"minimum": 0,
 						"description": "Bytes that the kernel sent to the peer since it added the peer."
+					},
+					"runtime": {
+						"type": "object",
+						"description": "Always {}: the item is itself the live state that the daemon or the kernel reports.",
+						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"runtime"
+				]
 			},
 			"WirelessDevicesResponse": {
 				"type": "object",
@@ -31265,7 +31283,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -32899,7 +32917,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -33174,8 +33192,16 @@
 							"null"
 						],
 						"description": "Client DUID. A v4 entry carries the client id that dnsmasq records, or null when the client sent none. A v6 entry always carries the DUID"
+					},
+					"runtime": {
+						"type": "object",
+						"description": "Always {}: the item is itself the live state that the daemon or the kernel reports.",
+						"readOnly": true
 					}
-				}
+				},
+				"required": [
+					"runtime"
+				]
 			},
 			"DhcpServersResponse": {
 				"type": "object",
@@ -33732,7 +33758,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -34029,7 +34055,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -34195,7 +34221,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -34403,7 +34429,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -34591,7 +34617,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -34863,7 +34889,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -35236,7 +35262,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -35548,7 +35574,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -35992,7 +36018,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36141,7 +36167,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36289,7 +36315,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36486,7 +36512,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36571,7 +36597,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36688,7 +36714,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -36851,7 +36877,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37094,7 +37120,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37291,7 +37317,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37477,7 +37503,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37566,7 +37592,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37666,7 +37692,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -37942,7 +37968,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -38356,7 +38382,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -38474,7 +38500,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -38644,7 +38670,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -39067,7 +39093,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					}
 				},
@@ -39915,7 +39941,7 @@
 					},
 					"runtime": {
 						"type": "object",
-						"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
 						"readOnly": true
 					},
 					"key": {
