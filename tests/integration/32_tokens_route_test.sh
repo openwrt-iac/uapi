@@ -94,6 +94,13 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 	-X POST "$URL/uapi/tokens" -d '{"name": "evil", "scopes": ["*:rw"]}')
 [ "$status" = "403" ] || fail "scope escalation expected 403, got $status"
 
+echo "--- POST /uapi/tokens refuses a scope that the server does not know ---"
+status=$(curl -sS -o /tmp/uapi_unknown_scope.json -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-X POST "$URL/uapi/tokens" -d '{"name": "api_unknown_scope", "scopes": ["dhcp:leases6:ro"]}')
+[ "$status" = "422" ] || fail "unknown scope expected 422, got $status"
+[ "$(jq -r '.errors[0].field + " " + .errors[0].code' /tmp/uapi_unknown_scope.json)" = "scopes[0] not_in_enum" ] \
+	|| fail "unknown scope: $(cat /tmp/uapi_unknown_scope.json)"
+
 echo "--- a token read and revoked by position is named, and its bucket, marker and series go with it ---"
 # api_shortlived is the last token in the file, and its request above created its state.
 [ "$(curl -sS -g -H "$ADMIN" "$URL/uapi/tokens/@token[-1]" | jq -r .name)" = "api_shortlived" ] \
