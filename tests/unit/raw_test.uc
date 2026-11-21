@@ -21,6 +21,8 @@ t.describe('raw.inferred_domain_path', () => {
 		                    ["openvpn"]);
 		t.assert_deep_equal(raw.inferred_domain_path("ipsec", "tunnel"),
 		                    ["ipsec"]);
+		t.assert_deep_equal(raw.inferred_domain_path("vnstat", "interface"),
+		                    ["vnstat"]);
 	});
 
 	t.it('maps dynamic wireguard_<iface> peer types to network/wireguard_peers', () => {
