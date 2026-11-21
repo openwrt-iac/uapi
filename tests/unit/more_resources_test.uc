@@ -823,19 +823,19 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.2');
 		t.assert_equal(ifh.patch(c, ctx, 'henet', { ip6prefix: [ '2001:db8:1::/48', '2001:db8:2::/48' ] }).status, 200);
 		t.assert_deep_equal(c._state.uci.network.henet.ip6prefix, [ '2001:db8:1::/48', '2001:db8:2::/48' ]);
-		t.assert_deep_equal(listed(c), [ [] ]);
+		t.assert_deep_equal(listed(c), []);
 
 		c = box({ ipaddr: [ '192.0.2.1' ] });
 		t.assert_deep_equal(listed(c), [ [ 'ipaddrs:conflict' ] ]);
-		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 422);
 		t.assert_deep_equal(c._state.uci.network.henet.ipaddr, [ '192.0.2.1' ]);
 		t.assert_equal(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.1' ] }).status, 200);
 		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.1');
-		t.assert_deep_equal(listed(c), [ [] ]);
+		t.assert_deep_equal(listed(c), []);
 
 		c = box({ ipaddr: [ '192.0.2.1', '192.0.2.3' ] });
 		t.assert_deep_equal(listed(c), [ [ 'ipaddrs:conflict' ] ]);
-		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 422);
 
 		let jp = { ...ctx, json_patch: true };
 		c = box({ ipaddr: '192.0.2.1' });
