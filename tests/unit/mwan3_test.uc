@@ -176,6 +176,19 @@ t.describe('mwan3 values that mwan3 does not run', () => {
 		t.assert_equal(index(SPEC.Mwan3GlobalsRequest.properties.loglevel.enum, "err"), -1);
 	});
 
+	t.it('a stored panic or 3, which iptables takes, is no error, and a write that sends one anew is refused', () => {
+		for (let l in [ "panic", "3" ]) {
+			let c = world({ loglevel: l, logging: '1' });
+			t.assert_deep_equal(gh.sweep(c), [], l);
+			t.assert_equal(gh.patch(c, ctx, { logging: false, loglevel: l }).status, 200, l);
+			t.assert_equal(c._state.uci.mwan3.globals.loglevel, l);
+			t.assert_deep_equal(codes(gh.patch(world({ loglevel: 'notice' }), ctx, { loglevel: l }), "loglevel"),
+			                    [ "not_in_enum" ], l);
+			t.assert_true(index(SPEC.Mwan3GlobalsResponse.properties.loglevel.enum, l) >= 0, l);
+			t.assert_equal(index(SPEC.Mwan3GlobalsRequest.properties.loglevel.enum, l), -1, l);
+		}
+	});
+
 	t.it('a metric above 256 answers out_of_range, and 256 passes', () => {
 		t.assert_deep_equal(codes(mh.patch(world({}), ctx, 'm1', { metric: 257 }), "metric"), [ "out_of_range" ]);
 		t.assert_equal(mh.patch(world({}), ctx, 'm1', { metric: 256 }).status, 200);

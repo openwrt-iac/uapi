@@ -62,6 +62,8 @@ const ROWS = [
 	[ "mwan3.globals.uc", "globals", "mmx_mask", "0x000003F00", "mmx_mask" ],
 	[ "mwan3.globals.uc", "globals", "mmx_mask", "037400", "mmx_mask" ],
 	[ "mwan3.globals.uc", "globals", "loglevel", "warning", "loglevel" ],
+	[ "mwan3.globals.uc", "globals", "loglevel", "panic", "loglevel" ],
+	[ "mwan3.globals.uc", "globals", "loglevel", "3", "loglevel" ],
 	[ "mwan3.interfaces.uc", "mwan", "track_method", "nslookup", "track_method" ],
 	[ "mwan3.interfaces.uc", "mwan", "count", "20", "probe_count" ],
 	[ "mwan3.interfaces.uc", "mwan", "size", "0", "size" ],

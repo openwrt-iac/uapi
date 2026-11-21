@@ -3,6 +3,8 @@ let strict_bool = values.strict_bool;
 
 // The names that LuCI offers and that the LOG target of iptables takes.
 const LOG_LEVELS = [ "emerg", "alert", "crit", "error", "warning", "notice", "info", "debug" ];
+// libxtables also takes these, so a stored one is no error, but LuCI does not offer them.
+const IPTABLES_ONLY = [ "panic", "0", "1", "2", "3", "4", "5", "6", "7" ];
 const IPTABLES_REFUSED = [ "err", "warn" ];
 
 function fromUci(section) {
@@ -57,8 +59,8 @@ return {
 		                  pattern: MASK_PATTERN,
 		                  description: "Firewall mark mask for mwan3-tagged packets (default 0x3F00), of 32 bits, in hex, decimal or octal, as ash, iptables and ip read it: a leading 0 makes it octal, so 08 is no number." },
 		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
-		loglevel:       { "x-uapi-read-nullable": true, type: ["string", "null"], enum: [ ...LOG_LEVELS, ...IPTABLES_REFUSED, null ],
+		loglevel:       { "x-uapi-read-nullable": true, type: ["string", "null"], enum: [ ...LOG_LEVELS, ...IPTABLES_ONLY, ...IPTABLES_REFUSED, null ],
 		                  "x-uapi-write": { enum: [ ...LOG_LEVELS, null ] },
-		                  description: "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. iptables refuses `err` and `warn`, and mwan3 then loads none of its rules. A write refuses them, and a stored one blocks every write of the section, but a read can give one." },
+		                  description: "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read can also give `panic` or a number from 0 to 7, which iptables takes, and a write can send such a stored value back. iptables refuses `err` and `warn`, and mwan3 then loads none of its rules. A write refuses them, and a stored one blocks every write of the section, but a read can give one." },
 	},
 };

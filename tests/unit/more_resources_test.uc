@@ -91,6 +91,46 @@ t.describe('firewall.defaults synflood_rate', () => {
 	});
 });
 
+// fw4.uc of 25.12.5 throws in parse_defaults on each of these, so it applies no ruleset.
+t.describe('firewall.defaults options that fw4 refuses', () => {
+	let dh = handler.make_singleton(fw_defaults, { tx: { acquire: () => ({}), release: () => null,
+	                                                     reload: () => null, check_services: () => null } });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let box = (opts) => ubus.stub({ uci: { firewall: {
+		d: { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT', ...opts },
+	} } });
+	let codes = (r, field) => map(filter(r.body.errors ?? [], (e) => e.field == field), (e) => e.code);
+	const REFUSED = [ { synflood_rate: 'abc' }, { synflood_burst: 'abc' }, { drop_invalid: 'YES' },
+	                  { syn_flood: 'maybe' }, { tcp_syncookies: [ '1' ] }, { flow_offloading: 'enabled' },
+	                  { flow_offloading_hw: '2' } ];
+
+	t.it('are a live error of the section that blocks a write of another field', () => {
+		for (let opts in REFUSED) {
+			let opt = keys(opts)[0];
+			let swept = dh.sweep(box(opts))[0]?.errors ?? [];
+			t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ opt, "invalid_format", true ] ], opt);
+			t.assert_deep_equal(codes(dh.patch(box(opts), ctx, { input: 'DROP' }), opt), [ "invalid_format" ], opt);
+		}
+	});
+
+	t.it('a write that names the option replaces it, and a null removes a bool', () => {
+		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { synflood_rate: '25/second', synflood_burst: 50,
+		                                  drop_invalid: false, syn_flood: null }).status, 200);
+		t.assert_deep_equal(c._state.uci.firewall.d, { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT',
+		                                               synflood_rate: '25/second', synflood_burst: '50', drop_invalid: '0' });
+	});
+
+	t.it('a null for a number keeps the option, so the write is refused', () => {
+		t.assert_deep_equal(codes(dh.patch(box({ synflood_burst: 'abc' }), ctx, { synflood_burst: null }), "synflood_burst"),
+		                    [ "invalid_format" ]);
+	});
+
+	t.it('a value that fw4 takes is no error', () => {
+		t.assert_deep_equal(dh.sweep(box({ synflood_burst: '0x10', synflood_rate: '! 25/m', drop_invalid: 'on' })), []);
+	});
+});
+
 t.describe('firewall.redirects', () => {
 	t.it('contract', () => {
 		t.assert_equal(redirects.package, "firewall");
