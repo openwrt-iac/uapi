@@ -891,9 +891,10 @@ fi
 $SSH "uci delete network.uapi45mark; uci commit network; wg set $IFACE2 peer '$MARK' remove"
 
 # The read of proto static hides listen_port, and a PATCH keeps what it leaves out, so the switch
-# gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. Either way out
-# that the message gives works: a null in the switch removes the option, and so does a JSON Patch
-# that removes it after a switch with disabled true.
+# gave wireguard.sh a hand-written port name that wg cannot resolve, and answered 200. The switch
+# refuses it, also with disabled true, since a write never leaves a section that the next write
+# refuses. A null in the switch removes the option, and so does a JSON Patch on a section that a
+# hand edit switched.
 echo "--- a switch to wireguard refuses a hand-written listen_port that does not resolve, which keeps the interface down ---"
 up3() { $SSH "ubus call network.interface.$IFACE3 status" 2>/dev/null | grep -q '"up": true'; }
 wait_up3() {
@@ -913,7 +914,10 @@ body_of "$r" | grep -q '"code": "conflict"' || fail "the 422 is not a conflict: 
 body_of "$r" | grep -q 'nosuchservice' && fail "the 422 quotes the stored value: $(body_of "$r")"
 [ "$($SSH "uci get network.$IFACE3.proto")" = "static" ] || fail "the refused switch changed the proto"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/interfaces/$IFACE3" -d "$TO_WG3,\"disabled\":true}")
-[ "$(status_of "$r")" = "200" ] || fail "switch with disabled true: $(body_of "$r")"
+[ "$(status_of "$r")" = "422" ] || fail "switch with disabled true expected 422, got $(status_of "$r"): $(body_of "$r")"
+$SSH "uci -q delete network.$IFACE3.ipaddr; uci set network.$IFACE3.proto=wireguard
+	uci set network.$IFACE3.private_key='$PRIV3'; uci add_list network.$IFACE3.addresses=10.98.96.1/30
+	uci set network.$IFACE3.disabled=1; uci commit network"
 # The ucode handler of main drops a port name before wg sees it and brings the interface up, as
 # 54_interface_netifd_reads_test pins (#359). The switch refuses the name on both.
 if ! wg_ucode_platform; then
