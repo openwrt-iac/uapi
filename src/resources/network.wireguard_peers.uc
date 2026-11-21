@@ -138,10 +138,12 @@ function validate_new(json) {
 	// wg reads a key without its whitespace and comment, and a newline adds a line to the config.
 	// wireguard.sh expands a backslash, which only the kernel apply follows, for a stored key. A key
 	// with one is refused here as it stands, so a request key costs no expansion under the lock. The
-	// ucode handler matches the key as uci holds it, and leaves out one with whitespace or a comment.
+	// ucode handler matches the key as uci holds it, and leaves out a list or one with whitespace or
+	// a comment.
 	for (let k in [ "public_key", "preshared_key" ]) {
 		let key = config_get(json[k]);
-		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0 || !match(handled ? key : values.wg_line(key), WG_KEY_RE)))
+		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0
+		    || (handled ? (type(json[k]) != "string" || !match(json[k], WG_KEY_RE)) : !match(values.wg_line(key), WG_KEY_RE))))
 			push(errs, { field: k, code: "invalid_format", live: live && !wg.handler_drops_key(json[k]),
 			             message: "must be a WireGuard key as wg genkey prints it, on one line and without a backslash" });
 	}

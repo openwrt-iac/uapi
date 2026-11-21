@@ -253,15 +253,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **On OpenWrt main, a WireGuard key that the ucode handler skips is an error,
   and its peer gets no route.** The handler matches a key as uci holds it, so it
   skips a peer whose `public_key` holds whitespace or a `#` comment, and leaves
-  out such a `preshared_key`. uapi judged the key as wg reads it under
-  wireguard.sh, so it reported no error, and a write of the peer answered 200
-  and installed the routes of `route_allowed_ips` for the peer that the handler
-  skips. Such a stored key now blocks every write of its peer there with 422
-  `invalid_format`, under the stored-error rule that 3.5.0 announces (#308),
-  and the kernel apply installs no route for the peer. A switch of
-  `network/interfaces` to wireguard, or an enable, is no longer refused for the
-  `allowed_ips` or `endpoint_host` of a peer that the handler skips. Note in
-  `docs/migration-v3-to-v4.md`. (#436)
+  out such a `preshared_key`, or one that uci holds as a list. uapi judged the
+  key as wg reads it under wireguard.sh, so it reported no error, and a write of
+  the peer answered 200 and installed the routes of `route_allowed_ips` for the
+  peer that the handler skips. Such a stored key now blocks every write of its
+  peer there with 422 `invalid_format`, under the stored-error rule that 3.5.0
+  announces (#308), and the kernel apply installs no route for the peer. A
+  switch of `network/interfaces` to wireguard, or an enable, is no longer
+  refused for the `allowed_ips` or `endpoint_host` of a peer that the handler
+  skips. Note in `docs/migration-v3-to-v4.md`. (#436)
 - **The schemas declare the values that LuCI and the daemons take, so a stored
   one blocks no write.** v4 checks each stored section against the schema of its
   resource, and many constraints were stricter than LuCI or the daemon that
