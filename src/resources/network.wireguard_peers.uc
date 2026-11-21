@@ -129,16 +129,19 @@ function validate(json, conn, id, delta) {
 function validate_new(json) {
 	let errs = [];
 	let enabled = json.disabled !== true;
-	// wireguard.sh writes no [Peer] block for a peer without a key, and still adds its routes.
+	let handled = wg.ucode_handler();
+	// wireguard.sh writes no [Peer] block for a peer without a key, and still adds its routes. The
+	// ucode handler skips a peer whose key does not match its pattern, with its routes.
 	let key = config_get(json.public_key);
-	let live = enabled && type(key) == "string" && key != "";
+	let live = enabled && type(key) == "string" && key != "" && !wg.handler_drops_key(json.public_key);
 
 	// wg reads a key without its whitespace and comment, and a newline adds a line to the config.
 	// wireguard.sh expands a backslash, which only the kernel apply follows, for a stored key. A key
-	// with one is refused here as it stands, so a request key costs no expansion under the lock.
+	// with one is refused here as it stands, so a request key costs no expansion under the lock. The
+	// ucode handler matches the key as uci holds it, and leaves out one with whitespace or a comment.
 	for (let k in [ "public_key", "preshared_key" ]) {
 		let key = config_get(json[k]);
-		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0 || !match(values.wg_line(key), WG_KEY_RE)))
+		if (type(key) == "string" && key != "" && (index(key, "\n") >= 0 || index(key, "\\") >= 0 || !match(handled ? key : values.wg_line(key), WG_KEY_RE)))
 			push(errs, { field: k, code: "invalid_format", live: live && !wg.handler_drops_key(json[k]),
 			             message: "must be a WireGuard key as wg genkey prints it, on one line and without a backslash" });
 	}
@@ -146,7 +149,7 @@ function validate_new(json) {
 	// Under wireguard.sh, netifd and `ip route` read a prefix length in base 0 and wg in base 10, so
 	// `/010` routes /8 to a peer that wg gives /10, and netifd installs no route for `/08`. The ucode
 	// handler reads it in base 10, as wg does.
-	let aips = wg.ucode_handler() ? [] : as_list(json.allowed_ips);
+	let aips = handled ? [] : as_list(json.allowed_ips);
 	for (let i = 0; i < length(aips); i++)
 		if (type(aips[i]) == "string" && match(aips[i], /\/0[0-9]+$/) && !match(aips[i], /\/0+[0-7]?$/))
 			push(errs, { field: sprintf("allowed_ips[%d]", i), code: "invalid_format",
@@ -161,11 +164,10 @@ function validate_new(json) {
 	// The ucode handler asks no resolver for a host of digits and dots, and gives it to wg as it
 	// stands. getaddrinfo looks up one that inet_aton does not read, such as `10.0.0.256`, as a name
 	// that no DNS holds, and wg then refuses the config of the whole interface. The handler gives wg
-	// no endpoint without a port that it reads, and no peer without a key that matches its pattern.
-	let handled = wg.ucode_handler();
+	// no endpoint without a port that it reads.
 	if (handled && type(host) == "string" && match(host, /^[0-9.]+$/) && wg.inet_aton(host) == null)
 		push(errs, { field: "endpoint_host", code: "invalid_format",
-		             live: live && json.endpoint_port !== 0 && !wg.handler_drops_key(json.public_key),
+		             live: live && json.endpoint_port !== 0,
 		             message: "must be an IPv4 address when it holds only digits and dots: the ucode handler gives such a host to wg as an address, and wg refuses the config of the whole interface for one that it cannot read" });
 
 	// The schema allows 0 and -1 because a read reports a port that /etc/services does not resolve

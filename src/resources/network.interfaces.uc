@@ -126,6 +126,7 @@ function fetch_runtime(conn, name) {
 // src/resources in the unit tests, and /usr/share/uapi/resources on the device.
 function peers_that_wg_refuses(conn, name) {
 	let peers = loadfile(sourcepath(0, true) + "/network.wireguard_peers.uc", { raw_mode: true })();
+	let wg = require('wg');
 	let out = [];
 	conn.uci_foreach(PKG, "wireguard_" + name, function(s) {
 		let view = peers.fromUci(s);
@@ -134,9 +135,9 @@ function peers_that_wg_refuses(conn, name) {
 		let errs = filter(peers.validate_new(view), (e) => e.live !== false);
 		// wg refuses the whole config for an allowed IP that it cannot parse. A peer write refuses
 		// such a value, and a few other forms, in validate(), and wg reads the allowed IPs of a peer
-		// only with its key.
+		// only with its key, which the ucode handler gives wg only when it matches its pattern.
 		let key = values.config_get(view.public_key);
-		if (view.disabled !== true && type(key) == "string" && key != "")
+		if (view.disabled !== true && type(key) == "string" && key != "" && !wg.handler_drops_key(view.public_key))
 			for (let e in peers.validate(view, null))
 				if (match(e.field, /^allowed_ips\[/)) push(errs, e);
 		let fields = uniq(map(errs, (e) => e.field));
