@@ -50,38 +50,52 @@ t.describe('scope.parse', () => {
 	});
 });
 
+function no_package() { return false; }
+function only_ddns(pkg) { return pkg == "ddns"; }
+
 t.describe('scope.is_known_path', () => {
 	t.it('accepts the documented v1 tree', () => {
-		t.assert_true(scope.is_known_path(["*"]));
-		t.assert_true(scope.is_known_path(["network"]));
-		t.assert_true(scope.is_known_path(["network", "interfaces"]));
-		t.assert_true(scope.is_known_path(["firewall", "rules"]));
-		t.assert_true(scope.is_known_path(["system"]));
+		t.assert_true(scope.is_known_path(["*"], no_package));
+		t.assert_true(scope.is_known_path(["network"], no_package));
+		t.assert_true(scope.is_known_path(["network", "interfaces"], no_package));
+		t.assert_true(scope.is_known_path(["firewall", "rules"], no_package));
+		t.assert_true(scope.is_known_path(["system"], no_package));
 	});
 
-	t.it('accepts raw:<any-package>', () => {
-		t.assert_true(scope.is_known_path(["raw"]));
-		t.assert_true(scope.is_known_path(["raw", "firewall"]));
-		t.assert_true(scope.is_known_path(["raw", "obscure_package"]));
+	t.it('accepts raw:<any-package>, and *:<any-package>, which matches it', () => {
+		t.assert_true(scope.is_known_path(["raw"], no_package));
+		t.assert_true(scope.is_known_path(["raw", "firewall"], no_package));
+		t.assert_true(scope.is_known_path(["raw", "obscure_package"], no_package));
+		t.assert_true(scope.is_known_path(["*", "obscure_package"], no_package));
+		t.assert_true(scope.permits(["*:obscure_package:ro"], ["raw", "obscure_package"], "ro"));
+	});
+
+	t.it('accepts a package outside the tree only while it exists, and no path below it', () => {
+		t.assert_true(scope.is_known_path(["ddns"], only_ddns));
+		t.assert_false(scope.is_known_path(["ddns"], no_package));
+		t.assert_false(scope.is_known_path(["firewal"], only_ddns));
+		t.assert_false(scope.is_known_path(["ddns", "service"], only_ddns));
 	});
 
 	t.it('rejects unknown paths', () => {
-		t.assert_false(scope.is_known_path(["bogus"]));
-		t.assert_false(scope.is_known_path(["firewall", "made_up"]));
-		t.assert_false(scope.is_known_path(["network", "interfaces", "extra"]));
+		t.assert_false(scope.is_known_path(["bogus"], no_package));
+		t.assert_false(scope.is_known_path(["firewall", "made_up"], no_package));
+		t.assert_false(scope.is_known_path(["network", "interfaces", "extra"], no_package));
 	});
 });
 
 t.describe('scope.validate_against_known_tree', () => {
 	t.it('passes for valid scopes', () => {
-		scope.validate_against_known_tree("firewall:rules:rw");
-		scope.validate_against_known_tree("*:ro");
-		scope.validate_against_known_tree("raw:firewall:rw");
+		scope.validate_against_known_tree("firewall:rules:rw", no_package);
+		scope.validate_against_known_tree("*:ro", no_package);
+		scope.validate_against_known_tree("raw:firewall:rw", no_package);
+		scope.validate_against_known_tree("ddns:rw", only_ddns);
 	});
 
 	t.it('throws for unknown paths', () => {
-		t.assert_throws(() => scope.validate_against_known_tree("bogus:rw"));
-		t.assert_throws(() => scope.validate_against_known_tree("firewall:bogus:rw"));
+		t.assert_throws(() => scope.validate_against_known_tree("bogus:rw", no_package));
+		t.assert_throws(() => scope.validate_against_known_tree("firewall:bogus:rw", no_package));
+		t.assert_throws(() => scope.validate_against_known_tree("firewal:rw", only_ddns));
 	});
 });
 

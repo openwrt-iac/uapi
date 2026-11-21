@@ -63,16 +63,31 @@ alone, so a client that must not see the IPv6 leases cannot keep `dhcp:leases`.
 
 ## The token mint refuses a scope that the server does not know
 
-`POST /uapi/tokens` now checks each scope against the scope tree of the server,
-as `uapi-token create` does (announced in 3.5.0, #415). A typo such as
-`firewall:rulez:rw`, a scope that v4 removed such as `dhcp:leases6:ro`, or a
-malformed scope such as one without a verb answers 422 `validation_failed`,
-with code `not_in_enum` on its entry of `scopes`, such as `scopes[1]`. 3.x
-minted a token with an unknown scope, which granted nothing, and answered 500
-`internal_error` for a malformed one. The check runs before the escalation
-check, so such a scope answers 422 and not 403 `scope_escalation_blocked`. A
-stored token that holds an unknown scope keeps it and still authenticates.
-`docs/tokens.md` lists the scope tree.
+`POST /uapi/tokens` now checks each scope as `uapi-token create` does
+(announced in 3.5.0, #415). A scope passes when its path is in the scope tree,
+is `raw:<package>`, or names all of a uci package that exists in `/etc/config`,
+such as `ddns:rw` where ddns is installed. Any other scope answers 422
+`validation_failed`, with code `not_in_enum` on its entry of `scopes`, such as
+`scopes[1]`:
+
+- a typo, such as `firewall:rulez:rw` or `firewal:rw`,
+- a scope that v4 removed, such as `dhcp:leases6:ro`,
+- a path below a package outside the tree, such as `ddns:service:rw`,
+- a scope on a package that is not installed,
+- a malformed scope, such as one without a verb.
+
+No request of v4 checks such a path, so none of these scopes grants access. A
+scope on a package that is not installed starts to grant access when the
+package is installed, so mint it after the install. 3.x minted each of them,
+and answered 500 `internal_error` for a malformed one. The check runs before
+the escalation check, so such a scope answers 422 and not 403
+`scope_escalation_blocked`. A stored token that holds such a scope keeps it and
+still authenticates. `docs/tokens.md` lists the scope tree.
+
+`vnstat:interfaces` left the scope tree in 3.0.0 with the `vnstat/interfaces`
+endpoint, but a raw request on a vnstat `interface` section still checked it.
+Such a section now needs `vnstat:ro` or `vnstat:rw`, as any section that no
+resource models.
 
 ## `id` and `runtime` are required in every resource response
 
@@ -275,9 +290,10 @@ change.
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of
-the stored scopes, only `dhcp:leases` and `dhcp:leases6` change what they grant,
-as the `dhcp/leases` section says. Some reads now answer another value for the
-same stored option, to follow what the daemon does:
+the stored scopes, only `dhcp:leases`, `dhcp:leases6` and `vnstat:interfaces`
+change what they grant, as the `dhcp/leases` and token mint sections say. Some
+reads now answer another value for the same stored option, to follow what the
+daemon does:
 
 | Resource | Field | The read changes when the option is |
 |---|---|---|

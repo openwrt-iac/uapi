@@ -95,10 +95,14 @@ function parse(scope) {
 	return { segments, verb };
 }
 
-function is_known_path(segments) {
-	if (length(segments) == 2 && segments[0] == "raw")
+// A path is also known when /raw/<pkg> checks it: [raw, <pkg>], which `*:<pkg>` matches too,
+// and [<pkg>] for a package outside the tree, while that package exists.
+function is_known_path(segments, package_exists) {
+	if (length(segments) == 2 && (segments[0] == "raw" || segments[0] == "*"))
 		return true;
 	if (!!KNOWN_PATHS[join(":", segments)])
+		return true;
+	if (length(segments) == 1 && package_exists(segments[0]))
 		return true;
 	let has_wildcard = false;
 	for (let s in segments) if (s == "*") { has_wildcard = true; break; }
@@ -116,9 +120,9 @@ function is_known_path(segments) {
 	return false;
 }
 
-function validate_against_known_tree(scope) {
+function validate_against_known_tree(scope, package_exists) {
 	let p = parse(scope);
-	if (!is_known_path(p.segments))
+	if (!is_known_path(p.segments, package_exists))
 		die(sprintf("scope: %J references unknown path", scope));
 	return p;
 }

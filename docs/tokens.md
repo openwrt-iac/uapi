@@ -92,7 +92,7 @@ create`, and the HTTP mint has no `--force`. A typo, a scope that a release
 removed such as `dhcp:leases6`, or a malformed scope returns `422
 validation_failed` with code `not_in_enum` on its entry, such as `scopes[1]`.
 This check runs before the escalation check, so an unknown scope never returns
-403.
+`scope_escalation_blocked`.
 
 The caller's scopes must cover the requested scopes, equal or narrower.
 Escalation
@@ -198,6 +198,12 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `packages` | `installed`, `feeds` |
 | `uapi` | `tokens`, `metrics`, `diagnostics` |
 | `raw` | `<any-package>` (composes with the curated domain tree) |
+
+The tree also holds the paths that `/raw/` checks for a package outside it. A
+scope on all of such a package, such as `ddns:rw`, is in the tree while the
+package exists in `/etc/config`. `*:<package>` is in the tree because it
+matches `raw:<package>`. A path below such a package, such as `ddns:service`,
+is not: `/raw/` checks each of its sections against the package alone.
 
 ## Deepest-match-wins
 

@@ -136,7 +136,8 @@ function cmd_create(opts) {
 	if (length(opts.scopes) == 0) die("uapi-token create: at least one --scope required");
 
 	if (!opts.force)
-		for (let s in opts.scopes) scope.validate_against_known_tree(s);
+		for (let s in opts.scopes)
+			scope.validate_against_known_tree(s, (pkg) => fs.stat("/etc/config/" + pkg) != null);
 
 	// Reject malformed --allowed-cidr at mint time. Otherwise a typo silently
 	// produces a token that denies every request with `ip_not_permitted` and
