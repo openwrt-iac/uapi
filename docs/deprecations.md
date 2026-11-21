@@ -76,9 +76,13 @@ section by count.
   in v4.** One check in `check_schema_types` replaces the per-field audits, with
   an opt-out annotation for `system.notes`, which holds several lines on
   purpose. (#276)
-- **`mwan3/interfaces.family` will be required in v4, or an unset one will read
-  as `ipv4`.** mwan3 reads an unset family as ipv4, while a read today gives
-  null and a PATCH of null answers 200. (#306)
+- **`mwan3/interfaces.family` will read as `ipv4` in v4 when it is unset or
+  empty.** mwan3 reads both as ipv4, while a read today gives null for an unset
+  family and `""` for an empty one, and a PATCH of null answers 200. The v4
+  schema declares `family` as a string that every response holds. The request
+  schema does not require it and does not declare null: a PUT that leaves out
+  `family` removes the option, and so does a null in a merge patch. The read
+  then gives `ipv4`. (#306)
 - **A `wireless/interfaces` section with no `mode` will read as null in v4
   instead of `ap`.** wifi-scripts sets up nothing for such a section, so the
   current read reports an access point that does not exist. A write that sends
@@ -87,7 +91,10 @@ section by count.
 - **A write will be refused for any stored error the section holds in v4, as
   LuCI does.** Today a write refuses only the errors it adds. A write that only
   disables the section is refused too, so a broken section is fixed or deleted,
-  not disabled. (#308)
+  not disabled. This covers the schema checks too: a stored value outside its
+  type, enum, bound or pattern, and a newline that the v4 newline rule refuses,
+  block every write of the section. The v4 schemas declare what LuCI and the
+  daemons take, so a value that the platform takes is no error. (#308)
 - **Boolean fields will read each option as the daemon that consumes it reads it
   in v4.** Where netifd reads an option through the uci blob converter, only
   `1`/`true` and `0`/`false` count, and the option is dropped otherwise (libuci
@@ -115,13 +122,23 @@ section by count.
   only that scope gets 403 on `?family=v6`, so mint one with `dhcp:leases`. A v6
   entry is addressed by its `ip`, as `GET /dhcp/leases/<ip>?family=v6`. 3.x
   ignores `family`, so any value lists the IPv4 entries. v4 refuses a value
-  other than `v4` or `v6` with 400 `bad_request`. (#320)
+  other than `v4` or `v6` with 400 `bad_request`. A token that holds
+  `dhcp:leases` will also read the IPv6 leases in v4, with their DUIDs, host
+  names and addresses. v4 has no scope for the IPv4 leases alone, so a client
+  that must not see the IPv6 leases cannot keep `dhcp:leases`. (#320)
 - **`runtime` is always present on every resource in v4, an object that the
   schema requires.** Its fields stay documented on the resources that document
   them today, 4 of 45, and the others keep an opaque object. (#322)
 - **Dead error codes leave the ErrorEnvelope enum in v4.**
   `unsupported_media_type` is declared but never returned; the emitted set is
   audited against the declared one. (#323)
+- **A query parameter value outside its declared set answers 400 in v4.** 3.x
+  ignores such a value. A `managed` other than `true` or `false` on a curated
+  list lists every section. A `validate` other than `1` on `/diagnostics` skips
+  the sweep. An empty `cursor` reads the first page. v4 answers 400
+  `bad_request` for `managed` and `validate`, and 400 `invalid_cursor` for the
+  empty cursor. Send only the values that the spec declares, and leave out a
+  parameter instead of sending it empty. (#403)
 
 ## Removed in past releases
 
