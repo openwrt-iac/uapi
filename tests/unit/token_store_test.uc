@@ -159,7 +159,7 @@ t.describe('token_store.create validation', () => {
 	});
 
 	t.it('refuses a scope outside the known tree on its own entry', () => {
-		for (let s in [ "firewall:rulez:rw", "dhcp:leases6:ro", "firewall:rules" ]) {
+		for (let s in [ "firewall:rulez:rw", "dhcp:leases6:ro", "firewall:rules", "ddns:service:rw" ]) {
 			let c = bus.stub({});
 			let r = token_store.create(c, { name: "ok_name", scopes: [ "firewall:rules:ro", s ] },
 				[ "*:rw" ], 1700000000, noop_tx());
@@ -177,6 +177,23 @@ t.describe('token_store.create validation', () => {
 			[ "*:rw" ], 1700000000, noop_tx());
 		t.assert_true(r.ok);
 		t.assert_deep_equal(c._state.uci.uapi.ok_name.scopes, [ "dhcp:leases:ro", "*:rules:ro", "raw:network:ro" ]);
+	});
+
+	t.it('mints a scope on all of a package outside the tree, which /raw checks', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c, { name: "ok_name", scopes: [ "raw:ddns:rw", "ddns:rw" ] },
+			[ "*:rw" ], 1700000000, noop_tx());
+		t.assert_true(r.ok);
+	});
+
+	t.it('refuses a scope on all of a package that does not exist, such as a typo', () => {
+		for (let s in [ "ddns:rw", "firewal:rw" ]) {
+			let c = bus.stub({ missing_packages: [ "ddns", "firewal" ] });
+			let r = token_store.create(c, { name: "ok_name", scopes: [ s ] },
+				[ "*:rw" ], 1700000000, noop_tx());
+			t.assert_equal(r.kind, "validation", s);
+			t.assert_equal(r.errors[0].field, "scopes[0]", s);
+		}
 	});
 
 	// A 403 would send the client to a broader token, which cannot mint the scope either.

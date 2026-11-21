@@ -96,7 +96,7 @@ function get_public(conn, name) {
 	return _read_record(s, false);
 }
 
-function _validate_create_body(body) {
+function _validate_create_body(body, package_exists) {
 	if (type(body) != "object")
 		return [errors.field_error("(root)", "invalid_type", "must be a JSON object")];
 	let errs = [];
@@ -110,7 +110,7 @@ function _validate_create_body(body) {
 		if (type(body.scopes[i]) != "string")
 			push(errs, errors.field_error(sprintf("scopes[%d]", i),
 				"invalid_type", "scope must be a string"));
-		else try { scope.validate_against_known_tree(body.scopes[i]); }
+		else try { scope.validate_against_known_tree(body.scopes[i], package_exists); }
 		catch (e) {
 			push(errs, errors.field_error(sprintf("scopes[%d]", i), "not_in_enum", e.message));
 		}
@@ -183,7 +183,7 @@ function create(conn, body, caller_scopes, now, tx_overrides) {
 		package: PACKAGE,
 		reload_services: [],
 		fn: function(c, pkg) {
-			let errs = _validate_create_body(body);
+			let errs = _validate_create_body(body, c.uci_package_exists);
 			if (length(errs) > 0)
 				return { ok: false, kind: "validation", errors: errs };
 			if (!scope.subsets(caller_scopes, body.scopes))
