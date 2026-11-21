@@ -1,5 +1,6 @@
 let t = require('harness');
 let bus = require('bus');
+let scope = require('scope');
 let raw = loadfile('src/raw.uc')();
 
 function ctx() { return { request_id: "01hx0000000000000000000000" }; }
@@ -21,8 +22,14 @@ t.describe('raw.inferred_domain_path', () => {
 		                    ["openvpn"]);
 		t.assert_deep_equal(raw.inferred_domain_path("ipsec", "tunnel"),
 		                    ["ipsec"]);
-		t.assert_deep_equal(raw.inferred_domain_path("vnstat", "interface"),
-		                    ["vnstat"]);
+	});
+
+	// 3.0.0 took vnstat:interfaces out of the tree with its endpoint and kept this mapping, so the
+	// mint refused the scope that this check reads.
+	t.it('maps a vnstat interface section to a path that the mint takes', () => {
+		let path = raw.inferred_domain_path("vnstat", "interface");
+		t.assert_deep_equal(path, ["vnstat", "interfaces"]);
+		t.assert_true(scope.is_known_path(path, () => false));
 	});
 
 	t.it('maps dynamic wireguard_<iface> peer types to network/wireguard_peers', () => {
