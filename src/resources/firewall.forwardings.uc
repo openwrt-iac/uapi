@@ -10,7 +10,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		src: section.src ?? null,
 		dest: section.dest ?? null,
-		family: section.family ?? "any",
+		family: values.fw_family(section.family) ?? "any",
 		enabled: normalize_bool(section.enabled, true),
 		runtime: {},
 	};

@@ -383,15 +383,14 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(h.patch(conn, ctx(), 'g_existing', { route_allowed_ips: true }).status, 422);
 	});
 
-	// wg reads such a key, so the rules of what wg reads take it, and the schema pattern, which LuCI's
-	// form also applies at save, refuses it.
-	t.it('a stored key with whitespace, which wg reads, blocks every write until a write replaces it', () => {
+	// wg reads such a key, so a stored one is no error, and a write sends the key as wg genkey prints it.
+	t.it('a stored key with whitespace, which wg reads, does not block enabling the peer, and a write refuses one', () => {
 		let c = with_wg();
 		c._state.uci.network.g_existing.public_key = PK + ' ';
 		c._state.uci.network.g_existing.disabled = '1';
-		t.assert_deep_equal(wgp.validate_new({ public_key: PK + ' ' }), []);
-		t.assert_deep_equal(fields_of(make_handler().patch(c, ctx(), 'g_existing', { disabled: false })), [ [ 'public_key', 'invalid_format' ] ]);
-		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false, public_key: PK }).status, 200);
+		t.assert_deep_equal(make_handler().sweep(c), []);
+		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
+		t.assert_deep_equal(fields_of(make_handler().patch(c, ctx(), 'g_existing', { public_key: PK + ' ' })), [ [ 'public_key', 'invalid_format' ] ]);
 	});
 
 	t.it('refuses a key whose unused bits are not zero, which wg refuses', () => {

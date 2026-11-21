@@ -154,9 +154,11 @@ commit-confirmed apply was designed at all.
 
 ## The write-overlay property
 
-A keyword under a property's `x-uapi-write` narrows only the `*Request` schema,
-and nothing at runtime reads it, so `validate()` is what makes it true.
-`tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the fixtures
+A keyword under a property's `x-uapi-write` narrows only the `*Request` schema.
+The handler checks it against the fields that a request names, and an entry of
+`openapi_write_conditional` holds only while `validate()` refuses the same
+values. `tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the
+fixtures
 of its module. A value just past the keyword must be refused in every case, with
 the keyword's own code in at least one of them, and the value at it must pass in
 at least one case. A `pattern` has no value at it, because none can be derived

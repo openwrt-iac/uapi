@@ -1,9 +1,8 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
-let as_list_or_null = values.as_list_or_null;
 
-const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
+const TARGETS = [ "SNAT", "MASQUERADE", "ACCEPT" ];
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
 
@@ -19,7 +18,7 @@ function fromUci(section) {
 		name: section.name ?? null,
 		// fw4 defaults an unset target to masquerade, and coerces anything
 		// outside snat/masquerade/accept to it with a warning.
-		target: section.target ?? "MASQUERADE",
+		target: values.fw_target(section.target, [ ...TARGETS, "NPT" ], "MASQUERADE") ?? "MASQUERADE",
 		enabled: normalize_bool(section.enabled, true),
 		snat_ip: section.snat_ip ?? null,
 		snat_port: section.snat_port ?? null,
@@ -30,12 +29,12 @@ function fromUci(section) {
 			src_port: section.src_port ?? null,
 			dest_ip: section.dest_ip ?? null,
 			dest_port: section.dest_port ?? null,
-			proto: as_list_or_null(section.proto),
+			proto: values.as_word_list_or_null(section.proto),
 			mark: section.mark ?? null,
 			// Deliberately not defaulted to "any": fw4 treats an absent family
 			// on a nat section as IPv4-only for backwards compatibility, so
 			// synthesizing "any" here would misreport what the box does.
-			family: section.family ?? null,
+			family: values.fw_family(section.family) ?? null,
 		},
 		runtime: {},
 	};
@@ -171,7 +170,7 @@ return {
 	schema_properties: {
 		name:      { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		             description: sprintf("Human-readable label for this NAT rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		target:    { type: "string", enum: keys(VALID_TARGETS), default: "MASQUERADE",
+		target:    { type: "string", enum: [ ...TARGETS, "NPT" ], "x-uapi-write": { enum: TARGETS }, default: "MASQUERADE",
 		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT" },
 		enabled:   { type: "boolean", default: true },
 		snat_ip:   { type: ["string", "null"],

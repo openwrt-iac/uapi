@@ -48,7 +48,7 @@ return {
 	id_prefix: "c",
 	openapi_required: ["commonname"],
 	schema_properties: {
-		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 36500,
+		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 49710,
 		                description: "Certificate validity in days" },
 		bits:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1024,
 		                description: "RSA key size in bits" },
@@ -56,7 +56,7 @@ return {
 		organization: { "x-uapi-read-nullable": true, type: "string", description: "X.509 O" },
 		location:     { "x-uapi-read-nullable": true, type: "string", description: "X.509 L" },
 		state:        { "x-uapi-read-nullable": true, type: "string", description: "X.509 ST" },
-		country:      { "x-uapi-read-nullable": true, type: "string", pattern: "^[A-Za-z]{2}$",
+		country:      { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": { pattern: "^[A-Za-z]{2}$" },
 		                description: "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)" },
 	},
 };

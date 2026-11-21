@@ -87,7 +87,8 @@ that the write adds (announced in 3.4.0, #308). Each check judges that whole
 section, for a PATCH of either kind as for a PUT:
 
 - the schema check: a type, an enum, a bound, a pattern, and the newline rule
-  of #276 below,
+  of #276 below. The schema declares what LuCI and the daemon take, so a value
+  that the platform takes is no error,
 - the rules on what a daemon reads, whose errors carry `live` in the sweep,
 - the other rules of each resource, also the ones that 3.x applied only to the
   fields that a request named: the `allowed_ips` of a disabled
@@ -102,14 +103,15 @@ error that it lists now blocks every write of its section. In v4 the same sweep
 is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid value for each
 listed field fixes the section in one write.
 
-Two values that the platform takes are no error, so they block no write and the
-v4 sweep does not list them: the `proto` of an interface that uapi does not
-model, such as the `6in4` that LuCI writes or the `qmi` that an LTE router
-ships, and a list that uci holds for a `wireless/interfaces` text option. Only
-a write that sends such a proto, or such a list where a string is due, answers
-422. On 3.x the sweep is the pre-flight check before the upgrade, with two gaps:
-it does not list what a rule new in v4 refuses, such as a newline in a string
-that 3.x took (#276), and it lists these two values.
+A value that LuCI or the daemon takes is no error, so it blocks no write and the
+v4 sweep does not list it. Examples are the `proto` of an interface that uapi
+does not model, such as the `6in4` that LuCI writes or the `qmi` that an LTE
+router ships, a list that uci holds for a `wireless/interfaces` text option, and
+the values that the section on schemas below names. Only a write that sends
+such a value where the request schema refuses it answers 422. On 3.x the sweep
+is the pre-flight check before the upgrade, with two gaps: it does not list
+what a rule new in v4 refuses, such as a newline in a string that 3.x took
+(#276), and it lists values that v4 takes.
 
 ## `wireless/interfaces` declares the lists that a read gives
 
@@ -119,6 +121,22 @@ declare. The response schema now declares a string or an array for each. A
 request may send `device` and `network` as a string or a list, since netifd
 takes either, and the other four only as a string. A client generated from the
 schema must take an array where the field held a string.
+
+## The schemas follow what LuCI and the daemons take
+
+The response schema of many fields is wider than in v3, because a stored value
+that LuCI or the daemon takes must not block a write: for example
+`network/rules.priority` up to 2147483647, `dhcp/servers.leasetime` with
+`infinite` and `deprecated`, `mwan3/rules.proto` as any protocol name, or the
+bounds of the `mwan3/interfaces` timers. `build/openapi.json` lists each one. A
+request can stay narrower, through the `*Request` schema, and the server now
+checks it against the fields that a request names. A `dhcp/servers.leasetime`
+with a year suffix, which stops dnsmasq, is refused on write.
+
+Some reads now give the value as the daemon parses it: a firewall policy,
+target, `reflection_src` or family as fw4 reads it, an option of several words
+as its words, and a numeric route type as its name. The table in "Reads that
+change at the upgrade" lists them.
 
 ## Boolean reads follow the reader of their daemon
 
@@ -234,6 +252,15 @@ same stored option, to follow what the daemon does:
 | `sqm/queues` | `enabled` | absent, or not `1`, `0`, `off`, `false` or `no` |
 | `wireless/interfaces` | `mode` | absent |
 | `mwan3/interfaces` | `family` | absent |
+| `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |
+| `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
+| `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
+| `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |
+| `firewall/rules`, `firewall/nat`, `firewall/redirects` | `match.family` | `all`, `*`, `inet`, or a word with 4 or 6 |
+| `firewall/rules` | `match.src_port`, `match.dest_port` | one option of several words, as LuCI writes it |
+| `firewall/rules`, `firewall/nat`, `firewall/redirects` | `match.proto` | one option of several words |
+| `uhttpd/instances` | `listen_http`, `listen_https` | an option or an entry of several words |
+| `network/routes` | `type` | a number from 1 to 9 |
 
 A section whose read changes gets a new ETag once, at the upgrade. A write that
 sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.

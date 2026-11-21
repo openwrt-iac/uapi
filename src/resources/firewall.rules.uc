@@ -17,7 +17,7 @@ const VALID_TARGETS = {
 const DSCP_VAL = '([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})';
 
 const DSCP_RE = '^' + DSCP_VAL + '$';
-const DSCP_MATCH_RE = '^!?' + DSCP_VAL + '$';
+const DSCP_MATCH_RE = '^(![ \t]*)?' + DSCP_VAL + '$';
 
 const DSCP_MAX = 63;
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
@@ -32,7 +32,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		target: section.target ?? null,
+		target: values.fw_target(section.target) ?? null,
 		enabled: normalize_bool(section.enabled, true),
 		set_mark: section.set_mark ?? null,
 		set_xmark: section.set_xmark ?? null,
@@ -42,10 +42,10 @@ function fromUci(section) {
 			dest_zone: section.dest ?? null,
 			src_ip: as_list_or_null(section.src_ip),
 			dest_ip: as_list_or_null(section.dest_ip),
-			src_port: as_list_or_null(section.src_port),
-			dest_port: as_list_or_null(section.dest_port),
-			proto: as_list_or_null(section.proto),
-			family: section.family ?? "any",
+			src_port: values.as_word_list_or_null(section.src_port),
+			dest_port: values.as_word_list_or_null(section.dest_port),
+			proto: values.as_word_list_or_null(section.proto),
+			family: values.fw_family(section.family) ?? "any",
 			mark: section.mark ?? null,
 			dscp: section.dscp ?? null,
 		},
@@ -239,7 +239,7 @@ return {
 	schema_properties: {
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		           description: sprintf("Human-readable label for this rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		target:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TARGETS) },
+		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ], "x-uapi-write": { enum: keys(VALID_TARGETS) } },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },

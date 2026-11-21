@@ -25826,6 +25826,7 @@
 							"NOTRACK",
 							"MARK",
 							"DSCP",
+							"HELPER",
 							null
 						]
 					},
@@ -26122,7 +26123,7 @@
 								],
 								"items": {
 									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+									"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"dest_port": {
@@ -26132,7 +26133,7 @@
 								],
 								"items": {
 									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+									"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"proto": {
@@ -26160,7 +26161,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
 								"description": "Match fwmark as value or value/mask, optionally negated with a leading '!'"
 							},
 							"dscp": {
@@ -26168,7 +26169,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$",
+								"pattern": "^(![ \t]*)?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$",
 								"description": "Match DSCP class or value, optionally negated with a leading '!'"
 							}
 						}
@@ -26348,7 +26349,7 @@
 								],
 								"items": {
 									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+									"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"dest_port": {
@@ -26358,7 +26359,7 @@
 								],
 								"items": {
 									"type": "string",
-									"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+									"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 								}
 							},
 							"proto": {
@@ -26388,14 +26389,14 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
 							},
 							"dscp": {
 								"type": [
 									"string",
 									"null"
 								],
-								"pattern": "^!?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$"
+								"pattern": "^(![ \t]*)?([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})$"
 							}
 						}
 					}
@@ -26418,7 +26419,7 @@
 							"string",
 							"null"
 						],
-						"description": "Zone name; alphanumerics, dashes, underscores"
+						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
 					},
 					"input": {
 						"type": "string",
@@ -26503,7 +26504,7 @@
 							"null"
 						],
 						"pattern": "^[a-zA-Z0-9_-]+$",
-						"description": "Zone name; alphanumerics, dashes, underscores"
+						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
 					},
 					"input": {
 						"type": "string",
@@ -26919,7 +26920,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Match source port or range, one value per redirect"
 							},
 							"src_dport": {
@@ -26927,7 +26928,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "With target DNAT, the incoming destination port or range to match. With target SNAT, the source port to rewrite to. One value per redirect"
 							},
 							"src_dip": {
@@ -26949,7 +26950,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Rewrite destination port or range, one value per redirect"
 							},
 							"proto": {
@@ -26977,7 +26978,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
 								"description": "Match fwmark as value or value/mask, optionally negated with a leading '!'"
 							}
 						}
@@ -27120,14 +27121,14 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 							},
 							"src_dport": {
 								"type": [
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 							},
 							"src_dip": {
 								"type": [
@@ -27146,7 +27147,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 							},
 							"proto": {
 								"type": [
@@ -27175,7 +27176,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
 							}
 						}
 					},
@@ -27231,7 +27232,8 @@
 						"enum": [
 							"SNAT",
 							"MASQUERADE",
-							"ACCEPT"
+							"ACCEPT",
+							"NPT"
 						],
 						"default": "MASQUERADE",
 						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT"
@@ -27445,7 +27447,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Match source port or range, optionally negated with a leading '!'"
 							},
 							"dest_ip": {
@@ -27460,7 +27462,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$",
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$",
 								"description": "Match destination port or range, optionally negated with a leading '!'"
 							},
 							"proto": {
@@ -27479,7 +27481,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$",
 								"description": "Match fwmark as value or value/mask, optionally negated with a leading '!'"
 							},
 							"family": {
@@ -27602,7 +27604,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 							},
 							"dest_ip": {
 								"type": [
@@ -27615,7 +27617,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?[0-9]{1,5}([-:][0-9]{1,5})?$"
+								"pattern": "^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$"
 							},
 							"proto": {
 								"type": [
@@ -27632,7 +27634,7 @@
 									"string",
 									"null"
 								],
-								"pattern": "^!?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
+								"pattern": "^(![ \t]*)?(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})(/(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10}))?$"
 							},
 							"family": {
 								"type": [
@@ -27850,16 +27852,15 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 0,
+						"maximum": 4294967295
 					},
 					"synflood_rate": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -27949,16 +27950,15 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 0,
+						"maximum": 4294967295
 					},
 					"synflood_rate": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -28040,16 +28040,15 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 0,
+						"maximum": 4294967295
 					},
 					"synflood_rate": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000000
+						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": [
@@ -28077,7 +28076,7 @@
 				"properties": {
 					"id": {
 						"type": "string",
-						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)."
+						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
 					},
 					"managed": {
 						"type": "boolean",
@@ -28142,7 +28141,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": -2147483648,
 						"maximum": 2147483647,
 						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first."
 					},
@@ -28184,7 +28183,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": -2147483648,
 						"description": "Metric of the routes this interface installs without one of their own"
 					},
 					"defaultroute": {
@@ -28389,14 +28388,14 @@
 							"string",
 							"null"
 						],
-						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons"
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits that colons, dashes or blanks may separate, as the proto scripts read it"
 					},
 					"reqprefix": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56"
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
 					},
 					"reqaddress": {
 						"type": [
@@ -28725,7 +28724,7 @@
 					"id": {
 						"type": "string",
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)."
+						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
 					},
 					"device": {
 						"type": [
@@ -28971,16 +28970,16 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9A-Fa-f:]*$",
-						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons"
+						"pattern": "^[0-9A-Fa-f: \t-]*$",
+						"description": "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits that colons, dashes or blanks may separate, as the proto scripts read it"
 					},
 					"reqprefix": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$",
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56"
+						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
 					},
 					"reqaddress": {
 						"type": [
@@ -29542,14 +29541,14 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9A-Fa-f:]*$"
+						"pattern": "^[0-9A-Fa-f: \t-]*$"
 					},
 					"reqprefix": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$"
+						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$"
 					},
 					"reqaddress": {
 						"type": [
@@ -29595,16 +29594,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"bridge",
-							"8021q",
-							"8021ad",
-							"macvlan",
-							"veth",
-							"tun",
-							"tap",
-							null
-						]
+						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device"
 					},
 					"ports": {
 						"type": [
@@ -29620,7 +29610,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 4094,
 						"description": "VLAN id for 8021q / 8021ad devices"
 					},
@@ -29704,6 +29694,7 @@
 							"string",
 							"null"
 						],
+						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device",
 						"enum": [
 							"bridge",
 							"8021q",
@@ -29917,14 +29908,14 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": -2147483648
 					},
 					"mtu": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": -2147483648
 					},
 					"source": {
 						"type": [
@@ -30190,8 +30181,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 32766,
+						"minimum": -2147483648,
+						"maximum": 2147483647,
 						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same."
 					},
 					"lookup": {
@@ -30380,7 +30371,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 32766,
+						"maximum": 2147483647,
 						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same."
 					},
 					"lookup": {
@@ -30570,7 +30561,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 32766
+						"maximum": 2147483647
 					},
 					"lookup": {
 						"type": [
@@ -30762,7 +30753,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9._-]+(:[tu*]+)?$"
+							"pattern": "^[^:/ \t\n]{1,15}(:[tu*]*)?$"
 						},
 						"description": "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix"
 					}
@@ -30801,7 +30792,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9._-]+(:[tu*]+)?$"
+							"pattern": "^[^:/ \t\n]{1,15}(:[tu*]*)?$"
 						}
 					}
 				}
@@ -30985,8 +30976,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-						"description": "WireGuard public key of the peer, as wg pubkey prints it"
+						"description": "WireGuard public key of the peer, as wg pubkey prints it",
+						"pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
 					},
 					"allowed_ips": {
 						"type": [
@@ -31189,11 +31180,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"mac80211",
-							"broadcom",
-							null
-						]
+						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed"
 					},
 					"path": {
 						"type": [
@@ -31306,6 +31293,7 @@
 							"string",
 							"null"
 						],
+						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed",
 						"enum": [
 							"mac80211",
 							"broadcom",
@@ -31567,6 +31555,7 @@
 							"wds",
 							"monitor",
 							"mesh",
+							"ahdemo",
 							null
 						],
 						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write answers 422 while the section holds it."
@@ -31597,6 +31586,8 @@
 							"wpa2",
 							"wpa3",
 							"wpa3-mixed",
+							"sae-compat",
+							"wpa3-192",
 							"wep-open",
 							"wep-shared",
 							"psk+ccmp",
@@ -31678,10 +31669,20 @@
 							"wpa3-mixed+aes",
 							"wpa3-mixed+tkip+aes",
 							"wpa3-mixed+aes+tkip",
-							"wpa3-mixed+ccmp+tkip"
+							"wpa3-mixed+ccmp+tkip",
+							"wpa3-192+ccmp",
+							"wpa3-192+ccmp256",
+							"wpa3-192+gcmp",
+							"wpa3-192+gcmp256",
+							"wpa3-192+tkip",
+							"wpa3-192+tkip+ccmp",
+							"wpa3-192+aes",
+							"wpa3-192+tkip+aes",
+							"wpa3-192+aes+tkip",
+							"wpa3-192+ccmp+tkip"
 						],
 						"default": "none",
-						"description": "Encryption mode. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A write that leaves a stored WEP value as it is is refused for it only when it sets the SSID up or changes its mode"
+						"description": "Encryption mode. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A stored WEP value blocks every write of the SSID"
 					},
 					"disabled": {
 						"type": "boolean",
@@ -31835,7 +31836,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that sets an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -31932,6 +31933,8 @@
 							"wpa2",
 							"wpa3",
 							"wpa3-mixed",
+							"sae-compat",
+							"wpa3-192",
 							"wep-open",
 							"wep-shared",
 							"psk+ccmp",
@@ -32013,10 +32016,20 @@
 							"wpa3-mixed+aes",
 							"wpa3-mixed+tkip+aes",
 							"wpa3-mixed+aes+tkip",
-							"wpa3-mixed+ccmp+tkip"
+							"wpa3-mixed+ccmp+tkip",
+							"wpa3-192+ccmp",
+							"wpa3-192+ccmp256",
+							"wpa3-192+gcmp",
+							"wpa3-192+gcmp256",
+							"wpa3-192+tkip",
+							"wpa3-192+tkip+ccmp",
+							"wpa3-192+aes",
+							"wpa3-192+tkip+aes",
+							"wpa3-192+aes+tkip",
+							"wpa3-192+ccmp+tkip"
 						],
 						"default": "none",
-						"description": "Encryption mode. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A write that leaves a stored WEP value as it is is refused for it only when it sets the SSID up or changes its mode"
+						"description": "Encryption mode. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A stored WEP value blocks every write of the SSID"
 					},
 					"disabled": {
 						"type": "boolean",
@@ -32108,7 +32121,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that sets an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -32151,6 +32164,8 @@
 										"wpa2",
 										"wpa3",
 										"wpa3-mixed",
+										"sae-compat",
+										"wpa3-192",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32210,7 +32225,17 @@
 										"wpa3-mixed+aes",
 										"wpa3-mixed+tkip+aes",
 										"wpa3-mixed+aes+tkip",
-										"wpa3-mixed+ccmp+tkip"
+										"wpa3-mixed+ccmp+tkip",
+										"wpa3-192+ccmp",
+										"wpa3-192+ccmp256",
+										"wpa3-192+gcmp",
+										"wpa3-192+gcmp256",
+										"wpa3-192+tkip",
+										"wpa3-192+tkip+ccmp",
+										"wpa3-192+aes",
+										"wpa3-192+tkip+aes",
+										"wpa3-192+aes+tkip",
+										"wpa3-192+ccmp+tkip"
 									]
 								}
 							},
@@ -32240,6 +32265,7 @@
 										"wpa2",
 										"wpa3",
 										"wpa3-mixed",
+										"wpa3-192",
 										"wpa+ccmp",
 										"wpa+ccmp256",
 										"wpa+gcmp",
@@ -32279,7 +32305,17 @@
 										"wpa3-mixed+aes",
 										"wpa3-mixed+tkip+aes",
 										"wpa3-mixed+aes+tkip",
-										"wpa3-mixed+ccmp+tkip"
+										"wpa3-mixed+ccmp+tkip",
+										"wpa3-192+ccmp",
+										"wpa3-192+ccmp256",
+										"wpa3-192+gcmp",
+										"wpa3-192+gcmp256",
+										"wpa3-192+tkip",
+										"wpa3-192+tkip+ccmp",
+										"wpa3-192+aes",
+										"wpa3-192+tkip+aes",
+										"wpa3-192+aes+tkip",
+										"wpa3-192+ccmp+tkip"
 									]
 								}
 							},
@@ -32315,6 +32351,8 @@
 										"wpa2",
 										"wpa3",
 										"wpa3-mixed",
+										"sae-compat",
+										"wpa3-192",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32374,7 +32412,17 @@
 										"wpa3-mixed+aes",
 										"wpa3-mixed+tkip+aes",
 										"wpa3-mixed+aes+tkip",
-										"wpa3-mixed+ccmp+tkip"
+										"wpa3-mixed+ccmp+tkip",
+										"wpa3-192+ccmp",
+										"wpa3-192+ccmp256",
+										"wpa3-192+gcmp",
+										"wpa3-192+gcmp256",
+										"wpa3-192+tkip",
+										"wpa3-192+tkip+ccmp",
+										"wpa3-192+aes",
+										"wpa3-192+tkip+aes",
+										"wpa3-192+aes+tkip",
+										"wpa3-192+ccmp+tkip"
 									]
 								},
 								"ft_psk_generate_local": {
@@ -32475,6 +32523,8 @@
 							"wpa2",
 							"wpa3",
 							"wpa3-mixed",
+							"sae-compat",
+							"wpa3-192",
 							"wep-open",
 							"wep-shared",
 							"psk+ccmp",
@@ -32557,6 +32607,16 @@
 							"wpa3-mixed+tkip+aes",
 							"wpa3-mixed+aes+tkip",
 							"wpa3-mixed+ccmp+tkip",
+							"wpa3-192+ccmp",
+							"wpa3-192+ccmp256",
+							"wpa3-192+gcmp",
+							"wpa3-192+gcmp256",
+							"wpa3-192+tkip",
+							"wpa3-192+tkip+ccmp",
+							"wpa3-192+aes",
+							"wpa3-192+tkip+aes",
+							"wpa3-192+aes+tkip",
+							"wpa3-192+ccmp+tkip",
 							null
 						]
 					},
@@ -33069,7 +33129,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"limit": {
 						"type": [
@@ -33077,13 +33137,14 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"leasetime": {
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "Lease time: a number of seconds, or with a suffix s, m, h, d or w, or infinite, or deprecated, as LuCI writes it. dnsmasq also reads an upper-case suffix, which odhcpd refuses, so a write takes only M of those, as before. A year suffix stops dnsmasq"
 					},
 					"ignore": {
 						"type": "boolean",
@@ -33128,21 +33189,12 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 2,
 						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always."
 					},
 					"dhcpv4": {
 						"type": [
 							"string",
 							"null"
-						],
-						"enum": [
-							"disabled",
-							"server",
-							"relay",
-							"hybrid",
-							null
 						],
 						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
 					},
@@ -33229,7 +33281,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"limit": {
 						"type": [
@@ -33237,14 +33289,15 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"leasetime": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9]+[smhdwMY]?$"
+						"pattern": "^([0-9]+[smhdwM]?|infinite|deprecated)$",
+						"description": "Lease time: a number of seconds, or with a suffix s, m, h, d or w, or infinite, or deprecated, as LuCI writes it. dnsmasq also reads an upper-case suffix, which odhcpd refuses, so a write takes only M of those, as before. A year suffix stops dnsmasq"
 					},
 					"ignore": {
 						"type": "boolean",
@@ -33289,23 +33342,23 @@
 							"integer",
 							"null"
 						],
+						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always.",
 						"minimum": 0,
-						"maximum": 2,
-						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always."
+						"maximum": 2
 					},
 					"dhcpv4": {
 						"type": [
 							"string",
 							"null"
 						],
+						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`.",
 						"enum": [
 							"disabled",
 							"server",
 							"relay",
 							"hybrid",
 							null
-						],
-						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
+						]
 					},
 					"ra_flags": {
 						"type": [
@@ -33372,7 +33425,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"limit": {
 						"type": [
@@ -33380,14 +33433,14 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 254
+						"maximum": 4294967295
 					},
 					"leasetime": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^[0-9]+[smhdwMY]?$"
+						"pattern": "^([0-9]+[smhdwM]?|infinite|deprecated)$"
 					},
 					"ignore": {
 						"type": [
@@ -33538,16 +33591,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 1000000
+						"minimum": 0
 					},
 					"port": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 65535
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "DNS port. 0 turns the DNS server of dnsmasq off, as next to another resolver"
 					},
 					"domainneeded": {
 						"type": "boolean",
@@ -33666,8 +33719,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 65535
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "DNS port. 0 turns the DNS server of dnsmasq off, as next to another resolver"
 					},
 					"domainneeded": {
 						"type": "boolean",
@@ -33786,7 +33840,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"domainneeded": {
@@ -33899,9 +33953,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 7,
-						"description": "syslog priority (0=emerg .. 7=debug)"
+						"description": "syslog priority (0=emerg .. 7=debug). odhcpd keeps the low 3 bits of another number"
 					},
 					"runtime": {
 						"type": "object",
@@ -33948,9 +34000,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 7,
-						"description": "syslog priority (0=emerg .. 7=debug)"
+						"description": "syslog priority (0=emerg .. 7=debug). odhcpd keeps the low 3 bits of another number"
 					}
 				}
 			},
@@ -33986,9 +34036,7 @@
 						"type": [
 							"integer",
 							"null"
-						],
-						"minimum": 0,
-						"maximum": 7
+						]
 					}
 				}
 			},
@@ -34011,7 +34059,7 @@
 							"string",
 							"null"
 						],
-						"description": "System hostname (alphanumerics, dashes, underscores, dots)"
+						"description": "System hostname. A write takes alphanumerics, dashes, underscores and dots, as LuCI does. A read also gives another name that the kernel takes, and refuses one with a comma, a quote or a ` #`, which change the line that dnsmasq reads"
 					},
 					"description": {
 						"type": [
@@ -34099,8 +34147,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$",
-						"description": "System hostname (alphanumerics, dashes, underscores, dots)"
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$",
+						"description": "System hostname. A write takes alphanumerics, dashes, underscores and dots, as LuCI does. A read also gives another name that the kernel takes, and refuses one with a comma, a quote or a ` #`, which change the line that dnsmasq reads"
 					},
 					"description": {
 						"type": [
@@ -34179,7 +34227,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$"
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$"
 					},
 					"description": {
 						"type": [
@@ -34436,7 +34484,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"password_auth": {
@@ -34498,7 +34546,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"password_auth": {
@@ -34552,7 +34600,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"password_auth": {
@@ -34612,7 +34660,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Addresses and ports to listen on. A read gives the words that uhttpd.init passes, and also a host name, a zone id or a service name, which uhttpd takes and a write does not"
 					},
 					"listen_https": {
 						"type": [
@@ -34701,15 +34750,13 @@
 						"type": [
 							"integer",
 							"null"
-						],
-						"minimum": 0
+						]
 					},
 					"tcp_keepalive": {
 						"type": [
 							"integer",
 							"null"
-						],
-						"minimum": 0
+						]
 					},
 					"index_page": {
 						"type": [
@@ -34769,8 +34816,9 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
-						}
+							"pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+						},
+						"description": "Addresses and ports to listen on. A read gives the words that uhttpd.init passes, and also a host name, a zone id or a service name, which uhttpd takes and a write does not"
 					},
 					"listen_https": {
 						"type": [
@@ -34779,7 +34827,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+							"pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"home": {
@@ -34918,7 +34966,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+							"pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"listen_https": {
@@ -34928,7 +34976,7 @@
 						],
 						"items": {
 							"type": "string",
-							"pattern": "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
+							"pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$"
 						}
 					},
 					"home": {
@@ -35067,8 +35115,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 36500,
+						"minimum": 0,
+						"maximum": 49710,
 						"description": "Certificate validity in days"
 					},
 					"bits": {
@@ -35140,8 +35188,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 36500,
+						"minimum": 0,
+						"maximum": 49710,
 						"description": "Certificate validity in days"
 					},
 					"bits": {
@@ -35185,8 +35233,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[A-Za-z]{2}$",
-						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)"
+						"description": "ISO 3166-1 alpha-2 country code (case-insensitive; normalized to uppercase on write)",
+						"pattern": "^[A-Za-z]{2}$"
 					}
 				},
 				"required": [
@@ -35206,8 +35254,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 36500
+						"minimum": 0,
+						"maximum": 49710
 					},
 					"bits": {
 						"type": [
@@ -35288,8 +35336,6 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 4,
 						"description": "How aggressively to add local FQDNs (0..4)"
 					},
 					"add_wan_fqdn": {
@@ -35297,8 +35343,6 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 4,
 						"description": "How aggressively to add WAN FQDNs (0..4)"
 					},
 					"dnssec_enabled": {
@@ -35391,28 +35435,19 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"0",
-							"1",
-							"2",
-							null
-						],
 						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked"
 					},
 					"num_threads": {
 						"type": [
 							"integer",
 							"null"
-						],
-						"minimum": 1,
-						"maximum": 64
+						]
 					},
 					"ttl_min": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0,
 						"maximum": 86400
 					},
 					"domain": {
@@ -35486,18 +35521,18 @@
 							"integer",
 							"null"
 						],
+						"description": "How aggressively to add local FQDNs (0..4)",
 						"minimum": 0,
-						"maximum": 4,
-						"description": "How aggressively to add local FQDNs (0..4)"
+						"maximum": 4
 					},
 					"add_wan_fqdn": {
 						"type": [
 							"integer",
 							"null"
 						],
+						"description": "How aggressively to add WAN FQDNs (0..4)",
 						"minimum": 0,
-						"maximum": 4,
-						"description": "How aggressively to add WAN FQDNs (0..4)"
+						"maximum": 4
 					},
 					"dnssec_enabled": {
 						"type": "boolean",
@@ -35589,13 +35624,14 @@
 							"string",
 							"null"
 						],
+						"pattern": "^-?[0-9]+$",
+						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked",
 						"enum": [
 							"0",
 							"1",
 							"2",
 							null
-						],
-						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked"
+						]
 					},
 					"num_threads": {
 						"type": [
@@ -35610,8 +35646,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 86400
+						"maximum": 86400,
+						"minimum": 0
 					},
 					"domain": {
 						"type": [
@@ -35777,6 +35813,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^-?[0-9]+$",
 						"enum": [
 							"0",
 							"1",
@@ -35797,8 +35834,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 86400
+						"maximum": 86400,
+						"minimum": 0
 					},
 					"domain": {
 						"type": [
@@ -36145,6 +36182,11 @@
 							"fq_codel",
 							"pie",
 							"htb",
+							"codel",
+							"sfq",
+							"fq_pie",
+							"ns2_codel",
+							"pfifo_fast",
 							null
 						]
 					},
@@ -36153,13 +36195,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"piece_of_cake.qos",
-							"simple.qos",
-							"simplest.qos",
-							"layer_cake.qos",
-							null
-						]
+						"description": "A file in /usr/lib/sqm, which LuCI lists and start-sqm sources, such as piece_of_cake.qos, simple.qos, simplest.qos, layer_cake.qos or simplest_tbf.qos."
 					},
 					"linklayer": {
 						"type": [
@@ -36237,6 +36273,11 @@
 							"fq_codel",
 							"pie",
 							"htb",
+							"codel",
+							"sfq",
+							"fq_pie",
+							"ns2_codel",
+							"pfifo_fast",
 							null
 						]
 					},
@@ -36245,13 +36286,8 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"piece_of_cake.qos",
-							"simple.qos",
-							"simplest.qos",
-							"layer_cake.qos",
-							null
-						]
+						"pattern": "^[A-Za-z0-9_][A-Za-z0-9_.+-]*\\.qos$",
+						"description": "A file in /usr/lib/sqm, which LuCI lists and start-sqm sources, such as piece_of_cake.qos, simple.qos, simplest.qos, layer_cake.qos or simplest_tbf.qos."
 					},
 					"linklayer": {
 						"type": [
@@ -36321,6 +36357,11 @@
 							"fq_codel",
 							"pie",
 							"htb",
+							"codel",
+							"sfq",
+							"fq_pie",
+							"ns2_codel",
+							"pfifo_fast",
 							null
 						]
 					},
@@ -36329,13 +36370,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"piece_of_cake.qos",
-							"simple.qos",
-							"simplest.qos",
-							"layer_cake.qos",
-							null
-						]
+						"pattern": "^[A-Za-z0-9_][A-Za-z0-9_.+-]*\\.qos$"
 					},
 					"linklayer": {
 						"type": [
@@ -36571,12 +36606,6 @@
 						"type": [
 							"string",
 							"null"
-						],
-						"enum": [
-							"v1",
-							"v2c",
-							"usm",
-							null
 						]
 					},
 					"secname": {
@@ -36620,6 +36649,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^([Vv]1|[Vv]2[Cc]|[Aa][Nn][Yy]|usm)$",
 						"enum": [
 							"v1",
 							"v2c",
@@ -36660,6 +36690,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^([Vv]1|[Vv]2[Cc]|[Aa][Nn][Yy]|usm)$",
 						"enum": [
 							"v1",
 							"v2c",
@@ -36706,25 +36737,12 @@
 						"type": [
 							"string",
 							"null"
-						],
-						"enum": [
-							"any",
-							"v1",
-							"v2c",
-							"usm",
-							null
 						]
 					},
 					"level": {
 						"type": [
 							"string",
 							"null"
-						],
-						"enum": [
-							"noauth",
-							"auth",
-							"priv",
-							null
 						]
 					},
 					"prefix": {
@@ -36735,6 +36753,7 @@
 						"enum": [
 							"exact",
 							"prefix",
+							"0",
 							null
 						]
 					},
@@ -36801,6 +36820,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^([Aa][Nn][Yy]|[Vv]1|[Vv]2[Cc]|usm)$",
 						"enum": [
 							"any",
 							"v1",
@@ -36814,6 +36834,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^(([Nn][Oo])?[Aa][Uu][Tt][Hh]([Nn][Oo][Pp][Rr][Ii][Vv])?|[Pp][Rr][Ii][Vv]|[Aa][Uu][Tt][Hh][Pp][Rr][Ii][Vv])$",
 						"enum": [
 							"noauth",
 							"auth",
@@ -36888,6 +36909,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^([Aa][Nn][Yy]|[Vv]1|[Vv]2[Cc]|usm)$",
 						"enum": [
 							"any",
 							"v1",
@@ -36901,6 +36923,7 @@
 							"string",
 							"null"
 						],
+						"pattern": "^(([Nn][Oo])?[Aa][Uu][Tt][Hh]([Nn][Oo][Pp][Rr][Ii][Vv])?|[Pp][Rr][Ii][Vv]|[Aa][Uu][Tt][Hh][Pp][Rr][Ii][Vv])$",
 						"enum": [
 							"noauth",
 							"auth",
@@ -36982,8 +37005,6 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 127,
 						"description": "SNMPv2-MIB::sysServices bitfield"
 					},
 					"sys_descr": {
@@ -37050,9 +37071,9 @@
 							"integer",
 							"null"
 						],
+						"description": "SNMPv2-MIB::sysServices bitfield",
 						"minimum": 0,
-						"maximum": 127,
-						"description": "SNMPv2-MIB::sysServices bitfield"
+						"maximum": 127
 					},
 					"sys_descr": {
 						"type": [
@@ -37379,7 +37400,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535,
 						"description": "TCP port for the /metrics endpoint"
 					},
@@ -37545,7 +37566,7 @@
 							"string",
 							"null"
 						],
-						"description": "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)."
+						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37562,7 +37583,9 @@
 							"alert",
 							"crit",
 							"err",
+							"error",
 							"warn",
+							"warning",
 							"notice",
 							"info",
 							"debug",
@@ -37596,8 +37619,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^0x[0-9A-Fa-f]+$",
-						"description": "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)."
+						"pattern": "^(0[xX][0-9A-Fa-f]{1,8}|[0-9]{1,10})$",
+						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37614,7 +37637,9 @@
 							"alert",
 							"crit",
 							"err",
+							"error",
 							"warn",
+							"warning",
 							"notice",
 							"info",
 							"debug",
@@ -37639,7 +37664,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^0x[0-9A-Fa-f]+$"
+						"pattern": "^(0[xX][0-9A-Fa-f]{1,8}|[0-9]{1,10})$"
 					},
 					"logging": {
 						"type": [
@@ -37657,7 +37682,9 @@
 							"alert",
 							"crit",
 							"err",
+							"error",
 							"warn",
+							"warning",
 							"notice",
 							"info",
 							"debug",
@@ -37712,6 +37739,9 @@
 							"httping",
 							"nping-tcp",
 							"nping-udp",
+							"nping-icmp",
+							"nping-arp",
+							"nslookup",
 							null
 						]
 					},
@@ -37729,7 +37759,6 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 10,
 						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute."
 					},
 					"size": {
@@ -37737,7 +37766,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65507,
 						"description": "Probe payload size in bytes."
 					},
@@ -37766,55 +37795,49 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 100
+						"minimum": 1
 					},
 					"recovery_latency": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1
+						"minimum": 0
 					},
 					"recovery_loss": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 100
+						"minimum": 0
 					},
 					"timeout": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 60
+						"minimum": 1
 					},
 					"interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"failure_interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"recovery_interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"keep_failure_interval": {
 						"type": "boolean",
@@ -37842,14 +37865,7 @@
 							"null"
 						],
 						"items": {
-							"type": "string",
-							"enum": [
-								"ifup",
-								"ifdown",
-								"connected",
-								"disconnected",
-								"never"
-							]
+							"type": "string"
 						},
 						"description": "Events that flush conntrack table."
 					},
@@ -37908,6 +37924,8 @@
 							"httping",
 							"nping-tcp",
 							"nping-udp",
+							"nping-icmp",
+							"nping-arp",
 							null
 						]
 					},
@@ -37925,8 +37943,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 10,
-						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute."
+						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute.",
+						"maximum": 10
 					},
 					"size": {
 						"type": [
@@ -37962,23 +37980,21 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 100
+						"minimum": 1
 					},
 					"recovery_latency": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1
+						"minimum": 0
 					},
 					"recovery_loss": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 100
+						"minimum": 0
 					},
 					"timeout": {
 						"type": [
@@ -38001,16 +38017,14 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"recovery_interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"keep_failure_interval": {
 						"type": "boolean",
@@ -38096,6 +38110,8 @@
 							"httping",
 							"nping-tcp",
 							"nping-udp",
+							"nping-icmp",
+							"nping-arp",
 							null
 						]
 					},
@@ -38148,23 +38164,21 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 100
+						"minimum": 1
 					},
 					"recovery_latency": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1
+						"minimum": 0
 					},
 					"recovery_loss": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0,
-						"maximum": 100
+						"minimum": 0
 					},
 					"timeout": {
 						"type": [
@@ -38187,16 +38201,14 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"recovery_interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0
 					},
 					"keep_failure_interval": {
 						"type": [
@@ -38260,7 +38272,6 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
 						"maximum": 1000,
 						"description": "Lower wins. Members in the same policy with equal metric share load."
 					},
@@ -38270,7 +38281,6 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 1000,
 						"description": "Relative load-share weight among equal-metric members."
 					},
 					"runtime": {
@@ -38306,9 +38316,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
 						"maximum": 1000,
-						"description": "Lower wins. Members in the same policy with equal metric share load."
+						"description": "Lower wins. Members in the same policy with equal metric share load.",
+						"minimum": 1
 					},
 					"weight": {
 						"type": [
@@ -38316,8 +38326,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 1000,
-						"description": "Relative load-share weight among equal-metric members."
+						"description": "Relative load-share weight among equal-metric members.",
+						"maximum": 1000
 					}
 				},
 				"required": [
@@ -38343,8 +38353,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 1000
+						"maximum": 1000,
+						"minimum": 1
 					},
 					"weight": {
 						"type": [
@@ -38491,6 +38501,7 @@
 						"enum": [
 							"ipv4",
 							"ipv6",
+							"any",
 							null
 						]
 					},
@@ -38499,13 +38510,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"tcp",
-							"udp",
-							"icmp",
-							"all",
-							null
-						]
+						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
 					},
 					"src_ip": {
 						"type": [
@@ -38546,7 +38551,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 86400
+						"maximum": 2147483
 					},
 					"ipset": {
 						"type": [
@@ -38595,6 +38600,7 @@
 						"enum": [
 							"ipv4",
 							"ipv6",
+							"any",
 							null
 						]
 					},
@@ -38603,13 +38609,8 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"tcp",
-							"udp",
-							"icmp",
-							"all",
-							null
-						]
+						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
+						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
 					},
 					"src_ip": {
 						"type": [
@@ -38652,7 +38653,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 86400
+						"maximum": 1000000
 					},
 					"ipset": {
 						"type": [
@@ -38694,6 +38695,7 @@
 						"enum": [
 							"ipv4",
 							"ipv6",
+							"any",
 							null
 						]
 					},
@@ -38702,13 +38704,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"tcp",
-							"udp",
-							"icmp",
-							"all",
-							null
-						]
+						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$"
 					},
 					"src_ip": {
 						"type": [
@@ -38748,7 +38744,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 86400
+						"maximum": 1000000
 					},
 					"ipset": {
 						"type": [
@@ -38806,7 +38802,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 3
+						"maximum": 2147483647
 					},
 					"ipv6": {
 						"type": "boolean",
@@ -38839,7 +38835,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"max_retry_band": {
 						"type": [
@@ -38868,7 +38864,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"band_steering_threshold": {
 						"type": [
@@ -38876,7 +38872,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"remote_update_interval": {
 						"type": [
@@ -39040,7 +39036,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 3
+						"maximum": 5
 					},
 					"ipv6": {
 						"type": "boolean",
@@ -39073,7 +39069,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"max_retry_band": {
 						"type": [
@@ -39102,7 +39098,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"band_steering_threshold": {
 						"type": [
@@ -39110,7 +39106,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"remote_update_interval": {
 						"type": [
@@ -39268,7 +39264,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 3
+						"maximum": 5
 					},
 					"ipv6": {
 						"type": [
@@ -39303,7 +39299,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"max_retry_band": {
 						"type": [
@@ -39332,7 +39328,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"band_steering_threshold": {
 						"type": [
@@ -39340,7 +39336,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 255
+						"maximum": 2147483647
 					},
 					"remote_update_interval": {
 						"type": [
@@ -39497,8 +39493,10 @@
 						"enum": [
 							"tun",
 							"tap",
+							"null",
 							null
-						]
+						],
+						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
 					},
 					"proto": {
 						"type": [
@@ -39526,7 +39524,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"lport": {
@@ -39542,7 +39540,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
+						"minimum": 0,
 						"maximum": 65535
 					},
 					"remote": {
@@ -39652,16 +39650,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"ping_restart": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 86400
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"persist_key": {
 						"type": "boolean",
@@ -39694,8 +39692,11 @@
 							"lz4-v2",
 							"stub",
 							"stub-v2",
+							"migrate",
+							"frames_only",
 							null
-						]
+						],
+						"description": "Compression framing. `frames_only` is LuCI's name for a bare `compress`, which the init script writes for it."
 					},
 					"cipher": {
 						"type": [
@@ -39820,7 +39821,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 11
+						"maximum": 2147483647
 					},
 					"mute": {
 						"type": [
@@ -39901,7 +39902,8 @@
 							"tun",
 							"tap",
 							null
-						]
+						],
+						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
 					},
 					"proto": {
 						"type": [
@@ -40055,16 +40057,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"ping_restart": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 86400
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"persist_key": {
 						"type": "boolean",
@@ -40097,8 +40099,11 @@
 							"lz4-v2",
 							"stub",
 							"stub-v2",
+							"migrate",
+							"frames_only",
 							null
-						]
+						],
+						"description": "Compression framing. `frames_only` is LuCI's name for a bare `compress`, which the init script writes for it."
 					},
 					"cipher": {
 						"type": [
@@ -40441,16 +40446,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 3600
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"ping_restart": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 1,
-						"maximum": 86400
+						"minimum": 0,
+						"maximum": 2147483647
 					},
 					"persist_key": {
 						"type": [
@@ -40487,6 +40492,8 @@
 							"lz4-v2",
 							"stub",
 							"stub-v2",
+							"migrate",
+							"frames_only",
 							null
 						]
 					},

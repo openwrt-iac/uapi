@@ -5,7 +5,7 @@ let ubus = require('bus');
 function field_errors(file, body, field) {
 	let r = loadfile(`src/resources/${file}`)();
 	let out = [];
-	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in handler.check_schema_types(handler.request_properties(r.schema_properties), body)) push(out, e);
 	for (let e in r.validate(body, null)) push(out, e);
 	for (let e in (r.validate_new != null) ? r.validate_new(body) : []) push(out, e);
 	return filter(out, (e) => e.field == field);

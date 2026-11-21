@@ -8,7 +8,7 @@ let hosts = loadfile('src/resources/dhcp.hosts.uc')();
 
 function full_validate(r, body, conn) {
 	let out = [];
-	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in handler.check_schema_types(handler.request_properties(r.schema_properties), body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
 	return out;
 }
@@ -197,10 +197,9 @@ t.describe('dhcp.odhcpd contract', () => {
 		t.assert_equal(odhcpd.reload, null);
 		t.assert_deep_equal(odhcpd.reload_if_running, ["odhcpd", "dnsmasq", "unbound"]);
 	});
-	t.it('rejects loglevel out of range', () => {
-		let errs = full_validate(odhcpd, { loglevel: 10 }, null);
-		let le = filter(errs, function(e) { return e.field == "loglevel"; });
-		t.assert_equal(le[0].code, "out_of_range");
+	// odhcpd keeps the low 3 bits of any number.
+	t.it('takes a loglevel outside 0 to 7, which odhcpd masks', () => {
+		t.assert_deep_equal(filter(full_validate(odhcpd, { loglevel: 10 }, null), (e) => e.field == "loglevel"), []);
 	});
 
 	// odhcpd takes 1 and true, and dnsmasq.init a number above 0 in the section named odhcpd.
@@ -396,7 +395,7 @@ t.describe('dhcp.servers dhcpv4, ra_flags and ra_slaac', () => {
 	t.it('refuses a flag or a dhcpv4 mode that odhcpd does not take', () => {
 		let r = h.patch(stored({}), ctx, 'lan', { dhcpv4: 'on', ra_flags: [ 'other-config', 'M' ] });
 		t.assert_equal(r.status, 422);
-		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]),
-		                    [ [ 'dhcpv4', 'not_in_enum' ], [ 'ra_flags[1]', 'not_in_enum' ] ]);
+		t.assert_deep_equal(sort(map(r.body.errors, (e) => e.field + ' ' + e.code)),
+		                    [ 'dhcpv4 not_in_enum', 'ra_flags[1] not_in_enum' ]);
 	});
 });

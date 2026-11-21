@@ -308,10 +308,11 @@ function endpoint_arg(host, port) {
 
 function set_peer_argv(iface, peer, psk_path) {
 	let argv = [ "wg", "set", iface, "peer", peer.public_key, "allowed-ips", join(",", peer.allowed_ips) ];
-	// -1 is a stored value that wg refuses, which another writer stored or a PUT sent back from its
-	// read: a write that leaves it as it is and the restore give it here. The restore sets every peer from uci and stops at the first one
-	// that fails, so a refusal here kept every later peer of the interface out of the kernel. The
-	// kernel keeps its keepalive.
+	// -1 is a stored value that wg refuses, which another writer stored. A write refuses the peer
+	// that holds it, so it reaches here only from the restore and from a peer that a remove sets
+	// again, as below. The restore sets every peer from uci and stops at the first one that fails,
+	// so a refusal here kept every later peer of the interface out of the kernel. The kernel keeps
+	// its keepalive.
 	if (peer.persistent_keepalive !== -1)
 		push(argv, "persistent-keepalive", sprintf("%d", peer.persistent_keepalive ?? 0));
 	push(argv, "preshared-key", psk_path ?? "/dev/null");
@@ -528,9 +529,9 @@ function apply_peer(iface, peer) {
 			return sprintf("refusing to apply a peer with an allowed_ips entry marked + or - on %s", iface);
 	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
-	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses to
-	// set, as for the keepalive above. A write that leaves it as it is, and the restore, set the rest of
-	// the peer, and the kernel keeps its endpoint.
+	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses, as
+	// for the keepalive above. The restore, and a remove that sets such a peer again, set the rest
+	// of the peer, and the kernel keeps its endpoint.
 	let keep_endpoint = host != "" && peer.endpoint_port === 0;
 
 	// The key is staged before anything changes in the kernel. Staged after the remove below, a key

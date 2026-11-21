@@ -12,6 +12,14 @@ const VALID_TYPES = {
 	"multicast": true, "local": true, "broadcast": true,
 };
 
+// netifd's system_rtn_aton also takes the kernel's number of a type, in base 0.
+const RTN_NAMES = [ null, "unicast", "local", "broadcast", "anycast", "multicast", "blackhole",
+                    "unreachable", "prohibit", "throw" ];
+function route_type(v) {
+	let n = (type(v) != "string") ? null : match(v, /^0[xX][0-9A-Fa-f]+$/) ? hex(v) : match(v, /^[0-9]+$/) ? int(v) : null;
+	return (n != null && n >= 1 && n <= 9) ? RTN_NAMES[n] : v;
+}
+
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -25,7 +33,7 @@ function fromUci(section) {
 		metric: netifd_int(section.metric),
 		mtu: netifd_int(section.mtu),
 		source: section.source ?? null,
-		type: section.type ?? "unicast",
+		type: route_type(section.type) ?? "unicast",
 		// netifd omits a disabled section entirely, so without this a route that does not
 		// exist on the box reads back as ordinary active config and a converged client sees
 		// nothing to apply. platform_bool rather than shell_bool: measured on 25.12.5,
@@ -121,8 +129,8 @@ return {
 		table:     { type: ["integer", "string", "null"], minimum: 0, maximum: 4294967295,
 		             "x-uapi-write": { minimum: 1 },
 		             description: "Routing table. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0." },
-		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
-		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
+		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": { minimum: 0 } },
+		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": { minimum: 0 } },
 		source:    { type: ["string", "null"],
 		             description: "Preferred source address (IPv4 or CIDR)" },
 		disabled:  { type: "boolean", default: false,
