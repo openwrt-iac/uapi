@@ -8,6 +8,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: the HTTP token mint refuses a scope that the server does not
+  know.** `POST /uapi/tokens` checks each scope against the scope tree, as
+  `uapi-token create` does. A typo, a removed scope such as `dhcp:leases6`, or a
+  malformed scope answers 422 `validation_failed` with code `not_in_enum` on its
+  entry of `scopes`. 3.x minted a token with an unknown scope, which granted
+  nothing, and answered 500 for a malformed one. This check runs before the
+  escalation check. Announced in 3.5.0 (#415). Migration note in
+  `docs/migration-v3-to-v4.md`. (#421)
+- **BREAKING: a `dhcp/leases` entry without a client id reads `duid` null.**
+  dnsmasq writes `*` for a missing client id, as for a missing host name, and
+  3.x reads it as the string `"*"`. Announced in 3.5.0 (#392). Migration note in
+  `docs/migration-v3-to-v4.md`. (#421)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a
