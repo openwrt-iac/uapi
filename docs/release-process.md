@@ -131,12 +131,9 @@ minors while the major is in flight.
   `main` when it applies there. The old major's releases are tagged on its
   maintenance branch. After such a tag, copy the new section of its
   `CHANGELOG.md` into the one of `main`, and take out of the `[Unreleased]`
-  of `main` each entry that the section carries. The released sections of
-  both branches then stay equal, except for one number. An entry that `main`
-  takes out ends with the number of its PR into `main`, so add that number
-  at the end of the carried entry in the copy of `main`, such as
-  `(#430) (#431)`. Without it, `scripts/changelog-missing.sh` on `main` lists
-  that PR.
+  of `main` each entry that the section carries, so the released sections of
+  both branches carry the same entries. A carried entry keeps the number of
+  its `main` PR at its end (see Changelog below).
 
 `v4` went through this on 2026-11-21: `main` carries 4.x, and `v3` carries 3.x
 from 3.5.0 on.
@@ -183,10 +180,11 @@ that names `main` names `v3` for it.
    (`v2.0.0-rc1`). For patch releases, just work on a topic branch.
 2. **Update `VERSION`** to the target value. **Regenerate** the OpenAPI:
    `make openapi`. Commit.
-3. **Close the changelog section.** Run
-   `scripts/changelog-missing.sh <previous-tag> main`, or
-   `scripts/changelog-missing.sh <previous-tag> v3` for a 3.x release, and
-   fix whatever it lists. Then rename `## [Unreleased]`
+3. **Close the changelog section.** Run `scripts/changelog-missing.sh
+   <previous-tag> <line>`, where `<line>` is the branch that the release is
+   tagged on (`main` for 4.x, `v3` for 3.x), and fix whatever it lists. On
+   that branch itself the script takes it as the default, and on a topic
+   branch it refuses to guess. Then rename `## [Unreleased]`
    to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it.
    Do this for `rc` releases too. A final release after RCs gets a short
    section of its own that points at the RC sections, as 3.0.0 does. The
@@ -204,7 +202,7 @@ that names `main` names `v3` for it.
    p99; it does not gate, because no
    baseline is committed. Read the numbers in the run log or the `bench-run`
    artifact if a release is expected to move latency.
-6. **Merge to main**, or to `v3` for a 3.x release.
+6. **Merge** into `main` for 4.x, or into `v3` for 3.x.
 7. **Sign and push the tag**:
    ```
    git tag -s v2.0.0 -m "v2.0.0"
@@ -240,7 +238,8 @@ that names `main` names `v3` for it.
    `openwrt-iac.github.io/feed/` picks up the new asset on its next
    `publish.yml` run (nightly schedule or manual
    `gh workflow run publish.yml --repo openwrt-iac/openwrt-iac.github.io`).
-10. **After a 3.x release, check that 4.x keeps the Latest mark.**
+10. **After a 3.x release, once 4.0.0 is out, check that 4.x keeps the Latest
+    mark.**
     `gh release list` must show `Latest` beside the highest 4.x release. The
     feed and the site serve the release with the mark, so a 3.x release with
     it puts 3.x on the feed in place of 4.x. If the 3.x release took the
@@ -327,13 +326,18 @@ counter, so the guess is wrong if an issue opens in between, and the check then
 fails until the
 entry carries the real number.
 
-**At release time,** `scripts/changelog-missing.sh <previous-tag> <branch>`
-lists every PR merged into the branch since that tag that has neither an entry
-nor the label. The branch is `main`, or `v3` for a 3.x release. It must print
-nothing. Step 3
+**At release time,** `scripts/changelog-missing.sh <previous-tag> <line>`
+lists every PR merged into `<line>` since that tag that has neither an entry
+nor the label: `main` for 4.x, `v3` for 3.x. It must print nothing. Step 3
 above then turns `## [Unreleased]` into the release section, and
-`scripts/release-notes.sh`
-makes that section the GitHub Release body.
+`scripts/release-notes.sh` makes that section the GitHub Release body.
+
+**A change carried between `main` and `v3`** has a PR on each branch, and its
+entry keeps the number of the `main` PR at its end:
+`(#<v3 PR>) (#<main PR>)`. When the `v3` PR merges first, the `main` number
+joins the entry where the 3.x section is copied into `main`. The sweep of each
+branch then finds its own PR, and the sweep of `main` still finds it after the
+copied section replaces the entry in its `[Unreleased]`.
 
 Before this process, entries were written at release time from memory. Between
 3.0.0 and the
@@ -347,9 +351,9 @@ Before tagging:
   outcome noted even if nothing was eligible.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
-- [ ] `scripts/changelog-missing.sh <previous-tag> main` prints nothing (`v3`
-  in place of `main` for a 3.x release), and `## [Unreleased]` is renamed to
-  this version.
+- [ ] `scripts/changelog-missing.sh <previous-tag> <line>` prints nothing
+  (`main` for 4.x, `v3` for 3.x), and `## [Unreleased]` is renamed to this
+  version.
 - [ ] Any version number a doc announced ahead of time now matches reality.
   `docs/deprecations.md` carries a target release in its "Deprecated since"
   column before that release exists, and the roadmap names target versions
@@ -360,14 +364,14 @@ Before tagging:
 - [ ] `make test coverage` green.
 - [ ] CI green on the branch being tagged, for the exact commit that will be
   tagged.
-  `main` for a 4.x release, `v3` for a 3.x release, `release/<major>.<minor>.x`
-  for a patch on an older line. All are built on push.
+  `main` for 4.x, `v3` for 3.x, `release/<major>.<minor>.x` for a patch on an
+  older major. All three are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
   `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
-- [ ] `gh workflow run ci.yml --ref main` green (`--ref v3` for a 3.x
-  release) - validates the per-arch SDK pins via `verify-arch-build` without
-  consuming a tag.
+- [ ] `gh workflow run ci.yml --ref main` green (`--ref v3` for 3.x) -
+  validates the per-arch SDK pins via `verify-arch-build` without consuming a
+  tag.
 
 After tagging, before announcing:
 
@@ -392,10 +396,11 @@ If a tagged release is broken in the field:
 
 1. Identify the breakage; file an issue.
 2. Mark the GitHub Release as "Pre-release" via
-   `gh release edit <tag> --prerelease` to demote it in the UI, and mark the
-   previous good release Latest with
-   `gh release edit <previous-tag> --latest`. The aggregator takes the
-   release marked Latest on its next run.
+   `gh release edit <tag> --prerelease` to demote it in the UI. Then mark the
+   highest good release of the same major Latest, such as
+   `gh release edit v4.0.0 --latest` when 4.0.1 is broken, also when a 3.x
+   release came after 4.0.1. The aggregator takes the release marked Latest
+   on its next run.
 3. Ship a `vX.Y.(Z+1)` patch with the fix. `release-apk` marks it Latest
    when it is the highest version, and the next aggregator run then picks it
    up and signs a fresh `packages.adb`.
