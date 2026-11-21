@@ -79,7 +79,7 @@ t.describe('handler.list', () => {
 		c._state.uci.firewall.r_a   = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT', src: 'wan' };
 		c._state.uci.firewall.cfg02 = { '.type': 'rule', '.anonymous': true, target: 'REJECT', src: 'wan' };
 		let r = rules.list(c, ctx(), { managed: "false", limit: "1" });
-		t.assert_equal(r.headers["Link"], '<?cursor=c_cfg01&limit=1&managed=false>; rel="next"');
+		t.assert_true(match(r.headers["Link"], /^<\?cursor=c_cfg01\.[0-9a-f]+&limit=1&managed=false>; rel="next"$/));
 		let next = {};
 		for (let kv in split(match(r.headers["Link"], /^<\?([^>]*)>/)[1], "&")) {
 			let p = split(kv, "=", 2);
@@ -124,6 +124,30 @@ t.describe('handler.list pagination', () => {
 		let p2 = rules.list(c, ctx(), { limit: "2", cursor: nxt });
 		t.assert_equal(length(p2.body), 2);
 		t.assert_true(p2.body[0].id != p1.body[length(p1.body) - 1].id);
+	});
+
+	// libuci names an anonymous section from its position, so after a delete of the first rule the
+	// cursor c_cfg0592bd named the third rule, and the second page skipped it.
+	t.it('refuses a cursor on an anonymous section once an earlier section is deleted', () => {
+		function firewall(names) {
+			let c = with_zones();
+			for (let i, n in names)
+				c._state.uci.firewall[sprintf("cfg%02x92bd", i + 4)] = {
+					'.type': 'rule', '.anonymous': true, target: 'ACCEPT', src: 'wan', name: n,
+				};
+			return c;
+		}
+		let p1 = rules.list(firewall([ "a", "b", "c", "d" ]), ctx(), { limit: "2" });
+		let cursor = p1.headers["X-Next-Cursor"];
+		t.assert_true(match(cursor, /^c_cfg0592bd\.[0-9a-f]+$/));
+		let p2 = rules.list(firewall([ "a", "b", "c", "d" ]), ctx(), { limit: "2", cursor: cursor });
+		t.assert_deep_equal(map(p2.body, (s) => s.name), [ "c", "d" ]);
+		p2 = rules.list(firewall([ "a", "b", "c" ]), ctx(), { limit: "2", cursor: cursor });
+		t.assert_deep_equal(map(p2.body, (s) => s.name), [ "c" ]);
+		let r = rules.list(firewall([ "b", "c", "d" ]), ctx(), { limit: "2", cursor: cursor });
+		t.assert_deep_equal([ r.status, r.body.code ], [ 400, "invalid_cursor" ]);
+		r = rules.list(firewall([ "a", "b", "c", "d" ]), ctx(), { limit: "2", cursor: "c_cfg0592bd" });
+		t.assert_deep_equal([ r.status, r.body.code ], [ 400, "invalid_cursor" ]);
 	});
 
 	t.it('rejects a cursor whose id is not in the current result', () => {

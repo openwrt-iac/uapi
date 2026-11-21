@@ -515,3 +515,17 @@ other than `1` on `/uapi/diagnostics` skipped the sweep, and an empty `cursor`
 read the first page. v4 answers 400 `bad_request` for `managed` and `validate`,
 and 400 `invalid_cursor` for the empty cursor. Send only the values that the
 spec declares, and leave out a parameter instead of sending it empty.
+
+## A cursor that ends on an unmanaged section holds a hash
+
+The id of an anonymous section is its libuci name, which holds the position of
+the section in its package. After a delete of an earlier section, 3.x resumed
+the next page from the section that now has that name, and skipped one item
+without an error. v4 gives a page that ends on an unmanaged section the cursor
+`c_<id>.<hash>` and answers 400 `invalid_cursor` when an item up to that section
+changed. A cursor `c_<id>` of an unmanaged section, which 3.x gave or a client
+builds, answers 400 `invalid_cursor` too. Follow `X-Next-Cursor` or the `Link`
+as they come, and read the list again from the first page after a 400. 3.x did
+not announce this change. It uses the tightening carve-out of
+`docs/versioning.md`, because a client could not tell whether the page of such
+a cursor skipped an item.

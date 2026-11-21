@@ -410,7 +410,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -1080,7 +1080,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -1750,7 +1750,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -2420,7 +2420,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -3090,7 +3090,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -3942,7 +3942,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -4624,7 +4624,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -5306,7 +5306,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -5976,7 +5976,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -6646,7 +6646,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -7328,7 +7328,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -7985,7 +7985,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -8138,7 +8138,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -8808,7 +8808,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -9478,7 +9478,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -10135,7 +10135,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					},
 					{
 						"name": "family",
@@ -10310,7 +10310,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -11526,7 +11526,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -12196,7 +12196,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -12866,7 +12866,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -13536,7 +13536,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -14752,7 +14752,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -15422,7 +15422,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -16092,7 +16092,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -16762,7 +16762,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -17432,7 +17432,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -19012,7 +19012,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -19682,7 +19682,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -20352,7 +20352,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -21022,7 +21022,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {
@@ -21874,7 +21874,7 @@
 							"type": "string",
 							"pattern": "^c_[A-Za-z0-9_.:-]+$"
 						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`."
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
 					}
 				],
 				"responses": {

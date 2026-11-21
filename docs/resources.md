@@ -277,8 +277,12 @@ unbound.
 ## Anonymous sections and adoption
 
 OpenWrt's uci distinguishes **named** sections (stable identifier across
-rewrites) from **anonymous** sections (auto-assigned `cfgXXXXXX` ids that change
-on rewrite). Anonymous ids are useless for IaC state tracking.
+rewrites) from **anonymous** sections. libuci names an anonymous section at each
+load as `cfg`, the position of the section in its package in hex, and four hex
+digits of a hash of its type, such as `cfg0692bd`. When an earlier section is
+deleted, each later anonymous section gets a lower position in its name, so it
+can take the old name of the section before it. Anonymous ids are useless for
+IaC state tracking.
 
 uapi-managed sections are always named: when a client POSTs to create a
 resource, the server emits a ULID-style identifier (Crockford base32,
@@ -299,8 +303,9 @@ The common starting state for a router under management is a mix of LuCI-named
 sections, hand-edited sections, and anonymous sections from prior tooling.
 Posture: **read-only by default, explicit adoption.**
 
-- `GET /<resource>` returns existing anonymous sections with a content-derived
-  synthetic id and `managed: false`.
+- `GET /<resource>` returns existing anonymous sections with their libuci name
+  as the id and `managed: false`. That id changes when an earlier section is
+  deleted, so a client adopts the section first and keeps the new id.
 - `PUT`/`PATCH`/`DELETE` on a `managed: false` section returns `409
   unmanaged_resource`.
 - `POST /<resource>/<id>/adopt` on an **anonymous** section renames it under
@@ -321,6 +326,13 @@ didn't author.
 Clients filter via `?managed=true` / `?managed=false` when they want one or the
 other. The `Link` to the next page keeps the filter.
 Another value answers 400 `bad_request`.
+
+A page that ends on an unmanaged section gives the cursor `c_<id>.<hash>`, where
+the hash covers the ETags of the items up to and including that section. When
+one of these items changed, for example because an earlier section was deleted
+and the names moved, the cursor answers 400 `invalid_cursor` and does not skip
+an item. Read the list again from the first page. A cursor of a managed section
+is `c_<id>`, and a change before it does not refuse it.
 
 ## Generic raw passthrough
 

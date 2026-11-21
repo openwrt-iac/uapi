@@ -371,7 +371,7 @@ const Q_LIMIT = {
 const Q_CURSOR = {
 	"name": "cursor", "in": "query", "required": false,
 	"schema": { "type": "string", "pattern": CURSOR_PATTERN },
-	"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`.",
+	"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed.",
 };
 const Q_IDEMPOTENCY_KEY = {
 	"name": "idempotency_key", "in": "query", "required": false,
