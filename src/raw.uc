@@ -53,7 +53,6 @@ const TYPE_DOMAIN_MAP = {
 	"lldpd.lldpd":          ["lldpd", "config"],
 	"prometheus-node-exporter-lua.prometheus-node-exporter-lua": ["prometheus_node_exporter_lua", "config"],
 	"vnstat.vnstat":        ["vnstat", "config"],
-	"vnstat.interface":     ["vnstat", "interfaces"],
 };
 
 function inferred_domain_path(pkg, sec_type) {
