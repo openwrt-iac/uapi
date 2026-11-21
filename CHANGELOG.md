@@ -77,6 +77,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`network/interfaces` stores one address as an option on a proto that uapi
+  does not model, as LuCI does.** A write stored `ipaddrs` and `ip6addrs` as a
+  uci list. netifd hands a list only to a handler that declares the option as
+  one, and 6in4, gre, ipip and vxlan declare `ipaddr` and `ip6addr` as strings.
+  So a PATCH of `ipaddrs` on a 6in4 tunnel answered 200, and the tunnel took the
+  wan address as its local end, and a PATCH of `ip6addrs` left it without an
+  IPv6 address. A write now stores one value of `ipaddrs`, `ip6addrs`,
+  `ip6prefix` or `addresses` as an option on such a proto. It refuses several
+  values with 422 `conflict` when the handler declares the option as one value
+  in `ubus call network get_proto_handlers`, because netifd hands it none of
+  them. That refusal uses the carve-out of `docs/versioning.md` for a payload
+  that produced broken state no caller can rely on. The validation sweep lists a
+  stored list that the handler drops, and a PATCH that sends the value stores it
+  as an option. (#PR)
 - **A read of a value that the platform takes conforms to its Response, and a
   write takes more of the values that LuCI writes.** An audit compared each
   schema constraint with LuCI and with the daemon that reads the option. A

@@ -37,7 +37,7 @@ return {
 	// dnsmasq.init reads maindhcp to decide whether dnsmasq serves DHCPv4, and the init of unbound
 	// makes the directory of leasefile when it takes records from odhcpd.
 	reload_if_running: ["odhcpd", "dnsmasq", "unbound"],
-	rewrite_when_named: ["maindhcp"],
+	rewrite_when_named: { maindhcp: "maindhcp" },
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,

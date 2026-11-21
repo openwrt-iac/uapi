@@ -55,6 +55,25 @@ function applies(field, proto) {
 		|| (!VALID_PROTOS[proto] && field != "broadcast_flag" && field != "has_private_key");
 }
 
+// The fields that toUci writes as a uci list, and their options. netifd hands a list to a handler
+// only for an option that the handler declares as a list, and it publishes each declaration in
+// get_proto_handlers: 6in4, gre, ipip and vxlan declare ipaddr as a string, and LuCI writes it as
+// an option for them.
+const LIST_OPTIONS = { ipaddrs: "ipaddr", ip6addrs: "ip6addr", ip6prefix: "ip6prefix", addresses: "addresses" };
+
+const ONE_VALUE = " On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list.";
+
+function handler_options(conn, proto) {
+	if (conn == null || type(proto) != "string" || VALID_PROTOS[proto]) return null;
+	let handlers = null;
+	try { handlers = conn.call("network", "get_proto_handlers"); } catch (e) {}
+	return handlers?.[proto]?.validate;
+}
+
+function one_value(declared) {
+	return type(declared) == "string" && substr(declared, 0, 5) != "list(";
+}
+
 // One entry per group of fields that share their protos: on the other modelled protos, each
 // field must be null. Generated from FIELD_PROTOS so the document and validate() cannot drift.
 function proto_scope_conditionals() {
@@ -213,12 +232,13 @@ function toUci(body) {
 	let out = {};
 	if (json.device != null) out.device = json.device;
 	if (json.proto != null) out.proto = json.proto;
-	// uci handles both `option ipaddr` and `list ipaddr` semantically; the
-	// list form is required for multi-address static interfaces.
+	// On a proto that uapi does not model, one value is written as an option, which a handler takes
+	// whether it declares a string or a list. netifd's static handler takes a list.
+	let list = (v) => (!VALID_PROTOS[json.proto] && length(v) == 1) ? v[0] : v;
 	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
-		out.ipaddr = json.ipaddrs;
+		out.ipaddr = list(json.ipaddrs);
 	if (type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0)
-		out.ip6addr = json.ip6addrs;
+		out.ip6addr = list(json.ip6addrs);
 
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
@@ -256,7 +276,7 @@ function toUci(body) {
 	// remove a hand-written listen_port without this clear.
 	else if (exists(json, "listen_port")) out.listen_port = [];
 	if (type(json.addresses) == "array" && length(json.addresses) > 0)
-		out.addresses = json.addresses;
+		out.addresses = list(json.addresses);
 	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
 	return out;
 }
@@ -311,6 +331,20 @@ function validate(json, conn, id, delta, partial, stored) {
 	// the check above refuses a request that names it, so a stale value stored under another
 	// proto must not block the PATCH that switches away from it.
 	let ok = (field) => applies(field, json.proto);
+	let handler = handler_options(conn, json.proto);
+	for (let field, opt in LIST_OPTIONS)
+		if (ok(field) && length(as_word_list_or_null(named[field])) > 1 && one_value(handler?.[opt]))
+			push(errs, { field, code: "conflict",
+			             message: sprintf("must hold one value on proto %s: its handler reads %s as one value, and netifd hands it no list", json.proto, opt) });
+	// A uci list never reaches a handler that reads the option as one value: on 6in4 the tunnel took
+	// the wan address and no IPv6 address. The read shows the value, so only the stored form tells.
+	// A write that names the field stores one value as an option, and one that leaves it keeps what
+	// uci holds, so only the sweep, which passes no `stored`, reports it.
+	let raw = (stored == null && handler != null && id != null) ? conn.uci_get(PKG, id) : null;
+	for (let field, opt in LIST_OPTIONS)
+		if (type(raw?.[opt]) == "array" && length(raw[opt]) == 1 && one_value(handler[opt]))
+			push(errs, { field, code: "conflict",
+			             message: sprintf("is stored as a uci list, which netifd does not hand to the %s handler, since it reads %s as one value. A PATCH that sends the value stores it as an option", json.proto, opt) });
 	if (ok("netmask") && json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
 		push(errs, { field: "netmask", code: "invalid_format",
 		             message: "must be a valid IPv4 netmask" });
@@ -470,6 +504,9 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	// A static interface takes `option ipaddr` and `list ipaddr` alike, so a PATCH that sends its
+	// address back writes nothing there.
+	rewrite_when_named: (view) => VALID_PROTOS[view?.proto] ? {} : LIST_OPTIONS,
 	openapi_write_back: keys(WRITE),
 	// Opt in to the advisory management-path warning. Only this resource carries the
 	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
@@ -530,9 +567,9 @@ return {
 		ipaddr:    { type: ["string", "null"], readOnly: true,
 		             description: "First entry of the uci `list ipaddr`. Read-only: send `ipaddrs` to write, which names the same uci option." },
 		ipaddrs:   { type: ["array", "null"], items: { type: "string" },
-		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry." },
+		             description: "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry." + ONE_VALUE },
 		ip6addrs:  { type: ["array", "null"], items: { type: "string" },
-		             description: "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both." },
+		             description: "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both." + ONE_VALUE },
 		netmask:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 netmask (static proto)" },
 		broadcast: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
@@ -541,7 +578,7 @@ return {
 		             description: "IPv6 default gateway, a bare address with no prefix length (static proto)" },
 		ip6prefix: { type: ["array", "string", "null"], "x-uapi-clear-on-omit": true, "x-uapi-write-string": true,
 		             items: { type: "string" },
-		             description: "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md)." },
+		             description: "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md)." + ONE_VALUE },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
 		dns:       { type: ["array", "null"], items: { type: "string" } },
@@ -561,7 +598,8 @@ return {
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
 		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer." },
-		addresses: { type: ["array", "null"], items: { type: "string" } },
+		addresses: { type: ["array", "null"], items: { type: "string" },
+		             description: "Addresses of a wireguard interface (uci `list addresses`)." + ONE_VALUE },
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it." },
 		has_private_key: { type: "boolean", readOnly: true },
