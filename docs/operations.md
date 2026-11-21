@@ -533,10 +533,13 @@ writes or the `qmi` that an LTE router ships, takes a PATCH that leaves `proto`
 out, and a `wireless/interfaces` text option that uci holds as a list reads as
 an array. Only a write that changes a field to such a value is refused: a write
 that sends back the value that the section holds, as a PUT of the read does,
-passes. Two values are the exception, because they need options that uapi does
-not model, and a PUT removes those options. A PUT answers 422 for such a proto,
-and for the `HELPER` target that LuCI writes on a firewall rule with its
-`set_helper` option.
+passes, with two exceptions. A request that names such a `proto` answers 422
+`not_in_enum`, also when it sends the stored proto, because a PUT would delete
+the options that its handler reads. So a PUT of the read of such an interface
+fails, and only a PATCH that leaves `proto` out can change it and keep its
+proto. A PUT also answers 422 for the `HELPER` target that LuCI writes on a
+firewall rule with its `set_helper` option, which uapi does not model and a PUT
+removes.
 
 A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break,
 until the daemon reads the value. Another writer can store a value that such a

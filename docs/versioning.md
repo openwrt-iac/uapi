@@ -287,7 +287,7 @@ which the handler checks against the fields that a request names, and
 names a proto that uapi does not model with 422 `not_in_enum`, also when it
 sends the stored proto, because a PUT would delete the options that the handler
 of that proto reads. So a PUT of the read of such an interface fails, and only
-a PATCH that leaves `proto` out can change it.
+a PATCH that leaves `proto` out can change it and keep its proto.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a
