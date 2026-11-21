@@ -54,8 +54,8 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' \
 [ "$status" = "403" ] || fail "diag scope check failed, got $status"
 
 echo "--- Idempotency-Key replays POST result on second use ---"
-# uhttpd CGI env allowlist strips Idempotency-Key; we pass it via the
-# ?idempotency_key= query param. Proxies that forward the header still work.
+# The first POST names the key in the query and the replay in the header, so
+# both forms are read and share one cache entry.
 key1="idem-$(date +%s)-1"
 first=$(curl -sS -D /tmp/uapi_idem1.h -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X POST "$URL/firewall/rules?idempotency_key=$key1" -d '{
@@ -70,7 +70,7 @@ trap "curl -sS -o /dev/null -H \"$ADMIN\" -X DELETE \"$URL/firewall/rules/$id1\"
 
 # Replay - should NOT create a second rule; should return cached body.
 second=$(curl -sS -D /tmp/uapi_idem2.h -H "$ADMIN" -H 'Content-Type: application/json' \
-	-X POST "$URL/firewall/rules?idempotency_key=$key1" -d '{
+	-H "Idempotency-Key: $key1" -X POST "$URL/firewall/rules" -d '{
 		"name": "idem-test-1",
 		"target": "ACCEPT",
 		"enabled": true,

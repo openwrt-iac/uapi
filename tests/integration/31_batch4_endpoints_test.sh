@@ -59,13 +59,14 @@ echo "$body" | grep -q '"scopes"'                || fail "whoami missing scopes"
 echo "$body" | grep -q '"source_ip"'             || fail "whoami missing source_ip"
 echo "$body" | grep -q '"expires_at"'            || fail "whoami missing expires_at placeholder"
 
-echo "--- inbound request id (?request_id= fallback) is echoed back ---"
-# uhttpd's CGI env allowlist drops X-Request-Id. We pass it as a query param;
-# proxies that propagate the header still work via the header path.
+echo "--- inbound request id (?request_id= or X-Request-Id) is echoed back ---"
 my_id="req-01HXTEST00000000000000"
 echoed=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/uapi/whoami?request_id=$my_id" \
 	| tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | tr -d '[:space:]')
 [ "$echoed" = "$my_id" ] || fail "request_id not echoed: got '$echoed' want '$my_id'"
+echoed=$(curl -sS -D - -o /dev/null -H "$ADMIN" -H "X-Request-Id: $my_id-h" "$URL/uapi/whoami" \
+	| tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | tr -d '[:space:]')
+[ "$echoed" = "$my_id-h" ] || fail "X-Request-Id header not echoed: got '$echoed' want '$my_id-h'"
 
 echo "--- malformed request id is dropped (server generates a fresh one) ---"
 gen=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/uapi/whoami?request_id=short" \
@@ -78,7 +79,6 @@ echo "--- conditional GET: If-None-Match matching ETag returns 304 ---"
 etag=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/system" | tr -d '\r' \
 	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
 [ -n "$etag" ] || fail "no ETag on /system"
-# uhttpd's CGI env drops If-None-Match like it drops If-Match; use ?if_none_match=
 unq=$(printf '%s' "$etag" | tr -d '"')
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" \
 	"$URL/system?if_none_match=$unq")

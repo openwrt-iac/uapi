@@ -458,6 +458,16 @@ under wireguard.sh. On OpenWrt main, such a key is now an error, so it blocks
 every write of its peer, as the stored errors above do. So no write installs
 the routes of such a peer, where 3.x did. LuCI refuses such a key too.
 
+## Four request headers take effect
+
+3.x read `If-Match`, `If-None-Match`, `Idempotency-Key` and `X-Request-Id` only
+from their query forms, `?if_match=`, `?if_none_match=`, `?idempotency_key=` and
+`?request_id=`, and ignored the headers. v4 reads the headers too, and a header
+wins over its query form. A request that sends one of the headers now gets what
+it asks for: a stale `If-Match` answers 412, a repeated `Idempotency-Key`
+replays the first response or answers 409, and a malformed `Idempotency-Key`
+answers 400. A client that sends only the query forms sees no change.
+
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of

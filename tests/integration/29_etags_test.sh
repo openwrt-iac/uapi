@@ -46,8 +46,6 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: a
 [ "$status" = "200" ] || fail "PATCH no-if-match expected 200, got $status"
 
 echo "--- PATCH with current If-Match (via ?if_match query param) succeeds and returns a NEW ETag ---"
-# uhttpd strips the If-Match header (its CGI env allowlist excludes it), so we
-# pass the ETag through ?if_match=<value> instead. The handler accepts either.
 fresh_etag_raw=$(curl -sS -D - -o /dev/null -H "$ADMIN" "$URL/firewall/rules/$id" | tr -d '\r' \
 	| sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' | head -1 | tr -d '[:space:]"')
 new_etag_raw=$(curl -sS -D - -o /dev/null -H "$ADMIN" \
@@ -61,6 +59,11 @@ echo "--- PATCH with stale ?if_match returns 412 precondition_failed ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
 	-X PATCH "$URL/firewall/rules/$id?if_match=deadbeef0000" -d '{"enabled": true}')
 [ "$status" = "412" ] || fail "stale if_match expected 412, got $status"
+
+echo "--- PATCH with a stale If-Match header returns 412 precondition_failed ---"
+status=$(curl -sS -o /dev/null -w '%{http_code}' -H "$ADMIN" -H 'Content-Type: application/json' \
+	-H 'If-Match: "deadbeef0000"' -X PATCH "$URL/firewall/rules/$id" -d '{"enabled": true}')
+[ "$status" = "412" ] || fail "stale If-Match header expected 412, got $status"
 
 echo "--- ?if_match=* succeeds against any existing resource ---"
 status=$(curl -sS -o /dev/null -w '%{http_code}' \

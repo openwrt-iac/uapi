@@ -64,6 +64,17 @@ function new_context(inbound_request_id) {
 	return { request_id: ids.new_ulid() };
 }
 
+// uhttpd-mod-ucode sets an HTTP_* variable only for a fixed list of headers, and none of these
+// four is on it. It passes every header in env.headers, its name in lower case.
+function request_context(env, query) {
+	let h = env.headers;
+	let ctx = new_context(h["x-request-id"] ?? query.request_id);
+	ctx.if_match = h["if-match"] ?? query.if_match;
+	ctx.if_none_match = h["if-none-match"] ?? query.if_none_match;
+	ctx.idempotency_key = h["idempotency-key"] ?? query.idempotency_key;
+	return ctx;
+}
+
 function base_headers(ctx) {
 	return {
 		"Content-Type": "application/json",
@@ -183,6 +194,7 @@ function no_content(ctx) {
 
 return {
 	new_context,
+	request_context,
 	error,
 	field_error,
 	validation_failed,

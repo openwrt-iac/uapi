@@ -1,6 +1,7 @@
 let t = require('harness');
 let ubus = require('bus');
 let handler = require('handler');
+let errors = require('errors');
 let rules_mod = loadfile('src/resources/firewall.rules.uc')();
 let reload_calls = [];
 function record_reload(services) { push(reload_calls, services); return null; }
@@ -1089,6 +1090,14 @@ t.describe('handler ETags / If-Match', () => {
 		let r = rules.patch(c, ctx_stale, 'r_existing', { target: 'REJECT' });
 		t.assert_equal(r.status, 412);
 		t.assert_equal(r.body.code, "precondition_failed");
+	});
+
+	t.it('PATCH with a stale If-Match header and no ?if_match= returns 412', () => {
+		let c = with_rules();
+		let env = { headers: { 'if-match': '"00000000abcd"' } };
+		let r = rules.patch(c, errors.request_context(env, {}), 'r_existing', { target: 'REJECT' });
+		t.assert_equal(r.status, 412);
+		t.assert_equal(c._state.uci.firewall.r_existing.target, 'ACCEPT');
 	});
 
 	t.it('PATCH with current If-Match (W/ weak prefix tolerated) succeeds', () => {

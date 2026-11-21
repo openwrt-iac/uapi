@@ -981,12 +981,8 @@ const PREFIX_ROUTES = [
 ];
 
 function dispatch(env, start) {
-	// uhttpd's CGI env drops If-Match/If-None-Match/X-Request-Id/Idempotency-Key.
-	// Fall back to query params; reverse proxies that forward the headers still
-	// work via the header path.
-	let qs = parse_query(env.QUERY_STRING);
-	let inbound_rid = env.HTTP_X_REQUEST_ID ?? qs.request_id ?? null;
-	let ctx = errors.new_context(inbound_rid);
+	let query = parse_query(env.QUERY_STRING);
+	let ctx = errors.request_context(env, query);
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
 	ctx.method = method;
@@ -1000,8 +996,6 @@ function dispatch(env, start) {
 		return { ctx, resp: errors.error(ctx, "tls_required",
 		                                 "HTTPS required for non-localhost requests") };
 	ctx.via_insecure_marker = tls.via_marker;
-	ctx.if_match = env.HTTP_IF_MATCH ?? qs.if_match ?? null;
-	ctx.if_none_match = env.HTTP_IF_NONE_MATCH ?? qs.if_none_match ?? null;
 
 	let parts = split_path(path);
 	for (let r in PUBLIC_ROUTES) {
@@ -1073,14 +1067,11 @@ function dispatch(env, start) {
 			                                 "Request body is required") };
 	}
 	ctx.body_text = body_text;
-	ctx.idempotency_key = env.HTTP_IDEMPOTENCY_KEY ?? qs.idempotency_key ?? null;
 	// PATCH with Content-Type: application/json-patch+json switches the
 	// handler from merge-patch (RFC 7396, the default) to RFC 6902 ops.
 	let ctype = env.CONTENT_TYPE ?? "";
 	ctx.json_patch = (method == "PATCH"
 	                  && index(ctype, "application/json-patch+json") >= 0);
-
-	let query = parse_query(env.QUERY_STRING);
 
 	// Authentication boundary. Everything in PUBLIC_ROUTES above is reachable without a
 	// bearer token, and today that is exactly three endpoints: `/openapi.json`,

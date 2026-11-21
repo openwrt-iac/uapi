@@ -695,11 +695,13 @@ current ETag doesn't match, return `412 precondition_failed` BEFORE any uci
 write. `If-Match: *` matches any existing resource. Absent header preserves
 last-write-wins (opt-in concurrency).
 
-uhttpd's CGI env strips `If-Match`, `If-None-Match`, `X-Request-Id`, and
-`Idempotency-Key` (hard-coded allowlist in uhttpd source). All four have
-`?if_match=` / `?if_none_match=` / `?request_id=` / `?idempotency_key=`
-query-string fallbacks; a reverse proxy in front of uhttpd that forwards
-the headers still works via the header path.
+uhttpd-mod-ucode sets an `HTTP_*` variable only for a fixed list of headers,
+and `If-Match`, `If-None-Match`, `X-Request-Id` and `Idempotency-Key` are not
+on it. It also gives every request header in `env.headers`, with its name in
+lower case, and `errors.request_context` reads the four from there. Each one
+has a query form for a client that cannot set a header: `?if_match=`,
+`?if_none_match=`, `?request_id=` and `?idempotency_key=`. When a request
+carries both, the header wins.
 
 ## Rate limit token bucket
 
