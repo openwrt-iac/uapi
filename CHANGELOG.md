@@ -204,13 +204,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`wireless/interfaces` refuses WEP where the router cannot run it.** On
   OpenWrt 25.12, a section with `encryption wep` gave hostapd no WEP key, so the
   SSID ran open, and uapi answered 200. A write now answers 422 `conflict` on
-  `encryption` for a value that starts with `wep`, unless the daemon of the mode
-  has WEP support: hostapd in mode ap, wpa_supplicant in mode sta or adhoc. uapi
-  asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does, only for a WEP
-  value. Mode mesh takes no WEP. OpenWrt builds both daemons without WEP, so
-  such a write is refused on a stock image. A stored WEP value shows in the
-  validation sweep, and a write that leaves it as it is still passes, unless it
-  sets the SSID up or changes its mode. This refuses requests that 3.4.1
+  `encryption` for a value that starts with `wep`, unless the router sets WEP
+  up. That needs the shell wifi-scripts and the daemon of the mode built with
+  WEP: hostapd in mode ap, wpa_supplicant in mode sta or adhoc. The ucode
+  wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, so
+  such a write is refused on a stock image. uapi asks `hostapd -vwep` or
+  `wpa_supplicant -vwep`, as LuCI does, only for a WEP value and only without
+  the ucode wifi-scripts. Mode mesh takes no WEP. A stored WEP value shows in
+  the validation sweep, and a write that leaves it as it is still passes, unless
+  it sets the SSID up or changes its mode. This refuses requests that 3.x
   accepted, under the security carve-out of `docs/versioning.md`: the client
   asked for encryption and got an open network. It fails loudly, with the 422.
   (#409) (#411)
