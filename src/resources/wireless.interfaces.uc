@@ -442,7 +442,7 @@ return {
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,
-		              description: "Disable this iface at boot. wifi-scripts sets an SSID up only while the SSID and a radio that `device` names are enabled, and that radio has a `type`, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio holds a value that wifi-scripts or a daemon refuses, as the other fields describe" },
+		              description: "Disable this iface at boot. wifi-scripts sets an SSID up only while it has a `mode`, the SSID and a radio that `device` names are enabled, and that radio has a `type`, and the daemons read its values only then. A write sets the SSID up when it enables the SSID on an enabled radio, or moves an enabled SSID from a radio that is off or missing to an enabled one. A move between two enabled radios is not checked. wireless/devices refuses a write that turns a radio on while an enabled SSID of the radio with a `mode` holds a value that wifi-scripts or a daemon refuses, as the other fields describe" },
 		hidden:     { type: "boolean", default: false,
 		              description: "Suppress SSID in beacon frames" },
 		isolate:    { type: "boolean", default: false,
