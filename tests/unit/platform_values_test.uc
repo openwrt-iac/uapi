@@ -82,7 +82,10 @@ const ROWS = [
 	[ "mwan3.rules.uc", "mr1", "proto", "esp", "proto" ],
 	[ "mwan3.rules.uc", "mr1", "proto", "0x11", "proto" ],
 	[ "mwan3.rules.uc", "mr1", "proto", "0377", "proto" ],
+	[ "mwan3.rules.uc", "mr1", "proto", "TCP", "proto" ],
 	[ "mwan3.rules.uc", "mr1", "family", "any", "family" ],
+	[ "mwan3.rules.uc", "mr1", "family", [ "ipv6" ], "family" ],
+	[ "mwan3.rules.uc", "mr1", "family", [ "" ], "family" ],
 	[ "mwan3.rules.uc", "mr1", "timeout", "2000000", "timeout" ],
 	[ "openvpn.instances.uc", "vpn0", "dev_type", "null", "dev_type" ],
 	[ "openvpn.instances.uc", "vpn0", "port", "0", "port" ],
@@ -181,14 +184,21 @@ t.describe('property: a write of the read passes with each value that the platfo
 	}
 });
 
-// libxtables reads an mwan3 protocol number with base 0, and LuCI's hostname() needs a letter or a
-// digit before a trailing dot.
-t.describe('a request takes what iptables and LuCI take, and refuses the rest', () => {
+// iptables 1.8.10 lowercases an mwan3 protocol and reads a number with base 0, and knows neither dccp
+// nor ipcomp. LuCI's hostname() needs a letter or a digit before a trailing dot. fw4 skips a zone
+// whose name starts with a digit or a dash.
+t.describe('a request takes what iptables, LuCI and fw4 take, and refuses the rest', () => {
 	let rule = (p) => { let s = seed([ "mwan3.rules.uc", "mr1", "proto", "tcp" ]); return s.h.patch(s.conn, ctx, s.c.id, { proto: p }).status; };
 	let host = (n) => { let s = seed([ "system.uc", "cfg1", "hostname", "router" ]); return s.h.patch(s.conn, ctx, { hostname: n }).status; };
+	let zone = (n) => { let s = seed([ "firewall.zones.uc", "z1", "name", "probez" ]); return s.h.patch(s.conn, ctx, s.c.id, { name: n }).status; };
 	t.it('an mwan3 rule protocol', () => {
-		for (let p in [ "255", "010", "0377", "0300", "0x11", "0XfF", "0x00ff" ]) t.assert_equal(rule(p), 200, p);
-		for (let p in [ "08", "09", "099", "0400", "0x100", "0x", "256" ]) t.assert_equal(rule(p), 422, p);
+		for (let p in [ "255", "010", "0377", "0300", "000017", "0x11", "0XfF", "0x00ff", "TCP", "Esp", "ALL", "mobility-header" ])
+			t.assert_equal(rule(p), 200, p);
+		for (let p in [ "08", "09", "099", "0400", "00400", "0x100", "0x", "256", "dccp", "ipcomp" ]) t.assert_equal(rule(p), 422, p);
+	});
+	t.it('a firewall zone name', () => {
+		for (let n in [ "zx", "_zx", "zx-2", "z" ]) t.assert_equal(zone(n), 200, n);
+		for (let n in [ "1zx", "-zx", "zx.2" ]) t.assert_equal(zone(n), 422, n);
 	});
 	t.it('a hostname', () => {
 		t.assert_equal(host("router."), 200);

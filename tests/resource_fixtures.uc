@@ -371,7 +371,7 @@ const CASES = [
 	},
 	{
 		file: "mwan3.rules.uc", id: "mr1", pkg: "mwan3",
-		section: { logging: '1', '.type': 'rule', use_policy: 'pol1', proto: 'all', sticky: '1' },
+		section: { logging: '1', '.type': 'rule', use_policy: 'pol1', proto: 'TCP', sticky: '1' },
 	},
 	{
 		file: "usteer.config.uc", id: "cfg", pkg: "usteer",

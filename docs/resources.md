@@ -136,7 +136,7 @@ daemon's runtime convergence.
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `firewall/zones` | `config zone` | input/output/forward policies, `network` list. A policy that the zone does not set reads null: fw4 then applies the one of `firewall/defaults`, and DROP when that has none. |
+| `firewall/zones` | `config zone` | input/output/forward policies, `network` list. A policy that the zone does not set reads null: fw4 then applies the one of `firewall/defaults`, and DROP when that has none. A write refuses a `name` that starts with a digit or a dash, since fw4 skips such a zone, and a stored one blocks every write of the section. |
 | `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family, mark, dscp}`. MARK and DSCP targets carry `set_mark` / `set_xmark` and `set_dscp`. `src_zone` is required only for NOTRACK, matching fw4. |
 | `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. DNAT and SNAT. Every `match` field except `proto` is a scalar, because firewall4 refuses a list on them and drops the section. `match.src_dip` is the external address matched on a DNAT (and the address NAT reflection uses) and the rewrite source on an SNAT, where it is required along with a named `match.dest_zone`. Prefer `firewall/nat` for new source NAT; LuCI migrates these sections there. |
 | `firewall/nat` | `config nat` | Source NAT: SNAT (`snat_ip` / `snat_port`), MASQUERADE, or ACCEPT to exempt traffic from rewriting. `match.src_zone` is the outbound zone. An unset `match.family` means IPv4 only, which is fw4's default for NAT. |
@@ -255,7 +255,7 @@ dnsmasq, because procd does not run it, runs no check.
 | `mwan3/interfaces` | `config interface` (mwan3) | Per-WAN tracking: `track_ip`, `track_method`, probe sizing and timing, up/down thresholds, `flush_conntrack`. |
 | `mwan3/members` | `config member` | Binds an `mwan3/interfaces` section to a `metric` and a `weight`. A write takes a metric from 1 to 256, since mwan3 leaves a member with a higher one out of its policy, and a stored one above 256 blocks every write of the section. |
 | `mwan3/policies` | `config policy` | `use_members` plus a `last_resort` verdict. |
-| `mwan3/rules` | `config rule` (mwan3) | Traffic match (family, proto, src/dest ip and port, ipset) routed to a `use_policy`. |
+| `mwan3/rules` | `config rule` (mwan3) | Traffic match (family, proto, src/dest ip and port, ipset) routed to a `use_policy`. A write takes a `proto` that iptables takes, in any case. With `src_port` or `dest_port`, it refuses `tcp` or `udp` in another case, whose ports mwan3 drops, and a stored one blocks every write of the section. `family` reads a list as mwan3's `config_get` joins it. |
 | `openvpn/instances` | `config openvpn` | Per-instance OpenVPN config. `key`, `tls_auth` and `pkcs12` are write-only; responses carry `has_key` / `has_tls_auth` / `has_pkcs12`. |
 | `usteer/config` (singleton) | `config usteer` | Band-steering and roaming thresholds for the usteer daemon. |
 
