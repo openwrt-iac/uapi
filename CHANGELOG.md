@@ -35,16 +35,24 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `REJECT`, since fw4 applies the policy of `firewall/defaults` there, and the
   schemas drop its default. This differs from the notice, which said that v4
   reads what fw4 applies: the policy that fw4 applies to such a zone is the one
-  that `firewall/defaults` reads. A `firewall/defaults.synflood_rate` reads the
-  string with the unit that fw4 applies, such as `25/second` for a stored `25`,
-  where 3.x read an integer, or null for a unit. A write takes such a string or
-  an integer. A `synflood_burst` reads as fw4 parses it, so `0x10` reads 16.
-  Such a section gets another ETag at the upgrade. A bool or number option of
-  `firewall/defaults` that fw4's parser refuses, such as a `synflood_rate` of
-  `abc`, or a burst that is no integer, is now an error of the section, because
-  fw4 then applies no ruleset, and it blocks every write that does not replace
-  it. Announced in 3.5.0 (#407, #408), and in 3.4.0 for a stored error (#308).
-  Migration note in `docs/migration-v3-to-v4.md`. (#423)
+  that `firewall/defaults` reads. A `firewall/defaults.synflood_rate` with a
+  unit, such as `25/s`, reads with the whole unit that fw4 applies, such as
+  `25/second`, where 3.x read null. A `synflood_burst` reads as fw4 parses it,
+  so `0x10` reads 16. Such a section gets another ETag at the upgrade. A bool or
+  number option of `firewall/defaults` that fw4's parser refuses, such as a
+  `synflood_rate` of `abc`, or a burst that is no integer, is now an error of
+  the section, because fw4 then applies no ruleset, and it blocks every write
+  that does not replace it. Announced in 3.5.0 (#407, #408), and in 3.4.0 for a
+  stored error (#308). Two changes of `synflood_rate` were not announced. A
+  stored rate without a unit, such as `25`, read as the integer 25 in 3.x and
+  now reads as the string `25/second`. The 3.5.0 notice did not cover this
+  change of type. Every rate reads as a string so that a Terraform client can
+  type the field, because Terraform has no type that is an integer or a string.
+  A write takes such a string, or an integer that is a rate per second, of at
+  most 15 digits, where 3.x took any integer from 1. The kernel refuses a rate
+  whose sum with the burst overflows 64 bits, and fw4 then applies no
+  ruleset while `syn_flood` is on. Migration note in
+  `docs/migration-v3-to-v4.md`. (#423)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a

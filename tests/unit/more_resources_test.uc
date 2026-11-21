@@ -75,6 +75,8 @@ t.describe('firewall.defaults synflood_rate and synflood_burst', () => {
 		t.assert_equal(read('synflood_rate', '5/h'), '5/hour');
 		t.assert_equal(read('synflood_rate', '1/d'), '1/day');
 		t.assert_equal(read('synflood_rate', '! 30/minute'), '30/minute');
+		t.assert_equal(read('synflood_rate', '9223372036854775808'), '9223372036854775808/second');
+		t.assert_equal(read('synflood_rate', '99999999999999999999999/h'), '18446744073709551615/hour');
 	});
 
 	t.it('a rate that fw4 refuses reads null', () => {
@@ -87,6 +89,16 @@ t.describe('firewall.defaults synflood_rate and synflood_burst', () => {
 			t.assert_deep_equal(refused(v), [], v);
 		t.assert_deep_equal(refused(0), [ 'out_of_range' ]);
 		for (let v in [ '25/s', '0/minute', '25' ])
+			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
+	});
+
+	// nft_limit_init refuses a rate that overflows a u64 when it adds the burst, at most 2^32 - 1.
+	t.it('a write refuses a rate of more than 15 digits', () => {
+		for (let v in [ 999999999999999, '999999999999999/day' ])
+			t.assert_deep_equal(refused(v), [], v);
+		for (let v in [ 1000000000000000, 18446744073709551615 ])
+			t.assert_deep_equal(refused(v), [ 'out_of_range' ], v);
+		for (let v in [ '1000000000000000/second', '18446744073709551615/second' ])
 			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
 	});
 

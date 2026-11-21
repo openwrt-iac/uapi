@@ -11,6 +11,7 @@ const ROWS = [
 	[ "firewall.defaults.uc", "defaults", "input", "accept", "input" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_burst", "0", "synflood_burst" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_rate", "2000000", "synflood_rate" ],
+	[ "firewall.defaults.uc", "defaults", "synflood_rate", "9223372036854775808", "synflood_rate" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_rate", "25/s", "synflood_rate" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_rate", "! 5/h", "synflood_rate" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_burst", "0x10", "synflood_burst" ],

@@ -8,12 +8,13 @@ const BOOLS = [ "syn_flood", "drop_invalid", "tcp_syncookies", "flow_offloading"
 const BOOL_REFUSED = " A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset.";
 
 // fw4's parse_limit: a rate, then a unit or a prefix of one, after a `!` that the syn_flood chain
-// ignores. fw4 applies a rate without a unit per second.
+// ignores. fw4 applies a rate without a unit per second. Its `+m[1]` is a uint64 that stops at
+// 18446744073709551615, where int() gives NaN from 2^63 on.
 function fw_limit(v) {
 	let m = (type(v) == "string") ? match(trim(replace(v, /^[ \t]*!/, "")), /^([0-9]+)(\/([a-z]+))?$/) : null;
 	if (m == null) return null;
 	let unit = (m[3] == null) ? "second" : filter(RATE_UNITS, (u) => substr(u, 0, length(m[3])) == m[3])[0];
-	return (unit != null) ? sprintf("%d/%s", int(m[1]), unit) : null;
+	return (unit != null) ? sprintf("%s/%s", +m[1], unit) : null;
 }
 
 // fw4's parse_int is `+val`, and its template prints the number into `burst <n> packets`, which nft
@@ -117,9 +118,11 @@ return {
 		                      description: "Packets above `synflood_rate` that `syn_flood` lets through in a burst. A read gives the number as fw4 parses it, so `0x10` reads 16. Unset, fw4 applies 50. A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. A number that is no integer, such as `16.5`, reads null and is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is on." },
 		synflood_rate:      { "x-uapi-read-nullable": true, type: ["integer", "string"],
 		                      pattern: "^[1-9][0-9]*/(second|minute|hour|day)$",
-		                      "x-uapi-write": { minimum: 1 },
+		                      // 15 digits keep the maximum exact for a client that reads JSON numbers as doubles.
+		                      "x-uapi-write": { minimum: 1, maximum: 999999999999999,
+		                                        pattern: "^[1-9][0-9]{0,14}/(second|minute|hour|day)$" },
 		                      "x-uapi-read": { type: ["string", "null"] },
-		                      description: "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset." },
+		                      description: "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second, and takes a rate of at most 15 digits: the kernel refuses a rate whose sum with the burst overflows 64 bits. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset." },
 		tcp_syncookies:     { type: "boolean", default: false,
 		                      description: "Enable kernel TCP SYN cookies." + BOOL_REFUSED },
 		flow_offloading:    { type: "boolean", default: false,
