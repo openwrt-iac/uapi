@@ -455,15 +455,15 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	});
 
 	// The ucode handler of OpenWrt main matches a key as uci holds it, and skips the peer, or leaves
-	// out the preshared key, for one with whitespace or a comment.
-	t.it('under the ucode handler a stored key with whitespace or a comment blocks every write of the peer, and is not live', () => {
+	// out the preshared key, for one with whitespace or a comment, or for a list.
+	t.it('under the ucode handler a stored key with whitespace, a comment or as a list blocks every write of the peer, and is not live', () => {
 		let h = handler.make(t.load_with({ wg: uc }, [ '../resources/network.wireguard_peers' ]),
 		                     { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
-		for (let k, v in { public_key: PK + ' # b', preshared_key: PK + ' ' }) {
-			let c = with_wg();
-			c._state.uci.network.g_existing[k] = v;
-			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { description: 'x' })), [ [ k, 'invalid_format' ] ], k);
-			t.assert_deep_equal(map(h.sweep(c)[0].errors, (e) => [ e.field, e.live ]), [ [ k, false ] ], k);
+		for (let kv in [ [ 'public_key', PK + ' # b' ], [ 'preshared_key', PK + ' ' ], [ 'preshared_key', [ PK ] ] ]) {
+			let k = kv[0], c = with_wg();
+			c._state.uci.network.g_existing[k] = kv[1];
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { description: 'x' })), [ [ k, 'invalid_format' ] ], kv);
+			t.assert_deep_equal(map(h.sweep(c)[0].errors, (e) => [ e.field, e.live ]), [ [ k, false ] ], kv);
 		}
 	});
 
