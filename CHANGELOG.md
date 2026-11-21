@@ -9,18 +9,22 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **A WireGuard peer endpoint that does not resolve follows the proto
-  handler.** 3.x committed such an `endpoint_host`, `wg set` refused the peer,
-  and the restore answered 500 `reload_failed_restored`. On 25.12, wireguard.sh
-  gives the endpoint to wg, which refuses the config of the whole interface at
-  its next start, so a write that sends such a host for an enabled peer with a
-  key answers 422 `conflict` on `endpoint_host` before its commit. On OpenWrt
-  main, the ucode proto handler leaves out the endpoint and keeps the peer, so
-  the write sets the peer without it and answers 200 with the new
-  `X-Kernel-Status: omitted`. A name resolves when busybox's nslookup answers
-  it, as that handler reads it. A stored name is not checked. This is not
-  breaking: 3.x stored no such write, so the 422 reports a refusal that already
-  happened as a client error, the 200 on main is a write that failed and now
-  succeeds, and a new header value is handled like a new error code. Note in
+  handler.** 3.x committed such an `endpoint_host`. On an up interface `wg set`
+  refused the peer and the restore answered 500 `reload_failed_restored`, and on
+  a down one the write answered 200 `X-Kernel-Status: skipped`. On 25.12,
+  wireguard.sh gives the endpoint to wg, which refuses the config of the whole
+  interface at its next start for a name that does not exist. So a write that
+  sends such a name for an enabled peer with a key answers 422 `conflict` on
+  `endpoint_host` before its commit: a name for which busybox's nslookup gets
+  NXDOMAIN, or a reply with no address. This refuses a payload that 3.x stored
+  on a down interface, under the carve-out of `docs/versioning.md` for a payload
+  that produced broken state no caller can rely on. A lookup that fails for a
+  time, as on a timeout or a SERVFAIL, is not refused, because wg retries the
+  name and the interface comes up once it resolves. A stored name is not
+  checked. On OpenWrt main, the ucode proto handler leaves out the endpoint of a
+  name for which nslookup prints no address, and keeps the peer, so the write
+  sets the peer without it and answers 200 with the new `X-Kernel-Status:
+  omitted`, a value that a client takes as it takes a new error code. Note in
   `docs/migration-v3-to-v4.md`. (#424)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
@@ -221,9 +225,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The restore sets a WireGuard peer with a host and no port with port 51820 on
   OpenWrt main.** Both proto handlers give wg port 51820 for such a peer, and
   the kernel apply of a write did too, but the restore on main left the endpoint
-  out. The ucode handler leaves the endpoint out for an empty `endpoint_port`,
-  which only a hand edit stores, so on main such a port now reads 0, as a port
-  that does not resolve reads. (#424)
+  out. The read of `endpoint_port` stays null. (#424)
 
 ## [3.5.0] - 2026-11-21
 
