@@ -377,9 +377,10 @@ const Q_CURSOR = {
 	"schema": { "type": "string", "pattern": CURSOR_PATTERN },
 	"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed.",
 };
+// KEY_RE of src/lib/idempotency.uc.
 const Q_IDEMPOTENCY_KEY = {
 	"name": "idempotency_key", "in": "query", "required": false,
-	"schema": { "type": "string" },
+	"schema": { "type": "string", "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$" },
 	"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409.",
 };
 

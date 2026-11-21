@@ -462,11 +462,28 @@ the routes of such a peer, where 3.x did. LuCI refuses such a key too.
 
 3.x read `If-Match`, `If-None-Match`, `Idempotency-Key` and `X-Request-Id` only
 from their query forms, `?if_match=`, `?if_none_match=`, `?idempotency_key=` and
-`?request_id=`, and ignored the headers. v4 reads the headers too, and a header
-wins over its query form. A request that sends one of the headers now gets what
-it asks for: a stale `If-Match` answers 412, a repeated `Idempotency-Key`
-replays the first response or answers 409, and a malformed `Idempotency-Key`
-answers 400. A client that sends only the query forms sees no change.
+`?request_id=`, and ignored the headers. v4 reads the headers too. A header
+that is not empty wins over its query form, and an `X-Request-Id` header only
+when it matches `^[A-Za-z0-9_-]{8,128}$`. A request that sends one of the
+headers now gets what it asks for, where 3.x answered as if it had no header:
+
+- A PUT, PATCH or DELETE with a stale `If-Match`, or with an `If-None-Match`
+  that matches, such as `If-None-Match: *` on a section that exists, answers
+  412 and writes nothing.
+- A GET of one item or of a singleton with an `If-None-Match` that matches its
+  ETag answers 304 with no body.
+- A POST that repeats an `Idempotency-Key` replays the first response, or
+  answers 409 `idempotency_key_conflict` for another body, and creates no
+  second section.
+- A POST with an `Idempotency-Key` outside
+  `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$` answers 400 `bad_request`, as
+  `?idempotency_key=` does in 3.x. A key in base64 is the usual case, because
+  `+`, `/` and `=` are outside the pattern.
+- A valid `X-Request-Id` is echoed in the `X-Request-Id` response header, in
+  the `request_id` of an error body and in the log lines of the request, in
+  place of a new ULID.
+
+A client that sends only the query forms sees no change.
 
 ## Reads that change at the upgrade
 

@@ -485,7 +485,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -1055,7 +1056,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -1176,7 +1178,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -1746,7 +1749,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -1867,7 +1871,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -2437,7 +2442,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -2558,7 +2564,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -3128,7 +3135,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -3249,7 +3257,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -3819,7 +3828,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -4128,7 +4138,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -4710,7 +4721,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -4831,7 +4843,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -5413,7 +5426,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -5534,7 +5548,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -6104,7 +6119,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -6225,7 +6241,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -6795,7 +6812,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -6916,7 +6934,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -7498,7 +7517,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -7619,7 +7639,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -8189,7 +8210,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -8458,7 +8480,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -9028,7 +9051,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -9149,7 +9173,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -9719,7 +9744,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -9840,7 +9866,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -10410,7 +10437,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -10699,7 +10727,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -11269,7 +11298,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -11954,7 +11984,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -12524,7 +12555,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -12645,7 +12677,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -13215,7 +13248,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -13336,7 +13370,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -13906,7 +13941,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -14027,7 +14063,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -14597,7 +14634,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -15282,7 +15320,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -15852,7 +15891,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -15973,7 +16013,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -16543,7 +16584,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -16664,7 +16706,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -17234,7 +17277,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -17355,7 +17399,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -17925,7 +17970,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -18046,7 +18092,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -18616,7 +18663,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -19677,7 +19725,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -20247,7 +20296,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -20368,7 +20418,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -20938,7 +20989,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -21059,7 +21111,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -21629,7 +21682,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -21750,7 +21804,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -22320,7 +22375,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -22629,7 +22685,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -23199,7 +23256,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -23355,7 +23413,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -23766,7 +23825,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -24021,7 +24081,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -24217,7 +24278,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -24357,7 +24419,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -24693,7 +24756,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -25205,7 +25269,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
@@ -25538,7 +25603,8 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
 						},
 						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
