@@ -84,12 +84,13 @@ The dependency is not the blocker: `apply-confirm` 0.1.0 is released and on
 the apk feed. The hold is the wire-contract commitment.
 
 Plan: ship the whole feature once, coherently, in one minor (per-write
-`?confirm` plus the standalone `POST /confirm` arm under Features below, with
-one reviewed authz model). One of the two gates is now closed: the authz model
-is decided and recorded, so the feature can be scoped into a minor whenever its
-consumer appears. The other is not. Nothing exercises the surface, and freezing
-a v2 contract that nothing uses is precisely why it came out of 2.3.0, so there
-is still no target release. Design reference: `docs/commit-confirm.md`.
+`?confirm` plus the standalone `POST /uapi/confirm` arm under Features below,
+with one reviewed authz model). One of the two gates is now closed: the authz
+model is decided and recorded, so the feature can be scoped into a minor
+whenever its consumer appears. The other is not. Nothing exercises the surface,
+and freezing a v2 contract that nothing uses is precisely why it came out of
+2.3.0, so there is still no target release. Design reference:
+`docs/commit-confirm.md`.
 
 
 ## Shipped in 2.5.0
@@ -316,8 +317,8 @@ contract in `docs/adding-a-resource.md`.
 moved to the helper of their reader, after #312 read libvalidate's set out of
 ubox. fw4's `parse_bool` keeps `normalize_bool`, which matches it.
 `sqm/queues.enabled` reads as sqm-scripts does, on only for the number 1 (#372).
-`unbound/servers` still uses `normalize_bool`, and its consumer has not been
-read yet. See `docs/ucode-quirks.md`.
+`unbound/srv.ip_transparent` still uses `normalize_bool`, and its consumer has
+not been read yet. See `docs/ucode-quirks.md`.
 
 ## Shipped in 3.1.0
 
@@ -596,7 +597,7 @@ read yet. See `docs/ucode-quirks.md`.
   requires the
   `package` check with the other four.
 
-## Features (additive, future minor bumps in v3.x)
+## Features (additive, future minor bumps in 4.x)
 
 - **Upstream: one unresolvable peer endpoint should not take a tunnel down.**
   Filed as
@@ -675,17 +676,18 @@ read yet. See `docs/ucode-quirks.md`.
   recorded so the
   question is not re-opened as uapi work.
 
-- **Standalone confirm arm over HTTP (`POST /confirm`).** The per-write
-  `?confirm` never shipped (built in 2.3.0-rc1, removed before stable) and
-  should not: a DAG apply is N isolated provider RPCs with no apply-level
-  begin/end hook, and only one window can exist at a time, so a second
-  `?confirm` write gets `409 already_armed` with its own change rolled back. The
-  Terraform-useful shape is apply-confirm's
+- **Standalone confirm arm over HTTP (`POST /uapi/confirm`, #324).** The
+  per-write `?confirm` never shipped (built in 2.3.0-rc1, removed before
+  stable) and should not: a DAG apply is N isolated provider RPCs with no
+  apply-level begin/end hook, and only one window can exist at a time, so a
+  second `?confirm` write gets `409 already_armed` with its own change rolled
+  back. The Terraform-useful shape is apply-confirm's
   `stage` primitive (arm once over a package set, ack once after the apply)
   exposed over HTTP, so a wrapper can arm, run the apply, then ack or let it
   auto-revert with no SSH hop. `ac_stage` exists only in the reverted rc1 code
-  (commit `a85a5cd`), and the bare
-  `POST /confirm` slot is free (unrouted, so 404 like any unknown path). Locked
+  (commit `a85a5cd`), and the
+  `POST /uapi/confirm` slot is free (unrouted, so 404 like any unknown path).
+  Locked
   design constraints if
   built: the body names curated **resources/scopes, never raw packages**, and
   uapi derives the package set and reload-service union from `RESOURCE_SOURCES`
@@ -934,23 +936,40 @@ The sweep list for v4, tracked in the [v4
 milestone](https://github.com/openwrt-iac/uapi/milestone/1). At v4 planning,
 read it top to bottom: every line must resolve to an issue in the milestone, or
 be explicitly descoped in the release PR with the reason. An issue is closed
-when its work merges into the `v4` branch, and that work ships with v4. The
-mechanisms, the evidence and the open questions live in the issues.
+when its work merges into `main`, the 4.x line since the `v4` branch merged, and
+that work ships with v4. The mechanisms, the evidence and the open questions
+live in the issues.
 
 **Open:**
 
-- [Widen `network/interfaces.disabled` to the platform
-  boolean](https://github.com/openwrt-iac/uapi/issues/311): conditional on the
-  OpenWrt branch carrying netifd `e97e36f` at v4 time. The unit test that pins
-  the per-type difference says when.
-- [Ship the standalone confirm arm `POST
-  /confirm`](https://github.com/openwrt-iac/uapi/issues/324): the authz model is
-  decided, additive.
+- [A v4 lease without a client id reads duid
+  `"*"`](https://github.com/openwrt-iac/uapi/issues/392): dnsmasq writes `*`
+  for a missing client id, which reads null, as for the hostname.
+- [mwan3 `loglevel` `err` and `warn`, and a member `metric` above
+  256](https://github.com/openwrt-iac/uapi/issues/407): uapi takes them and the
+  daemon does not. Confirm on a router, then refuse them on write or describe
+  them.
+- [A firewall `synflood_rate` with a unit and a zone without a policy read
+  another value than fw4 uses](https://github.com/openwrt-iac/uapi/issues/408):
+  reads that change, with a new ETag at the upgrade.
+- [The HTTP token mint takes a scope that the server does not
+  know](https://github.com/openwrt-iac/uapi/issues/415): it answers 422, as
+  `uapi-token create` refuses it, announced in 3.5.0.
 - The mount moves to `/api/v4` and the install hook strips every older prefix,
   as each major moved it before. The v3-to-v4 migration document rides the
   release.
 
-**Merged into the `v4` branch, and closed:**
+**Left the milestone:**
+
+- [Widen `network/interfaces.disabled` to the platform
+  boolean](https://github.com/openwrt-iac/uapi/issues/311): OpenWrt 25.12,
+  which 4.x supports, does not carry netifd `e97e36f`, and the widening is
+  breaking, so it waits for the major after v4.
+- [Ship the standalone confirm
+  arm](https://github.com/openwrt-iac/uapi/issues/324): additive, so a 4.x
+  minor can ship it, as `POST /uapi/confirm` with the scope `uapi:confirm:rw`.
+
+**Merged, and closed:**
 
 - [Routes `table` and rules `lookup` accept table names on
   write](https://github.com/openwrt-iac/uapi/issues/240): the request type
@@ -990,6 +1009,12 @@ mechanisms, the evidence and the open questions live in the issues.
 - [Consolidate the `x-uapi-*` marker
   namespace](https://github.com/openwrt-iac/uapi/issues/329): four vendor
   markers, one of which dies with #241, internal.
+- [WireGuard peers on OpenWrt
+  main](https://github.com/openwrt-iac/uapi/issues/359): the kernel apply waits
+  for the restart of netifd's ucode handler, and a restart that does not end
+  fails the write.
+- [dnsmasq on OpenWrt main](https://github.com/openwrt-iac/uapi/issues/360): the
+  test writes `dhcpv4 'server'`, as the stock config of main does.
 
 ## Out of scope by design
 
