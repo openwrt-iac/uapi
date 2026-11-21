@@ -339,22 +339,33 @@ ensure_wireguard() {
 	return 1
 }
 
-# Real handlers of protos that uapi does not model, and a test handler that keeps the config netifd
-# hands it, so that a write is checked against what the handler receives. netifd scans
-# /lib/netifd/proto only when it starts, as for wireguard above.
+# Real handlers of protos that uapi does not model, a test handler that keeps the config netifd
+# hands it, so that a write is checked against what the handler receives, and the tools with which
+# test 62 reads a tunnel back from the kernel, since the ip of busybox decodes none. netifd scans
+# /lib/netifd/proto only when it starts, as for wireguard above, so a changed test handler reaches
+# it only through a restart.
 proto_handlers_ready() {
-	$SSH 'lsmod | grep -q "^dummy "' && $SSH 'ubus call network get_proto_handlers 2>/dev/null' \
+	$SSH 'lsmod | grep -q "^dummy " && ip -V 2>&1 | grep -q iproute2 && apk info -e ucode-mod-rtnl >/dev/null' \
+		&& [ "$($SSH 'md5sum < /lib/netifd/proto/uapitest.sh' 2>/dev/null)" \
+			= "$(md5sum < tests/integration/lib/uapitest_proto.sh)" ] \
+		&& $SSH 'ubus call network get_proto_handlers 2>/dev/null' \
 		| jq -e 'has("6in4") and has("gre") and has("ipip") and has("vxlan") and has("uapitest")' >/dev/null
 }
 
 ensure_proto_handlers() {
 	proto_handlers_ready && return 0
-	$SSH 'apk add 6in4 gre ipip vxlan kmod-dummy 2>&1 | tail -3; modprobe dummy' || return 1
+	local netifd
+	netifd=$($SSH 'pidof netifd')
+	# ip-full decodes tunnels too, and apk refuses ip-tiny beside it.
+	$SSH 'apk add 6in4 gre ipip vxlan kmod-dummy ucode-mod-rtnl 2>&1 | tail -3
+		ip -V 2>&1 | grep -q iproute2 || apk add ip-tiny 2>&1 | tail -3
+		modprobe dummy' || return 1
 	push_file_to_vm tests/integration/lib/uapitest_proto.sh /lib/netifd/proto/uapitest.sh || return 1
 	$SSH 'chmod +x /lib/netifd/proto/uapitest.sh; (sleep 1; /etc/init.d/network restart) >/dev/null 2>&1 &' || true
+	# When only the test handler changed, the old netifd lists every handler already.
 	n=0
 	while [ $n -lt 40 ]; do
-		proto_handlers_ready && return 0
+		[ "$($SSH 'pidof netifd' 2>/dev/null)" != "$netifd" ] && proto_handlers_ready && return 0
 		n=$((n + 1)); sleep 2
 	done
 	return 1

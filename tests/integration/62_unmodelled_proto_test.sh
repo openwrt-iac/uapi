@@ -3,12 +3,13 @@ set -eu
 
 . tests/integration/lib/install_uapi.sh
 install_uapi
-ensure_proto_handlers || { echo "FAIL: netifd did not register the 6in4, gre, ipip, vxlan and uapitest handlers"; exit 1; }
+ensure_proto_handlers || { echo "FAIL: the box lacks a tunnel handler, the uapitest handler of this tree, an ip of iproute2 or ucode-mod-rtnl"; exit 1; }
 
 URL=http://127.0.0.1:8080/api/v3
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 IFACES="uapi62a uapi62b uapi62c uapi62d uapi62e"
-fail() { echo "FAIL: $*"; exit 1; }
+# On stderr, so that a fail of ends, which runs in a command substitution, still shows.
+fail() { echo "FAIL: $*" >&2; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 body() { printf '%s\n' "$1" | sed '$d'; }
 status() { printf '%s\n' "$1" | tail -1; }
@@ -18,14 +19,18 @@ form() {
 	$SSH "uci export network" | sed -n "/^config interface '$1'/,/^\$/p" \
 		| grep -E "^[[:space:]]+(option|list) $2 " | sed 's/^[[:space:]]*//' | tr '\n' ' ' | sed 's/ $//'
 }
-# "<mtu> <local> <remote>" of a tunnel: ip-tiny decodes no vxlan, and the rtnl module of ucode
-# decodes no end of a sit, gre or ipip tunnel.
+# "<mtu> <local> <remote>" of a tunnel, or nothing when the link is gone: ip-tiny decodes no vxlan,
+# and the rtnl module of ucode decodes no end of a sit, gre or ipip tunnel. A missing tool would
+# read as a link that uapi got wrong, so ends stops the test: each call assigns its value, and
+# set -e stops on an assignment that fails.
 ends() {
 	[ -n "$1" ] || return 0
 	if [ "$2" = vxlan ]; then
 		$SSH "ucode -e 'import * as rtnl from \"rtnl\"; let l = rtnl.request(rtnl.const.RTM_GETLINK, 0, { dev: \"$1\" });
-			if (l) print(l.mtu, \" \", l.linkinfo.local, \" \", l.linkinfo.group, \"\\n\");'" 2>/dev/null || true
+			if (l) print(l.mtu, \" \", l.linkinfo.local, \" \", l.linkinfo.group, \"\\n\");'" \
+			|| fail "ucode could not read the link $1 through ucode-mod-rtnl"
 	else
+		$SSH 'ip -V 2>&1 | grep -q iproute2' || fail "ip on the box is the one of busybox, which decodes no tunnel"
 		$SSH "ip -d link show $1" 2>/dev/null | awk '
 			NR == 1 { for (i = 1; i < NF; i++) if ($i == "mtu") m = $(i + 1) }
 			/ remote / { for (i = 1; i < NF; i++) { if ($i == "remote") r = $(i + 1); if ($i == "local") l = $(i + 1) } }
@@ -51,7 +56,8 @@ cleanup() {
 	for i in $IFACES; do del="$del uci -q delete network.$i;"; done
 	$SSH "$del uci commit network; /etc/init.d/network reload" 2>/dev/null || true
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
+cleanup
 
 LOCAL=$($SSH 'ubus call network.interface.lan status' | jq -r '."ipv4-address"[0].address // empty')
 [ -n "$LOCAL" ] || fail "lan has no IPv4 address to carry the tunnels"
@@ -77,7 +83,8 @@ for spec in "6in4 uapi62a 192.0.2.62" "gre uapi62b 192.0.2.63" "ipip uapi62c 192
 		'.proto == $p and .runtime.up and .runtime.effective_proto == $p and .mtu == 1400 and .ipaddrs == [$l]' >/dev/null \
 		|| fail "$proto: the read does not report what uci holds and netifd runs: $view"
 	dev=$(printf '%s' "$view" | jq -r '.runtime.l3_device')
-	[ "$(ends "$dev" "$proto")" = "1400 $LOCAL $peer" ] || fail "$proto: the kernel link is not the one of uci: $(ends "$dev" "$proto")"
+	link=$(ends "$dev" "$proto")
+	[ "$link" = "1400 $LOCAL $peer" ] || fail "$proto: the kernel link is not the one of uci: $link"
 	[ "$(swept "$name")" = '[]' ] || fail "$proto: the sweep listed the section: $(swept "$name")"
 
 	before=$($SSH "uci show network.$name" | grep -v '\.mtu=')
@@ -86,16 +93,16 @@ for spec in "6in4 uapi62a 192.0.2.62" "gre uapi62b 192.0.2.63" "ipip uapi62c 192
 	settled "$name" "$proto after the PATCH of mtu"
 	[ "$($SSH "uci show network.$name" | grep -v '\.mtu=')" = "$before" ] \
 		|| fail "$proto: the PATCH of mtu changed another option: $($SSH "uci show network.$name")"
-	[ "$(ends "$(dev_of "$name")" "$proto")" = "1380 $LOCAL $peer" ] \
-		|| fail "$proto: the handler did not get the mtu of the PATCH or lost an option: $(ends "$(dev_of "$name")" "$proto")"
+	link=$(ends "$(dev_of "$name")" "$proto")
+	[ "$link" = "1380 $LOCAL $peer" ] || fail "$proto: the handler did not get the mtu of the PATCH or lost an option: $link"
 
 	r=$(send PATCH "/$name" "{\"ipaddrs\":[\"$MOVED\"]}")
 	[ "$(status "$r")" = 200 ] || fail "$proto: PATCH ipaddrs: $(body "$r")"
 	[ "$(form "$name" ipaddr)" = "option ipaddr '$MOVED'" ] \
 		|| fail "$proto: one address is not stored as an option, which the handler reads: $(form "$name" ipaddr)"
 	settled "$name" "$proto after the PATCH of ipaddrs"
-	[ "$(ends "$(dev_of "$name")" "$proto")" = "1380 $MOVED $peer" ] \
-		|| fail "$proto: the handler did not get the address of the PATCH: $(ends "$(dev_of "$name")" "$proto")"
+	link=$(ends "$(dev_of "$name")" "$proto")
+	[ "$link" = "1380 $MOVED $peer" ] || fail "$proto: the handler did not get the address of the PATCH: $link"
 
 	r=$(send PATCH "/$name" '{"disabled":true}')
 	[ "$(status "$r")" = 200 ] || fail "$proto: PATCH disabled true: $(body "$r")"
@@ -106,8 +113,8 @@ for spec in "6in4 uapi62a 192.0.2.62" "gre uapi62b 192.0.2.63" "ipip uapi62c 192
 	r=$(send PATCH "/$name" '{"disabled":false}')
 	[ "$(status "$r")" = 200 ] || fail "$proto: PATCH disabled false: $(body "$r")"
 	settled "$name" "$proto after enabling it"
-	[ "$(ends "$(dev_of "$name")" "$proto")" = "1380 $MOVED $peer" ] \
-		|| fail "$proto: the enabled tunnel lost an option: $(ends "$(dev_of "$name")" "$proto")"
+	link=$(ends "$(dev_of "$name")" "$proto")
+	[ "$link" = "1380 $MOVED $peer" ] || fail "$proto: the enabled tunnel lost an option: $link"
 	echo "  ok: $proto"
 done
 
@@ -127,7 +134,8 @@ r=$(send PATCH /uapi62a "{\"ipaddrs\":[\"$LOCAL\",\"$MOVED\"]}")
 # interface holds MOVED, so the handler has it only from uci.
 $SSH "uci delete network.uapi62a.ipaddr; uci add_list network.uapi62a.ipaddr=$MOVED; uci commit network; /etc/init.d/network reload"
 idle uapi62a
-case "$(ends 6in4-uapi62a 6in4)" in
+link=$(ends 6in4-uapi62a 6in4)
+case "$link" in
 	*" $MOVED "*) fail "the handler got a uci list for its string ipaddr, so the report guards nothing" ;;
 esac
 [ "$(swept uapi62a)" = '["ipaddrs:conflict"]' ] || fail "the sweep does not report the stored list: $(swept uapi62a)"
@@ -135,8 +143,8 @@ r=$(send PATCH /uapi62a "{\"ipaddrs\":[\"$MOVED\"]}")
 [ "$(status "$r")" = 200 ] || fail "the PATCH that sends the address back: $(body "$r")"
 settled uapi62a "6in4 after the address was sent back"
 [ "$(form uapi62a ipaddr)" = "option ipaddr '$MOVED'" ] || fail "the PATCH kept the list: $(form uapi62a ipaddr)"
-[ "$(ends 6in4-uapi62a 6in4)" = "1380 $MOVED 192.0.2.62" ] \
-	|| fail "the handler did not get the address: $(ends 6in4-uapi62a 6in4)"
+link=$(ends 6in4-uapi62a 6in4)
+[ "$link" = "1380 $MOVED 192.0.2.62" ] || fail "the handler did not get the address: $link"
 [ "$(swept uapi62a)" = '[]' ] || fail "the sweep still reports the section: $(swept uapi62a)"
 
 echo "--- a handler that uapi does not know gets every option of uci after a write, its own lists too ---"
