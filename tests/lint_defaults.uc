@@ -27,7 +27,8 @@
 //   - <jsonkey>: <normalize_bool|platform_bool|shell_bool>(section.<ucikey>, true|false)
 //   - <jsonkey>: <same>(section["<ucikey>"], true|false)
 //   - <jsonkey>: strict_bool(section.<ucikey>)   -- default false
-//   - <jsonkey>: section.<ucikey> ?? "literal"   -- or || "literal", for an empty value too
+//   - <jsonkey>: section.<ucikey> ?? "literal"   -- or || "literal", for an empty value too,
+//     and either with section.<ucikey> inside values.config_get()
 //
 // Captures the JSON-side key (the schema property name), not the uci-side
 // key. Some resources name them differently (e.g. dropbear's password_auth
@@ -86,14 +87,14 @@ function find_fromuci_defaults(content) {
 	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
 	let strict_re       = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*strict_bool\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)');
 	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
-	let str_re          = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*(\\?\\?|\\|\\|)\\s*"([^"]+)"');
+	let str_re          = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(values\\.config_get\\()?section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)?\\s*(\\?\\?|\\|\\|)\\s*"([^"]+)"');
 
 	for (let line in split(content, "\n")) {
 		let m;
 		if (m = match(line, bool_dot_re))     defaults[m[1]] = m[3];
 		if (m = match(line, bool_bracket_re)) defaults[m[1]] = m[3];
 		if (m = match(line, strict_re))       defaults[m[1]] = "false";
-		if (m = match(line, str_re))          defaults[m[1]] = sprintf('"%s"', m[3]);
+		if (m = match(line, str_re))          defaults[m[1]] = sprintf('"%s"', m[4]);
 	}
 	return defaults;
 }

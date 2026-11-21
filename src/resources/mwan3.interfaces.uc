@@ -15,9 +15,9 @@ function fromUci(section) {
 		// absent option means off. Declaring true here reported an interface mwan3 ignores as
 		// enabled, and any PATCH persisted that read view as `enabled='1'`, switching it on.
 		enabled:                shell_bool(section.enabled, false),
-		// mwan3.sh and mwan3track read it with `config_get family ... ipv4`, whose `${...:-ipv4}`
-		// takes an empty value as unset too.
-		family:                 section.family || "ipv4",
+		// mwan3.sh and mwan3track read it with `config_get family ... ipv4`, which joins a list
+		// with spaces, and whose `${...:-ipv4}` takes an empty value as unset too.
+		family:                 values.config_get(section.family) || "ipv4",
 		track_ip:               as_list_or_null(section.track_ip),
 		track_method:           section.track_method ?? null,
 		reliability:            as_int(section.reliability),
