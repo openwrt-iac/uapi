@@ -37,12 +37,10 @@ permissions:
 # hang in our own code: the 2026-08-06 Actions incident produced 15 and 45 minute failures
 # with no logs retained, and hours were spent proving the branches were fine. These budgets
 # are roughly 2-3x the observed maxima (lint 0.5m, unit 1.5m, integration 9.3m,
-# verify-arch-build 9.6m), with extra room for a cold SDK cache. Integration on the
-# OpenWrt main snapshot takes about 30m: every peer write restarts the
-# wireguard interface there, and the wireguard tests wait each restart out. Package
-# there takes about 60m on a cold cache: the snapshot SDK download alone took 27m,
-# and the build of the dependencies about 30m. A PR to v4 restores the SDK that the
-# last push to v4 cached.
+# verify-arch-build 9.6m), with extra room for a cold SDK cache. v3 runs on the stable
+# release only, but keeps the budgets of main, which also runs the OpenWrt main snapshot:
+# integration there takes about 30m and package about 60m on a cold cache. The same
+# budgets on both branches let a change of this file carry from one to the other.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: >-
@@ -83,16 +81,13 @@ jobs:
       package_changed: ${{ steps.package.outputs.changed }}
       series: ${{ steps.series.outputs.list }}
     steps:
-      # The OpenWrt series that the VM and SDK jobs run on. v4 runs on both the stable release
-      # and the main snapshot, because it ships on both. Only #311 depends on the netifd of main,
-      # and it is conditional. Every other ref, tags included, runs on stable. The stable SDK is
-      # pinned by checksum in build/sdk.sha256. A snapshot has no filename to pin (the gcc
-      # version is part of it), so the main series verifies against the sha256sums published
-      # beside the tarball. Both paths live in tools/openwrt-sdk.sh.
+      # The OpenWrt series that the VM and SDK jobs run on. v3 and the 3.x tags run on the
+      # stable release only, whose SDK is pinned by checksum in build/sdk.sha256. The output
+      # stays because main, the 4.x line, adds the OpenWrt main snapshot to it, and the jobs
+      # that read it are the same on both branches.
       - name: Which OpenWrt series?
         id: series
-        run: |
-          echo 'list=${{ (github.ref_name == 'v4' || github.base_ref == 'v4') && '["stable","main"]' || '["stable"]' }}' >> "$GITHUB_OUTPUT"
+        run: echo 'list=["stable"]' >> "$GITHUB_OUTPUT"
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
@@ -105,8 +100,8 @@ jobs:
       # lint-emdash cannot list tracked files, which is how it went unenforced.
       - name: Trust the workspace (container checkout)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # In lint rather than a job of its own: package would skip when a job it needs fails, and a
-      # skipped job passes as a required check. An error of git diff counts as a change.
+      # In lint, which package needs already and which is a required check, so a failure of this
+      # step blocks the merge. An error of git diff counts as a change.
       - name: Does the pull request change the package?
         id: package
         if: github.event_name == 'pull_request'
@@ -217,11 +212,10 @@ jobs:
   # GitHub's 7-day eviction.
   warm-sdk-cache:
     runs-on: ubuntu-latest
-    # On v4 the snapshot SDK download took 46m with the CDN cutting it, and the dependency
-    # build ran past 60m before the cache was saved.
+    # The budget of main, where the snapshot SDK download took 46m with the CDN cutting it, and
+    # the dependency build ran past 60m before the cache was saved.
     timeout-minutes: 120
-    # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
-    # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
+    # A PR restores the caches of its base branch, so v3 warms its own.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
     needs: lint
     strategy:
@@ -482,18 +476,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
+          case "$TAG" in
+            *-rc*|*-alpha*|*-beta*|*-pre*)
+              PRE=--prerelease LATEST= ;;
+            *)
+              # The feed and the site follow the Latest mark, so a fix of an older major, such
+              # as a 3.x release after 4.0.0, must not take it from the current one. The list is
+              # an assignment of its own so that set -e stops the step when gh fails: in a group
+              # with the echo of the tag, the status was the echo's, and the tag became Latest.
+              released=$(gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+                           --json tagName --jq '.[].tagName')
+              highest=$(printf '%s\n%s\n' "$released" "$TAG" | sort -V | tail -1)
+              PRE= LATEST=--latest=false
+              [ "$highest" = "$TAG" ] && LATEST=--latest ;;
+          esac
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            case "$TAG" in
-              *-rc*|*-alpha*|*-beta*|*-pre*)
-                PRE=--prerelease LATEST= ;;
-              *)
-                # The feed and the site follow the Latest mark, so a fix of an older major, such
-                # as a 3.x release after 4.0.0, must not take it from the current one.
-                highest=$( { gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
-                               --json tagName --jq '.[].tagName'; echo "$TAG"; } | sort -V | tail -1)
-                PRE= LATEST=--latest=false
-                [ "$highest" = "$TAG" ] && LATEST=--latest ;;
-            esac
             chmod +x scripts/release-notes.sh
             scripts/release-notes.sh "$TAG" > /tmp/release-notes.md
             if [ -s /tmp/release-notes.md ]; then
@@ -510,7 +507,8 @@ jobs:
           # Deleting a tag in order to move it reverts its release to a draft, and
           # `gh release view` succeeds on a draft, so the create branch above is skipped
           # and the rebuilt artifacts land in a release nobody can see or download.
-          gh release edit "$TAG" --draft=false
+          # Publishing a draft without make_latest lets GitHub mark it Latest, hence $LATEST.
+          gh release edit "$TAG" --draft=false $LATEST
 
       # The signed APK feed lives at openwrt-iac.github.io/feed/ and is
       # rebuilt by openwrt-iac/openwrt-iac.github.io's publish.yml workflow,
