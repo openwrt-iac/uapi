@@ -435,6 +435,32 @@ t.describe('wg.apply against logging wg and ip', () => {
 		t.assert_deep_equal(r.commands, []);
 	});
 
+	// #387: the remove set the first section with the key again before it refused the second, and the
+	// restore refuses that section before it changes the kernel, so the kernel kept what the remove
+	// had set.
+	t.it('a remove refuses a later section with the key before it sets an earlier one again', () => {
+		let first = peer({ public_key: PK, allowed_ips: [ '10.0.0.2/32' ] });
+		for (let load in [ null, UCODE_WG ]) {
+			let r = run_wg({ network: { wg1: WG1, b: first, c: peer({ public_key: PK, allowed_ips: [ '\t+10.0.0.0/8' ] }) } },
+			               sprintf("wg.apply(c, %J)", [ { iface: 'wg1', action: 'remove', public_key: PK } ]), null, null, load);
+			t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1', load);
+			t.assert_deep_equal(r.commands, [], load);
+		}
+		let r = apply({ network: { wg1: WG1, b: first, c: peer({ public_key: PK, allowed_ips: [ '10.0.0.3/32' ], preshared_key: 'not-a-key' }) } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK } ]);
+		t.assert_equal(r.result, 'refusing to apply a peer with a malformed preshared key on wg1');
+		t.assert_deep_equal(r.commands, []);
+	});
+
+	// The remove of one key of a multi-line public_key ran before the refusal of a section that held
+	// another key, as in #387.
+	t.it('a remove refuses a section with one of its keys before it removes another', () => {
+		let r = apply({ network: { wg1: WG1, b: peer({ public_key: PK2, allowed_ips: [ '+10.0.0.0/8' ] }) } },
+		              [ { iface: 'wg1', action: 'remove', public_key: PK + '\n[Peer]\nPublicKey=' + PK2 } ]);
+		t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1');
+		t.assert_deep_equal(r.commands, []);
+	});
+
 	// A write that leaves such a port as uci holds it gives it here, and so does the restore, which
 	// must still set the peers after it.
 	t.it('sets a peer with a host and a port that reads 0 without its endpoint, and does not remove it', () => {
