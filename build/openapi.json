@@ -27895,7 +27895,7 @@
 							"string",
 							"null"
 						],
-						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second, and takes a rate of at most 15 digits: the kernel refuses a rate whose sum with the burst overflows 64 bits. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -27997,9 +27997,10 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
-						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset.",
-						"minimum": 1
+						"pattern": "^[1-9][0-9]{0,14}/(second|minute|hour|day)$",
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second, and takes a rate of at most 15 digits: the kernel refuses a rate whose sum with the burst overflows 64 bits. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset.",
+						"minimum": 1,
+						"maximum": 999999999999999
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -28090,8 +28091,9 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
-						"minimum": 1
+						"pattern": "^[1-9][0-9]{0,14}/(second|minute|hour|day)$",
+						"minimum": 1,
+						"maximum": 999999999999999
 					},
 					"tcp_syncookies": {
 						"type": [

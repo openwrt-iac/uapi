@@ -314,10 +314,23 @@ reads null, and `firewall/defaults` reads the policy.
 
 fw4 takes a `firewall/defaults.synflood_rate` with a unit, such as
 `25/minute`, or a prefix of the unit, such as `25/m`. 3.x read null for it. v4
-reads the rate as fw4 applies it, always with the whole unit: a stored `25`
-reads `25/second`, where 3.x read the integer 25, and `25/m` reads `25/minute`.
-The response declares a string. A write takes such a string or an integer, a
-rate per second. A client generated from the schema must take a string there.
+reads the rate as fw4 applies it, always with the whole unit, so `25/m` reads
+`25/minute` (announced in 3.5.0, #408).
+
+A stored rate without a unit, such as `25`, read as the integer 25 in 3.x. v4
+reads it as the string `25/second`, and the response declares a string. The
+3.5.0 notice did not cover this change of type. Every rate reads as a string
+so that a Terraform client can type the field, because Terraform has no type
+that is an integer or a string. A client generated from the schema must take a
+string there.
+
+A write takes such a string, or an integer that is a rate per second. It takes
+a rate of at most 15 digits, where 3.x took any integer from 1. The kernel
+refuses a rate whose sum with the burst overflows 64 bits, and fw4 then applies
+no ruleset while `syn_flood` is on. Even `999999999999999/day` is more than
+any link carries. The 3.5.0 notice did not cover this limit either. A stored
+rate of more digits reads as fw4 parses it, and a write that sends it back
+unchanged passes.
 
 A `firewall/defaults.synflood_burst` reads as fw4 parses it, so `0x10` reads 16
 and `1e3` reads 1000, where 3.x read null.
