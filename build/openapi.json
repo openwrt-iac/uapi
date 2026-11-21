@@ -27888,16 +27888,14 @@
 						],
 						"minimum": 0,
 						"maximum": 4294967295,
-						"description": "A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "Packets above `synflood_rate` that `syn_flood` lets through in a burst. A read gives the number as fw4 parses it, so `0x10` reads 16. Unset, fw4 applies 50. A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. A number that is no integer, such as `16.5`, reads null and is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is on."
 					},
 					"synflood_rate": {
 						"type": [
-							"integer",
 							"string",
 							"null"
 						],
-						"minimum": 1,
-						"description": "SYN packets that `syn_flood` lets through: an integer per second, or a rate with its unit, such as `25/minute`. fw4 also takes a prefix of the unit, which reads as the whole word, so `25/s` reads `25/second`. Unset, fw4 applies 25 per second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -27991,7 +27989,7 @@
 						],
 						"minimum": 0,
 						"maximum": 4294967295,
-						"description": "A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "Packets above `synflood_rate` that `syn_flood` lets through in a burst. A read gives the number as fw4 parses it, so `0x10` reads 16. Unset, fw4 applies 50. A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. A number that is no integer, such as `16.5`, reads null and is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is on."
 					},
 					"synflood_rate": {
 						"type": [
@@ -27999,9 +27997,9 @@
 							"string",
 							"null"
 						],
-						"minimum": 1,
 						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
-						"description": "SYN packets that `syn_flood` lets through: an integer per second, or a rate with its unit, such as `25/minute`. fw4 also takes a prefix of the unit, which reads as the whole word, so `25/s` reads `25/second`. Unset, fw4 applies 25 per second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset.",
+						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
@@ -28092,8 +28090,8 @@
 							"string",
 							"null"
 						],
-						"minimum": 1,
-						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$"
+						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
+						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": [
@@ -37710,29 +37708,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"emerg",
-							"alert",
-							"crit",
-							"error",
-							"warning",
-							"notice",
-							"info",
-							"debug",
-							"panic",
-							"0",
-							"1",
-							"2",
-							"3",
-							"4",
-							"5",
-							"6",
-							"7",
-							"err",
-							"warn",
-							null
-						],
-						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read can also give `panic` or a number from 0 to 7, which iptables takes, and a write can send such a stored value back. iptables refuses `err` and `warn`, and mwan3 then loads none of its rules. A write refuses them, and a stored one blocks every write of the section, but a read can give one."
+						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read gives any level that iptables takes, such as `panic`, `3` or `0x3`, and a write can send such a stored value back. iptables refuses any other value, such as `err` or `warn`, and mwan3 then loads none of its rules: a write refuses it, and a stored one blocks every write of the section, but a read can give one."
 					},
 					"runtime": {
 						"type": "object",
@@ -37773,6 +37749,7 @@
 							"string",
 							"null"
 						],
+						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read gives any level that iptables takes, such as `panic`, `3` or `0x3`, and a write can send such a stored value back. iptables refuses any other value, such as `err` or `warn`, and mwan3 then loads none of its rules: a write refuses it, and a stored one blocks every write of the section, but a read can give one.",
 						"enum": [
 							"emerg",
 							"alert",
@@ -37783,8 +37760,7 @@
 							"info",
 							"debug",
 							null
-						],
-						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read can also give `panic` or a number from 0 to 7, which iptables takes, and a write can send such a stored value back. iptables refuses `err` and `warn`, and mwan3 then loads none of its rules. A write refuses them, and a stored one blocks every write of the section, but a read can give one."
+						]
 					}
 				}
 			},

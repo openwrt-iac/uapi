@@ -166,26 +166,26 @@ t.describe('mwan3 values that mwan3 does not run', () => {
 		}
 	});
 
-	t.it('a stored err blocks a write of another field, reads as stored, and is live only while logging is on', () => {
-		let c = world({ loglevel: 'err', logging: '1' });
-		t.assert_equal(gh.get(c, ctx).body.loglevel, "err");
-		t.assert_deep_equal(codes(gh.patch(c, ctx, { mmx_mask: '0x3F00' }), "loglevel"), [ "not_in_enum" ]);
-		t.assert_equal(gh.sweep(c)[0].errors[0].live, true);
+	// Each one checked against iptables 1.8.13, through iptables-restore as mwan3 runs it.
+	t.it('a stored level that iptables refuses blocks a write of another field, reads as stored, and is live only while logging is on', () => {
+		for (let l in [ "err", "warn", "8", "08", "0x", "-1", "PANIC", "3 x" ]) {
+			let c = world({ loglevel: l, logging: '1' });
+			t.assert_equal(gh.get(c, ctx).body.loglevel, l, l);
+			t.assert_deep_equal(codes(gh.patch(c, ctx, { mmx_mask: '0x3F00' }), "loglevel"), [ "not_in_enum" ], l);
+			t.assert_equal(gh.sweep(c)[0].errors[0].live, true, l);
+		}
 		t.assert_equal(gh.sweep(world({ loglevel: 'warn', logging: '0' }))[0].errors[0].live, false);
-		t.assert_true(index(SPEC.Mwan3GlobalsResponse.properties.loglevel.enum, "err") >= 0);
-		t.assert_equal(index(SPEC.Mwan3GlobalsRequest.properties.loglevel.enum, "err"), -1);
+		t.assert_equal(SPEC.Mwan3GlobalsResponse.properties.loglevel.enum, null);
 	});
 
-	t.it('a stored panic or 3, which iptables takes, is no error, and a write that sends one anew is refused', () => {
-		for (let l in [ "panic", "3" ]) {
+	t.it('a stored level that iptables takes is no error and goes back in a write, and a write that sends one anew is refused', () => {
+		for (let l in [ "panic", "3", "0x3", "07", " 3", "+3", "error " ]) {
 			let c = world({ loglevel: l, logging: '1' });
 			t.assert_deep_equal(gh.sweep(c), [], l);
 			t.assert_equal(gh.patch(c, ctx, { logging: false, loglevel: l }).status, 200, l);
 			t.assert_equal(c._state.uci.mwan3.globals.loglevel, l);
 			t.assert_deep_equal(codes(gh.patch(world({ loglevel: 'notice' }), ctx, { loglevel: l }), "loglevel"),
 			                    [ "not_in_enum" ], l);
-			t.assert_true(index(SPEC.Mwan3GlobalsResponse.properties.loglevel.enum, l) >= 0, l);
-			t.assert_equal(index(SPEC.Mwan3GlobalsRequest.properties.loglevel.enum, l), -1, l);
 		}
 	});
 
