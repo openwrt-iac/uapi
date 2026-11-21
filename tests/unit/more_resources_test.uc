@@ -3,6 +3,7 @@ let handler = require('handler');
 let ubus = require('bus');
 
 let zones = loadfile('src/resources/firewall.zones.uc')();
+let fw_defaults = loadfile('src/resources/firewall.defaults.uc')();
 let redirects = loadfile('src/resources/firewall.redirects.uc')();
 let interfaces = loadfile('src/resources/network.interfaces.uc')();
 
@@ -20,12 +21,26 @@ t.describe('firewall.zones', () => {
 		t.assert_deep_equal(zones.reload, ["firewall"]);
 	});
 
-	t.it('fromUci defaults policies to REJECT', () => {
-		let r = zones.fromUci({ '.name': 'z_lan', '.anonymous': false, '.type': 'zone',
-		                        name: 'lan', input: 'ACCEPT' });
-		t.assert_equal(r.input, 'ACCEPT');
-		t.assert_equal(r.output_policy, 'REJECT');
-		t.assert_equal(r.forward, 'REJECT');
+	// fw4 gives a zone without a policy the one of firewall/defaults, so a read that filled one in
+	// would claim a policy that fw4 does not apply, and a write of that read would pin it.
+	t.it('a policy that the zone does not set reads null, and a write of the read stores none', () => {
+		let zh = handler.make(zones, { tx: { acquire: () => ({}), release: () => null,
+		                                     reload: () => null, check_services: () => null } });
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { firewall: {
+			d: { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT', output: 'ACCEPT', forward: 'ACCEPT' },
+			z_lan: { '.type': 'zone', '.anonymous': false, name: 'lan', input: 'acc' },
+		} } });
+		let read = zh.get_one(c, ctx, 'z_lan').body;
+		t.assert_equal(read.input, 'ACCEPT');
+		t.assert_equal(read.output_policy, null);
+		t.assert_equal(read.forward, null);
+		delete read.runtime;
+		t.assert_equal(zh.replace(c, ctx, 'z_lan', read).status, 200);
+		t.assert_equal(c._state.uci.firewall.z_lan.output, null);
+		t.assert_equal(c._state.uci.firewall.z_lan.forward, null);
+		t.assert_equal(zh.patch(c, ctx, 'z_lan', { input: null }).status, 200);
+		t.assert_equal(c._state.uci.firewall.z_lan.input, null);
 	});
 
 	t.it('toUci preserves network list', () => {
@@ -42,6 +57,110 @@ t.describe('firewall.zones', () => {
 		let errs = full_validate(zones, { name: 'lan', input: 'BOGUS' }, null);
 		let ie = filter(errs, function(e) { return e.field == "input"; });
 		t.assert_equal(ie[0].code, 'not_in_enum');
+	});
+});
+
+t.describe('firewall.defaults synflood_rate and synflood_burst', () => {
+	let read = (opt, v) => fw_defaults.fromUci({ '.name': 'd', [opt]: v })[opt];
+	let refused = (v) => map(filter(full_validate(fw_defaults, { synflood_rate: v }, null),
+	                                (e) => e.field == "synflood_rate"), (e) => e.code);
+
+	t.it('a rate reads with the unit that fw4 applies', () => {
+		t.assert_equal(read('synflood_rate', null), null);
+		t.assert_equal(read('synflood_rate', '25'), '25/second');
+		t.assert_equal(read('synflood_rate', ' 025 '), '25/second');
+		t.assert_equal(read('synflood_rate', '25/second'), '25/second');
+		t.assert_equal(read('synflood_rate', '25/s'), '25/second');
+		t.assert_equal(read('synflood_rate', '10/min'), '10/minute');
+		t.assert_equal(read('synflood_rate', '5/h'), '5/hour');
+		t.assert_equal(read('synflood_rate', '1/d'), '1/day');
+		t.assert_equal(read('synflood_rate', '! 30/minute'), '30/minute');
+	});
+
+	t.it('a rate that fw4 refuses reads null', () => {
+		for (let v in [ 'abc', '25/seconds', '25/S', '25 /second', '25/', '/second', '-5', '!' ])
+			t.assert_equal(read('synflood_rate', v), null, v);
+	});
+
+	t.it('a write takes an integer, a rate per second, or a rate with its whole unit', () => {
+		for (let v in [ 25, '25/second', '1/day' ])
+			t.assert_deep_equal(refused(v), [], v);
+		t.assert_deep_equal(refused(0), [ 'out_of_range' ]);
+		for (let v in [ '25/s', '0/minute', '25' ])
+			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
+	});
+
+	t.it('the response declares the rate as a string', () => {
+		let fs = require('fs');
+		let SPEC = json(fs.readfile('build/openapi.json')).components.schemas;
+		t.assert_deep_equal(SPEC.FirewallDefaultsResponse.properties.synflood_rate.type, [ 'string', 'null' ]);
+		t.assert_deep_equal(SPEC.FirewallDefaultsRequest.properties.synflood_rate.type, [ 'integer', 'string', 'null' ]);
+	});
+
+	t.it('a burst reads as fw4 parses it when nft takes the number', () => {
+		t.assert_equal(read('synflood_burst', '0x10'), 16);
+		t.assert_equal(read('synflood_burst', ' 16'), 16);
+		t.assert_equal(read('synflood_burst', '1e3'), 1000);
+		for (let v in [ '16.5', 'abc', [ '16' ] ])
+			t.assert_equal(read('synflood_burst', v), null, v);
+	});
+});
+
+// fw4.uc of 25.12.5 throws in parse_defaults on each of these, so it applies no ruleset.
+t.describe('firewall.defaults options that fw4 refuses', () => {
+	let dh = handler.make_singleton(fw_defaults, { tx: { acquire: () => ({}), release: () => null,
+	                                                     reload: () => null, check_services: () => null } });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let box = (opts) => ubus.stub({ uci: { firewall: {
+		d: { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT', ...opts },
+	} } });
+	let codes = (r, field) => map(filter(r.body.errors ?? [], (e) => e.field == field), (e) => e.code);
+	const REFUSED = [ { synflood_rate: 'abc' }, { synflood_burst: 'abc' }, { drop_invalid: 'YES' },
+	                  { syn_flood: 'maybe' }, { tcp_syncookies: [ '1' ] }, { flow_offloading: 'enabled' },
+	                  { flow_offloading_hw: '2' } ];
+
+	t.it('are a live error of the section that blocks a write of another field', () => {
+		for (let opts in REFUSED) {
+			let opt = keys(opts)[0];
+			let swept = dh.sweep(box(opts))[0]?.errors ?? [];
+			t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ opt, "invalid_format", true ] ], opt);
+			t.assert_deep_equal(codes(dh.patch(box(opts), ctx, { input: 'DROP' }), opt), [ "invalid_format" ], opt);
+		}
+	});
+
+	// nft refuses `burst 16.5 packets`, which fw4 renders only while syn_flood is on.
+	t.it('a burst that is no integer is an error, live while syn_flood is on', () => {
+		for (let on in [ '1', '0' ]) {
+			let swept = dh.sweep(box({ synflood_burst: '16.5', syn_flood: on }))[0]?.errors ?? [];
+			t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ "synflood_burst", "invalid_format", on == '1' ] ], on);
+		}
+	});
+
+	t.it('a write that names the option replaces the stored value, and a null removes it', () => {
+		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { synflood_rate: 30, synflood_burst: null,
+		                                  drop_invalid: false, syn_flood: null }).status, 200);
+		t.assert_deep_equal(c._state.uci.firewall.d, { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT',
+		                                               synflood_rate: '30', drop_invalid: '0' });
+		t.assert_equal(dh.get(c, ctx).body.synflood_rate, '30/second');
+	});
+
+	t.it('a value that fw4 takes is no error', () => {
+		t.assert_deep_equal(dh.sweep(box({ synflood_burst: '0x10', synflood_rate: '! 25/m', drop_invalid: 'on' })), []);
+	});
+
+	// The stock /etc/config/firewall sets none of these bools, and fw4 reads an absent
+	// tcp_syncookies as 1, so a write of the read must not pin them to the 0 that the read gives.
+	t.it('a write of the read of a stock section writes nothing', () => {
+		let c = box({ syn_flood: '1', output: 'ACCEPT', forward: 'REJECT', input: 'REJECT' });
+		let before = sprintf("%J", c._state.uci.firewall.d);
+		let body = dh.get(c, ctx).body;
+		delete body.runtime;
+		t.assert_equal(dh.patch(c, ctx, body).status, 200);
+		t.assert_equal(sprintf("%J", c._state.uci.firewall.d), before);
+		t.assert_deep_equal(filter(c._state.uci_ops, (op) => index([ "set", "delete", "delete-option" ], op[0]) >= 0), []);
+		t.assert_equal(dh.patch(c, ctx, { tcp_syncookies: false }).status, 200);
+		t.assert_equal(c._state.uci.firewall.d.tcp_syncookies, null);
 	});
 });
 

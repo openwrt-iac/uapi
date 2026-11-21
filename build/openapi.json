@@ -26432,32 +26432,43 @@
 						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
 					},
 					"input": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT"
+						"description": "Unset, fw4 applies the `input` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"output_policy": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT",
-						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword). Unset, fw4 applies the `output_policy` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"forward": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT"
+						"description": "Unset, fw4 applies the `forward` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"network": {
 						"type": [
@@ -26517,32 +26528,43 @@
 						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
 					},
 					"input": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT"
+						"description": "Unset, fw4 applies the `input` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"output_policy": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT",
-						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword). Unset, fw4 applies the `output_policy` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"forward": {
-						"type": "string",
+						"type": [
+							"string",
+							"null"
+						],
 						"enum": [
 							"ACCEPT",
 							"REJECT",
-							"DROP"
+							"DROP",
+							null
 						],
-						"default": "REJECT"
+						"description": "Unset, fw4 applies the `forward` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults."
 					},
 					"network": {
 						"type": [
@@ -27820,7 +27842,8 @@
 							"REJECT",
 							"DROP",
 							null
-						]
+						],
+						"description": "Unset, fw4 applies DROP, here and in each firewall/zones section without its own `input`."
 					},
 					"output_policy": {
 						"type": [
@@ -27833,7 +27856,7 @@
 							"DROP",
 							null
 						],
-						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword). Unset, fw4 applies DROP, here and in each firewall/zones section without its own `output_policy`."
 					},
 					"forward": {
 						"type": [
@@ -27845,17 +27868,18 @@
 							"REJECT",
 							"DROP",
 							null
-						]
+						],
+						"description": "Unset, fw4 applies DROP, here and in each firewall/zones section without its own `forward`."
 					},
 					"syn_flood": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable SYN flood protection"
+						"description": "Enable SYN flood protection. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"drop_invalid": {
 						"type": "boolean",
 						"default": false,
-						"description": "Drop packets with invalid conntrack state"
+						"description": "Drop packets with invalid conntrack state. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"synflood_burst": {
 						"type": [
@@ -27863,29 +27887,30 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 4294967295
+						"maximum": 4294967295,
+						"description": "Packets above `synflood_rate` that `syn_flood` lets through in a burst. A read gives the number as fw4 parses it, so `0x10` reads 16. Unset, fw4 applies 50. A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. A number that is no integer, such as `16.5`, reads null and is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is on."
 					},
 					"synflood_rate": {
 						"type": [
-							"integer",
+							"string",
 							"null"
 						],
-						"minimum": 1
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable kernel TCP SYN cookies"
+						"description": "Enable kernel TCP SYN cookies. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"flow_offloading": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable software flow offloading"
+						"description": "Enable software flow offloading. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"flow_offloading_hw": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable hardware flow offloading (requires NIC support)"
+						"description": "Enable hardware flow offloading (requires NIC support). A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"runtime": {
 						"type": "object",
@@ -27918,7 +27943,8 @@
 							"REJECT",
 							"DROP",
 							null
-						]
+						],
+						"description": "Unset, fw4 applies DROP, here and in each firewall/zones section without its own `input`."
 					},
 					"output_policy": {
 						"type": [
@@ -27931,7 +27957,7 @@
 							"DROP",
 							null
 						],
-						"description": "Renamed on the wire from uci's `output` (HCL block keyword)."
+						"description": "Renamed on the wire from uci's `output` (HCL block keyword). Unset, fw4 applies DROP, here and in each firewall/zones section without its own `output_policy`."
 					},
 					"forward": {
 						"type": [
@@ -27943,17 +27969,18 @@
 							"REJECT",
 							"DROP",
 							null
-						]
+						],
+						"description": "Unset, fw4 applies DROP, here and in each firewall/zones section without its own `forward`."
 					},
 					"syn_flood": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable SYN flood protection"
+						"description": "Enable SYN flood protection. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"drop_invalid": {
 						"type": "boolean",
 						"default": false,
-						"description": "Drop packets with invalid conntrack state"
+						"description": "Drop packets with invalid conntrack state. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"synflood_burst": {
 						"type": [
@@ -27961,29 +27988,33 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 4294967295
+						"maximum": 4294967295,
+						"description": "Packets above `synflood_rate` that `syn_flood` lets through in a burst. A read gives the number as fw4 parses it, so `0x10` reads 16. Unset, fw4 applies 50. A stored list, or a value that is no number to fw4, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. A number that is no integer, such as `16.5`, reads null and is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is on."
 					},
 					"synflood_rate": {
 						"type": [
 							"integer",
+							"string",
 							"null"
 						],
+						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
+						"description": "SYN packets that `syn_flood` lets through, as a rate with its unit, such as `25/second`. A read gives it as fw4 applies it, so a stored `25` and `25/s` read `25/second`. A write also takes an integer, a rate per second. Unset, fw4 applies 25/second. A stored list, or a value that fw4 refuses, such as `abc`, reads null and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset.",
 						"minimum": 1
 					},
 					"tcp_syncookies": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable kernel TCP SYN cookies"
+						"description": "Enable kernel TCP SYN cookies. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"flow_offloading": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable software flow offloading"
+						"description": "Enable software flow offloading. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					},
 					"flow_offloading_hw": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable hardware flow offloading (requires NIC support)"
+						"description": "Enable hardware flow offloading (requires NIC support). A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
 					}
 				}
 			},
@@ -28056,8 +28087,10 @@
 					"synflood_rate": {
 						"type": [
 							"integer",
+							"string",
 							"null"
 						],
+						"pattern": "^[1-9][0-9]*/(second|minute|hour|day)$",
 						"minimum": 1
 					},
 					"tcp_syncookies": {
@@ -37675,20 +37708,7 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"emerg",
-							"alert",
-							"crit",
-							"err",
-							"error",
-							"warn",
-							"warning",
-							"notice",
-							"info",
-							"debug",
-							null
-						],
-						"description": "syslog facility level (notice/info/debug/etc.)."
+						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read gives any level that iptables takes, such as `panic`, `3` or `0x3`, and a write can send such a stored value back. iptables refuses any other value, such as `err` or `warn`, and mwan3 then loads none of its rules: a write refuses it, and a stored one blocks every write of the section, but a read can give one."
 					},
 					"runtime": {
 						"type": "object",
@@ -37729,20 +37749,18 @@
 							"string",
 							"null"
 						],
+						"description": "Level of the LOG rule that mwan3 adds for each mwan3/rules section with `logging` while `logging` is on here. Unset, mwan3 uses notice. A write takes the names that LuCI offers. A read gives any level that iptables takes, such as `panic`, `3` or `0x3`, and a write can send such a stored value back. iptables refuses any other value, such as `err` or `warn`, and mwan3 then loads none of its rules: a write refuses it, and a stored one blocks every write of the section, but a read can give one.",
 						"enum": [
 							"emerg",
 							"alert",
 							"crit",
-							"err",
 							"error",
-							"warn",
 							"warning",
 							"notice",
 							"info",
 							"debug",
 							null
-						],
-						"description": "syslog facility level (notice/info/debug/etc.)."
+						]
 					}
 				}
 			},
@@ -37778,9 +37796,7 @@
 							"emerg",
 							"alert",
 							"crit",
-							"err",
 							"error",
-							"warn",
 							"warning",
 							"notice",
 							"info",
@@ -38370,7 +38386,7 @@
 							"null"
 						],
 						"maximum": 1000,
-						"description": "Lower wins. Members in the same policy with equal metric share load."
+						"description": "Lower wins. Members in the same policy with equal metric share load. Unset, mwan3 uses 1. mwan3 leaves a member with a metric above 256 out of its policy: a write refuses one, and a stored one blocks every write of the section, but a read can give one."
 					},
 					"weight": {
 						"type": [
@@ -38413,8 +38429,8 @@
 							"integer",
 							"null"
 						],
-						"maximum": 1000,
-						"description": "Lower wins. Members in the same policy with equal metric share load.",
+						"maximum": 256,
+						"description": "Lower wins. Members in the same policy with equal metric share load. Unset, mwan3 uses 1. mwan3 leaves a member with a metric above 256 out of its policy: a write refuses one, and a stored one blocks every write of the section, but a read can give one.",
 						"minimum": 1
 					},
 					"weight": {
@@ -38450,7 +38466,7 @@
 							"integer",
 							"null"
 						],
-						"maximum": 1000,
+						"maximum": 256,
 						"minimum": 1
 					},
 					"weight": {

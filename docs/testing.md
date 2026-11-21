@@ -230,9 +230,9 @@ case may seed a field at the value `fromUci` would synthesize for it.** If a
 seed uses the default, dropping that field from `toUci` is invisible, because
 the re-read fills the default back in and before matches after. Measured rather
 than assumed: deleting `out.forward` from `firewall.zones` went unnoticed while
-the seed said `REJECT`, the documented default, and was caught immediately once
-the seed said `DROP`. The check found seven more cases seeding booleans at their
-defaults that a hand audit had missed.
+the seed said `REJECT`, then the documented default, and was caught immediately
+once the seed said `DROP`. The check found seven more cases seeding booleans at
+their defaults that a hand audit had missed.
 
 A third unit property (3.2.0+) checks the raw section instead of the view: **a
 PATCH that names nothing leaves uci as stored.** The view cannot see this,

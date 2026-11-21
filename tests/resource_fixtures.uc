@@ -77,7 +77,7 @@ const CASES = [
 		file: "firewall.defaults.uc", id: "defaults", pkg: "firewall",
 		singleton: true,
 		modify: { key: "forward", value: "DROP" },
-		section: { syn_flood: '1', drop_invalid: '1', tcp_syncookies: '1', flow_offloading: '1', flow_offloading_hw: '1', '.type': 'defaults', input: 'ACCEPT', output: 'ACCEPT', forward: 'REJECT' },
+		section: { syn_flood: '1', drop_invalid: '1', tcp_syncookies: '1', flow_offloading: '1', flow_offloading_hw: '1', '.type': 'defaults', input: 'ACCEPT', output: 'ACCEPT', forward: 'REJECT', synflood_rate: '30' },
 	},
 	{
 		file: "network.interfaces.uc", id: "lan", pkg: "network",

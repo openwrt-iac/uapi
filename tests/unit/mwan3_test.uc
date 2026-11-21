@@ -138,3 +138,67 @@ t.describe('mwan3.rules validates policy cross-reference + IP shapes', () => {
 		t.assert_true(length(filter(errs, e => e.field == "dest_ip")) > 0);
 	});
 });
+
+// iptables refuses err and warn as a log level, and mwan3 leaves a member with a metric above 256 out
+// of its policy. A write refuses both, a stored one blocks every write of its section, and the read
+// still gives it, so the response schema has to take it.
+t.describe('mwan3 values that mwan3 does not run', () => {
+	let fs = require('fs');
+	let SPEC = json(fs.readfile('build/openapi.json')).components.schemas;
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let world = (globals_sec, member_sec) => bus.stub({ uci: { mwan3: {
+		globals: { '.type': 'globals', '.anonymous': false, ...globals_sec },
+		wan: { '.type': 'interface', '.anonymous': false, family: 'ipv4' },
+		m1: { '.type': 'member', '.anonymous': false, interface: 'wan', metric: '1', ...(member_sec ?? {}) },
+	} } });
+	let gh = handler.make_singleton(globals, { tx });
+	let mh = handler.make(members, { tx });
+	let codes = (r, field) => map(filter(r.body.errors ?? [], (e) => e.field == field), (e) => e.code);
+
+	t.it('a loglevel of err or warn answers not_in_enum, and error and warning pass', () => {
+		for (let l in [ "err", "warn" ])
+			t.assert_deep_equal(codes(gh.patch(world({}), ctx, { loglevel: l }), "loglevel"), [ "not_in_enum" ], l);
+		for (let l in [ "error", "warning" ]) {
+			let c = world({});
+			t.assert_equal(gh.patch(c, ctx, { loglevel: l }).status, 200, l);
+			t.assert_equal(c._state.uci.mwan3.globals.loglevel, l);
+		}
+	});
+
+	// Each one checked against iptables 1.8.13, through iptables-restore as mwan3 runs it.
+	t.it('a stored level that iptables refuses blocks a write of another field, reads as stored, and is live only while logging is on', () => {
+		for (let l in [ "err", "warn", "8", "08", "0x", "-1", "PANIC", "3 x" ]) {
+			let c = world({ loglevel: l, logging: '1' });
+			t.assert_equal(gh.get(c, ctx).body.loglevel, l, l);
+			t.assert_deep_equal(codes(gh.patch(c, ctx, { mmx_mask: '0x3F00' }), "loglevel"), [ "not_in_enum" ], l);
+			t.assert_equal(gh.sweep(c)[0].errors[0].live, true, l);
+		}
+		t.assert_equal(gh.sweep(world({ loglevel: 'warn', logging: '0' }))[0].errors[0].live, false);
+		t.assert_equal(SPEC.Mwan3GlobalsResponse.properties.loglevel.enum, null);
+	});
+
+	t.it('a stored level that iptables takes is no error and goes back in a write, and a write that sends one anew is refused', () => {
+		for (let l in [ "panic", "3", "0x3", "07", " 3", "+3", "error " ]) {
+			let c = world({ loglevel: l, logging: '1' });
+			t.assert_deep_equal(gh.sweep(c), [], l);
+			t.assert_equal(gh.patch(c, ctx, { logging: false, loglevel: l }).status, 200, l);
+			t.assert_equal(c._state.uci.mwan3.globals.loglevel, l);
+			t.assert_deep_equal(codes(gh.patch(world({ loglevel: 'notice' }), ctx, { loglevel: l }), "loglevel"),
+			                    [ "not_in_enum" ], l);
+		}
+	});
+
+	t.it('a metric above 256 answers out_of_range, and 256 passes', () => {
+		t.assert_deep_equal(codes(mh.patch(world({}), ctx, 'm1', { metric: 257 }), "metric"), [ "out_of_range" ]);
+		t.assert_equal(mh.patch(world({}), ctx, 'm1', { metric: 256 }).status, 200);
+	});
+
+	t.it('a stored metric above 256 blocks a write of another field and reads as stored', () => {
+		let c = world({}, { metric: '300' });
+		t.assert_equal(mh.get_one(c, ctx, 'm1').body.metric, 300);
+		t.assert_deep_equal(codes(mh.patch(c, ctx, 'm1', { weight: 2 }), "metric"), [ "out_of_range" ]);
+		t.assert_true(SPEC.Mwan3MembersResponse.properties.metric.maximum >= 300);
+		t.assert_equal(SPEC.Mwan3MembersRequest.properties.metric.maximum, 256);
+	});
+});

@@ -144,6 +144,15 @@ error that it lists now blocks every write of its section. In v4 the same sweep
 is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid value for each
 listed field fixes the section in one write.
 
+A value that the read cannot show is judged too. fw4 stops while it reads a
+`firewall/defaults` section with an option that its parser refuses, such as a
+`synflood_rate` of `abc`, a `drop_invalid` of `YES` or a list, and applies no
+ruleset. A `synflood_burst` that is a number but no integer, such as `16.5`,
+is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is
+on. Such a bool reads `false` and such a number reads `null`, and the sweep
+names the option and says why. A write that sends the field replaces the value,
+and a null removes it.
+
 A value that LuCI or the daemon takes is no error, so it blocks no write and the
 v4 sweep does not list it. Examples are the `proto` of an interface that uapi
 does not model, such as the `6in4` that LuCI writes or the `qmi` that an LTE
@@ -271,6 +280,48 @@ makes of it. The response declares `family` as a string that every read holds,
 and the request no longer declares null: to remove the option, leave `family`
 out of a PUT or send null in a merge patch.
 
+## Two mwan3 values that mwan3 does not run answer 422
+
+mwan3 passes `mwan3/globals.loglevel` to iptables as the level of its LOG
+rules, and iptables refuses `err` and `warn`. mwan3 then loads none of its rules
+once one of them logs. mwan3 also leaves a `mwan3/members` section with a
+`metric` above 256 out of its policy. A write of such a value now answers 422,
+`not_in_enum` for the log level and `out_of_range` for the metric (announced in
+3.5.0, #407). Send `error` or `warning`, and a metric from 1 to 256, as LuCI
+does. A stored one blocks every write of its section until a write replaces
+it, and the read still gives it. `GET /uapi/diagnostics?validate=1` lists it,
+and marks the log level `live` only while `logging` is on. The same holds for
+any other level that iptables refuses, such as `8` or `3 x`. A stored level that
+iptables takes is no error, such as `panic`, or a number from 0 to 7 in the
+base that strtoul reads, such as `3` or `0x3`. The read gives it and a write can
+send it back, but a write that sends it anew answers 422, since a request takes
+the names that LuCI offers. The response schema of `loglevel` declares a string
+with no enum.
+
+## Two firewall reads say what fw4 applies
+
+fw4 gives a `firewall/zones` section without `input`, `output` or `forward` the
+policy of `firewall/defaults`, and DROP when that section has none. 3.x read
+`REJECT` for it. v4 reads `null` (announced in 3.5.0, #408), and the schemas
+declare null and no `default` for the three fields. `firewall/defaults` gives
+the policy that fw4 applies. A write of the read, or a null, stores no policy,
+so the zone keeps the policy of `firewall/defaults`. A plan that holds `REJECT`
+from a 3.x read now writes it, and the zone then rejects where it took the
+policy of `firewall/defaults` before. Set the field to null in the plan to keep
+that policy. This differs from the 3.5.0 notice, which said that v4 reads what
+fw4 applies: fw4 applies the policy that `firewall/defaults` holds, so the zone
+reads null, and `firewall/defaults` reads the policy.
+
+fw4 takes a `firewall/defaults.synflood_rate` with a unit, such as
+`25/minute`, or a prefix of the unit, such as `25/m`. 3.x read null for it. v4
+reads the rate as fw4 applies it, always with the whole unit: a stored `25`
+reads `25/second`, where 3.x read the integer 25, and `25/m` reads `25/minute`.
+The response declares a string. A write takes such a string or an integer, a
+rate per second. A client generated from the schema must take a string there.
+
+A `firewall/defaults.synflood_burst` reads as fw4 parses it, so `0x10` reads 16
+and `1e3` reads 1000, where 3.x read null.
+
 ## Curated string fields refuse newlines and carriage returns
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on
@@ -351,6 +402,9 @@ same stored option, to follow what the daemon does:
 | `wireless/interfaces` | `mode` | absent |
 | `mwan3/interfaces` | `family` | absent |
 | `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |
+| `firewall/zones` | `input`, `output_policy`, `forward` | absent |
+| `firewall/defaults` | `synflood_rate` | any rate: a number, such as `25`, reads as the string `25/second` instead of an integer, and a rate with a unit, such as `25/s`, or after spaces or a `!`, reads with the whole unit instead of null |
+| `firewall/defaults` | `synflood_burst` | a number that fw4 reads in another form, such as `0x10`, ` 16` or `1e3` |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
 | `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
 | `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |
@@ -369,11 +423,12 @@ upgrade. Its apply writes that value, and the daemon then does what the 3.x read
 said, which it did not do before. Refresh the state and check each such diff
 before you apply. The sections above name the cases that matter most.
 
-The spec `default` of five fields changes with the read: `system.log_remote` is
+The spec `default` of eight fields changes with the read: `system.log_remote` is
 `true`, `usteer/config.syslog` and `sqm/queues.enabled` are `false`,
-`mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` has none. A
-client that sends the spec default for a field that its user left out now sends
-the new one.
+`mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` and the
+`input`, `output_policy` and `forward` of `firewall/zones` have none. A client
+that sends the spec default for a field that its user left out now sends the
+new one.
 
 ## A query parameter value outside its declared set answers 400
 

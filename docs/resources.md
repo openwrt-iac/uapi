@@ -136,12 +136,12 @@ daemon's runtime convergence.
 
 | Path | Wraps | Notes |
 |---|---|---|
-| `firewall/zones` | `config zone` | input/output/forward policies, `network` list. |
+| `firewall/zones` | `config zone` | input/output/forward policies, `network` list. A policy that the zone does not set reads null: fw4 then applies the one of `firewall/defaults`, and DROP when that has none. |
 | `firewall/rules` | `config rule` | Nested `match: {src_zone, dest_zone, src_ip, dest_ip, src_port, dest_port, proto, family, mark, dscp}`. MARK and DSCP targets carry `set_mark` / `set_xmark` and `set_dscp`. `src_zone` is required only for NOTRACK, matching fw4. |
 | `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. DNAT and SNAT. Every `match` field except `proto` is a scalar, because firewall4 refuses a list on them and drops the section. `match.src_dip` is the external address matched on a DNAT (and the address NAT reflection uses) and the rewrite source on an SNAT, where it is required along with a named `match.dest_zone`. Prefer `firewall/nat` for new source NAT; LuCI migrates these sections there. |
 | `firewall/nat` | `config nat` | Source NAT: SNAT (`snat_ip` / `snat_port`), MASQUERADE, or ACCEPT to exempt traffic from rewriting. `match.src_zone` is the outbound zone. An unset `match.family` means IPv4 only, which is fw4's default for NAT. |
 | `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. |
-| `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. |
+| `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. `synflood_rate` reads as fw4 applies it, always with its unit, such as `25/second`, and a write also takes an integer, a rate per second. `synflood_burst` reads as fw4 parses it, so `0x10` reads 16. A bool or number option that fw4's parser refuses, such as a `synflood_rate` of `abc`, reads `false` or null and is an error of the section, since fw4 then applies no ruleset. |
 
 Reload: `firewall` (fw4).
 
@@ -251,9 +251,9 @@ dnsmasq, because procd does not run it, runs no check.
 | `lldpd/config` (singleton) | `config lldpd 'config'` | LLDP/CDP/etc. toggles. |
 | `prometheus_node_exporter_lua/config` (singleton) | `config prometheus-node-exporter-lua 'main'` | `listen_interface` + `listen_port`. |
 | `vnstat/config` (singleton) | `config vnstat` | `interfaces`, the devices vnstat tracks (kernel device names, not uci interface names). The only vnstat option any shipped code reads. |
-| `mwan3/globals` (singleton) | `config globals` | `mmx_mask`, `logging`, `loglevel`. |
+| `mwan3/globals` (singleton) | `config globals` | `mmx_mask`, `logging`, `loglevel`. A write takes the `loglevel` names that LuCI offers. A stored level that iptables refuses, such as `err` or `warn`, blocks every write of the section, and one that iptables takes, such as `panic` or `0x3`, is no error. |
 | `mwan3/interfaces` | `config interface` (mwan3) | Per-WAN tracking: `track_ip`, `track_method`, probe sizing and timing, up/down thresholds, `flush_conntrack`. |
-| `mwan3/members` | `config member` | Binds an `mwan3/interfaces` section to a `metric` and a `weight`. |
+| `mwan3/members` | `config member` | Binds an `mwan3/interfaces` section to a `metric` and a `weight`. A write takes a metric from 1 to 256, since mwan3 leaves a member with a higher one out of its policy, and a stored one above 256 blocks every write of the section. |
 | `mwan3/policies` | `config policy` | `use_members` plus a `last_resort` verdict. |
 | `mwan3/rules` | `config rule` (mwan3) | Traffic match (family, proto, src/dest ip and port, ipset) routed to a `use_policy`. |
 | `openvpn/instances` | `config openvpn` | Per-instance OpenVPN config. `key`, `tls_auth` and `pkcs12` are write-only; responses carry `has_key` / `has_tls_auth` / `has_pkcs12`. |
