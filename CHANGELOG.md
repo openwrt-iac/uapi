@@ -55,6 +55,19 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `syn_flood` was on. This refusal uses the carve-out of `docs/versioning.md`
   for a tightening that refuses a payload that produced broken state. Migration
   note in `docs/migration-v3-to-v4.md`. (#423)
+- **BREAKING: an mwan3 rule with a port and `tcp` or `udp` in another case, and
+  a firewall zone name that starts with a digit or a dash, answer 422.** mwan3
+  compares the `proto` of `mwan3/rules` with `tcp` and `udp` in lower case and
+  drops the ports of another spelling, such as `TCP`, so the rule matches every
+  port. Such a rule with `src_port` or `dest_port` answers 422 `conflict` on
+  `proto`. fw4 skips a zone whose name starts with a digit or a dash, such as
+  `1wan`, and a write of such a `firewall/zones.name` answers 422
+  `invalid_format`. Its request schema declared such a name valid, and now
+  declares `^[a-zA-Z_][a-zA-Z0-9_-]*$`. A stored one blocks every write of its
+  section. 3.x took both writes, and no 3.5.0 notice covers them. Both use the
+  carve-out of `docs/versioning.md` for a tightening that refuses a payload
+  that produced broken state. Migration note in `docs/migration-v3-to-v4.md`.
+  (#435)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a
@@ -249,6 +262,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stored list is no error. A request takes `device` and `network` as a list too,
   since netifd reads either form, and the other four only as a string. A
   client fails loudly where it does not take the array. (#405)
+- **`mwan3/rules.proto` takes on write what iptables takes, and
+  `mwan3/rules.family` reads a list as mwan3 does.** A write takes a protocol
+  name in any case, since iptables lowercases it, `mobility-header`, and an
+  octal number with more leading zeros, such as `000017`, which 3.5.0 took and
+  the v4 request schema refused. `dccp` and `ipcomp` stay refused, since
+  iptables 1.8.10 and musl do not know them. A `family` stored as a list read as
+  an array outside the schema, which blocked every write of the rule. It now
+  reads as the string that `config_get` joins, and an empty one reads null,
+  which mwan3 runs for both families. 3.x read the array or the empty string
+  outside its own schema: carve-out (b) of `docs/versioning.md`. (#435)
 
 ## [3.5.0] - 2026-11-21
 
