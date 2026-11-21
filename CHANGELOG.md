@@ -89,10 +89,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json`
   and the "Announced response-shape changes" section now also list the move of
   the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into
-  `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the
-  always-present documented `runtime` envelope on every resource, and the
-  pruning of dead error codes from the enum. The deprecation window runs from
-  this release, not from v4. (#345)
+  `dhcp/leases?family=v6`, a `runtime` object that every resource returns, and
+  the pruning of dead error codes from the enum. The deprecation window runs
+  from this release, not from v4. (#345)
 
 ### Fixed
 

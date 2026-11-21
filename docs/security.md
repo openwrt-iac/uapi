@@ -189,7 +189,7 @@ a domain scope of `dhcp`, a root scope already, can write such a line.
 ### Audit consequence
 
 The token *name* is logged on every audit line. Tokens should be named for
-their owner (`ci-bot`, `terraform-prod`, `alice-laptop`) so the audit log
+their owner (`ci_bot`, `terraform_prod`, `alice_laptop`) so the audit log
 identifies the responsible party, not a hash.
 
 ## Authentication-design exclusions
