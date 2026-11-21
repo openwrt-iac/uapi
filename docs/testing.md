@@ -41,15 +41,17 @@ that is not committed yet, as the real one reads the file, because the
 transaction takes its snapshot after `fn` has written. This is the difference
 between covering 30% and covering the transaction recipe's failure paths
 (specifically the snapshot-restore rollback, which is hard to trigger
-naturally). The stub cannot show what `bus.connect()` itself does, so
-`tests/unit/bus_test.uc` also runs `connect()` with a fake ubus, a fake uci
-module, and real files for the restore. CI's ucode has no uci module, which is
-why the fake exists. The fake keeps only what those tests need from libuci: a
-load by name, also on first use, applies what a shell staged and reads an
-override in place of the file, a load by path does neither and fails for a
-package that the cursor holds, a commit writes the cursor's copy, and a revert
-deletes what the shell staged. It holds sections as plain objects, so it knows
-nothing of anonymous sections, lists, section order or parse errors.
+naturally). `has_feature()` asks hostapd or wpa_supplicant for a build feature,
+as LuCI does, and the stub answers it from its `features`. The stub cannot show
+what `bus.connect()` itself does, so `tests/unit/bus_test.uc` also runs
+`connect()` with a fake ubus, a fake uci module, and real files for the restore.
+CI's ucode has no uci module, which is why the fake exists. The fake keeps only
+what those tests need from libuci: a load by name, also on first use, applies
+what a shell staged and reads an override in place of the file, a load by path
+does neither and fails for a package that the cursor holds, a commit writes the
+cursor's copy, and a revert deletes what the shell staged. It holds sections as
+plain objects, so it knows nothing of anonymous sections, lists, section order
+or parse errors.
 
 ## Load-bearing integration tests
 

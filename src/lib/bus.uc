@@ -102,7 +102,7 @@ function connect(opts) {
 	// libuci commits a package loaded by path by writing the copy that it holds, where it reads a
 	// package loaded by name again and replays the delta. So the commit reloads the file and
 	// replays the writes kept here, and a commit by LuCI or a shell while the request ran stays.
-	let writes = {}, changed = {};
+	let writes = {}, changed = {}, features = {};
 	function load(pkg) {
 		if (writes[pkg] == null && loadable(pkg) && cursor.load(config_dir + "/" + pkg))
 			writes[pkg] = [];
@@ -240,6 +240,14 @@ function connect(opts) {
 			if (!load(pkg)) return null;
 			return cursor.foreach(pkg, sec_type, fn);
 		},
+		// The probe of LuCI's getFeatures: hostapd and wpa_supplicant exit 0 on -v<feature> when they
+		// are built with it. A request runs each probe once.
+		has_feature: function(daemon, feature) {
+			let k = daemon + " " + feature;
+			if (!exists(features, k))
+				features[k] = system(sprintf("/usr/sbin/%s -v%s >/dev/null 2>&1", daemon, feature)) == 0;
+			return features[k];
+		},
 	};
 }
 
@@ -248,6 +256,7 @@ function stub(initial) {
 	let st = {
 		uci: deepcopy(init.uci ?? {}),
 		missing_packages: init.missing_packages ?? [],
+		features: init.features ?? {},
 		ubus_responses: { ...(init.ubus ?? {}) },
 		ubus_calls: [],
 		uci_ops: [],
@@ -377,6 +386,10 @@ function stub(initial) {
 			st.uci[pkg] = json(snapshot);
 			record("import", pkg);
 			return true;
+		},
+
+		has_feature: function(daemon, feature) {
+			return index(st.features[daemon] ?? [], feature) >= 0;
 		},
 
 		uci_foreach: function(pkg, sec_type, fn) {
