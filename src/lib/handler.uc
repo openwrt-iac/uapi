@@ -41,8 +41,19 @@ function compute_etag(body) {
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
-// A lease is paged by its IP, so a cursor takes `.` and `:` too.
+// A lease is paged by its IP, so a cursor takes `.` and `:` too. An IP holds more than one dot
+// or a colon, so it never reads as the section name and hash that cursor_after gives.
 const CURSOR_RE = /^c_[A-Za-z0-9_.:-]+$/;
+
+// libuci names an anonymous section by its position in the package, so after a delete of an
+// earlier section the next one takes its name, and a bare name resumes one item too far. The
+// hash covers the ETags and not only the ids: deleting the first of a run of anonymous rules
+// shifts each later name down by one, so the ids up to the cursor stay the same.
+function cursor_after(items, end, key) {
+	let last = items[end - 1];
+	if (last.managed !== false) return last[key];
+	return last[key] + "." + _hash(join(",", map(slice(items, 0, end), compute_etag)));
+}
 
 function paginate(ctx, items, query, id_field, carry) {
 	let key = id_field ?? "id";
@@ -63,19 +74,20 @@ function paginate(ctx, items, query, id_field, carry) {
 	if (query != null && query.cursor != null) {
 		if (!match(query.cursor, CURSOR_RE))
 			return errors.error(ctx, "invalid_cursor", "cursor is malformed");
-		let after_id = substr(query.cursor, 2);
-		let found = false;
-		for (let i = 0; i < length(items); i++) {
-			if (items[i][key] == after_id) { start = i + 1; found = true; break; }
-		}
-		if (!found)
+		let after = substr(query.cursor, 2);
+		let id = match(after, /^([A-Za-z0-9_]+)\.[0-9a-f]+$/)?.[1] ?? after;
+		while (start < length(items) && items[start][key] != id) start++;
+		if (start == length(items))
 			return errors.error(ctx, "invalid_cursor", "cursor refers to no current item");
+		if (cursor_after(items, start + 1, key) != after)
+			return errors.error(ctx, "invalid_cursor", "cursor does not match the current items up to it");
+		start++;
 	}
 	let end = start + limit;
 	let page = slice(items, start, end);
 	let resp = errors.ok(ctx, page);
 	if (end < length(items) && length(page) > 0) {
-		let next = "c_" + page[length(page) - 1][key];
+		let next = "c_" + cursor_after(items, end, key);
 		resp.headers["Link"] = sprintf("<?cursor=%s&limit=%d%s>; rel=\"next\"", next, limit, carry ?? "");
 		resp.headers["X-Next-Cursor"] = next;
 	}
