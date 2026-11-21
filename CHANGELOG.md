@@ -13,12 +13,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`/diagnostics` reports interrupted writes.** A write now records itself in
   `/var/run/uapi-interrupted-writes/` before the commit, under the package lock
   so the record and the commit are ordered together, and removes the record when
-  the recipe ends on any path the request can still reach. When uhttpd kills the
-  request process after the commit (client disconnect or `script_timeout`), the
-  record survives: `GET /diagnostics` lists it under `interrupted_writes` with
-  the packages, the request id, the staged sections and whether the reload had
-  started. Report only; uapi still never finishes or restores another request's
-  write. Additive. (#341)
+  it returns. When uhttpd kills the request process after the commit (client
+  disconnect or `script_timeout`), or the write throws after it, the record
+  survives: `GET /diagnostics` lists it under `interrupted_writes` with the
+  packages, the request id, the staged sections and whether the reload had
+  started. A record is named by the pid and the start time of its process, so a
+  later process that gets the same pid does not hide it. Report only, and uapi
+  still never finishes or restores another request's write. Additive. (#341)
+  (#384)
 
 - **Request bounds are configurable from `config limits` in
   `/etc/config/uapi`.** `max_body_bytes` (default 262144), `max_body_containers`
@@ -28,14 +30,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bound and not raise it above its default: the body is parsed before the bearer
   check, so a raised body bound let a request without a token make the parse
   take hundreds of MB, and the time bounds at their defaults already fill
-  uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`.
-  Additive. (#339) (#374)
+  uhttpd's 60 s. `GET /diagnostics` reports the effective values under `limits`,
+  which its spec requires. Additive. (#339) (#374) (#389)
 - **`POST /batch` results carry per-operation headers.** Each entry of the 207
   `results` array now has a `headers` object with the headers of the
   sub-request's own response: its own `X-Request-Id`, and on a 200 the `ETag` of
   the body, so a client can chain an `If-Match` after a batch. The reload and
   kernel outcome stays on the 207, one for the whole batch, because a
-  sub-request runs no commit and no reload of its own. Additive. (#338)
+  sub-request runs no commit and no reload of its own. Additive. (#338) (#389)
 
 ### Changed
 
@@ -54,18 +56,21 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Deprecated
 
-- **The v4 announcement adds five changes, and says more about three others.**
-  In v4 a `managed` other than `true` or `false`, a `validate` other than `1`
-  and an empty `cursor` answer 400, where 3.x ignores them. Two firewall reads
-  say what fw4 applies (#408), a lease without a client id reads `duid` null
-  (#392), a mwan3 `loglevel` of `err` or `warn` and a member `metric` above 256
-  answer 422 (#407), and the HTTP token mint refuses a scope that the server
-  does not know (#415). An empty `mwan3/interfaces.family` reads `ipv4` too, and
-  the v4 schema declares `family` as a string that every response holds. The
-  refusal of a write over a stored error covers the schema checks, and a value
-  that the platform takes is no error. A token that holds `dhcp:leases` reads
-  the IPv6 leases too. `docs/deprecations.md` and the "Upcoming in v4" block of
-  the spec now say so. (#414)
+- **The v4 announcement adds nine changes, and says more about two others.** In
+  v4 a `managed` other than `true` or `false`, a `validate` other than `1` and
+  an empty `cursor` answer 400, where 3.x ignores them. Two firewall reads say
+  what fw4 applies (#408), a lease without a client id reads `duid` null (#392),
+  a mwan3 `loglevel` of `err` or `warn` and a member `metric` above 256 answer
+  422 (#407), and the HTTP token mint refuses a scope that the server does not
+  know (#415). `network/rules.ipproto` takes only an integer in the request
+  schema, a `dhcp/servers.leasetime` with a year suffix and a bridge-VLAN port
+  name longer than 15 characters answer 422, and some firewall, uhttpd and route
+  reads give the value as the daemon parses it (#405). An empty
+  `mwan3/interfaces.family` reads `ipv4` too, and the v4 schema declares
+  `family` as a string that every response holds. The refusal of a write over a
+  stored error covers the schema checks, and a value that the platform takes is
+  no error. `docs/deprecations.md` and the "Upcoming in v4" block of the spec
+  now say so. (#414)
 - **The v4 announcement says that `dhcp/leases` will refuse an unknown
   `family`.** 3.x ignores the parameter, so `?family=ipv6` or `?family=` lists
   the IPv4 leases. In v4 a value other than `v4` or `v6` answers 400
@@ -80,21 +85,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (#369)
 - **The v4 announcement says what the v4 branch does.** It no longer says that
   this major accepts both forms of every announced change: that holds for
-  `ip6prefix` alone. It adds what v4 also changes: a `wireless/interfaces` write
-  with no `mode` stores none, a write that only disables a section with a stored
-  error is refused, the `path` label of the metrics follows the new paths, and
-  the `dhcp:leases6` scope goes with its endpoint. It says that `runtime`
-  becomes required, not documented everywhere. The removal of `managed` and of
-  the adopt flow is withdrawn: an anonymous section is named from its position
-  in the file at each load, so its name cannot be a client's id, and adopt is
-  how a client gets one that holds. (#376)
+  `ip6prefix` alone. It adds that a `wireless/interfaces` write with no `mode`
+  stores none in v4, and that a write that only disables a section with a stored
+  error is refused. (#376)
 - **The rest of the v4 program is announced in the published spec and
   `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json`
-  and the "Announced response-shape changes" section now also list the move of
-  the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into
-  `dhcp/leases?family=v6`, a `runtime` object that every resource returns, and
-  the pruning of dead error codes from the enum. The deprecation window runs
-  from this release, not from v4. (#345)
+  and the "Announced response-shape changes" section now also list four changes.
+  The special endpoints move under `/uapi/...`, and the `path` label of the
+  metrics follows them. `dhcp/leases6` merges into `dhcp/leases?family=v6` with
+  its `dhcp:leases6` scope, so a token that holds `dhcp:leases` reads the IPv6
+  leases too. Every resource returns a `runtime` object, and dead error codes
+  leave the enum. The deprecation window runs from this release, not from v4.
+  (#345) (#376)
 
 ### Fixed
 
@@ -128,15 +130,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that changes a field to it, with the same code and message as before. A write
   that sends the stored value back passes, such as a PUT of the read, which a
   full-body client sends, and the description of the field says so. A
-  `firewall/rules` PUT of `HELPER` stays refused, because a PUT
-  removes the `set_helper` option, which uapi does not model, and firewall4
-  skips a HELPER rule without it. Some of these values blocked every PATCH of
-  their section and no longer do: a device or radio type that uapi does not
-  write, a `vid` of 0, mode `ahdemo`, an unbound `rebind_protection` other than
-  0, 1 or 2, a `reqprefix` with an `:IAID`, a negated firewall port with a blank
-  after the `!`, the `snat_ip` of an NPT rule, and an EAP SSID without a key, as
-  LuCI writes it. Such an SSID needs a key only in a write that changes its
-  encryption. A write also takes values that LuCI or the daemon takes and 3.x
+  `firewall/rules` PUT of `HELPER` stays refused, because a PUT removes the
+  `set_helper` option, which uapi does not model, and firewall4 skips a HELPER
+  rule without it. Some of these values blocked every PATCH of their section and
+  no longer do: a device or radio type that uapi does not write, a `vid` of 0,
+  mode `ahdemo`, an unbound `rebind_protection` other than 0, 1 or 2, a
+  `reqprefix` with an `:IAID`, a negated firewall port with a blank after the
+  `!`, the `snat_ip` of an NPT rule, and an EAP SSID without a key, as LuCI
+  writes it. Such an SSID needs a key only in a write that changes its
+  encryption. A write also takes values that LuCI or the daemon takes and 3.4.0
   refused, which is an addition, such as the negated port, mark and DSCP forms
   with a blank, `sae-compat`, `wpa3-192`, `wpa-mixed`, `psk3`, `psk3-mixed`, a
   `network/rules.priority` above 32766, an mwan3 rule `proto` that iptables
@@ -155,8 +157,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the keepalive or the port that wg reads instead of what the handler leaves
   out, and a switch to wireguard or an enable of the interface was refused for
   such a stored value, which no longer keeps the interface down. The read, the
-  kernel apply, the restore and that refusal now follow the handler. 25.12 is
-  unchanged. (#398)
+  kernel apply, the restore and that refusal now follow the handler. On OpenWrt
+  main, a read of `disabled`, `route_allowed_ips`, the endpoint port or the
+  keepalive of a peer changes where the handler leaves the value out, and so
+  does the ETag of that peer. 25.12 is unchanged. (#398)
 - **The `Link` to the next page of a curated list keeps `managed`.** The link
   is relative, so it replaced the whole query, and the second page of
   `?managed=false` listed the managed sections too. (#399)
@@ -169,12 +173,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   one does not, prints the commands that upgrade `uhttpd` and its `uhttpd-mod-*`
   together. `docs/installation.md` asks for that upgrade before the install.
   (#395)
-- **The spec of `GET /diagnostics` requires `limits` again, and the docs say
-  what a batch result, the rulesets and the `kernel_ops` hook do.** Two
-  `required` lists in one schema dropped `limits`. The docs said that `package`
-  is not a required check, that a batch result carries the reload headers of its
-  sub-request, and that `kernel_ops` receives `replace` and `patch`, which it
-  never does. (#389)
 - **A wireguard peer apply refuses an `allowed_ips` marker that follows a
   space.** `wg set` drops every space of the list before it reads a `+` or `-`
   marker. So a stored entry with a space before its marker got past the check,
@@ -182,21 +180,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   holds instead of replacing them. On 25.12 the space had to be a tab, a line
   break or an escaped space such as `\040`. On OpenWrt main a plain space in a
   `list` entry was enough. The apply and the restore now refuse such an entry,
-  as they refuse a marker at the start. (#386)
+  as they refuse a marker at the start. A write that sets such a stored peer
+  again, such as a DELETE of another peer of its interface, answered 200 in
+  3.4.0 and now fails with 500 `reload_failed_restored`. A restore that sets
+  one, which reported the write as restored, now reports
+  `reload_failed_unrecovered`. This refusal of an `allowed_ips` entry with
+  whitespace before its `+` or `-` uses the carve-out of `docs/versioning.md`
+  for a payload that produced broken state no caller can rely on: the peer kept
+  prefixes that its stored list does not hold. (#386)
 - **Every list that pages declares `limit`, `cursor` and its paging headers in
   the spec.** No list declared the `limit` and `cursor` query parameters, and
   the read-only lists (`dhcp/leases`, `dhcp/leases6`,
   `network/wireguard_kernel_peers`) did not declare the `Link` and
   `X-Next-Cursor` headers that they send. The pattern of `X-Next-Cursor` also
   refused the cursor of a lease, which holds `.` or `:`. (#385)
-- **`/diagnostics` keeps reporting an interrupted write after a throw or a pid
-  reuse.** A write that threw after its commit, such as a restore that died,
-  removed its journal record, so `interrupted_writes` did not report a write
-  whose commit may have landed. The record now stays, as it does when uhttpd
-  kills the request. A record was also named by the pid alone, and a later
-  process that got the same pid hid it while it ran, or overwrote and removed
-  it. A record is now named by the pid and the start time of its process, and a
-  running process hides only its own record. (#384)
 - **`network/wireguard_kernel_peers` names the interfaces whose kernel it could
   not read.** When `wg show <interface> dump` failed on an up interface, or
   printed a shape that uapi does not read, the collection listed nothing for it
@@ -247,12 +244,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `wpa_supplicant -vwep`, as LuCI does, only for a WEP value and only without
   the ucode wifi-scripts. Mode mesh takes no WEP. A stored WEP value shows in
   the validation sweep, and a write that leaves it as it is still passes, unless
-  it sets the SSID up or changes its mode. This refuses requests that 3.x
+  it sets the SSID up or changes its mode. This refuses requests that 3.4.0
   accepted, under the security carve-out of `docs/versioning.md`: the client
   asked for encryption and got an open network. It fails loudly, with the 422. A
-  stored `wep-open` or `wep-shared`, which LuCI writes, broke the Response enum
-  and blocked every write of the SSID. Read and write take them now, under the
-  same rule. (#409) (#411)
+  `wireless/devices` write that turns on a radio with such an enabled SSID
+  answers 422 `conflict` on `disabled`. A stored `wep-open` or `wep-shared`,
+  which LuCI writes, broke the Response enum and blocked every write of the
+  SSID. Read and write take them now, under the same rule. (#409) (#411)
 
 ## [3.4.0] - 2026-11-04
 
