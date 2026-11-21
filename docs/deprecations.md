@@ -156,6 +156,31 @@ section by count.
   v4.** It answers 422 `validation_failed` on that entry of `scopes`, as
   `uapi-token create` already refuses it. This major mints such a token, and it
   grants nothing. (#415)
+- **`network/rules.ipproto` will take only an integer in the request schema of
+  v4.** This major declares an integer or a string, and its server already
+  refuses a string unless it is the value that the section holds. v4 declares
+  an integer from 1 to 255, as LuCI writes it, so a client generated from the v4
+  spec types the field as an integer. A read still gives a stored name or
+  spelling, such as `tcp` or `06`, as uci holds it, and a write may send it back
+  unchanged. (#405)
+- **`dhcp/servers.leasetime` will refuse a year suffix in v4.** dnsmasq does
+  not know the `Y` suffix and does not start with such a lease time. This major
+  takes it. v4 answers 422 `invalid_format` for a write that sends one, and a
+  stored one blocks every write of the section, under the stored-error rule
+  above. Send the time in weeks or days. (#405)
+- **A `network/bridge_vlans` port name longer than 15 characters will answer
+  422 in v4.** No Linux interface has such a name, so the bridge never gets that
+  port. This major takes the name. v4 answers 422 `invalid_format` for a write
+  that sends one, and a stored one blocks every write of the section. (#405)
+- **Some reads will give the value as the daemon parses it in v4.** A firewall
+  policy, target, `reflection_src` or `family` reads as fw4 parses it, so a
+  lower-case `accept` reads `ACCEPT`, and a nat or redirect target that fw4
+  replaces with its default reads as that default. A firewall `src_port`,
+  `dest_port` or `proto` stored as one option of several words, as LuCI writes
+  it, reads as its words, and so does a `uhttpd/instances.listen_http` or
+  `listen_https`. A numeric `network/routes.type` reads as its name, as netifd
+  reads it, so `010` reads `prohibit`. Such a section gets another ETag at the
+  upgrade, and an `If-Match` from before it answers 412. (#405)
 
 ## Removed in past releases
 
