@@ -174,7 +174,7 @@ without uci state change.
    the
    write.
 3. **Validate.** Resource's `check_schema_types` + `validate(json, conn, id,
-   delta, partial)`
+   delta, partial, stored)`
    run inside the lock, and `validate_new(json, conn)` where a resource has one,
    which refuses only
    the errors that the write adds (`docs/adding-a-resource.md`). Any field error

@@ -9,13 +9,13 @@ const VALID_RESOURCE  = { "default": true, "tiny": true, "small": true, "medium"
 const VALID_PROTOCOL  = { "default": true, "mixed": true, "ip4_only": true,
                           "ip6_only": true, "ip6_local": true, "ip6_prefer": true };
 const VALID_REBIND    = { "0": true, "1": true, "2": true };
-// unbound.sh takes any number for these, and a negative ttl_min.
+// unbound.sh takes any number for these. It runs a ttl_min above 1800 as 300.
 const WRITE = {
 	add_local_fqdn: { minimum: 0, maximum: 4 },
 	add_wan_fqdn: { minimum: 0, maximum: 4 },
 	rebind_protection: { enum: keys(VALID_REBIND) },
 	num_threads: { minimum: 1, maximum: 64 },
-	ttl_min: { minimum: 0 },
+	ttl_min: { minimum: 0, maximum: 86400 },
 };
 const VALID_DOMAIN_TYPE = {
 	"deny": true, "refuse": true, "static": true, "transparent": true,
@@ -86,9 +86,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (json.listen_port != null) {
 		let p = int(json.listen_port);
 		if (p < 1 || p > 65535)
@@ -147,6 +147,7 @@ return {
 		localservice:      { "x-uapi-read-nullable": true, type: "boolean" },
 		hide_binddata:     { "x-uapi-read-nullable": true, type: "boolean" },
 		num_threads:       { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.num_threads },
-		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", maximum: 86400, "x-uapi-write": WRITE.ttl_min },
+		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.ttl_min,
+		                     description: "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300" },
 	},
 };

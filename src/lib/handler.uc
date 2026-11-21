@@ -318,8 +318,9 @@ function new_errors(resource, after, before, conn) {
 // never sent: a PATCH that switches network/interfaces away from static still carries the old
 // addresses in its merged view, and refusing them there would make the switch impossible.
 // `partial` is true for a PATCH, which keeps a stored option that the request leaves out, where a
-// PUT removes it.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before, partial) {
+// PUT removes it. `stored` is the read of the section before the write, so that a rule can tell a
+// value that the request sends back from one that it changes. A create and the sweep pass none.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, before, partial, stored) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -339,7 +340,7 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		delete schema_body.id;
 	}
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta, partial);
+	let val_errs = resource.validate(validate_body, conn, id, delta, partial, stored);
 	let seen = {};
 	let merged = [];
 	for (let e in type_errs) {
@@ -924,20 +925,25 @@ function make(resource, opts) {
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
 				let found = existing != null && type_predicate(existing['.type']);
-				let existing_view = (resource.validate_new != null && found) ? resource.fromUci(existing, conn) : null;
+				// The read throws for a section that the resource cannot read, which the sweep
+				// reports as unreadable. A PUT still answers the validation of its body first, and
+				// throws on the read below.
+				let existing_view = null;
+				if (found)
+					try { existing_view = resource.fromUci(existing, conn); } catch (e) {}
 				let write_body = carry_write_only(resource, body, existing);
-				let before = (existing_view != null) ? carry_write_only(resource, existing_view, existing) : null;
+				let before = (resource.validate_new != null && existing_view != null) ? carry_write_only(resource, existing_view, existing) : null;
 				// The schema checks only what the caller sent. A carried secret is whatever uci
 				// holds, an option where the schema says list for instance, and the caller can
 				// neither see it nor send it.
-				let errs = _validate_with_schema(resource, body, write_body, c, id, body, before);
+				let errs = _validate_with_schema(resource, body, write_body, c, id, body, before, null, existing_view);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
 				// wireless/interfaces reads with three ubus calls under the lock, so a view that
-				// validate_new() needed is read once.
+				// the validation needed is read once.
 				if (existing_view == null) existing_view = resource.fromUci(existing, conn);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
@@ -998,7 +1004,7 @@ function make(resource, opts) {
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
 				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
-				                                 true);
+				                                 true, existing_view);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1238,7 +1244,7 @@ function make_singleton(resource, opts) {
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta,
 				                                 (resource.validate_new != null) ? carry_write_only(resource, existing_view, existing) : null,
-				                                 true);
+				                                 true, synthesized ? null : existing_view);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

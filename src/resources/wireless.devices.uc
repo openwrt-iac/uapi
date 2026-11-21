@@ -74,11 +74,11 @@ function ssid_errors(conn, radio) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
 	values.require_present(errs, json, "type");
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 
 	if (json.band != null && !VALID_BANDS[json.band])
 		push(errs, { field: "band", code: "not_in_enum",

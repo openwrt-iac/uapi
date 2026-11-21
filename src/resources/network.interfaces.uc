@@ -261,7 +261,7 @@ function toUci(body) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
 	values.require_present(errs, json, "proto");
@@ -270,7 +270,7 @@ function validate(json, conn, id, delta, partial) {
 	// fields in its merged view, and toUci drops them. The read-only twins never write, and an
 	// empty value asks for nothing, as a module that writes `cond ? [...] : []` sends.
 	let named = delta ?? json;
-	values.write_bounds(errs, named, WRITE);
+	values.write_bounds(errs, named, WRITE, stored);
 	// Here rather than as an enum in schema_properties, which the Response would then declare
 	// although a read answers any proto that uci stores. Only a request that names the proto is
 	// refused, so a PATCH of either kind that leaves it out keeps the options of the handler,
@@ -417,10 +417,10 @@ function validate(json, conn, id, delta, partial) {
 	    && values.service_port(old.listen_port, () => fs.readfile("/etc/services"), -1) === -1)
 		push(errs, { field: "listen_port", code: "conflict",
 		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null, or switch with disabled true and send a port or null before enabling the interface" });
-	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms. dhcpv6.sh also
-	// passes a leading `/` and an `:IAID` suffix through.
+	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms. Either can end in
+	// an :IAID, which dhcpv6.sh passes through. odhcp6c exits on a `/` with no address before it.
 	let prefix = (type(json.reqprefix) == "string") ? replace(json.reqprefix, /(\/[0-9]+):[0-9A-Fa-f]{1,8}$/, "$1") : null;
-	if (ok("reqprefix") && prefix != null && index(prefix, "/") > 0 && !is_valid_ipv6_cidr(prefix))
+	if (ok("reqprefix") && prefix != null && index(prefix, "/") != -1 && !is_valid_ipv6_cidr(prefix))
 		push(errs, { field: "reqprefix", code: "invalid_format",
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
 	// The schema allows the whole range so that a stored value reads as it is. ppp.sh hands the
@@ -584,8 +584,8 @@ return {
 		                description: "Client hostname sent in DHCPDISCOVER (dhcp)" },
 		clientid:     { "x-uapi-read-nullable": true, type: "string", pattern: "^[0-9A-Fa-f:]*$",
 		                description: "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons" },
-		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
-		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it" },
+		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as odhcp6c reads it" },
 		reqaddress:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REQADDRESS),
 		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
 		delegate:     { "x-uapi-read-nullable": true, type: "boolean",

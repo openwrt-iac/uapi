@@ -591,6 +591,12 @@ const PROTO_NAMES = {
 };
 const PROTO_MAX = 255;
 
+// musl's getprotobyname compares a name against this built-in table, case-sensitively.
+const MUSL_PROTOCOLS = [ "ip", "icmp", "igmp", "ggp", "ipencap", "st", "tcp", "egp", "pup", "udp", "hmp",
+                         "xns-idp", "rdp", "iso-tp4", "xtp", "ddp", "idpr-cmtp", "ipv6", "ipv6-route",
+                         "ipv6-frag", "idrp", "rsvp", "gre", "esp", "ah", "skip", "ipv6-icmp", "ipv6-nonxt",
+                         "ipv6-opts", "rspf", "vmtp", "ospf", "ipip", "encap", "pim", "raw" ];
+
 // Shape only, so the spec documents the field; the authoritative check is
 // proto_problem, which fw4's case-insensitivity makes awkward to express as a
 // pattern (ucode's regex engine has no inline-flag support).
@@ -787,12 +793,14 @@ function section_index(conn, pkg, sec_type, key, filter) {
 }
 
 // A bound that a write applies and a read does not, which the request schema declares under
-// x-uapi-write: a read gives what the daemon takes, which can be past it. The schema check judged
-// such a bound only on the fields that a request names, with these messages, so this does too, and
-// a PATCH that leaves a stored value as it is passes.
-function write_bounds(errs, named, bounds) {
+// x-uapi-write: a read gives what the daemon takes, which can be past it. A write is refused only
+// where a field that it names changes to such a value, with the messages of the schema check. A
+// PATCH that leaves the stored value, and a PUT of the read, which sends it back, pass. `stored` is
+// the read of the section before the write, null on a create.
+function write_bounds(errs, named, bounds, stored) {
 	for (let field, b in bounds) {
 		let v = named?.[field];
+		if (stored != null && sprintf("%J", v) == sprintf("%J", stored[field])) continue;
 		let list = type(v) == "array";
 		for (let i = 0; i < (list ? length(v) : 1); i++) {
 			let x = list ? v[i] : v, path = list ? sprintf("%s[%d]", field, i) : field;
@@ -818,7 +826,7 @@ return {
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
-	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
+	PROTO_RE, PROTO_MAX, MUSL_PROTOCOLS, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,

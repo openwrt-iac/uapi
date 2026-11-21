@@ -25,8 +25,15 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+// mwan3 reads the mask in shell arithmetic, which takes a leading 0 as octal, and gives it to
+// iptables, which takes 32 bits.
+function validate(json, conn, id, delta) {
 	let errs = [];
+	let m = (delta ?? json).mmx_mask;
+	if (type(m) == "string" && match(m, /^[0-9]+$/)
+	    && (match(m, /^0[0-7]*$/) ? length(ltrim(m, "0")) > 11 || int(m, 8) > 0xFFFFFFFF : int(m) > 0xFFFFFFFF))
+		push(errs, { field: "mmx_mask", code: "out_of_range",
+		             message: "must be at most 0xFFFFFFFF: iptables takes a mark mask of 32 bits" });
 	return errs;
 }
 
@@ -39,8 +46,8 @@ return {
 	validate: validate,
 	schema_properties: {
 		mmx_mask:       { type: ["string", "null"],
-		                  pattern: "^(0[xX][0-9A-Fa-f]+|[0-9]{1,10})$",
-		                  description: "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)." },
+		                  pattern: "^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]{0,9})$",
+		                  description: "Firewall mark mask for mwan3-tagged packets, in hex, decimal or octal with a leading 0, as the shell arithmetic of mwan3 reads it (default 0x3F00). A decimal or octal mask is at most 0xFFFFFFFF." },
 		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
 		loglevel:       { "x-uapi-read-nullable": true, type: ["string", "null"], enum: [ ...keys(VALID_LOGLEVEL), null ],
 		                  description: "syslog facility level (notice/info/debug/etc.)." },

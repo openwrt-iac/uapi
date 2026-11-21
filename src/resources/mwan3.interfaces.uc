@@ -75,9 +75,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (type(json.track_ip) == "array") {
 		for (let i = 0; i < length(json.track_ip); i++) {
 			if (!is_valid_ip(json.track_ip[i]))
