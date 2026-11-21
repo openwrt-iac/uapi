@@ -479,17 +479,35 @@ t.describe('wg.apply against logging wg and ip', () => {
 			'h-timeout': [ ";; connection timed out; no servers could be reached\n\n", true, false ],
 			'h-noroute': [ "nslookup: write to '127.0.0.1': Network unreachable\n;; connection timed out; no servers could be reached\n\n", true, false ],
 			'h-headers': [ HEAD, true, false ],
+			'h-cname': [ HEAD + "Non-authoritative answer:\nh-cname\tcanonical name = target.example\n\n"
+			             + "Non-authoritative answer:\nh-cname\tcanonical name = target.example\n\n", false, true ],
+			'h-cname-chain': [ HEAD + "Non-authoritative answer:\nh-cname-chain\tcanonical name = mid.example\nmid.example\tcanonical name = target.example\n\n"
+			                   + "Non-authoritative answer:\nh-cname-chain\tcanonical name = mid.example\nmid.example\tcanonical name = target.example\n\n", false, true ],
+			'h-cname-addr': [ HEAD + "Non-authoritative answer:\nh-cname-addr\tcanonical name = target.example\nName:\ttarget.example\nAddress: 192.0.2.7\n\n"
+			                  + "Non-authoritative answer:\nh-cname-addr\tcanonical name = target.example\n\n", false, false ],
 			'1.2.3.4.5': [ HEAD + "** server can't find 1.2.3.4.5: NXDOMAIN\n\n", true, true ],
+			'10.0.0.256': [ HEAD + "** server can't find 10.0.0.256: NXDOMAIN\n\n", true, true ],
 		};
 		let outputs = {}, fail = [];
 		for (let h, c in cases) {
 			outputs['nslookup|' + h] = c[0];
 			if (c[1]) push(fail, 'nslookup\\|' + h);
 		}
-		let hosts = [ ...keys(cases), '192.0.2.1', 'fd00::1' ];
-		let r = run_wg({ network: {} }, sprintf("sprintf('%%J', map(%J, (h) => wg.missing_host(h)))", hosts), outputs, join('|', fail));
-		t.assert_equal(r.result, sprintf('%J', [ ...map(keys(cases), (h) => cases[h][2]), false, false ]));
+		let addresses = [ '192.0.2.1', '192.168.1.01', '010.0.0.1', '167772161', '0x0a000001', 'fd00::1' ];
+		let r = run_wg({ network: {} }, sprintf("sprintf('%%J', map(%J, (h) => wg.missing_host(h)))", [ ...keys(cases), ...addresses ]),
+		               outputs, join('|', fail));
+		t.assert_equal(r.result, sprintf('%J', [ ...map(keys(cases), (h) => cases[h][2]), ...map(addresses, () => false) ]));
 		t.assert_deep_equal(r.commands, map(keys(cases), (h) => 'nslookup|' + h));
+	});
+
+	// getaddrinfo of musl reads these as addresses, and looks the others up as names.
+	t.it('reads an IPv4 address as inet_aton does', () => {
+		let dotted = (n) => (n == null) ? null : sprintf('%d.%d.%d.%d', (n >> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255);
+		let v = [ '192.168.1.01', '010.0.0.1', '167772161', '0x0a000001', '0X0A.0', '1.16777215', '4294967295', '192.0.2.1',
+		          '10.0.0.256', '1.2.3.4.5', '1.2.3.4.', '08.0.0.1', '4294967296', '1.16777216', '.', '0x', '1..2', ' 10.0.0.1', '+1', '' ];
+		t.assert_deep_equal(map(v, (s) => dotted(wg.inet_aton(s))),
+		                    [ '192.168.1.1', '8.0.0.1', '10.0.0.1', '10.0.0.1', '10.0.0.0', '1.255.255.255', '255.255.255.255', '192.0.2.1',
+		                      null, null, null, null, null, null, null, null, null, null, null, null ]);
 	});
 
 	// wireguard.sh gives wg every host, so the apply does too, and a host that does not resolve fails

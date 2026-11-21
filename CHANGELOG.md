@@ -78,15 +78,21 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   interface at its next start for a name that does not exist. So a write that
   sends such a name for an enabled peer with a key answers 422 `conflict` on
   `endpoint_host` before its commit: a name for which busybox's nslookup gets
-  NXDOMAIN, or a reply with no address. This refuses a payload that 3.x stored
-  on a down interface, under the carve-out of `docs/versioning.md` for a payload
-  that produced broken state no caller can rely on. A lookup that fails for a
-  time, as on a timeout or a SERVFAIL, is not refused, because wg retries the
-  name and the interface comes up once it resolves. A stored name is not
-  checked. On OpenWrt main, the ucode proto handler leaves out the endpoint of a
-  name for which nslookup prints no address, and keeps the peer, so the write
-  sets the peer without it and answers 200 with the new `X-Kernel-Status:
-  omitted`, a value that a client takes as it takes a new error code. Note in
+  NXDOMAIN, or a reply with no address, such as one that holds only a CNAME.
+  This refuses a payload that 3.x stored on a down interface, under the
+  carve-out of `docs/versioning.md` for a payload that produced broken state no
+  caller can rely on. A lookup that fails for a time, as on a timeout or a
+  SERVFAIL, is not refused, because wg retries the name and the interface comes
+  up once it resolves. A stored name is not checked. A host that inet_aton reads
+  as an IPv4 address, such as `192.168.1.01` or `0x0a000001`, asks no resolver.
+  On OpenWrt main, the ucode proto handler gives wg a host of only digits and
+  dots as it stands, and wg refuses the config of the whole interface for one
+  that inet_aton does not read, such as `10.0.0.256`. A write refuses such a
+  host with 422 `invalid_format` on `endpoint_host`, a stored one too, under the
+  same carve-out. The handler leaves out the endpoint of any other host for
+  which nslookup prints no address, and keeps the peer, so the write sets the
+  peer without it and answers 200 with the new `X-Kernel-Status: omitted`, a
+  value that a client takes as it takes a new error code. Note in
   `docs/migration-v3-to-v4.md`. (#424)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
