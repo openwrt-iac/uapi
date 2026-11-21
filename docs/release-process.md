@@ -126,7 +126,10 @@ minors while the major is in flight.
   `main`, delete it and its ruleset, then run the rc flow below. From then, a
   fix of the old major lands on its maintenance branch by PR, and is carried to
   `main` when it applies there. The old major's releases are tagged on its
-  maintenance branch.
+  maintenance branch. After such a tag, copy the new section of its
+  `CHANGELOG.md` into the one of `main`, and take out of the `[Unreleased]`
+  of `main` each entry that the section carries, so the released sections of
+  both branches stay equal.
 
 `v4` went through this on 2026-11-21: `main` carries 4.x, and `v3` carries 3.x
 from 3.5.0 on.
