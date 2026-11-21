@@ -742,16 +742,11 @@ for body in '{"description":"x"}' '{"allowed_ips":["10.98.99.36/32"]}' '{"disabl
 	r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/network/wireguard_peers/$kept" -d "$body")
 	[ "$(status_of "$r")" = "422" ] || fail "PATCH $body of a peer with stored errors expected 422 on v4: $(body_of "$r")"
 done
+# Every write is refused, so none reloads the network, and the kernel keeps what the POST set.
 endpoint=$($SSH "wg show $IFACE endpoints" | awk -v k="$PEER3" '$1 == k { print $2 }')
+[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
 keepalive=$($SSH "wg show $IFACE persistent-keepalive" | awk -v k="$PEER3" '$1 == k { print $2 }')
-if wg_ucode_platform; then
-	# The commit by hand restarts the interface on main, and the handler leaves out the port 0 and
-	# the keepalive 25x since openwrt ecd9120f04, so the peer runs without them.
-	[ "$endpoint $keepalive" = "(none) off" ] || fail "the kernel holds endpoint '$endpoint' and keepalive '$keepalive'"
-else
-	[ "$endpoint" = "198.51.100.7:51820" ] || fail "the kernel endpoint became '$endpoint'"
-	[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
-fi
+[ "$keepalive" = "25" ] || fail "the kernel keepalive became '$keepalive'"
 [ "$($SSH "uci get network.$kept.endpoint_port; uci get network.$kept.persistent_keepalive" | tr '\n' ' ')" = "0 25x " ] \
 	|| fail "a refused PATCH rewrote the stored port or keepalive"
 has_peer "$PEER3" || fail "a refused PATCH removed the peer from the kernel"
