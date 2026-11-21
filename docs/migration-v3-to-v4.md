@@ -50,31 +50,36 @@ schema, `duid` can now be `null`, but a v6 entry always has one, and `ia_type`
 no longer lists `IA_TA`, which uapi never returned.
 
 The upgrade keeps each stored token and its scopes. A token that holds
-`dhcp:leases` now also reads the IPv6 leases, with their DUIDs, host names and
-addresses. 3.x kept those behind `dhcp:leases6`. A token that holds only
-`dhcp:leases6` still authenticates, but that scope grants nothing now, so
-`?family=v6` answers 403 `insufficient_scope`. `uapi-token create` refuses
-`dhcp:leases6` as an unknown path, and `POST /uapi/tokens` answers 422 for it,
-as the next section says. A scope on all of `dhcp`, such as `dhcp:ro`, reads
-both families before and after the upgrade.
+`dhcp:leases` or `*:leases`, with either verb, now also reads the IPv6 leases,
+with their DUIDs, host names and addresses. 3.x kept those behind
+`dhcp:leases6` or `*:leases6`. A token that holds only `dhcp:leases6` or
+`*:leases6` still authenticates, but that scope grants nothing on
+`/dhcp/leases` now, so `?family=v6` answers 403 `insufficient_scope`.
+`uapi-token create` refuses `dhcp:leases6` as an unknown path, and `POST
+/uapi/tokens` answers 422 for it, as the next section says. Both still mint
+`*:leases6`, which grants nothing on `/dhcp/leases`. A scope on all of `dhcp`,
+such as `dhcp:ro`, reads both families before and after the upgrade.
 
-Before the upgrade, run `uapi-token list` to find the tokens that hold either
-scope. For a client that reads the IPv6 leases, mint a token on 3.x with both
-`dhcp:leases` and `dhcp:leases6`, and revoke the old one. The new token reads
-both families before and after the upgrade. v4 has no scope for the IPv4 leases
-alone, so a client that must not see the IPv6 leases cannot keep `dhcp:leases`.
+Before the upgrade, run `uapi-token list` to find the tokens that hold one of
+these four scopes, `dhcp:leases`, `dhcp:leases6`, `*:leases` or `*:leases6`,
+with either verb. For a client that reads the IPv6 leases, mint a token on 3.x
+with both `dhcp:leases` and `dhcp:leases6`, and revoke the old one. The new
+token reads both families before and after the upgrade. v4 has no scope for the
+IPv4 leases alone, so a client that must not see the IPv6 leases cannot keep
+`dhcp:leases` or `*:leases`.
 
 ## The token mint refuses a scope that the server does not know
 
 `POST /uapi/tokens` now checks each scope as `uapi-token create` does
 (announced in 3.5.0, #415). A scope passes when its path is in the scope tree,
-is `raw:<package>`, or names all of a uci package that exists in `/etc/config`,
-such as `ddns:rw` where ddns is installed. Any other scope answers 422
-`validation_failed`, with code `not_in_enum` on its entry of `scopes`, such as
-`scopes[1]`:
+is `raw:<package>` or `*:<package>`, or names all of a uci package that exists
+in `/etc/config`, such as `ddns:rw` where ddns is installed. Any other scope
+answers 422 `validation_failed`, with code `not_in_enum` on its entry of
+`scopes`, such as `scopes[1]`:
 
 - a typo, such as `firewall:rulez:rw` or `firewal:rw`,
-- a scope that v4 removed, such as `dhcp:leases6:ro`,
+- a scope that v4 removed, such as `dhcp:leases6:ro`, but not `*:leases6:ro`,
+  which passes as `*:<package>` and grants nothing on `/dhcp/leases`,
 - a path below a package outside the tree, such as `ddns:service:rw`,
 - a scope on a package that is not installed,
 - a malformed scope, such as one without a verb.
@@ -132,9 +137,13 @@ section, for a PATCH of either kind as for a PUT:
   that the platform takes is no error,
 - the rules on what a daemon reads, whose errors carry `live` in the sweep,
 - the other rules of each resource, also the ones that 3.x applied only to the
-  fields that a request named: the `allowed_ips` of a disabled
-  `network/wireguard_peers`, and a `network/interfaces.listen_port` that reads
-  -1.
+  fields that a request named, or only in the sweep: the `allowed_ips` of a
+  disabled `network/wireguard_peers`, a `network/interfaces.listen_port` that
+  reads -1, and the one-value rule of `network/interfaces`. On a proto whose
+  handler reads `ipaddr`, `ip6addr` or `ip6prefix` as one value, such as 6in4,
+  that rule refuses several values of `ipaddrs`, `ip6addrs` or `ip6prefix`, or
+  one value that uci holds as a list. A PATCH that sends one value for the
+  field stores it as an option and fixes the section.
 
 Before v4 a write that left a stored value alone answered 200, so a broken
 section could still be disabled. Now the fix comes first, or goes through
@@ -161,12 +170,16 @@ the values that the section on schemas below names. Only a write that changes a
 field to such a value where the request schema refuses it answers 422. A write
 that sends back the value that the section holds passes, so a PUT of a read
 takes it, but a client that checks a body against the `*Request` schema before
-it sends it must leave such a field out. As in 3.5.0, a PUT still answers 422
-for such a proto and for the `HELPER` target that LuCI writes on a firewall
-rule, because uapi does not model the options that they need, and a PUT removes
-them. On 3.x the sweep is the pre-flight check before the upgrade, with two
-gaps: it does not list what a rule new in v4 refuses, such as a newline in a
-string that 3.x took (#276), and it lists values that v4 takes.
+it sends it must leave such a field out. Two exceptions remain. A request that
+names a proto that uapi does not model answers 422 `not_in_enum`, also when it
+sends the stored proto, because a PUT would delete the options that the handler
+of that proto reads. So a PUT of the read of such an interface fails, and only a
+PATCH that leaves `proto` out can change it and keep its proto. As in 3.5.0, a
+PUT of the `HELPER` target that LuCI writes on a firewall rule answers 422 too,
+because uapi does not model its `set_helper` option, and a PUT removes it. On
+3.x the sweep is the pre-flight check before the upgrade, with two gaps: it does
+not list what a rule new in v4 refuses, such as a newline in a string that 3.x
+took (#276), and it lists values that v4 takes.
 
 ## `wireless/interfaces` declares the lists that a read gives
 
@@ -179,23 +192,24 @@ schema must take an array where the field held a string.
 
 ## The schemas follow what LuCI and the daemons take
 
-The response schema of many fields is wider than in v3, because a stored value
-that LuCI or the daemon takes must not block a write: for example
-`network/rules.priority` up to 2147483647, `dhcp/servers.leasetime` with
-`infinite` and `deprecated`, `mwan3/rules.proto` as any protocol name, the
-bounds of the `mwan3/interfaces` timers, an `unbound/server.ttl_min` above
-86400, or a `wireless/interfaces.encryption` of `psk3`, `psk3-mixed` or
-`wpa-mixed`, which wifi-scripts sets up as `sae`, `sae-mixed` and WPA and WPA2
-with EAP. `build/openapi.json` lists each one. A request can stay narrower,
-through the `*Request` schema, and the server now checks it against the fields
-that a request names, other than a value that the section holds. A
-`dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused on
-write, and so are a `mwan3/rules.proto` that iptables refuses, a
-`uhttpd/certs.days` of 0 and a `network/bridge_vlans` port name longer than 15
-characters, which no Linux interface has. The request schema of
-`network/rules.ipproto` takes only an integer from 1 to 255, as LuCI writes
-it, where 3.x declared an integer or a string: a read still gives a stored
-name such as `tcp`, and a write may send it back unchanged.
+A stored value that LuCI or the daemon takes must not block a write, so the
+response schema of each field declares what the platform takes. 3.5.0 already
+widened most of these schemas (#410), for example `network/rules.priority` up
+to 2147483647, `dhcp/servers.leasetime` with `infinite` and `deprecated`,
+`mwan3/rules.proto` as any protocol name, the bounds of the `mwan3/interfaces`
+timers, an `unbound/server.ttl_min` above 86400, and a
+`wireless/interfaces.encryption` of `psk3`, `psk3-mixed` or `wpa-mixed`. Over
+3.5.0, v4 widens the response schema of the `dhcp/leases` items, of the
+`wireless/interfaces` lists and of `wireless/interfaces.mode`, which can read
+null. Their sections say more, and `build/openapi.json` lists each field. A
+request can stay narrower, through the `*Request` schema. As in 3.5.0, the
+server checks it against the fields that a request names, other than a value
+that the section holds. In v4, a `dhcp/servers.leasetime` with a year suffix,
+which stops dnsmasq, is refused on write, and so is a `network/bridge_vlans`
+port name longer than 15 characters, which no Linux interface has. The request
+schema of `network/rules.ipproto` takes only an integer from 1 to 255, as LuCI
+writes it, where 3.x declared an integer or a string: a read still gives a
+stored name such as `tcp`, and a write may send it back unchanged.
 
 The rules on what netifd and wifi-scripts read judge only what they refuse or
 read as another value. A `network/rules` form that netifd installs as it reads,
@@ -488,9 +502,10 @@ A client that sends only the query forms sees no change.
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of
-the stored scopes, only `dhcp:leases` and `dhcp:leases6` change what they grant,
-as the `dhcp/leases` section says. Some reads now answer another value for the
-same stored option, to follow what the daemon does:
+the stored scopes, only `dhcp:leases`, `dhcp:leases6`, `*:leases` and
+`*:leases6` change what they grant, as the `dhcp/leases` section says. Some
+reads now answer another value for the same stored option, to follow what the
+daemon does:
 
 | Resource | Field | The read changes when the option is |
 |---|---|---|
@@ -501,9 +516,9 @@ same stored option, to follow what the daemon does:
 | `usteer/config` | `ipv6`, `assoc_steering` | `enabled` |
 | `dropbear/instances` | `password_auth`, `root_password_auth`, `root_login` | `disabled` |
 | `dropbear/instances` | `gateway_ports` | `enabled` |
-| `sqm/queues` | `enabled` | absent, or not `1`, `0`, `off`, `false` or `no` |
+| `sqm/queues` | `enabled` | absent, or a value other than `0`, `off`, `false` or `no` that the shell test `-eq 1` does not read as 1 |
 | `wireless/interfaces` | `mode` | absent |
-| `mwan3/interfaces` | `family` | absent |
+| `mwan3/interfaces` | `family` | absent, empty, or a list |
 | `mwan3/rules` | `family` | empty, which reads null, or a list, which reads as the string that `config_get` joins, such as `ipv4 ipv6` |
 | `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |
 | `firewall/zones` | `input`, `output_policy`, `forward` | absent |

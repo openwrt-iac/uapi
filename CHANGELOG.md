@@ -122,8 +122,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lists every section, a `validate` other than `1` on `/uapi/diagnostics` skips
   the sweep, and an empty `cursor` reads the first page. v4 answers 400
   `bad_request` for `managed` and `validate`, and 400 `invalid_cursor` for the
-  empty cursor. The `Link` to the next page of a curated list now keeps
-  `managed`. Announced in 3.5.0. Migration note in
+  empty cursor. Announced in 3.5.0. Migration note in
   `docs/migration-v3-to-v4.md`. (#403)
 - **BREAKING: `dhcp/leases` refuses a `family` other than `v4` or `v6`.** 3.x
   ignores the parameter, so any value lists the IPv4 leases. v4 answers 400
@@ -141,7 +140,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The read now follows sqm-scripts, and the schema default is `false`. A queue
   that LuCI made holds `1` or `0` and reads the same. A plan that sets `enabled
   = true` on a queue read `false` now writes `1`, which starts SQM there.
-  Announced in 3.x. (#372) (#383)
+  Announced in 3.5.0 (#372). Migration note in `docs/migration-v3-to-v4.md`.
+  (#383)
 - **BREAKING: one documented `runtime` envelope on every resource.** Every
   resource response holds `runtime`, an object that its schema requires. `id`
   and `runtime` joined the `required` list of the 42 curated CRUD and singleton
@@ -167,18 +167,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only the errors the write adds. The schema check (type, enum, bound, pattern
   and the newline rule) judges the section that a PATCH of either kind leaves,
   as for a PUT, and so do the rules that 3.x applied only to the fields a
-  request named: the `allowed_ips` of a disabled `network/wireguard_peers` and
-  a `network/interfaces.listen_port` that reads -1. Before v4 a write that left
-  a stored value alone answered 200, so a broken section could still be
-  disabled. Now the fix comes first, or goes through `/raw`. Each error that
-  `GET /uapi/diagnostics?validate=1` lists blocks the write. A value that the
-  platform takes is no error: the `proto` of an interface that uapi does not
-  model, such as `6in4` or `qmi`, blocks no write and leaves the sweep, and only
-  a request that changes a field to it answers 422. A request that sends back
-  the value that the section holds, such as a PUT of the read, passes. A PUT of
-  such a proto, or of the `HELPER` target of a firewall rule, stays refused as
-  in 3.5.0, because a PUT removes the options that these values need. Announced
-  in 3.4.0 (#308), migration note in `docs/migration-v3-to-v4.md`. (#350) (#405)
+  request named, or only in the sweep: the `allowed_ips` of a disabled
+  `network/wireguard_peers`, a `network/interfaces.listen_port` that reads -1,
+  and several values of `ipaddrs`, `ip6addrs` or `ip6prefix`, or one value that
+  uci holds as a list, on a proto whose handler reads the option as one value,
+  such as 6in4. A PATCH that sends one value for such a field fixes it. Before
+  v4 a write that left a stored value alone answered 200, so a broken section
+  could still be disabled. Now the fix comes first, or goes through `/raw`. Each
+  error that `GET /uapi/diagnostics?validate=1` lists blocks the write. A value
+  that the platform takes is no error: it blocks no write and leaves the sweep,
+  and only a request that changes a field to it answers 422. A request that
+  sends back the value that the section holds, such as a PUT of the read,
+  passes, with two exceptions. A request that names the `proto` of an
+  interface that uapi does not model, such as `6in4` or `qmi`, answers 422 even
+  when it sends the stored proto, because a PUT would delete the options of its
+  handler, so only a PATCH that leaves `proto` out can change such an interface
+  and keep its proto. A PUT of the `HELPER` target of a firewall rule stays
+  refused as in 3.5.0, because a PUT removes the `set_helper` option that it
+  needs. Announced in 3.4.0 (#308), migration note in
+  `docs/migration-v3-to-v4.md`. (#350) (#405)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
   `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)
@@ -290,20 +297,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   firewall reads a policy, a target, `reflection_src` and a family as fw4 does,
   a scalar port or proto option of a rule as its words, and a port, mark or DSCP
   match with a `!` and blanks, as LuCI writes them. A numeric route type reads
-  as netifd reads it, so `010` is `prohibit`. `wireless/interfaces.encryption`
-  takes `psk3`, `psk3-mixed` and `wpa-mixed`. A `network/rules` form that netifd
-  installs, such as an `ipproto` of `tcp`, a `wireless/devices` power or channel
-  above the write bound and a `wireless/interfaces.mode` of `wds`, which
+  as netifd reads it, so `010` is `prohibit`. A `network/rules` form that
+  netifd installs, such as an `ipproto` of `tcp`, a `wireless/devices` power or
+  channel above the write bound and a `wireless/interfaces.mode` of `wds`, which
   wifi-scripts skips as it skips `ahdemo`, are no error. A
-  `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, a
-  `mwan3/rules.proto` that iptables refuses and a `uhttpd/certs.days` of 0 are
-  refused on write, and a `mwan3/globals.mmx_mask` that is not a 32-bit number
-  blocks the write. The migration doc lists what a read now gives. An mwan3 rule
-  `proto` reads and writes a number in hex or octal, as libxtables reads it with
-  base 0, so `08` is refused and `0x11` is taken. An NPT rule keeps its
-  `snat_ip`, the prefix that firewall4 maps `src_ip` to. A `system.hostname`
-  write needs a letter, a digit, a dash or an underscore before each dot, as
-  LuCI's `hostname()` does. (#405)
+  `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused
+  on write, and a `mwan3/globals.mmx_mask` that is not a 32-bit number blocks
+  the write. The migration doc lists what a read now gives. (#405)
 - **`wireless/interfaces` declares the lists that its read gives.** `device`,
   `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
   that uci holds as an array while the response schema said string, so the
