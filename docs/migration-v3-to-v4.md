@@ -271,6 +271,38 @@ makes of it. The response declares `family` as a string that every read holds,
 and the request no longer declares null: to remove the option, leave `family`
 out of a PUT or send null in a merge patch.
 
+## Two mwan3 values that mwan3 does not run answer 422
+
+mwan3 passes `mwan3/globals.loglevel` to iptables as the level of its LOG
+rules, and iptables refuses `err` and `warn`. mwan3 then loads none of its rules
+once one of them logs. mwan3 also leaves a `mwan3/members` section with a
+`metric` above 256 out of its policy. A write of such a value now answers 422,
+`not_in_enum` for the log level and `out_of_range` for the metric (announced in
+3.5.0, #407). Send `error` or `warning`, and a metric from 1 to 256, as LuCI
+does. A stored one blocks every write of its section until a write replaces
+it, and the read still gives it. `GET /uapi/diagnostics?validate=1` lists it,
+and marks the log level `live` only while `logging` is on.
+
+## Two firewall reads say what fw4 applies
+
+fw4 gives a `firewall/zones` section without `input`, `output` or `forward` the
+policy of `firewall/defaults`, and DROP when that section has none. 3.x read
+`REJECT` for it. v4 reads `null` (announced in 3.5.0, #408), and the schemas
+declare null and no `default` for the three fields. `firewall/defaults` gives
+the policy that fw4 applies. A write of the read, or a null, stores no policy,
+so the zone keeps the policy of `firewall/defaults`. A plan that holds `REJECT`
+from a 3.x read now writes it, and the zone then rejects where it took the
+policy of `firewall/defaults` before. Set the field to null in the plan to keep
+that policy.
+
+fw4 takes a `firewall/defaults.synflood_rate` with a unit, such as
+`25/minute`, or a prefix of the unit, such as `25/m`. 3.x read null for it. v4
+reads the rate as fw4 parses it: an integer per second for a rate without a
+unit, and the rate with the whole unit, such as `25/minute`, for one with a
+unit. Both schemas declare an integer or a string, and a write takes either,
+with the whole unit. A client generated from the schema must take a string
+there.
+
 ## Curated string fields refuse newlines and carriage returns
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on
@@ -351,6 +383,8 @@ same stored option, to follow what the daemon does:
 | `wireless/interfaces` | `mode` | absent |
 | `mwan3/interfaces` | `family` | absent |
 | `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |
+| `firewall/zones` | `input`, `output_policy`, `forward` | absent |
+| `firewall/defaults` | `synflood_rate` | a rate with a unit, such as `25/second`, or one that fw4 takes after spaces or a `!` |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
 | `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
 | `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |
@@ -369,11 +403,12 @@ upgrade. Its apply writes that value, and the daemon then does what the 3.x read
 said, which it did not do before. Refresh the state and check each such diff
 before you apply. The sections above name the cases that matter most.
 
-The spec `default` of five fields changes with the read: `system.log_remote` is
+The spec `default` of eight fields changes with the read: `system.log_remote` is
 `true`, `usteer/config.syslog` and `sqm/queues.enabled` are `false`,
-`mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` has none. A
-client that sends the spec default for a field that its user left out now sends
-the new one.
+`mwan3/interfaces.family` is `ipv4`, and `wireless/interfaces.mode` and the
+`input`, `output_policy` and `forward` of `firewall/zones` have none. A client
+that sends the spec default for a field that its user left out now sends the
+new one.
 
 ## A query parameter value outside its declared set answers 400
 
