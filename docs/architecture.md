@@ -307,12 +307,14 @@ without uci state change.
    from settling: the platform sets all the peers or none, and uapi cannot
    tell the two cases apart. Since openwrt ecd9120f04, which fixed
    openwrt/openwrt#24511, the handler leaves out a key, a preshared key, an
-   endpoint or a keepalive that wg would refuse, so only an allowed IP that wg
-   refuses still keeps the interface from settling. The apply sets a peer as
-   the handler does, without the endpoint of a host that does not resolve,
-   and answers `X-Kernel-Status: omitted`. wireguard.sh restarts
-   nothing on a peer change, and its failed setup reads pending until the
-   stored config changes, so on 25.12 the check reads the status once. Runs
+   endpoint or a keepalive that wg would refuse. Two values still keep the
+   interface from settling: an allowed IP that wg refuses, and an endpoint
+   host of digits and dots that inet_aton does not read, such as `10.0.0.256`,
+   which the handler gives wg as an address. A write refuses such a host. The
+   apply sets a peer as the handler does, without the endpoint of a host that
+   does not resolve, and answers `X-Kernel-Status: omitted`. wireguard.sh
+   restarts nothing on a peer change, and its failed setup reads pending until
+   the stored config changes, so on 25.12 the check reads the status once. Runs
    only after the reload returned zero, and reports the same way, so a failure
    here follows the recipe below. The interfaces actually
    applied are recorded and reported on the response as `X-Kernel-Status` and
@@ -478,9 +480,11 @@ takes `disabled` and `route_allowed_ips` as on only when they hold `1`. Since
 openwrt ecd9120f04 it also checks a peer value against the grammar of wg, as uci
 holds it, and leaves out what wg would refuse: the peer, with its routes, for a
 key that is not a WireGuard key, and the line for a preshared key, an endpoint
-or a keepalive. An endpoint port is 1 to 65535 in digits or the first field of a
-`/udp` line of `/etc/services`, and an empty one leaves the endpoint out. A
-peer with a host and no port gets port 51820, as under `wireguard.sh`. The
+or a keepalive. It gives wg an endpoint host of digits and dots as it stands,
+so wg still refuses the whole config for one that inet_aton does not read, such
+as `10.0.0.256`. An endpoint port is 1 to 65535 in digits or the first field
+of a `/udp` line of `/etc/services`, and an empty one leaves the endpoint out.
+A peer with a host and no port gets port 51820, as under `wireguard.sh`. The
 read, the kernel apply, the routes and the reconcile take these rules from
 `wg.uc`. So on main a GET reports an entry that wg refuses as that
 one entry, not as the prefixes that `wireguard.sh` made of it.
