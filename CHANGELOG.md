@@ -138,10 +138,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only when `enabled` is the number 1. uapi read an absent value, or `yes`, `on`
   or `true`, as `true` with `normalize_bool`, for a queue that sqm leaves off.
   The read now follows sqm-scripts, and the schema default is `false`. A queue
-  that LuCI made holds `1` or `0` and reads the same. A plan that sets `enabled
-  = true` on a queue read `false` now writes `1`, which starts SQM there.
-  Announced in 3.5.0 (#372). Migration note in `docs/migration-v3-to-v4.md`.
-  (#383)
+  that LuCI made holds `1` or `0` and reads the same, as does a value such as
+  `01`, `+1` or ` 1`, which the `-eq 1` test of busybox reads as 1. A plan that
+  sets `enabled = true` on a queue read `false` now writes `1`, which starts SQM
+  there. Announced in 3.5.0 (#372). Migration note in
+  `docs/migration-v3-to-v4.md`. (#383) (#404)
 - **BREAKING: one documented `runtime` envelope on every resource.** Every
   resource response holds `runtime`, an object that its schema requires. `id`
   and `runtime` joined the `required` list of the 42 curated CRUD and singleton
@@ -238,13 +239,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   answers null. It is now a required string, and the request schema no longer
   declares null: a PUT that leaves `family` out removes the option, and so does
   a null in a merge patch. Part of the change of #306 (#346). (#404)
-- **A `wireless/interfaces` section without a `mode` and `sqm/queues.enabled`
-  read as their daemons do.** wifi-scripts sets up nothing for a section without
-  a mode, so such a section no longer blocks a `wireless/devices` write that
-  turns its radio on, and the validation sweep marks its errors `live: false`. A
-  write to it is still checked as mode `ap`. `sqm/queues.enabled` reads `true`
-  for every form of 1 that the `-eq 1` test of sqm-scripts takes in busybox,
-  such as `01`, `+1` or ` 1`. (#404)
+- **A `wireless/interfaces` section without a `mode` no longer blocks its
+  radio.** wifi-scripts sets up nothing for a section without a mode, so such a
+  section no longer blocks a `wireless/devices` write that turns its radio on,
+  and the validation sweep marks its errors `live: false`. A write to it is
+  still checked as mode `ap`. (#404)
 
 ### Removed
 
@@ -282,28 +281,19 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `network/interfaces` to wireguard, or an enable, is no longer refused for the
   `allowed_ips` or `endpoint_host` of a peer that the handler skips. Note in
   `docs/migration-v3-to-v4.md`. (#436)
-- **The schemas declare the values that LuCI and the daemons take, so a stored
-  one blocks no write.** v4 checks each stored section against the schema of its
-  resource, and many constraints were stricter than LuCI or the daemon that
-  reads the option, such as a `network/rules.priority` above 32766, a
-  `dhcp/servers.leasetime` of `infinite`, a `mwan3/rules.proto` of `esp`, or a
-  `network/interfaces` section named `4g`, whose name the id pattern of a create
-  refuses. Each schema now takes what the platform takes, which fixes the reads
-  that broke their own schema (carve-out (b) of `docs/versioning.md`). Where a
-  write should send less, an `x-uapi-write` keyword keeps the request narrower,
-  and the server now checks those keywords against the fields that a request
-  names, other than a value that the section holds. Where the read and the
-  request bound refuse a sent value, the 422 gives the request bound. The
-  firewall reads a policy, a target, `reflection_src` and a family as fw4 does,
-  a scalar port or proto option of a rule as its words, and a port, mark or DSCP
-  match with a `!` and blanks, as LuCI writes them. A numeric route type reads
-  as netifd reads it, so `010` is `prohibit`. A `network/rules` form that
-  netifd installs, such as an `ipproto` of `tcp`, a `wireless/devices` power or
-  channel above the write bound and a `wireless/interfaces.mode` of `wds`, which
-  wifi-scripts skips as it skips `ahdemo`, are no error. A
-  `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused
-  on write, and a `mwan3/globals.mmx_mask` that is not a 32-bit number blocks
-  the write. The migration doc lists what a read now gives. (#405)
+- **A stored value that LuCI or the daemon takes blocks no write.** v4 checks
+  each stored section against the schema of its resource (#308), and the
+  schemas take what the platform takes, as in 3.5.0 (#410). The rules on what a
+  daemon reads take more too: a `network/rules` form that netifd installs, such
+  as an `ipproto` of `tcp`, a `wireless/devices` power or channel above the
+  write bound and a `wireless/interfaces.mode` of `wds`, which wifi-scripts
+  skips as it skips `ahdemo`, are no error. The firewall reads a policy, a
+  target, `reflection_src` and a family as fw4 does, and a scalar port or proto
+  option of a rule as its words. A numeric route type reads as netifd reads it,
+  so `010` is `prohibit`. A `dhcp/servers.leasetime` with a year suffix, which
+  stops dnsmasq, is refused on write, and a `mwan3/globals.mmx_mask` that is not
+  a 32-bit number blocks the write. The migration doc lists what a read now
+  gives. (#405)
 - **`wireless/interfaces` declares the lists that its read gives.** `device`,
   `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
   that uci holds as an array while the response schema said string, so the

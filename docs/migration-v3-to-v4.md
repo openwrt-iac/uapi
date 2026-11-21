@@ -56,9 +56,9 @@ with their DUIDs, host names and addresses. 3.x kept those behind
 `*:leases6` still authenticates, but that scope grants nothing on
 `/dhcp/leases` now, so `?family=v6` answers 403 `insufficient_scope`.
 `uapi-token create` refuses `dhcp:leases6` as an unknown path, and `POST
-/uapi/tokens` answers 422 for it, as the next section says. Both still mint
-`*:leases6`, which grants nothing on `/dhcp/leases`. A scope on all of `dhcp`,
-such as `dhcp:ro`, reads both families before and after the upgrade.
+/uapi/tokens` answers 422 for it, as the next section says, but both still mint
+`*:leases6`. A scope on all of `dhcp`, such as `dhcp:ro`, reads both families
+before and after the upgrade.
 
 Before the upgrade, run `uapi-token list` to find the tokens that hold one of
 these four scopes, `dhcp:leases`, `dhcp:leases6`, `*:leases` or `*:leases6`,
