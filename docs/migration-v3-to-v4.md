@@ -324,13 +324,16 @@ so that a Terraform client can type the field, because Terraform has no type
 that is an integer or a string. A client generated from the schema must take a
 string there.
 
-A write takes such a string, or an integer that is a rate per second. It takes
-a rate of at most 15 digits, where 3.x took any integer from 1. The kernel
-refuses a rate whose sum with the burst overflows 64 bits, and fw4 then applies
-no ruleset while `syn_flood` is on. Even `999999999999999/day` is more than
-any link carries. The 3.5.0 notice did not cover this limit either. A stored
-rate of more digits reads as fw4 parses it, and a write that sends it back
-unchanged passes.
+A write takes such a string, or an integer that is a rate per second. The
+kernel refuses a limit whose rate plus burst overflows 64 bits, such as a rate
+of `18446744073709551615`. It also refuses a slow rate with a large burst, such
+as `1/minute` with a burst of 4294967295, when the nanoseconds per packet times
+the burst overflow 64 bits. fw4 then applies no ruleset while `syn_flood` is
+on. v4 refuses such a write with 422 `out_of_range` on `synflood_rate`. A
+stored one is an error of the section that blocks every write that does not
+fix it, and the sweep marks it live while `syn_flood` is on. 3.x took such a
+write. This refusal uses the carve-out of `docs/versioning.md` for a tightening
+that refuses a payload that produced broken state.
 
 A `firewall/defaults.synflood_burst` reads as fw4 parses it, so `0x10` reads 16
 and `1e3` reads 1000, where 3.x read null.
