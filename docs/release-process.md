@@ -225,10 +225,12 @@ Per-release steps (operator does these in order):
 
    Once `package` and `integration` pass, `release-apk` creates the GitHub
    Release and attaches the APK and the SBOM (always; RCs get `--prerelease`).
-   It marks the release Latest only when no published release has a higher
-   version, so a 3.x release after 4.0.0 leaves the mark on 4.x. A moved tag
-   republishes its release with the same decision. When the list of releases
-   cannot be read, the job fails rather than guess.
+   It marks the release Latest only when no stable release has a higher
+   version. Drafts and prereleases do not count, because GitHub never marks
+   them Latest. So a 3.x release after 4.0.0 leaves the mark on 4.x, and a
+   4.0.1 takes it while 5.0.0-rc1 is out. A moved tag republishes its release
+   by the same rule. When the list of releases cannot be read, the job fails
+   rather than guess.
 9. **Verify the release** is visible on GitHub Releases. The feed at
    `openwrt-iac.github.io/feed/` picks up the new asset on its next
    `publish.yml` run (nightly schedule or manual
