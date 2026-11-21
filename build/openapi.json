@@ -25838,7 +25838,8 @@
 							"DSCP",
 							"HELPER",
 							null
-						]
+						],
+						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it"
 					},
 					"enabled": {
 						"type": "boolean",
@@ -26063,7 +26064,8 @@
 							"MARK",
 							"DSCP",
 							null
-						]
+						],
+						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it"
 					},
 					"enabled": {
 						"type": "boolean",

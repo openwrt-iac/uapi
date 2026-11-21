@@ -161,10 +161,12 @@ the values that the section on schemas below names. Only a write that changes a
 field to such a value where the request schema refuses it answers 422. A write
 that sends back the value that the section holds passes, so a PUT of a read
 takes it, but a client that checks a body against the `*Request` schema before
-it sends it must leave such a field out. On 3.x the sweep
-is the pre-flight check before the upgrade, with two gaps: it does not list
-what a rule new in v4 refuses, such as a newline in a string that 3.x took
-(#276), and it lists values that v4 takes.
+it sends it must leave such a field out. As in 3.5.0, a PUT still answers 422
+for such a proto and for the `HELPER` target that LuCI writes on a firewall
+rule, because uapi does not model the options that they need, and a PUT removes
+them. On 3.x the sweep is the pre-flight check before the upgrade, with two
+gaps: it does not list what a rule new in v4 refuses, such as a newline in a
+string that 3.x took (#276), and it lists values that v4 takes.
 
 ## `wireless/interfaces` declares the lists that a read gives
 

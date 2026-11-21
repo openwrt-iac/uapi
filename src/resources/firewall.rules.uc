@@ -128,9 +128,14 @@ function check_target_coupling(json, errs) {
 
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
 
+	// The request, not the stored section: LuCI stores a HELPER rule with its set_helper, and fw4 applies it.
+	if (!partial && (delta ?? json).target == "HELPER")
+		push(errs, { field: "target", code: "not_in_enum",
+		             message: sprintf("must be one of %s: firewall4 skips a HELPER rule without set_helper, which uapi does not write, and a PUT removes it. A PATCH can send a stored HELPER back",
+		                              join(", ", keys(VALID_TARGETS))) });
 	if (json.target == null)
 		push(errs, { field: "target", code: "required", message: "is required" });
 
@@ -239,7 +244,9 @@ return {
 	schema_properties: {
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		           description: sprintf("Human-readable label for this rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ], "x-uapi-write": { enum: keys(VALID_TARGETS) } },
+		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ],
+		           "x-uapi-write": { enum: keys(VALID_TARGETS) },
+		           description: "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it" },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },

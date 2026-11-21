@@ -164,7 +164,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   platform takes is no error: the `proto` of an interface that uapi does not
   model, such as `6in4` or `qmi`, blocks no write and leaves the sweep, and only
   a request that changes a field to it answers 422. A request that sends back
-  the value that the section holds, such as a PUT of the read, passes. Announced
+  the value that the section holds, such as a PUT of the read, passes. A PUT of
+  such a proto, or of the `HELPER` target of a firewall rule, stays refused as
+  in 3.5.0, because a PUT removes the options that these values need. Announced
   in 3.4.0 (#308), migration note in `docs/migration-v3-to-v4.md`. (#350) (#405)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,

@@ -208,3 +208,24 @@ t.describe('a request takes what iptables, LuCI and fw4 take, and refuses the re
 		for (let n in [ "router..", "a...", ".router" ]) t.assert_equal(host(n), 422, n);
 	});
 });
+
+// LuCI writes a HELPER rule with a set_helper option that uapi does not model. A PUT removes every
+// option that toUci does not emit, and firewall4 skips a HELPER rule without set_helper.
+t.describe('firewall/rules: a stored HELPER target', () => {
+	let helper = () => seed([ "firewall.rules.uc", "r1", "target", "HELPER", "target", { set_helper: "ftp" } ]);
+	t.it('is no error of the section, and a PATCH that sends it back keeps set_helper', () => {
+		let s = helper();
+		t.assert_deep_equal(s.h.sweep(s.conn), []);
+		t.assert_equal(s.h.patch(s.conn, ctx, s.c.id, { target: "HELPER" }).status, 200);
+		t.assert_equal(s.conn._state.uci.firewall.r1.set_helper, "ftp");
+	});
+	t.it('refuses a PUT of the read, and keeps set_helper', () => {
+		let s = helper();
+		let body = {};
+		for (let k, v in read_of(s))
+			if (s.mod.schema_properties[k]?.readOnly !== true) body[k] = v;
+		let r = s.h.replace(s.conn, ctx, s.c.id, body);
+		t.assert_deep_equal(map(r.body.errors ?? [], (e) => e.field + ":" + e.code), [ "target:not_in_enum" ]);
+		t.assert_equal(s.conn._state.uci.firewall.r1.set_helper, "ftp");
+	});
+});
