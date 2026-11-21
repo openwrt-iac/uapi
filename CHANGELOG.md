@@ -336,6 +336,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   OpenWrt main.** Both proto handlers give wg port 51820 for such a peer, and
   the kernel apply of a write did too, but the restore on main left the endpoint
   out. The read of `endpoint_port` stays null. (#424)
+- **uapi reads the `If-Match`, `If-None-Match`, `Idempotency-Key` and
+  `X-Request-Id` headers.** uhttpd-mod-ucode sets no `HTTP_*` variable for
+  them, and uapi read only those variables, so it ignored the headers that the
+  spec said it honours. A PATCH with a stale `If-Match` header wrote, and a
+  retried POST with an `Idempotency-Key` header created a second section. uapi
+  now reads them from `env.headers`, which holds every request header, and a
+  header wins over its query form. A request that sends one of them now gets
+  what it asks for, such as a 412 for a stale `If-Match`. The spec declares
+  `?request_id=` on every operation. (#431)
 
 ## [3.5.0] - 2026-11-21
 
