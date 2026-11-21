@@ -53,8 +53,7 @@ const CASES = fx.CASES;
 // The seeds that store values validate_new() refuses: v4 (#308) answers 422 for a write of
 // their own read, naming these stored errors.
 const STORED_REFUSED = {
-	"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
-	                          "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
+	"network.rules.uc/nr5": [ "tos not_in_enum", "sport out_of_range" ],
 };
 
 function seeded(c) {

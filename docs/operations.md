@@ -526,7 +526,9 @@ A value that the platform takes and that uapi does not write is not listed. An
 interface on a proto that uapi does not model, such as the `6in4` that LuCI
 writes or the `qmi` that an LTE router ships, takes a PATCH that leaves `proto`
 out, and a `wireless/interfaces` text option that uci holds as a list reads as
-an array. Only a write that sends such a value is refused.
+an array. Only a write that changes a field to such a value is refused: a write
+that sends back the value that the section holds, as a PUT of the read does,
+passes.
 
 A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break,
 until the daemon reads the value. Another writer can store a value that such a

@@ -48,8 +48,7 @@ function seeded(c) {
 function snapshot(conn) { return sprintf("%J", conn._state.uci); }
 
 const STORED_REFUSED = {
-	"network.rules.uc/nr5": [ "suppress_prefixlength out_of_range", "tos not_in_enum", "ipproto invalid_type",
-	                          "uidrange invalid_format", "sport out_of_range", "dport invalid_format" ],
+	"network.rules.uc/nr5": [ "tos not_in_enum", "sport out_of_range" ],
 };
 
 t.describe('property: a failed write leaves uci untouched', () => {

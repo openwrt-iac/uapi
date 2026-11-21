@@ -598,7 +598,12 @@ as it fails the sweep, whichever fields the request names. The schema declares
 what the platform takes, which a read can give, so a value that LuCI or the
 daemon takes is no error. A keyword under `x-uapi-write` can narrow what a
 write may send: the handler checks the fields that the request names against
-those keywords too, and a stored value past them blocks nothing. The `id` of a
+those keywords too, and a stored value past them blocks nothing. A field that
+the request sends back as the read gives it changes nothing, so those keywords
+do not judge it, and a PUT of the read passes. A PUT reads the stored section
+for that comparison only when a keyword refuses a value. Where the read bound
+and the request bound refuse a sent value with one code, the error gives the
+message of the request bound. The `id` of a
 stored section is left out, since LuCI names sections that the id pattern of a
 create refuses, such as `4g`. The write-only secrets that the handler carries
 from uci are left out, because the read masks them. The full merged body,

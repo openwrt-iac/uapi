@@ -335,7 +335,11 @@ function request_properties(schema_properties) {
 // addresses in its merged view, and the write drops them, and a proto that uapi does not write is
 // refused only where a request sends it. The sweep passes an empty one. `partial` is true for a
 // PATCH, which keeps a stored option that the request leaves out, where a PUT removes it.
-function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, partial) {
+// `stored` returns the read of the section before the write: a request that sends a field back as
+// the read gives it changes nothing, so the x-uapi-write keywords do not judge it. A client that
+// PUTs what it read, as the Terraform provider does, then passes. It is a function because a PUT
+// reads the section only when the request schema refuses a value.
+function _validate_with_schema(resource, schema_body, validate_body, conn, id, delta, partial, stored) {
 	// Every resource opened validate() by re-checking this, 43 copies of one guard, so a
 	// module that forgot it would fault instead of returning 422. It is a guarantee here
 	// now: validate() is only ever called with an object.
@@ -360,6 +364,13 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	                      (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
 	// Last, so that a rule of validate() or validate_new() that refuses the same value names it.
 	let request_errs = check_schema_types(request_properties(resource.schema_properties), sent);
+	if (length(request_errs) > 0 && stored != null) {
+		let view = stored();
+		let changed = {};
+		for (let k, v in sent)
+			if (!jsonpatch.deep_equal(v, view[k])) changed[k] = v;
+		request_errs = check_schema_types(request_properties(resource.schema_properties), changed);
+	}
 	// The newline refusal of the schema check gives way to a validate_new() error with its code on
 	// its field, or on the list that holds it, which a daemon reads as its joined entries: that error
 	// says why the daemon cares and carries `live`. Two validate_new() rules on one field are two
@@ -376,7 +387,13 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		seen[k] = true;
 		return true;
 	};
-	for (let e in [ ...type_errs, ...val_errs ])
+	// Where the read and the request schema refuse a sent value with one code, the request's bound
+	// is the one that the client has to meet.
+	let request_by_key = {};
+	for (let e in request_errs) request_by_key[e.field + "|" + e.code] = e;
+	for (let e in type_errs)
+		if (keep(e)) push(merged, request_by_key[e.field + "|" + e.code] ?? e);
+	for (let e in val_errs)
 		if (keep(e)) push(merged, e);
 	for (let e in daemon_errs)
 		if (!seen[e.field + "|" + e.code]) push(merged, e);
@@ -938,15 +955,18 @@ function make(resource, opts) {
 				// secret and must not outlive the write.
 				let existing = load_section(c, p, id);
 				if (existing) id = existing['.name'];
+				let found = existing != null && type_predicate(existing['.type']);
+				let existing_view = null;
+				let read_existing = () => (existing_view ??= resource.fromUci(existing, conn));
 				let write_body = carry_write_only(resource, body, existing);
-				let errs = _validate_with_schema(resource, body, write_body, c, id, body);
+				let errs = _validate_with_schema(resource, body, write_body, c, id, body, false,
+				                                 found ? read_existing : null);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
-				if (existing == null || !type_predicate(existing['.type']))
+				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				let existing_view = resource.fromUci(existing, conn);
-				if (!existing_view.managed)
+				if (!read_existing().managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };
 				let pc = precondition_check(ctx, existing_view);
@@ -1003,7 +1023,7 @@ function make(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true, () => existing_view);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 
@@ -1243,7 +1263,7 @@ function make_singleton(resource, opts) {
 				let r = apply_patch_body(existing, existing_view, body, ctx, singleton_merge, resource);
 				if (!r.ok) return r;
 
-				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true);
+				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true, () => existing_view);
 				if (length(errs) > 0)
 					return { ok: false, kind: "validation", errors: errs };
 

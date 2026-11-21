@@ -28395,7 +28395,7 @@
 							"string",
 							"null"
 						],
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh passes it to odhcp6c"
 					},
 					"reqaddress": {
 						"type": [
@@ -28978,8 +28978,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
+						"pattern": "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh passes it to odhcp6c"
 					},
 					"reqaddress": {
 						"type": [
@@ -29548,7 +29548,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$"
+						"pattern": "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$"
 					},
 					"reqaddress": {
 						"type": [
@@ -30235,7 +30235,7 @@
 						],
 						"minimum": -2147483648,
 						"maximum": 2147483647,
-						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is, and a write answers 422 while the rule holds one."
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and is no error."
 					},
 					"tos": {
 						"type": [
@@ -30251,7 +30251,7 @@
 							"string",
 							"null"
 						],
-						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write answers 422 while the rule holds a form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005."
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text. A form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005, is no error while netifd installs the rule with it."
 					},
 					"ipproto": {
 						"type": [
@@ -30260,7 +30260,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write answers 422 while the rule holds one."
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and are no error while netifd installs the rule with them."
 					},
 					"sport": {
 						"type": [
@@ -30424,7 +30424,7 @@
 						],
 						"minimum": 0,
 						"maximum": 32,
-						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is, and a write answers 422 while the rule holds one."
+						"description": "Ignore a route that the lookup of this rule finds when its prefix is this long or shorter, and go on to the next rule: 0 ignores only a default route. A write takes 0 to 32, as LuCI does. A read reports what netifd reads: `0x10` reads 16, and a value that it cannot parse reads null, because netifd ignores it. The kernel takes any other value, -1 as unset and 32 or more as ignoring every IPv4 route, so a stored one reads as it is and is no error."
 					},
 					"tos": {
 						"type": [
@@ -30451,17 +30451,16 @@
 							"string",
 							"null"
 						],
-						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text, and a write answers 422 while the rule holds a form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005.",
+						"description": "Match traffic of local sockets owned by this uid, or by a range of uids such as `1000-1005`, each from 0 to 4294967294. The kernel refuses a range that runs backwards or holds 4294967295, and netifd wraps a larger number. A read reports the stored text. A form that a write refuses, such as `1000-1005x`, which netifd reads as 1000-1005, is no error while netifd installs the rule with it.",
 						"pattern": "^[0-9]{1,10}(-[0-9]{1,10})?$"
 					},
 					"ipproto": {
 						"type": [
 							"integer",
-							"string",
 							"null"
 						],
 						"minimum": 1,
-						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and a write answers 422 while the rule holds one.",
+						"description": "Match this IP protocol. A write takes an integer from 1 to 255, as LuCI writes it: netifd drops a rule whose ipproto is 0, and sends the kernel only the low byte of a larger one. A stored decimal reads as an integer. netifd also takes a number in another spelling, such as `06` or `0x6`, or a name in musl's table, such as `tcp`, where `ip` resolves to 0, which matches every protocol. Those read as the stored text, and are no error while netifd installs the rule with them.",
 						"maximum": 255
 					},
 					"sport": {
@@ -30644,7 +30643,6 @@
 					"ipproto": {
 						"type": [
 							"integer",
-							"string",
 							"null"
 						],
 						"minimum": 1,
@@ -31558,7 +31556,7 @@
 							"ahdemo",
 							null
 						],
-						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write answers 422 while the section holds it."
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds or ahdemo, which wifi-scripts skips as it skips a section without a mode, and which is no error."
 					},
 					"ssid": {
 						"type": [
@@ -31588,6 +31586,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"psk3",
+							"psk3-mixed",
+							"wpa-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -31648,6 +31649,16 @@
 							"wpa2+tkip+aes",
 							"wpa2+aes+tkip",
 							"wpa2+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip",
 							"wpa3+ccmp",
 							"wpa3+ccmp256",
 							"wpa3+gcmp",
@@ -31679,7 +31690,8 @@
 							"wpa3-192+aes+tkip",
 							"wpa3-192+ccmp+tkip"
 						],
-						"default": "none"
+						"default": "none",
+						"description": "Security of the SSID. wifi-scripts sets up psk3 and psk3-mixed as sae and sae-mixed, and wpa-mixed as WPA and WPA2 with EAP. A forced cipher follows a `+`, as LuCI writes it."
 					},
 					"disabled": {
 						"type": "boolean",
@@ -31833,7 +31845,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that sets an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that changes the encryption to an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae, sae-mixed, sae-compat, psk3 or psk3-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -31902,7 +31914,7 @@
 							"mesh",
 							null
 						],
-						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write answers 422 while the section holds it."
+						"description": "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds or ahdemo, which wifi-scripts skips as it skips a section without a mode, and which is no error."
 					},
 					"ssid": {
 						"type": [
@@ -31932,6 +31944,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"psk3",
+							"psk3-mixed",
+							"wpa-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -31992,6 +32007,16 @@
 							"wpa2+tkip+aes",
 							"wpa2+aes+tkip",
 							"wpa2+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip",
 							"wpa3+ccmp",
 							"wpa3+ccmp256",
 							"wpa3+gcmp",
@@ -32023,7 +32048,8 @@
 							"wpa3-192+aes+tkip",
 							"wpa3-192+ccmp+tkip"
 						],
-						"default": "none"
+						"default": "none",
+						"description": "Security of the SSID. wifi-scripts sets up psk3 and psk3-mixed as sae and sae-mixed, and wpa-mixed as WPA and WPA2 with EAP. A forced cipher follows a `+`, as LuCI writes it."
 					},
 					"disabled": {
 						"type": "boolean",
@@ -32115,7 +32141,7 @@
 					"key": {
 						"type": "string",
 						"writeOnly": true,
-						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that sets an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
+						"description": "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. A stored EAP SSID without a key, as LuCI writes it, is no error, and a write that changes the encryption to an EAP mode needs one. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae, sae-mixed, sae-compat, psk3 or psk3-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write answers 422 while the stored key holds such a problem, also on a disabled SSID"
 					},
 					"r0kh": {
 						"type": "array",
@@ -32160,6 +32186,9 @@
 										"wpa3-mixed",
 										"sae-compat",
 										"wpa3-192",
+										"psk3",
+										"psk3-mixed",
+										"wpa-mixed",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32200,6 +32229,16 @@
 										"wpa2+tkip+aes",
 										"wpa2+aes+tkip",
 										"wpa2+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip",
 										"wpa3+ccmp",
 										"wpa3+ccmp256",
 										"wpa3+gcmp",
@@ -32260,6 +32299,7 @@
 										"wpa3",
 										"wpa3-mixed",
 										"wpa3-192",
+										"wpa-mixed",
 										"wpa+ccmp",
 										"wpa+ccmp256",
 										"wpa+gcmp",
@@ -32280,6 +32320,16 @@
 										"wpa2+tkip+aes",
 										"wpa2+aes+tkip",
 										"wpa2+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip",
 										"wpa3+ccmp",
 										"wpa3+ccmp256",
 										"wpa3+gcmp",
@@ -32347,6 +32397,9 @@
 										"wpa3-mixed",
 										"sae-compat",
 										"wpa3-192",
+										"psk3",
+										"psk3-mixed",
+										"wpa-mixed",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32387,6 +32440,16 @@
 										"wpa2+tkip+aes",
 										"wpa2+aes+tkip",
 										"wpa2+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip",
 										"wpa3+ccmp",
 										"wpa3+ccmp256",
 										"wpa3+gcmp",
@@ -32519,6 +32582,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"psk3",
+							"psk3-mixed",
+							"wpa-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -32579,6 +32645,16 @@
 							"wpa2+tkip+aes",
 							"wpa2+aes+tkip",
 							"wpa2+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip",
 							"wpa3+ccmp",
 							"wpa3+ccmp256",
 							"wpa3+gcmp",
@@ -35180,7 +35256,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 49710,
 						"description": "Certificate validity in days"
 					},
@@ -35246,7 +35322,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 49710
 					},
 					"bits": {
@@ -35439,8 +35515,7 @@
 						"type": [
 							"integer",
 							"null"
-						],
-						"maximum": 86400
+						]
 					},
 					"domain": {
 						"type": [
@@ -35638,8 +35713,8 @@
 							"integer",
 							"null"
 						],
-						"maximum": 86400,
-						"minimum": 0
+						"minimum": 0,
+						"maximum": 86400
 					},
 					"domain": {
 						"type": [
@@ -35826,8 +35901,8 @@
 							"integer",
 							"null"
 						],
-						"maximum": 86400,
-						"minimum": 0
+						"minimum": 0,
+						"maximum": 86400
 					},
 					"domain": {
 						"type": [
@@ -37558,7 +37633,7 @@
 							"string",
 							"null"
 						],
-						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
+						"description": "Firewall mark mask for mwan3-tagged packets (default 0x3F00), of 32 bits, in hex, decimal or octal, as ash, iptables and ip read it: a leading 0 makes it octal, so 08 is no number."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37611,8 +37686,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(0[xX][0-9A-Fa-f]{1,8}|[0-9]{1,10})$",
-						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
+						"pattern": "^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$",
+						"description": "Firewall mark mask for mwan3-tagged packets (default 0x3F00), of 32 bits, in hex, decimal or octal, as ash, iptables and ip read it: a leading 0 makes it octal, so 08 is no number."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37656,7 +37731,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(0[xX][0-9A-Fa-f]{1,8}|[0-9]{1,10})$"
+						"pattern": "^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$"
 					},
 					"logging": {
 						"type": [
@@ -38502,7 +38577,7 @@
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
 					},
 					"src_ip": {
 						"type": [
@@ -38601,8 +38676,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
-						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
+						"pattern": "^([0-9]{1,2}|1[0-9]{2}|2[0-4][0-9]|25[0-5]|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$",
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
 					},
 					"src_ip": {
 						"type": [
@@ -38696,7 +38771,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$"
+						"pattern": "^([0-9]{1,2}|1[0-9]{2}|2[0-4][0-9]|25[0-5]|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$"
 					},
 					"src_ip": {
 						"type": [

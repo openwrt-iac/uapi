@@ -107,8 +107,11 @@ A value that LuCI or the daemon takes is no error, so it blocks no write and the
 v4 sweep does not list it. Examples are the `proto` of an interface that uapi
 does not model, such as the `6in4` that LuCI writes or the `qmi` that an LTE
 router ships, a list that uci holds for a `wireless/interfaces` text option, and
-the values that the section on schemas below names. Only a write that sends
-such a value where the request schema refuses it answers 422. On 3.x the sweep
+the values that the section on schemas below names. Only a write that changes a
+field to such a value where the request schema refuses it answers 422. A write
+that sends back the value that the section holds passes, so a PUT of a read
+takes it, but a client that checks a body against the `*Request` schema before
+it sends it must leave such a field out. On 3.x the sweep
 is the pre-flight check before the upgrade, with two gaps: it does not list
 what a rule new in v4 refuses, such as a newline in a string that 3.x took
 (#276), and it lists values that v4 takes.
@@ -127,11 +130,30 @@ schema must take an array where the field held a string.
 The response schema of many fields is wider than in v3, because a stored value
 that LuCI or the daemon takes must not block a write: for example
 `network/rules.priority` up to 2147483647, `dhcp/servers.leasetime` with
-`infinite` and `deprecated`, `mwan3/rules.proto` as any protocol name, or the
-bounds of the `mwan3/interfaces` timers. `build/openapi.json` lists each one. A
-request can stay narrower, through the `*Request` schema, and the server now
-checks it against the fields that a request names. A `dhcp/servers.leasetime`
-with a year suffix, which stops dnsmasq, is refused on write.
+`infinite` and `deprecated`, `mwan3/rules.proto` as any protocol name, the
+bounds of the `mwan3/interfaces` timers, an `unbound/server.ttl_min` above
+86400, or a `wireless/interfaces.encryption` of `psk3`, `psk3-mixed` or
+`wpa-mixed`, which wifi-scripts sets up as `sae`, `sae-mixed` and WPA and WPA2
+with EAP. `build/openapi.json` lists each one. A request can stay narrower,
+through the `*Request` schema, and the server now checks it against the fields
+that a request names, other than a value that the section holds. A
+`dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused on
+write, and so are a `mwan3/rules.proto` that iptables refuses and a
+`uhttpd/certs.days` of 0.
+
+The rules on what netifd and wifi-scripts read judge only what they refuse or
+read as another value. A `network/rules` form that netifd installs as it reads,
+such as an `ipproto` of `tcp` or `06`, a `uidrange` of `1000-1005x` or a
+`suppress_prefixlength` above 32, and a `wireless/devices.txpower` above 30, a
+`channel` above 233 or a `radio` below 0, with which the radio comes up, block
+no write. Nor does a `wireless/interfaces.mode` of `wds`, which blocked enabling
+the SSID or its radio in 3.x: mac80211.sh skips it as it skips `ahdemo` and a
+section without a mode, and a write that sends it is still refused. An `ipproto`
+above 255, or a port or uid that netifd wraps, is an error: the kernel gets
+another value. A `mwan3/globals.mmx_mask` that is not a 32-bit number in hex,
+decimal or octal, such as `08`, blocks every write, since mwan3, iptables and
+`ip` cannot use it. A write that changes the encryption of an SSID to an EAP
+mode needs a key, and one that sends back the stored mode does not.
 
 Some reads now give the value as the daemon parses it: a firewall policy,
 target, `reflection_src` or family as fw4 reads it, an option of several words
@@ -260,7 +282,7 @@ same stored option, to follow what the daemon does:
 | `firewall/rules` | `match.src_port`, `match.dest_port` | one option of several words, as LuCI writes it |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `match.proto` | one option of several words |
 | `uhttpd/instances` | `listen_http`, `listen_https` | an option or an entry of several words |
-| `network/routes` | `type` | a number from 1 to 9 |
+| `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
 
 A section whose read changes gets a new ETag once, at the upgrade. A write that
 sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.

@@ -29,22 +29,35 @@ const ROWS = [
 	[ "firewall.rules.uc", "r1", "dscp", "! EF", "match.dscp" ],
 	[ "network.interfaces.uc", "lan", "metric", "-1", "metric" ],
 	[ "network.interfaces.uc", "lan", "ip6weight", "-5", "ip6weight" ],
-	[ "network.interfaces.uc", "wan6", "reqprefix", "/56:1a", "reqprefix" ],
+	[ "network.interfaces.uc", "wan6", "reqprefix", "56:1a", "reqprefix" ],
 	[ "network.interfaces.uc", "wan6", "clientid", "00-03-00-01", "clientid" ],
 	[ "network.devices.uc", "dev1", "vid", "0", "vid" ],
 	[ "network.devices.uc", "dev1", "macaddr", "2:0:0:0:0:1", "macaddr" ],
 	[ "network.devices.uc", "dev2", "type", "bonding", "type" ],
 	[ "network.bridge_vlans.uc", "bv1", "ports", "lan.1:t", "ports" ],
 	[ "network.routes.uc", "rt1", "type", "6", "type" ],
+	[ "network.routes.uc", "rt1", "type", "010", "type" ],
 	[ "network.routes.uc", "rt1", "metric", "-1", "metric" ],
 	[ "network.routes.uc", "rt1", "mtu", "-1", "mtu" ],
 	[ "network.rules.uc", "nr1", "priority", "40000", "priority" ],
+	[ "network.rules.uc", "nr1", "ipproto", "06", "ipproto" ],
+	[ "network.rules.uc", "nr1", "ipproto", "tcp", "ipproto" ],
+	[ "network.rules.uc", "nr1", "uidrange", "1000-1005x", "uidrange" ],
+	[ "network.rules.uc", "nr1", "suppress_prefixlength", "40", "suppress_prefixlength" ],
 	[ "wireless.devices.uc", "radio0", "type", "qcawifi", "type" ],
+	[ "wireless.devices.uc", "radio0", "txpower", "31", "txpower" ],
+	[ "wireless.devices.uc", "radio0", "channel", "240", "channel" ],
 	[ "wireless.interfaces.uc", "w1", "mode", "ahdemo", "mode" ],
+	[ "wireless.interfaces.uc", "w1", "mode", "wds", "mode" ],
 	[ "wireless.interfaces.uc", "w1", "encryption", "sae-compat", "encryption" ],
+	[ "wireless.interfaces.uc", "w1", "encryption", "psk3", "encryption" ],
+	[ "wireless.interfaces.uc", "w1", "encryption", "psk3-mixed", "encryption" ],
+	[ "wireless.interfaces.uc", "w1", "encryption", "wpa-mixed", "encryption" ],
 	[ "wireless.interfaces.uc", "w1", "device", [ "radio0", "radio1" ], "device" ],
 	[ "wireless.interfaces.uc", "w1", "network", [ "lan", "guest" ], "network" ],
 	[ "mwan3.globals.uc", "globals", "mmx_mask", "16128", "mmx_mask" ],
+	[ "mwan3.globals.uc", "globals", "mmx_mask", "0x000003F00", "mmx_mask" ],
+	[ "mwan3.globals.uc", "globals", "mmx_mask", "037400", "mmx_mask" ],
 	[ "mwan3.globals.uc", "globals", "loglevel", "warning", "loglevel" ],
 	[ "mwan3.interfaces.uc", "mwan", "track_method", "nslookup", "track_method" ],
 	[ "mwan3.interfaces.uc", "mwan", "count", "20", "probe_count" ],
@@ -82,11 +95,13 @@ const ROWS = [
 	[ "dropbear.instances.uc", "db1", "Port", "0", "port" ],
 	[ "system.uc", "cfg1", "hostname", "my router", "hostname" ],
 	[ "uhttpd.certs.uc", "px", "days", "40000", "days" ],
+	[ "uhttpd.certs.uc", "px", "days", "0", "days" ],
 	[ "uhttpd.certs.uc", "px", "country", "ZZZ", "country" ],
 	[ "uhttpd.instances.uc", "main", "http_keepalive", "-1", "http_keepalive" ],
 	[ "unbound.server.uc", "ub", "rebind_protection", "3", "rebind_protection" ],
 	[ "unbound.server.uc", "ub", "num_threads", "128", "num_threads" ],
 	[ "unbound.server.uc", "ub", "add_local_fqdn", "5", "add_local_fqdn" ],
+	[ "unbound.server.uc", "ub", "ttl_min", "90000", "ttl_min" ],
 	[ "snmpd.accesses.uc", "ac1", "level", "authpriv", "level", { write: 'none', notify: 'none' } ],
 	[ "snmpd.accesses.uc", "ac1", "prefix", "0", "prefix", { write: 'none', notify: 'none' } ],
 	[ "snmpd.groups.uc", "g1", "version", "any", "version" ],
@@ -106,25 +121,51 @@ function other_field(mod, read, field) {
 	return {};
 }
 
+function seed(row) {
+	let file = row[0], id = row[1], option = row[2], value = row[3], extra = row[5];
+	let c = filter(fx.CASES, (k) => k.file == file && k.id == id)[0];
+	let uci = fx.world();
+	if (uci[c.pkg] == null) uci[c.pkg] = {};
+	uci[c.pkg][c.id] = { '.anonymous': false, ...c.section, ...(extra ?? {}), [option]: value };
+	let mod = loadfile('src/resources/' + file)();
+	let h = c.singleton ? handler.make_singleton(mod, { tx }) : handler.make(mod, { tx });
+	return { c, mod, h, conn: ubus.stub({ uci: uci }) };
+}
+
+function read_of(s) {
+	return s.c.singleton ? s.h.get(s.conn, ctx).body : s.h.get_one(s.conn, ctx, s.c.id).body;
+}
+
 t.describe('property: a value that the platform takes is no error of the section', () => {
 	for (let row in ROWS) {
-		let file = row[0], id = row[1], option = row[2], value = row[3], field = row[4], extra = row[5];
-		t.it(sprintf("%s %s %J", file, option, value), () => {
-			let c = filter(fx.CASES, (k) => k.file == file && k.id == id)[0];
-			let uci = fx.world();
-			if (uci[c.pkg] == null) uci[c.pkg] = {};
-			uci[c.pkg][c.id] = { '.anonymous': false, ...c.section, ...(extra ?? {}), [option]: value };
-			let conn = ubus.stub({ uci: uci });
-			let mod = loadfile('src/resources/' + file)();
-			let h = c.singleton ? handler.make_singleton(mod, { tx }) : handler.make(mod, { tx });
+		let option = row[2], value = row[3], field = row[4];
+		t.it(sprintf("%s %s %J", row[0], option, value), () => {
+			let s = seed(row);
 			let mine = (e) => e.field == field || index(e.field, field + "[") == 0 || index(e.field, field + ".") == 0;
-			for (let s in h.sweep(conn))
-				t.assert_deep_equal(filter(s.errors, mine), [], sprintf("swept %J", s.errors));
-			let read = c.singleton ? h.get(conn, ctx).body : h.get_one(conn, ctx, c.id).body;
-			let body = other_field(mod, read, field);
-			let r = c.singleton ? h.patch(conn, ctx, body) : h.patch(conn, ctx, c.id, body);
+			for (let sw in s.h.sweep(s.conn))
+				t.assert_deep_equal(filter(sw.errors, mine), [], sprintf("swept %J", sw.errors));
+			let body = other_field(s.mod, read_of(s), field);
+			let r = s.c.singleton ? s.h.patch(s.conn, ctx, body) : s.h.patch(s.conn, ctx, s.c.id, body);
 			t.assert_equal(r.status, 200, sprintf("%J", r.body));
-			t.assert_deep_equal(conn._state.uci[c.pkg][c.id][option], value);
+			t.assert_deep_equal(s.conn._state.uci[s.c.pkg][s.c.id][option], value);
+		});
+	}
+});
+
+// A client that writes back what it read, as the Terraform provider does with a PUT, sends each such
+// value back, and a write refuses only a value that it changes.
+t.describe('property: a write of the read passes with each value that the platform takes', () => {
+	let at = (o, path) => { for (let p in split(path, ".")) o = o?.[p]; return o; };
+	for (let row in ROWS) {
+		t.it(sprintf("%s %s %J", row[0], row[2], row[3]), () => {
+			let s = seed(row);
+			let read = read_of(s);
+			let body = {};
+			for (let k, v in read)
+				if (s.mod.schema_properties[k]?.readOnly !== true) body[k] = v;
+			let r = s.c.singleton ? s.h.patch(s.conn, ctx, body) : s.h.replace(s.conn, ctx, s.c.id, body);
+			t.assert_equal(r.status, 200, sprintf("%J", r.body));
+			t.assert_deep_equal(at(read_of(s), row[4]), at(read, row[4]));
 		});
 	}
 });

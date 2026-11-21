@@ -192,8 +192,8 @@ const CASES = [
 		section: { invert: '1', '.type': 'rule', src: '10.3.0.0/16', 'goto': '7', disabled: '1' },
 	},
 	{
-		// What LuCI or a hand edit stores and a write refuses: forms that netifd installs, and the tos 10
-		// and ports 0-65535 that the kernel refuses.
+		// What LuCI or a hand edit stores and a write refuses: forms that netifd installs, which are no
+		// error, and the tos 10 and ports 0-65535 that the kernel refuses.
 		file: "network.rules.uc", id: "nr5", pkg: "network",
 		section: { invert: '1', '.type': 'rule', src: '10.4.0.0/16', lookup: '43', suppress_prefixlength: '64',
 		           tos: '10', uidrange: '1000-1005x', ipproto: 'tcp', sport: '0-65535', dport: '80 ', disabled: '1' },

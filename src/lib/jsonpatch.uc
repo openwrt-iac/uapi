@@ -242,4 +242,4 @@ function apply(target, patch) {
 	return { ok: true, value: working };
 }
 
-return { apply };
+return { apply, deep_equal: _deep_equal };
