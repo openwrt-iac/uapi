@@ -342,8 +342,9 @@ ensure_wireguard() {
 # Real handlers of protos that uapi does not model, a test handler that keeps the config netifd
 # hands it, so that a write is checked against what the handler receives, and the tools with which
 # test 62 reads a tunnel back from the kernel, since the ip of busybox decodes none. netifd scans
-# /lib/netifd/proto only when it starts, as for wireguard above, so a changed test handler reaches
-# it only through a restart.
+# /lib/netifd/proto, and reads the option list and the flags of each handler, only when it starts,
+# as for wireguard above. So a changed init_config of the test handler reaches it only through a
+# restart.
 proto_handlers_ready() {
 	$SSH 'lsmod | grep -q "^dummy " && ip -V 2>&1 | grep -q iproute2 && apk info -e ucode-mod-rtnl >/dev/null' \
 		&& [ "$($SSH 'md5sum < /lib/netifd/proto/uapitest.sh' 2>/dev/null)" \

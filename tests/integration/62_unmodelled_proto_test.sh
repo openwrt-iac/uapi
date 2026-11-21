@@ -56,7 +56,10 @@ cleanup() {
 	for i in $IFACES; do del="$del uci -q delete network.$i;"; done
 	$SSH "$del uci commit network; /etc/init.d/network reload" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# A trap that only cleans up lets the test go on after the signal. An exit runs the EXIT trap.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cleanup
 
 LOCAL=$($SSH 'ubus call network.interface.lan status' | jq -r '."ipv4-address"[0].address // empty')
