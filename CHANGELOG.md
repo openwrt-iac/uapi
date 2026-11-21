@@ -36,6 +36,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: some requests and reads follow the daemons more closely.** The
+  request schema of `network/rules.ipproto` takes an integer from 1 to 255,
+  where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a
+  year suffix, which dnsmasq does not know, and a `network/bridge_vlans` port
+  name longer than 15 characters, which no Linux interface has, answer 422
+  `invalid_format`. A firewall policy, target, `reflection_src` or `family`
+  reads as fw4 parses it, so a lower-case `accept` reads `ACCEPT`. A firewall
+  `src_port`, `dest_port` or `proto`, or a `uhttpd/instances.listen_http` or
+  `listen_https`, stored as one option of several words reads as its words. A
+  numeric `network/routes.type` reads as its name, so `010` reads `prohibit`.
+  Such a section gets another ETag at the upgrade. Announced in 3.5.0. Migration
+  note in `docs/migration-v3-to-v4.md`. (#405)
 - **BREAKING: a query parameter value outside its declared set answers 400.**
   3.x ignores it. A `managed` other than `true` or `false` on a curated list
   lists every section, a `validate` other than `1` on `/uapi/diagnostics` skips

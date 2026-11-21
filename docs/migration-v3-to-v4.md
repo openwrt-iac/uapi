@@ -138,8 +138,12 @@ with EAP. `build/openapi.json` lists each one. A request can stay narrower,
 through the `*Request` schema, and the server now checks it against the fields
 that a request names, other than a value that the section holds. A
 `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused on
-write, and so are a `mwan3/rules.proto` that iptables refuses and a
-`uhttpd/certs.days` of 0.
+write, and so are a `mwan3/rules.proto` that iptables refuses, a
+`uhttpd/certs.days` of 0 and a `network/bridge_vlans` port name longer than 15
+characters, which no Linux interface has. The request schema of
+`network/rules.ipproto` takes only an integer from 1 to 255, as LuCI writes
+it, where 3.x declared an integer or a string: a read still gives a stored
+name such as `tcp`, and a write may send it back unchanged.
 
 The rules on what netifd and wifi-scripts read judge only what they refuse or
 read as another value. A `network/rules` form that netifd installs as it reads,
