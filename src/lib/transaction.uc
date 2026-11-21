@@ -757,7 +757,7 @@ function with_lock(params) {
 	if (type(lock) == "object" && lock.unavailable != null)
 		return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
 
-	write_journal.record_start(params.journal_packages ?? [], params.request_id, null);
+	write_journal.record_start([], params.request_id, null);
 	let result = null;
 	let caught = null;
 	try { result = fn(); }
