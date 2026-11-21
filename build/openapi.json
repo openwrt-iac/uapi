@@ -27247,7 +27247,7 @@
 							"string",
 							"null"
 						],
-						"description": "IPv4 address to rewrite the source to. Requires target SNAT"
+						"description": "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to"
 					},
 					"snat_port": {
 						"type": [
@@ -27408,7 +27408,7 @@
 							"string",
 							"null"
 						],
-						"description": "IPv4 address to rewrite the source to. Requires target SNAT"
+						"description": "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to"
 					},
 					"snat_port": {
 						"type": [
@@ -34221,7 +34221,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$",
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$",
 						"description": "System hostname. A write takes alphanumerics, dashes, underscores and dots, as LuCI does. A read also gives another name that the kernel takes, and refuses one with a comma, a quote or a ` #`, which change the line that dnsmasq reads"
 					},
 					"description": {
@@ -34301,7 +34301,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$"
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$"
 					},
 					"description": {
 						"type": [
@@ -38583,7 +38583,7 @@
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
 					},
 					"src_ip": {
 						"type": [
@@ -38682,8 +38682,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,2}|1[0-9]{2}|2[0-4][0-9]|25[0-5]|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$",
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
+						"pattern": "^(0|[1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0[0-7]{1,2}|0[0-3][0-7]{2}|0[xX]0*[0-9A-Fa-f]{1,2}|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$",
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
 					},
 					"src_ip": {
 						"type": [
@@ -38777,7 +38777,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,2}|1[0-9]{2}|2[0-4][0-9]|25[0-5]|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$"
+						"pattern": "^(0|[1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0[0-7]{1,2}|0[0-3][0-7]{2}|0[xX]0*[0-9A-Fa-f]{1,2}|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$"
 					},
 					"src_ip": {
 						"type": [

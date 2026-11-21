@@ -84,7 +84,8 @@ function validate(json, conn) {
 			push(errs, { field: "snat_ip", code: "required",
 			             message: "one of snat_ip or snat_port is required when target is SNAT" });
 	} else {
-		if (snat_ip)
+		// fw4 of OpenWrt main maps the src_ip prefix of an NPT rule to its snat_ip prefix.
+		if (snat_ip && json.target != "NPT")
 			push(errs, { field: "snat_ip", code: "conflict",
 			             message: "is only valid when target is SNAT; send null to clear it" });
 		if (snat_port)
@@ -174,7 +175,7 @@ return {
 		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT" },
 		enabled:   { type: "boolean", default: true },
 		snat_ip:   { type: ["string", "null"],
-		             description: "IPv4 address to rewrite the source to. Requires target SNAT" },
+		             description: "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to" },
 		snat_port: { type: ["string", "null"],
 		             description: "Port or port range to rewrite the source port to. Requires target SNAT" },
 		match: {
