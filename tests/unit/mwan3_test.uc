@@ -40,11 +40,13 @@ t.describe('mwan3.globals contract', () => {
 });
 
 t.describe('mwan3.interfaces contract', () => {
-	t.it('family is not required; an unset or empty option reads ipv4, as mwan3 does', () => {
+	t.it('family is not required, an unset or empty option reads ipv4, and a list reads as config_get joins it, as mwan3 does', () => {
 		t.assert_equal(interfaces.openapi_required, null);
 		t.assert_equal(interfaces.fromUci({ '.name': 'wan' }).family, 'ipv4');
 		t.assert_equal(interfaces.fromUci({ '.name': 'wan', family: '' }).family, 'ipv4');
 		t.assert_equal(interfaces.fromUci({ '.name': 'wan', family: 'ipv6' }).family, 'ipv6');
+		t.assert_equal(interfaces.fromUci({ '.name': 'wan', family: [ 'ipv6' ] }).family, 'ipv6');
+		t.assert_equal(interfaces.fromUci({ '.name': 'wan', family: [ '' ] }).family, 'ipv4');
 	});
 
 	t.it('rejects non-IP entries in track_ip[]', () => {
