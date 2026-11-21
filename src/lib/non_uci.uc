@@ -21,8 +21,7 @@ function _logfmt_value(v) {
 }
 
 function with_lock_translated(ctx, fn, kind_messages, lock_opts) {
-	let params = { fn: fn, request_id: ctx?.request_id,
-	               journal_packages: lock_opts?.journal_packages ?? [] };
+	let params = { fn: fn, request_id: ctx?.request_id };
 	if (lock_opts != null) {
 		if (lock_opts.acquire != null)   params.acquire   = lock_opts.acquire;
 		if (lock_opts.release != null)   params.release   = lock_opts.release;
