@@ -740,7 +740,8 @@ t.describe('network.interfaces proto scope', () => {
 		let body = { proto: '6in4', ipaddrs: [ '192.0.2.1' ], ip6prefix: '2001:db8:1::/48', nohostroute: true };
 		t.assert_deep_equal(filter(interfaces.validate(body, null), (e) => e.code == 'conflict'), []);
 		let u = interfaces.toUci(body);
-		t.assert_deep_equal(u.ipaddr, [ '192.0.2.1' ]);
+		t.assert_equal(u.ipaddr, '192.0.2.1');
+		t.assert_deep_equal(interfaces.toUci({ proto: 'static', ipaddrs: [ '192.0.2.1/24' ] }).ipaddr, [ '192.0.2.1/24' ]);
 		t.assert_equal(u.ip6prefix, '2001:db8:1::/48');
 		t.assert_equal(u.nohostroute, '1');
 		t.assert_deep_equal(codes(interfaces.validate({ proto: '6in4', broadcast_flag: true }, null), 'broadcast_flag'), [ 'conflict' ]);
@@ -772,6 +773,62 @@ t.describe('network.interfaces proto scope', () => {
 			[ { op: 'replace', path: '/mtu', value: 1380 } ]).status, 200);
 		t.assert_equal(c._state.uci.network.henet.mtu, '1380');
 		t.assert_equal(c._state.uci.network.henet.peeraddr, '192.0.2.1');
+	});
+	t.it('on a proto that uapi does not model, stores one value as an option and refuses several where the handler reads one', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		const HANDLERS = { '6in4': { validate: { ipaddr: 'string', ip6addr: 'string', ip6prefix: 'list(string)' } } };
+		let box = (extra, handlers) => ubus.stub({ ubus: { 'network get_proto_handlers': handlers ?? HANDLERS }, uci: { network: {
+			henet: { '.type': 'interface', '.anonymous': false, proto: '6in4', peeraddr: '192.0.2.9', ...extra },
+		} } });
+		let fields = (r) => map(r.body?.errors ?? [], (e) => e.field + ':' + e.code);
+		let listed = (c) => map(filter(ifh.sweep(c), (s) => s.id == 'henet'),
+			(s) => map(filter(s.errors, (e) => e.field != 'proto'), (e) => e.field + ':' + e.code));
+
+		let c = box({ ipaddr: '192.0.2.1' });
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.2' ], ip6addrs: [ '2001:db8::2/64' ] }).status, 200);
+		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.2');
+		t.assert_equal(c._state.uci.network.henet.ip6addr, '2001:db8::2/64');
+		t.assert_deep_equal(fields(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.2', '192.0.2.3' ] })), [ 'ipaddrs:conflict' ]);
+		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.2');
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { ip6prefix: [ '2001:db8:1::/48', '2001:db8:2::/48' ] }).status, 200);
+		t.assert_deep_equal(c._state.uci.network.henet.ip6prefix, [ '2001:db8:1::/48', '2001:db8:2::/48' ]);
+		t.assert_deep_equal(listed(c), [ [] ]);
+
+		c = box({ ipaddr: [ '192.0.2.1' ] });
+		t.assert_deep_equal(listed(c), [ [ 'ipaddrs:conflict' ] ]);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+		t.assert_deep_equal(c._state.uci.network.henet.ipaddr, [ '192.0.2.1' ]);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.1' ] }).status, 200);
+		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.1');
+		t.assert_deep_equal(listed(c), [ [] ]);
+
+		c = box({ ipaddr: [ '192.0.2.1', '192.0.2.3' ] });
+		t.assert_deep_equal(listed(c), [ [ 'ipaddrs:conflict' ] ]);
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
+
+		c = box({}, {});
+		t.assert_equal(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.2', '192.0.2.3' ] }).status, 200);
+		t.assert_deep_equal(c._state.uci.network.henet.ipaddr, [ '192.0.2.2', '192.0.2.3' ]);
+	});
+	t.it('a PATCH that sends back the address of a static interface keeps the form that uci holds', () => {
+		let ifh = handler.make(interfaces, {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { network: {
+			lan2: { '.type': 'interface', '.anonymous': false, proto: 'static', ipaddr: '192.0.2.1/24' },
+		} } });
+		t.assert_equal(ifh.patch(c, ctx, 'lan2', { ipaddrs: [ '192.0.2.1/24' ] }).status, 200);
+		t.assert_equal(c._state.uci.network.lan2.ipaddr, '192.0.2.1/24');
 	});
 	t.it('checks only what the request named, and never the read-only twins', () => {
 		let merged = { proto: 'dhcp', ipaddr: '10.0.0.1', ipaddrs: [ '10.0.0.1/24' ], netmask: 'junk', has_private_key: true };

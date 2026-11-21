@@ -597,11 +597,14 @@ function default_footprint(resource, existing, old_opts, new_opts, replace) {
 	return resource.toUci(resource.fromUci(post, null));
 }
 
-// A field of `rewrite_when_named` carries the name of its uci option.
-function named_rewrites(resource, delta) {
+// `rewrite_when_named` maps a field to its uci option, or is a function of the section after the
+// write that returns such a map.
+function named_rewrites(resource, delta, merged) {
+	let map = resource.rewrite_when_named ?? {};
+	if (type(map) == "function") map = map(merged);
 	let out = {};
-	for (let k in resource.rewrite_when_named ?? [])
-		if (type(delta) == "object" && exists(delta, k)) out[k] = true;
+	for (let field, opt in map)
+		if (type(delta) == "object" && exists(delta, field)) out[opt] = true;
 	return out;
 }
 
@@ -1017,7 +1020,7 @@ function make(resource, opts) {
 				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				let wrote = diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                             default_footprint(resource, existing, old_opts, new_opts),
-				                             named_rewrites(resource, r.delta));
+				                             named_rewrites(resource, r.delta, r.merged));
 				c.uci_require(p, id);
 				let staged = load_section(c, p, id);
 				let out = resource.fromUci(staged, conn);
@@ -1247,7 +1250,7 @@ function make_singleton(resource, opts) {
 				let old_opts = resource.toUci(carry_write_only(resource, existing_view, existing));
 				diff_apply_patch(c, p, id, existing, old_opts, new_opts,
 				                 default_footprint(resource, existing, old_opts, new_opts),
-				                 named_rewrites(resource, r.delta));
+				                 named_rewrites(resource, r.delta, r.merged));
 				return { ok: true, body: resource.fromUci(load_section(c, p, id), conn) };
 			},
 		}));

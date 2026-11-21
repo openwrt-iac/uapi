@@ -28370,7 +28370,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry. On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"ip6addrs": {
 						"type": [
@@ -28380,7 +28380,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both. On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"netmask": {
 						"type": [
@@ -28415,7 +28415,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md)."
+						"description": "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"gateway": {
 						"type": [
@@ -28432,7 +28432,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Addresses of a wireguard interface (uci `list addresses`). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"private_key": {
 						"type": "string",
@@ -28954,7 +28955,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry."
+						"description": "Full IPv4 address list for static proto (uci `list ipaddr`). The only write name for this option; `ipaddr` is the read-only first entry. On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"ip6addrs": {
 						"type": [
@@ -28964,7 +28965,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both."
+						"description": "IPv6 address list for static proto (uci `list ip6addr`). A static interface needs either this or `ipaddrs`, not both. On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"netmask": {
 						"type": [
@@ -29000,7 +29001,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md)."
+						"description": "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Responses are always an array. A space-separated string is still accepted on write, and v4 removes that (see docs/deprecations.md). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"gateway": {
 						"type": [
@@ -29017,7 +29018,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "Addresses of a wireguard interface (uci `list addresses`). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
 					},
 					"private_key": {
 						"type": "string",
