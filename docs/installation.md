@@ -130,11 +130,14 @@ the feed, anything with a `><Q1...` suffix is pinned to one build. This is why a
 router that dogfooded an RC keeps reporting the RC long after a stable release
 exists.
 
-The feed carries the **current stable release only**: the index is rebuilt from
-the latest stable tag each publish, so the previous version's APK stops
-resolving the moment a new one ships. `apk add uapi=<version>-r1` therefore pins
-an exact build only while that build is the current one, and a constraint like
-`apk add 'uapi<3.0.0'` will not find an older release once it has rolled off.
+The feed carries the **current stable release only**: each publish rebuilds the
+index from the release that GitHub marks Latest, which is the highest stable
+version, so the previous version's APK stops resolving the moment a new one
+ships. A fix of an older major, such as a 3.x release after 4.0.0, is on the
+GitHub Releases page only and never reaches the feed.
+`apk add uapi=<version>-r1` therefore pins an exact build only while that build
+is the current one, and a constraint like `apk add 'uapi<3.0.0'` will not find
+an older release once it has rolled off.
 Older releases stay on the GitHub Releases page permanently, and installing one
 from there is the supported way back, subject to the pinning note above.
 `CHANGELOG.md` and the GitHub Releases page are the sources of truth for what
