@@ -16,9 +16,8 @@ on:
     # release/vX.Y.Z-rcN topic branches, which a pull_request run already covers. Without
     # this a patch on an old major reached its tag having never been built: the tag run is
     # the first CI it sees, and by then the tag exists.
-    # `v4` rides the push trigger too, so every rebase of the branch runs the
-    # suite against both OpenWrt series (the `series` output of lint).
-    branches: [main, v4, 'release/*.x']
+    # `v3`, the 3.x line, rides the push trigger too, so every merge into it warms its caches.
+    branches: [main, v3, 'release/*.x']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -223,7 +222,7 @@ jobs:
     timeout-minutes: 120
     # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
     # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
     needs: lint
     strategy:
       fail-fast: false
@@ -486,16 +485,21 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             case "$TAG" in
               *-rc*|*-alpha*|*-beta*|*-pre*)
-                PRE=--prerelease ;;
+                PRE=--prerelease LATEST= ;;
               *)
-                PRE= ;;
+                # The feed and the site follow the Latest mark, so a fix of an older major, such
+                # as a 3.x release after 4.0.0, must not take it from the current one.
+                highest=$( { gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+                               --json tagName --jq '.[].tagName'; echo "$TAG"; } | sort -V | tail -1)
+                PRE= LATEST=--latest=false
+                [ "$highest" = "$TAG" ] && LATEST=--latest ;;
             esac
             chmod +x scripts/release-notes.sh
             scripts/release-notes.sh "$TAG" > /tmp/release-notes.md
             if [ -s /tmp/release-notes.md ]; then
-              gh release create "$TAG" $PRE --title "$TAG" --notes-file /tmp/release-notes.md
+              gh release create "$TAG" $PRE $LATEST --title "$TAG" --notes-file /tmp/release-notes.md
             else
-              gh release create "$TAG" $PRE --title "$TAG" --generate-notes
+              gh release create "$TAG" $PRE $LATEST --title "$TAG" --generate-notes
             fi
           fi
           gh release upload "$TAG" dist/uapi-*.apk --clobber
