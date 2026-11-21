@@ -56,9 +56,10 @@ reload. A single box-global pending window is enforced by an exclusive flock
 - A write carries `?confirm=<seconds>` (1..3600). uapi snapshots the
   affected packages, commits, reloads, and returns `202 Accepted` with a
   `ConfirmWindow {token, timeout, deadline, packages}` body plus
-  `X-Confirm-Token` / `X-Confirm-Deadline` headers. The header form
-  `X-Uapi-Confirm` also works behind a proxy that forwards it, but uhttpd's
-  CGI strips custom headers, so the query form is the portable interface.
+  `X-Confirm-Token` / `X-Confirm-Deadline` headers. rc1 read the header form
+  `X-Uapi-Confirm` from `HTTP_X_UAPI_CONFIRM`, which uhttpd never sets, so
+  only the query form worked. A new arm reads `env.headers`, which holds every
+  request header.
 - `GET /confirm` (list), `GET /confirm/<token>` (status), `POST
   /confirm/<token>` (ack), `DELETE /confirm/<token>` (roll back now).
 - Scope `uapi:confirm` (`:ro` for status/list, `:rw` for ack/rollback). Arming

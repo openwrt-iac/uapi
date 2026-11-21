@@ -122,9 +122,10 @@ t.describe('dhcp/leases ?family', () => {
 	});
 
 	t.it('is declared in the spec with limit and cursor, on the list and on a read by id', () => {
-		let names = (op) => map(op.parameters ?? [], (p) => p.name);
-		t.assert_deep_equal(names(spec["/dhcp/leases"].get), [ "limit", "cursor", "family" ]);
-		t.assert_deep_equal(names(spec["/dhcp/leases/{id}"].get), [ "family" ]);
+		let names = (op) => map(op.parameters ?? [], (p) => p.name ?? p["$ref"]);
+		let rid = "#/components/parameters/RequestId";
+		t.assert_deep_equal(names(spec["/dhcp/leases"].get), [ "limit", "cursor", "family", rid ]);
+		t.assert_deep_equal(names(spec["/dhcp/leases/{id}"].get), [ "family", rid ]);
 		t.assert_deep_equal(spec["/dhcp/leases"].get.parameters[2].schema.enum, [ "v4", "v6" ]);
 	});
 });

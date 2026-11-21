@@ -34,6 +34,29 @@ t.describe('errors.new_context', () => {
 	});
 });
 
+t.describe('errors.request_context', () => {
+	t.it('reads the four request headers from env.headers', () => {
+		let ctx = errors.request_context({ headers: {
+			'x-request-id': 'req-from-header', 'if-match': '"aaaa"',
+			'if-none-match': '"bbbb"', 'idempotency-key': 'k1',
+		} }, {});
+		t.assert_deep_equal(ctx, { request_id: 'req-from-header', if_match: '"aaaa"',
+		                           if_none_match: '"bbbb"', idempotency_key: 'k1' });
+	});
+
+	t.it('takes the header over the query parameter', () => {
+		let ctx = errors.request_context({ headers: { 'if-match': '"aaaa"' } },
+		                                 { if_match: 'cccc', idempotency_key: 'k2' });
+		t.assert_equal(ctx.if_match, '"aaaa"');
+		t.assert_equal(ctx.idempotency_key, 'k2');
+	});
+
+	t.it('falls back to a new ULID for a malformed X-Request-Id', () => {
+		let ctx = errors.request_context({ headers: { 'x-request-id': 'short' } }, {});
+		t.assert_equal(length(ctx.request_id), 26);
+	});
+});
+
 t.describe('errors.error', () => {
 	let ctx = { request_id: "01hx0000000000000000000000" };
 
