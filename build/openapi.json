@@ -30894,7 +30894,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for an empty value, which also reads 0 there. A write answers 422 while the port reads 0, on a disabled peer too. A peer with a host and no port reads null, and both handlers give wg port 51820 for it, as the kernel apply and the restore do."
 					},
 					"persistent_keepalive": {
 						"type": [
@@ -31042,7 +31042,7 @@
 						],
 						"minimum": 1,
 						"maximum": 65535,
-						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too."
+						"description": "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for an empty value, which also reads 0 there. A write answers 422 while the port reads 0, on a disabled peer too. A peer with a host and no port reads null, and both handlers give wg port 51820 for it, as the kernel apply and the restore do."
 					},
 					"persistent_keepalive": {
 						"type": [

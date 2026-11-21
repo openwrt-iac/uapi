@@ -1112,10 +1112,11 @@ t.describe('network.wireguard_peers runtime', () => {
 	const STORED = { public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: '192.0.2.1',
 	                 endpoint_port: '51820', persistent_keepalive: '25' };
 
-	function kernel(network, dumps, up) {
+	function kernel(network, dumps, up, ucode) {
 		let k = { ran: [] };
 		let real = global.modules.wg;
-		global.modules.wg = t.load_with_fs({ ...fs, popen: function(cmd) {
+		let access = ucode ? { access: (p) => p == '/lib/netifd/proto/wireguard.uc' || fs.access(p) } : {};
+		global.modules.wg = t.load_with_fs({ ...fs, ...access, popen: function(cmd) {
 			push(k.ran, cmd);
 			let iface = match(cmd, /^'wg' 'show' '([^']*)' 'dump' 2>&1$/)?.[1];
 			let out = (iface != null) ? dumps[iface] : null;
@@ -1138,6 +1139,19 @@ t.describe('network.wireguard_peers runtime', () => {
 		let text = sprintf("%J", view);
 		t.assert_true(index(text, PSK) < 0 && index(text, PRIV) < 0, text);
 		t.assert_deep_equal(k.ran, [ dump_of('wg1') ]);
+	});
+
+	// Both proto handlers give wg port 51820 for a peer with a host and no port, as the kernel apply
+	// and the restore do, and the read keeps the port as uci holds it.
+	t.it('reads no port for a peer with a host and no port, and the endpoint with port 51820 that the kernel holds', () => {
+		for (let ucode in [ false, true ]) {
+			let k = kernel({ wg1: wgif, a: peer('wg1', { public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: '192.0.2.1' }) },
+			               { wg1: dump([ peer_line(PK, '192.0.2.1:51820', '10.0.0.2/32', 'off') ]) }, null, ucode);
+			let view = k.read('a');
+			t.assert_deep_equal([ view.endpoint_host, view.endpoint_port, view.runtime.in_kernel, view.runtime.endpoint ],
+			                    [ '192.0.2.1', null, true, '192.0.2.1:51820' ], ucode);
+			t.assert_deep_equal(handler.make(k.mod).sweep(k.conn), [], ucode);
+		}
 	});
 
 	t.it('reads the endpoint, keepalive and allowed IPs of the kernel beside the ones that uci holds', () => {

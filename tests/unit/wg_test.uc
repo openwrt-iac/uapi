@@ -1033,7 +1033,7 @@ t.describe('wg under the ucode handler', () => {
 	});
 	t.it('reads a port as the handler gives it to wg, and 0 for one that it leaves the endpoint out for', () => {
 		let v = [ '51820', '051820', '0', '65536', '+51820', ' 51820', 'https', 'openvpn', 'ovpn', 'nosuch', '', null ];
-		t.assert_deep_equal(map(v, (p) => ucs.endpoint_port(p)), [ 51820, 51820, 0, 0, 0, 0, 443, 1194, 0, 0, null, null ]);
+		t.assert_deep_equal(map(v, (p) => ucs.endpoint_port(p)), [ 51820, 51820, 0, 0, 0, 0, 443, 1194, 0, 0, 0, null ]);
 	});
 	// The handler reads busybox's nslookup, whose output holds a `Name:` line for each address that a
 	// name has, and takes an address as it stands.
@@ -1094,10 +1094,29 @@ t.describe('wg under the ucode handler', () => {
 		view.public_key = replace(PK, /4=$/, '5=');
 		t.assert_deep_equal(live(t.load_with({ wg: uc }, [ '../resources/network.wireguard_peers' ]))[0], [ 'public_key', true ]);
 	});
-	t.it('leaves out the endpoint of a stored peer without a port, where wireguard.sh takes 51820', () => {
+	// wireguard.sh reads the port with config_get and a default of 51820, and the ucode handler with
+	// `endpoint_port ?? '51820'`. The restore of main left the endpoint out, where the restart of the
+	// handler had set it.
+	t.it('sets a stored peer with a host and no port with port 51820, as both handlers do', () => {
 		let s = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', endpoint_host: '192.0.2.1' });
+		t.assert_equal(uc.to_peer(s).endpoint_port, null);
+		t.assert_equal(wg.to_peer(s).endpoint_port, null);
+		for (let load in [ null, UCODE_WG ]) {
+			let r = run_wg({ network: { wg1: WG1, a: s } }, "wg.reconcile(c, [ 'wg1' ])", null, null, load);
+			t.assert_equal(r.result, 'ok', load);
+			t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32') + '|endpoint|192.0.2.1:51820') >= 0, r.commands);
+			r = run_wg({ network: { wg1: WG1, a: s } }, sprintf("wg.apply(c, [ { iface: 'wg1', action: 'set', ...wg.to_peer(%J) } ])", s), null, null, load);
+			t.assert_deep_equal(r.commands, [ set_of(PK, '10.0.0.2/32') + '|endpoint|192.0.2.1:51820' ], load);
+		}
+	});
+	// The ucode handler takes an empty value, which only a hand edit of the file stores, as a port,
+	// which it refuses, and wireguard.sh's config_get takes the default for it.
+	t.it('leaves out the endpoint of an empty port under the ucode handler only', () => {
+		let s = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', endpoint_host: '192.0.2.1', endpoint_port: '' });
 		t.assert_equal(uc.to_peer(s).endpoint_port, 0);
 		t.assert_equal(wg.to_peer(s).endpoint_port, null);
+		let r = run_wg({ network: { wg1: WG1, a: s } }, "wg.reconcile(c, [ 'wg1' ])", null, null, UCODE_WG);
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
 	});
 	t.it('reads a list entry as one entry and an option as its words, and expands no escape', () => {
 		t.assert_deep_equal(uc.allowed_ips([ '10.0.0.0/24 10.0.1.7' ]), [ '10.0.0.0/24 10.0.1.7' ]);
