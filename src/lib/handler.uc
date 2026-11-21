@@ -331,6 +331,13 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	if (type(validate_body) != "object")
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
+	// The id of a stored section is the name that uci holds, and the write takes it from the path.
+	// LuCI and a shell take names that the id pattern of a create refuses, such as `4g`, so a body
+	// that echoes one must not fail on it.
+	if (id != null && type(schema_body) == "object" && exists(schema_body, "id")) {
+		schema_body = { ...schema_body };
+		delete schema_body.id;
+	}
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
 	let val_errs = resource.validate(validate_body, conn, id, delta, partial);
 	let seen = {};

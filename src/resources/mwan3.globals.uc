@@ -2,8 +2,8 @@ let values = require('values');
 let strict_bool = values.strict_bool;
 
 const VALID_LOGLEVEL = {
-	"emerg": true, "alert": true, "crit": true, "err": true,
-	"warn": true, "notice": true, "info": true, "debug": true,
+	"emerg": true, "alert": true, "crit": true, "err": true, "error": true,
+	"warn": true, "warning": true, "notice": true, "info": true, "debug": true,
 };
 
 function fromUci(section) {
@@ -39,8 +39,8 @@ return {
 	validate: validate,
 	schema_properties: {
 		mmx_mask:       { type: ["string", "null"],
-		                  pattern: "^0x[0-9A-Fa-f]+$",
-		                  description: "Firewall mark mask for mwan3-tagged packets (hex, default 0x3F00)." },
+		                  pattern: "^(0[xX][0-9A-Fa-f]+|[0-9]{1,10})$",
+		                  description: "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)." },
 		logging:        { type: "boolean", default: false, description: "Enable mwan3 daemon logging via logread." },
 		loglevel:       { "x-uapi-read-nullable": true, type: ["string", "null"], enum: [ ...keys(VALID_LOGLEVEL), null ],
 		                  description: "syslog facility level (notice/info/debug/etc.)." },

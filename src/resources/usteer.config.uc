@@ -3,6 +3,9 @@ let normalize_bool = values.normalize_bool;
 let as_list_or_null = values.as_list_or_null;
 let as_int = values.as_int;
 
+// usteer takes any debug level, and LuCI's form writes up to 5.
+const WRITE = { debug_level: { maximum: 5 } };
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -83,8 +86,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	return errs;
 }
 
@@ -99,17 +103,17 @@ return {
 		enabled:                       { type: "boolean", default: true },
 		network:                       { type: ["string", "null"], description: "Network interface usteer listens on for peer announcements." },
 		syslog:                        { type: "boolean", default: true },
-		debug_level:                   { type: ["integer", "null"], minimum: 0, maximum: 3 },
+		debug_level:                   { type: ["integer", "null"], minimum: 0, maximum: 2147483647, "x-uapi-write": WRITE.debug_level },
 		ipv6:                          { type: "boolean", default: false },
 		sta_block_timeout:             { type: ["integer", "null"], minimum: 0 },
 		local_sta_timeout:             { type: ["integer", "null"], minimum: 0 },
 		local_sta_update:              { type: ["integer", "null"], minimum: 0 },
-		max_neighbor_reports:          { type: ["integer", "null"], minimum: 0, maximum: 255 },
+		max_neighbor_reports:          { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
 		max_retry_band:                { type: ["integer", "null"], minimum: 0 },
 		seen_policy_timeout:           { type: ["integer", "null"], minimum: 0 },
 		measurement_report_timeout:    { type: ["integer", "null"], minimum: 0 },
-		load_balancing_threshold:      { type: ["integer", "null"], minimum: 0, maximum: 255 },
-		band_steering_threshold:       { type: ["integer", "null"], minimum: 0, maximum: 255 },
+		load_balancing_threshold:      { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
+		band_steering_threshold:       { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
 		remote_update_interval:        { type: ["integer", "null"], minimum: 0 },
 		remote_node_timeout:           { type: ["integer", "null"], minimum: 0 },
 		assoc_steering:                { type: "boolean", default: false },

@@ -314,6 +314,9 @@ the property's
 minimum: 68 } }`. The generator puts those keywords on the `*Request` schema
 only, and the type
 gate does not read them, so `validate()` must refuse the value itself.
+`values.write_bounds()` refuses an `enum`, `minimum` or `maximum` on the fields
+that a request names, as the type gate would: pass it the same object that the
+property takes under `x-uapi-write`, and `delta ?? json`.
 `tests/unit/write_overlay_test.uc` checks that it does, with a value just past
 each keyword in
 every fixture case of the module. A `pattern` is probed only with values that

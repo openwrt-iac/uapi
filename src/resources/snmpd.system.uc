@@ -1,6 +1,9 @@
 let values = require('values');
 let as_int = values.as_int;
 
+// snmpd takes any number.
+const WRITE = { sys_services: { minimum: 0, maximum: 127 } };
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -31,8 +34,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	return errs;
 }
 
@@ -47,7 +51,7 @@ return {
 		sys_location:  { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysLocation" },
 		sys_contact:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysContact" },
 		sys_name:      { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysName" },
-		sys_services:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 127,
+		sys_services:  { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.sys_services,
 		                 description: "SNMPv2-MIB::sysServices bitfield" },
 		sys_descr:     { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysDescr" },
 		sys_object_id: { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysObjectID OID" },
