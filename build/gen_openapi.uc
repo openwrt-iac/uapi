@@ -106,10 +106,11 @@ const RESPONSE_ONLY = { "runtime": true, "managed": true };
 const READ_NULLABLE = "x-uapi-read-nullable";
 // A field that may hold several lines opts out of the default newline/CR refusal (#276).
 const MULTILINE = "x-uapi-multiline";
-// Keywords that only the request half declares. A read can return a value that validate()
-// refuses on every write, such as a stored mtu below 68 or a proto uapi does not model, so the
-// module schema keeps the read bound for the type gate and the sweep, and the request half
-// takes these instead. tests/unit/write_overlay_test.uc ties each one to a refusal in validate().
+// Keywords that only the request half declares. A read can return a value that a write does not
+// take, such as a proto that uapi does not model or a channel above 233, so the module schema keeps
+// the read bound for the type gate and the sweep, and the request half takes these instead. The
+// handler checks them against the fields that a request sends, other than a value that the section
+// holds, and tests/unit/write_overlay_test.uc ties each one to a refusal.
 const WRITE_OVERLAY = "x-uapi-write";
 
 function strip_marker(v) {

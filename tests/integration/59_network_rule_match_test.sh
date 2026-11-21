@@ -130,7 +130,7 @@ r=$(send PATCH network/rules/uapi59y '{"ipproto":17}')
 [ "$(status "$r")" = 200 ] || fail "PATCH ipproto 17 expected 200: $r"
 wait_for "the kernel did not take ipproto 17" 'has 30597 ".ip_proto == 17"'
 
-echo "--- a stored ipproto 0 or hand-written form blocks every write of the rule, enabling and disabling too ---"
+echo "--- a stored ipproto 0 blocks every write of the rule, and a hand-written form that netifd installs none ---"
 r=$(send PATCH network/rules/uapi59x '{"disabled":true}')
 # v4 (#308): the stored ipproto 0 blocks every write of the rule, disabling included.
 [ "$(status "$r")" = 422 ] || fail "PATCH that disables the rule with ipproto 0 expected 422 on v4: $r"
@@ -142,13 +142,18 @@ r=$(send PATCH network/rules/uapi59x '{"disabled":false}')
 [ "$(uci_get uapi59x.disabled)" != 0 ] || fail "the refused enable changed the rule"
 read_back uapi59h | jq -e '.suppress_prefixlength == 64 and .ipproto == "06" and .uidrange == "1000-1005x"' \
 	>/dev/null || fail "the hand-written forms read wrong: $(read_back uapi59h)"
-# v4 (#308): the hand-written forms are stored errors, so every write of the rule is refused.
+# netifd installs the hand-written forms as it reads them, so they are no error, and a PUT of the
+# read sends them back unchanged.
 r=$(send PATCH network/rules/uapi59h '{"disabled":false}')
-[ "$(status "$r")" = 422 ] || fail "enabling the rule with stored bad forms expected 422 on v4: $r"
+[ "$(status "$r")" = 200 ] || fail "enabling the rule with forms that netifd installs expected 200: $r"
+wait_for "netifd did not install the hand-written forms of rule 30599" \
+	'has 30599 ".suppress_prefixlen == 64 and .ip_proto == 6 and .uid_range == [1000,1005]"'
 r=$(send PUT network/rules/uapi59h "$(read_back uapi59h)")
-[ "$(status "$r")" = 422 ] || fail "PUT of the read of the hand-written forms expected 422 on v4: $r"
+[ "$(status "$r")" = 200 ] || fail "PUT of the read of the hand-written forms expected 200: $r"
 [ "$(uci_get uapi59h.ipproto)" = 06 ] && [ "$(uci_get uapi59h.suppress_prefixlength)" = 64 ] \
-	|| fail "a refused write changed the stored forms: $r"
+	&& [ "$(uci_get uapi59h.uidrange)" = 1000-1005x ] || fail "the PUT changed the stored forms: $r"
+r=$(send PATCH network/rules/uapi59h '{"ipproto":"tcp"}')
+[ "$(status "$r")" = 422 ] || fail "PATCH that changes ipproto to a name expected 422: $r"
 
 echo "--- a write of a value that a write refuses answers 422 and stores nothing ---"
 for b in '"tos":10' '"tos":32' '"dport":"0-65535"' '"sport":"2000-1000"' '"ipproto":"tcp"' '"ipproto":0' \

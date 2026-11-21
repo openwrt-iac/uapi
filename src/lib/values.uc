@@ -808,6 +808,12 @@ function fw_target(v, allowed, fallback) {
 	return fallback;
 }
 
+// musl's getprotobyname compares a name against this built-in table, case-sensitively.
+const MUSL_PROTOCOLS = [ "ip", "icmp", "igmp", "ggp", "ipencap", "st", "tcp", "egp", "pup", "udp", "hmp",
+                         "xns-idp", "rdp", "iso-tp4", "xtp", "ddp", "idpr-cmtp", "ipv6", "ipv6-route",
+                         "ipv6-frag", "idrp", "rsvp", "gre", "esp", "ah", "skip", "ipv6-icmp", "ipv6-nonxt",
+                         "ipv6-opts", "rspf", "vmtp", "ospf", "ipip", "encap", "pim", "raw" ];
+
 // fw4's parse_family.
 function fw_family(v) {
 	if (type(v) != "string") return v;
@@ -828,7 +834,7 @@ return {
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds, fw_enum, fw_target, fw_family,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
-	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
+	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict, MUSL_PROTOCOLS,
 	NAME_MAX, DEVICE_MAX,
 	address_problem, has_noncontiguous_mask,
 	is_valid_ipv4, is_valid_ipv6, is_valid_ip, is_valid_cidr, is_valid_ipv6_cidr, is_valid_cidr_any,

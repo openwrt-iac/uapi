@@ -447,7 +447,7 @@ function validate(json, conn, id, delta, partial) {
 		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	let prefix = (type(json.reqprefix) == "string") ? replace(json.reqprefix, /(\/[0-9]+):[0-9A-Fa-f]{1,8}$/, "$1") : null;
-	if (ok("reqprefix") && prefix != null && index(prefix, "/") > 0 && !is_valid_ipv6_cidr(prefix))
+	if (ok("reqprefix") && prefix != null && index(prefix, "/") != -1 && !is_valid_ipv6_cidr(prefix))
 		push(errs, { field: "reqprefix", code: "invalid_format",
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
 	// The schema allows the whole range so that a stored value reads as it is. ppp.sh hands the
@@ -614,8 +614,8 @@ return {
 		                description: "Client hostname sent in DHCPDISCOVER (dhcp)" },
 		clientid:     { "x-uapi-read-nullable": true, type: "string", pattern: "^[0-9A-Fa-f: \t-]*$",
 		                description: "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits that colons, dashes or blanks may separate, as the proto scripts read it" },
-		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
-		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it" },
+		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh passes it to odhcp6c" },
 		reqaddress:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REQADDRESS),
 		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
 		delegate:     { "x-uapi-read-nullable": true, type: "boolean",

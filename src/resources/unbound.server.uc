@@ -138,6 +138,6 @@ return {
 		localservice:      { "x-uapi-read-nullable": true, type: "boolean" },
 		hide_binddata:     { "x-uapi-read-nullable": true, type: "boolean" },
 		num_threads:       { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": { minimum: 1, maximum: 64 } },
-		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", maximum: 86400, "x-uapi-write": { minimum: 0 } },
+		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": { minimum: 0, maximum: 86400 } },
 	},
 };

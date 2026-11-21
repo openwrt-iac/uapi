@@ -40,6 +40,12 @@ t.describe('network.routes.validate', () => {
 		let errs = routes.validate({ target: '10.0.0.0/24', type: 'blackhole' }, null);
 		t.assert_equal(length(errs), 0);
 	});
+	// netifd's system_rtn_aton reads a number with strtoul in base 0.
+	t.it('reads a type number as netifd does, and keeps one that it cannot read', () => {
+		let read = (v) => routes.fromUci({ '.name': 'x', '.type': 'route', target: '10.0.0.0/24', type: v }).type;
+		for (let p in [ [ '6', 'blackhole' ], [ '010', 'prohibit' ], [ '0x7', 'unreachable' ], [ '08', '08' ], [ '0', '0' ], [ '10', '10' ] ])
+			t.assert_equal(read(p[0]), p[1], p[0]);
+	});
 	t.it('reports conflict when interface does not exist', () => {
 		let conn = ubus.stub({ uci: { network: {
 			lan: { '.type': 'interface', proto: 'static' },
@@ -461,13 +467,9 @@ t.describe('network.rules match options', () => {
 		for (let k in SIX) t.assert_false(exists(rules.toUci({ src: '10.0.0.0/24', lookup: 42 }), k), k);
 	});
 
-	t.it('suppress_prefixlength takes 0 to 32, and a value outside is never live, since the kernel takes it', () => {
-		for (let v in [ 0, 24, 32 ])
+	t.it('suppress_prefixlength is no error at any value, since the kernel takes it', () => {
+		for (let v in [ -1, 0, 32, 33, 64, 2147483647 ])
 			t.assert_deep_equal(codes({ suppress_prefixlength: v }), [], v);
-		for (let v in [ -1, -2, 33, 64, 2147483647 ]) {
-			t.assert_deep_equal(codes({ suppress_prefixlength: v }), [ 'suppress_prefixlength out_of_range' ], v);
-			t.assert_deep_equal(live({ suppress_prefixlength: v }), [ false ], v);
-		}
 	});
 	t.it('tos takes the multiples of 4 up to 28, and each other value is live, as none installs', () => {
 		for (let v in [ 0, 4, 8, 12, 16, 20, 24, 28 ])
@@ -478,53 +480,44 @@ t.describe('network.rules match options', () => {
 		}
 		t.assert_deep_equal(live({ tos: 10, disabled: true }), [ false ]);
 	});
-	t.it('ipproto takes an integer from 1 to 255, and is live only for what netifd cannot resolve', () => {
-		for (let v in [ 1, 6, 17, 255 ])
-			t.assert_deep_equal(codes({ ipproto: v }), [], v);
-		for (let v in [ [ 0, true ], [ 256, false ], [ 262, false ], [ 4294967296, true ] ]) {
-			t.assert_deep_equal(codes({ ipproto: v[0] }), [ 'ipproto out_of_range' ], v[0]);
-			t.assert_deep_equal(live({ ipproto: v[0] }), [ v[1] ], v[0]);
-		}
+	t.it('ipproto is an error only where netifd drops the rule or sends the kernel another protocol', () => {
 		// netifd resolves these through strtoul base 0 or musl's table, `ip` to 0, which is any protocol.
-		for (let v in [ 'tcp', 'ip', 'raw', '6', '06', '0x6', '+6', ' 6', '-250', '4294967297' ]) {
-			t.assert_deep_equal(codes({ ipproto: v }), [ 'ipproto invalid_type' ], v);
-			t.assert_deep_equal(live({ ipproto: v }), [ false ], v);
-		}
-		for (let v in [ '0', '09', '0x', '6 ', 'TCP', 'sctp', 'hopopt', '6.5', '' ])
+		for (let v in [ 1, 6, 17, 255, 'tcp', 'ip', 'raw', '6', '06', '0x6', '+6', ' 6' ])
+			t.assert_deep_equal(codes({ ipproto: v }), [], v);
+		// Only the low byte of a number reaches the kernel, and netifd keeps 32 bits of it.
+		for (let v in [ 0, 256, 262, 4294967296, '0', '-250', '4294967297' ]) {
+			t.assert_deep_equal(codes({ ipproto: v }), [ 'ipproto out_of_range' ], v);
 			t.assert_deep_equal(live({ ipproto: v }), [ true ], v);
+		}
+		for (let v in [ '09', '0x', '6 ', 'TCP', 'sctp', 'hopopt', '6.5', '' ])
+			t.assert_deep_equal(codes({ ipproto: v }), [ 'ipproto invalid_format' ], v);
+		t.assert_deep_equal(live({ ipproto: 0, disabled: true }), [ false ]);
 	});
-	t.it('sport and dport take 1 to 65534 as plain decimals, and are live only for what netifd or the kernel refuses', () => {
+	t.it('sport and dport are an error only where netifd drops the rule, the kernel refuses it, or a port wraps', () => {
+		// sscanf skips whitespace and takes a sign before each number, reads a second only right
+		// after the dash, and ignores what follows.
 		for (let k in [ 'sport', 'dport' ]) {
-			for (let v in [ '1', '80', '0080', '65534', '1000-2000', '443-443', '1-65534' ])
+			for (let v in [ '1', '80', '0080', '65534', '1000-2000', '443-443', '1-65534', '80 ', ' 80', '80-', '+80',
+			                '1000-2000x', '1000- 2000', '80:90', 80 ])
 				t.assert_deep_equal(codes({ [k]: v }), [], v);
-			for (let v in [ [ '0', true ], [ '65535', true ], [ '0-65535', true ], [ '1-65535', true ], [ '0-80', true ],
-			                [ '2000-1000', true ], [ '65616', false ], [ '99999', false ] ]) {
-				t.assert_deep_equal(codes({ [k]: v[0] }), [ k + ' out_of_range' ], v[0]);
-				t.assert_deep_equal(live({ [k]: v[0] }), [ v[1] ], v[0]);
+			for (let v in [ '0', '65535', '0-65535', '1-65535', '0-80', '2000-1000', '65616', '99999', '123456', '-80' ]) {
+				t.assert_deep_equal(codes({ [k]: v }), [ k + ' out_of_range' ], v);
+				t.assert_deep_equal(live({ [k]: v }), [ true ], v);
 			}
-			// sscanf skips whitespace and takes a sign before each number, reads a second only right
-			// after the dash, and ignores what follows. -80 wraps to 65456.
-			for (let v in [ [ '80 ', false ], [ ' 80', false ], [ '80-', false ], [ '+80', false ], [ '-80', false ],
-			                [ '1000-2000x', false ], [ '1000- 2000', false ], [ '80:90', false ], [ 'http', true ],
-			                [ '', true ], [ '-', true ], [ '123456', false ], [ 80, false ] ]) {
-				t.assert_deep_equal(codes({ [k]: v[0] }), [ k + ' invalid_format' ], v[0]);
-				t.assert_deep_equal(live({ [k]: v[0] }), [ v[1] ], v[0]);
-			}
+			for (let v in [ 'http', '', '-' ])
+				t.assert_deep_equal(codes({ [k]: v }), [ k + ' invalid_format' ], v);
 		}
 	});
-	t.it('uidrange takes 0 to 4294967294 as plain decimals, and is live only for what netifd or the kernel refuses', () => {
-		for (let v in [ '0', '1000', '1000-1005', '1000-1000', '0-4294967294' ])
+	t.it('uidrange is an error only where netifd drops the rule, the kernel refuses it, or a uid wraps', () => {
+		for (let v in [ '0', '1000', '1000-1005', '1000-1000', '0-4294967294', '1000-', '1000 -1005', '1000- 1005',
+		                '1000-1005x', 1000 ])
 			t.assert_deep_equal(codes({ uidrange: v }), [], v);
-		for (let v in [ [ '4294967295', true ], [ '0-4294967295', true ], [ '1005-1000', true ],
-		                [ '4294967296', false ], [ '9999999999', false ] ]) {
-			t.assert_deep_equal(codes({ uidrange: v[0] }), [ 'uidrange out_of_range' ], v[0]);
-			t.assert_deep_equal(live({ uidrange: v[0] }), [ v[1] ], v[0]);
+		for (let v in [ '4294967295', '0-4294967295', '1005-1000', '4294967296', '9999999999', '12345678901' ]) {
+			t.assert_deep_equal(codes({ uidrange: v }), [ 'uidrange out_of_range' ], v);
+			t.assert_deep_equal(live({ uidrange: v }), [ true ], v);
 		}
-		for (let v in [ [ '1000-', false ], [ '1000 -1005', false ], [ '1000- 1005', false ], [ '1000-1005x', false ],
-		                [ '-1', true ], [ 'root', true ], [ '12345678901', false ], [ '', true ], [ 1000, false ] ]) {
-			t.assert_deep_equal(codes({ uidrange: v[0] }), [ 'uidrange invalid_format' ], v[0]);
-			t.assert_deep_equal(live({ uidrange: v[0] }), [ v[1] ], v[0]);
-		}
+		for (let v in [ '-1', 'root', '' ])
+			t.assert_deep_equal(codes({ uidrange: v }), [ 'uidrange invalid_format' ], v);
 	});
 });
 
@@ -539,29 +532,40 @@ t.describe('network.rules match options through the handler', () => {
 	} } });
 	let read_back = (c) => { let b = h.get_one(c, ctx(), 'm1').body; delete b.runtime; return b; };
 	let fields = (r) => map(r.body.errors ?? [], (e) => e.field + ' ' + e.code);
-	// LuCI's own forms for each option, and forms that a write refuses: netifd installs the first
-	// four and drops or the kernel refuses the last two.
+	// LuCI's own forms for each option, forms that netifd installs as they read and a write refuses,
+	// and values with which the kernel refuses the rule.
 	const LUCI = { suppress_prefixlength: '0', tos: '16', uidrange: '1000-1005', ipproto: '6', sport: '1000-2000', dport: '443' };
-	const REFUSED = { suppress_prefixlength: '64', ipproto: '06', uidrange: '1000-1005x', sport: '80 ', tos: '10', dport: '65535' };
+	const TAKEN = { suppress_prefixlength: '64', ipproto: '06', uidrange: '1000-1005x', sport: '80 ' };
+	const BROKEN = { tos: '10', dport: '65535' };
 
 	t.it('a PUT of a rule that holds all six options keeps them', () => {
 		let c = stored(LUCI);
 		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 200);
 		for (let k, v in LUCI) t.assert_equal(c._state.uci.network.m1[k], v, k);
 	});
-	// v4 (#308): LuCI's model, the stored values that a write refuses block every write of the
-	// section, so a PATCH and a PUT answer 422 and name them all, and uci stays as it is.
-	t.it('a PATCH and a PUT answer 422 for stored values that a write refuses, which stay as they are', () => {
-		let c = stored(REFUSED);
+	t.it('a stored form that netifd installs is no error, and a write that sends another such form is refused', () => {
+		let c = stored(TAKEN);
+		t.assert_deep_equal(h.sweep(c), []);
+		t.assert_equal(h.patch(c, ctx(), 'm1', { priority: 30021 }).status, 200);
+		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'm1', { ...TAKEN, suppress_prefixlength: 64 }).status, 200);
+		t.assert_equal(h.patch(c, { ...ctx(), json_patch: true }, 'm1',
+		                       [ { op: 'replace', path: '/ipproto', value: '06' } ]).status, 200);
+		for (let k, v in TAKEN) t.assert_equal(c._state.uci.network.m1[k], v, k);
+		for (let p in [ [ 'suppress_prefixlength', 33, 'out_of_range' ], [ 'ipproto', 'tcp', 'invalid_type' ],
+		                [ 'uidrange', '1000-1006x', 'invalid_format' ], [ 'sport', '81 ', 'invalid_format' ] ])
+			t.assert_deep_equal(fields(h.patch(c, ctx(), 'm1', { [p[0]]: p[1] })), [ p[0] + ' ' + p[2] ], p[0]);
+	});
+	// v4 (#308): LuCI's model, a stored value with which netifd drops the rule or the kernel
+	// refuses it blocks every write of the section, so a PATCH and a PUT answer 422 and uci stays.
+	t.it('a PATCH and a PUT answer 422 while the rule stores a value that the kernel refuses', () => {
+		let c = stored({ ...TAKEN, ...BROKEN });
 		let r = h.patch(c, ctx(), 'm1', { priority: 30021 });
 		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(sort(fields(r)),
-		                    sort([ 'suppress_prefixlength out_of_range', 'tos not_in_enum', 'ipproto invalid_type',
-		                           'uidrange invalid_format', 'sport invalid_format', 'dport out_of_range' ]));
+		t.assert_deep_equal(sort(fields(r)), [ 'dport out_of_range', 'tos not_in_enum' ]);
 		t.assert_equal(h.replace(c, ctx(), 'm1', read_back(c)).status, 422);
-		for (let k, v in REFUSED) t.assert_equal(c._state.uci.network.m1[k], v, k);
-		t.assert_equal(h.patch(c, ctx(), 'm1', { ipproto: 6 }).status, 422);
-		t.assert_equal(c._state.uci.network.m1.ipproto, '06');
+		for (let k, v in { ...TAKEN, ...BROKEN }) t.assert_equal(c._state.uci.network.m1[k], v, k);
+		t.assert_equal(h.patch(c, ctx(), 'm1', { tos: 16, dport: '443' }).status, 200);
 	});
 	t.it('a write that changes a value to one that it refuses answers 422 with the errors of the section', () => {
 		let c = stored(LUCI);
@@ -571,42 +575,39 @@ t.describe('network.rules match options through the handler', () => {
 			t.assert_equal(length(filter(fields(r), (f) => substr(f, 0, length(k) + 1) == k + ' ')), 1, k);
 			t.assert_equal(c._state.uci.network.m1[k], LUCI[k], k);
 		}
-		t.assert_deep_equal(sort(fields(h.patch(stored(REFUSED), ctx(), 'm1', { sport: '80  ' }))),
-		                    sort([ 'suppress_prefixlength out_of_range', 'tos not_in_enum', 'ipproto invalid_type',
-		                           'uidrange invalid_format', 'sport invalid_format', 'dport out_of_range' ]));
+		t.assert_deep_equal(sort(fields(h.patch(stored({ ...TAKEN, ...BROKEN }), ctx(), 'm1', { sport: '80  ' }))),
+		                    [ 'dport out_of_range', 'sport invalid_format', 'tos not_in_enum' ]);
+	});
+	t.it('a value past both the read and the request bound gets the message of the request bound', () => {
+		let r = h.patch(stored(LUCI), ctx(), 'm1', { suppress_prefixlength: 2147483648 });
+		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code, e.message ]),
+		                    [ [ 'suppress_prefixlength', 'out_of_range', 'must be <= 32' ] ]);
 	});
 	t.it('a create refuses them too', () => {
-		let r = h.create(stored({}), ctx(), { id: 'm2', src: '10.9.1.0/24', lookup: 42, tos: 10, ipproto: 'sctp' });
+		let r = h.create(stored({}), ctx(), { id: 'm2', src: '10.9.1.0/24', lookup: 42, tos: 10, ipproto: 'tcp' });
 		t.assert_equal(r.status, 422);
 		t.assert_deep_equal(sort(fields(r)), [ 'ipproto invalid_type', 'tos not_in_enum' ]);
 	});
-	// v4 (#308): LuCI's model, enabling the rule is refused while it stores a value that a
-	// write refuses, and the 422 names them all, the ones the write does not touch included.
-	t.it('enabling a rule is refused while it stores a value that a write refuses', () => {
-		let installs = { suppress_prefixlength: '64', ipproto: '06', uidrange: '1000-1005x', sport: '80 ', disabled: '1' };
-		let base = [ 'suppress_prefixlength out_of_range', 'ipproto invalid_type', 'uidrange invalid_format', 'sport invalid_format' ];
-		let c = stored(installs);
-		let r = h.patch(c, ctx(), 'm1', { disabled: false });
-		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(sort(fields(r)), sort(base));
-		t.assert_equal(c._state.uci.network.m1.disabled, '1');
-		for (let o in [ [ 'tos', '10', 'not_in_enum', null ], [ 'ipproto', '0', 'out_of_range', 'ipproto invalid_type' ],
-		                [ 'ipproto', 'sctp', 'invalid_type', 'ipproto invalid_type' ],
-		                [ 'dport', '65535', 'out_of_range', null ], [ 'uidrange', '4294967295', 'out_of_range', 'uidrange invalid_format' ] ]) {
-			c = stored({ ...installs, [o[0]]: o[1] });
-			let want = filter(base, (f) => f != o[3]);
-			push(want, o[0] + ' ' + o[2]);
-			t.assert_deep_equal(sort(fields(h.patch(c, ctx(), 'm1', { disabled: false }))), sort(want), o[1]);
+	// v4 (#308): enabling the rule is refused while it stores a value with which netifd drops it,
+	// the kernel refuses it, or the kernel gets another value.
+	t.it('enabling a rule is refused only while it stores a value that netifd drops or misreads', () => {
+		let c = stored({ ...TAKEN, disabled: '1' });
+		t.assert_equal(h.patch(c, ctx(), 'm1', { disabled: false }).status, 200);
+		for (let o in [ [ 'tos', '10', 'not_in_enum' ], [ 'ipproto', '0', 'out_of_range' ], [ 'ipproto', 'sctp', 'invalid_format' ],
+		                [ 'ipproto', '256', 'out_of_range' ], [ 'dport', '65535', 'out_of_range' ], [ 'sport', '65616', 'out_of_range' ],
+		                [ 'uidrange', '4294967295', 'out_of_range' ] ]) {
+			c = stored({ ...TAKEN, disabled: '1', [o[0]]: o[1] });
+			t.assert_deep_equal(fields(h.patch(c, ctx(), 'm1', { disabled: false })), [ o[0] + ' ' + o[2] ], o[1]);
 			t.assert_equal(c._state.uci.network.m1.disabled, '1', o[1]);
 		}
 	});
-	t.it('the sweep lists each stored value that a write refuses, with whether netifd reads it', () => {
-		let swept = h.sweep(stored({ tos: '10', ipproto: '06', disabled: '1' }));
+	t.it('the sweep lists each stored value that netifd drops or misreads, with whether netifd reads it', () => {
+		let swept = h.sweep(stored({ ...TAKEN, tos: '10', ipproto: '0', disabled: '1' }));
 		t.assert_deep_equal(sort(map(swept[0].errors, (e) => sprintf('%s %s %J', e.field, e.code, e.live))),
-		                    [ 'ipproto invalid_type false', 'tos not_in_enum false' ]);
-		swept = h.sweep(stored({ tos: '10', ipproto: '06' }));
+		                    [ 'ipproto out_of_range false', 'tos not_in_enum false' ]);
+		swept = h.sweep(stored({ ...TAKEN, tos: '10', ipproto: '0' }));
 		t.assert_deep_equal(sort(map(swept[0].errors, (e) => sprintf('%s %s %J', e.field, e.code, e.live))),
-		                    [ 'ipproto invalid_type false', 'tos not_in_enum true' ]);
+		                    [ 'ipproto out_of_range true', 'tos not_in_enum true' ]);
 	});
 	t.it('a rule without a selector takes a PUT of its read and a create', () => {
 		let c = ubus.stub({ uci: { network: {

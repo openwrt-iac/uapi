@@ -96,24 +96,14 @@ function validate(json, conn, id) {
 	return errs;
 }
 
-// 6 GHz channels go up to 233. Only cell_density has bounds in the wifi-scripts schema, and
-// validate.uc stops the radio for a value outside them, so only its error is live: a radio with a
-// stored radio index, channel or power outside the range that a write takes still comes up.
-const RANGES = { radio: [ 0, null, false ], channel: [ 0, 233, false ], txpower: [ 0, 30, false ],
-                 cell_density: [ 0, 3, true ] };
-
-// A read gives what wifi-scripts reads from the stored text, which can be outside the range that a
-// write takes.
+// Only cell_density has bounds in the wifi-scripts schema, and validate.uc stops the radio, with all
+// its SSIDs, for a value outside them. A radio with a stored radio index, channel or power outside
+// the range that a write takes still comes up, so only the request schema refuses those.
 function validate_new(json) {
-	let errs = [];
-	for (let f, r in RANGES) {
-		let v = json[f];
-		if (type(v) == "int" && (v < r[0] || (r[1] != null && v > r[1])))
-			push(errs, { field: f, code: "out_of_range", live: r[2] && json.disabled !== true && type(json.type) == "string" && json.type != "",
-			             message: (r[1] != null) ? sprintf("must be from %d to %d", r[0], r[1])
-			                                      : sprintf("must be at least %d", r[0]) });
-	}
-	return errs;
+	let v = json.cell_density;
+	if (type(v) != "int" || (v >= 0 && v <= 3)) return [];
+	return [ { field: "cell_density", code: "out_of_range", message: "must be from 0 to 3",
+	           live: json.disabled !== true && type(json.type) == "string" && json.type != "" } ];
 }
 
 return {

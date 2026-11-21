@@ -794,16 +794,16 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_equal(c._state.uci.wireless.w1.mode, null);
 	});
 
-	t.it('refuses mode wds on write, and reads a stored one', () => {
-		t.assert_deep_equal(codes({ mode: 'wds' }, 'mode'), [ 'not_in_enum' ]);
-		t.assert_deep_equal(live({ mode: 'wds', disabled: true }, 'mode'), [ false ]);
+	// mac80211.sh skips an SSID in mode wds, as it skips ahdemo and a section without a mode.
+	t.it('refuses mode wds on write, and a stored one is no error', () => {
 		let c = stored({ mode: 'wds', disabled: '1' });
 		t.assert_equal(read_back(c).mode, 'wds');
-		let r = h().patch(c, CTX, 'w1', { ssid: 'home2' });
-		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(map(r.body.errors, (e) => e.field), [ 'mode' ]);
-		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { disabled: false }).body.errors, (e) => e.field), [ 'mode' ]);
-		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'ap', disabled: false }).status, 200);
+		t.assert_deep_equal(h().sweep(c), []);
+		t.assert_equal(h().patch(c, CTX, 'w1', { ssid: 'home2', disabled: false }).status, 200);
+		t.assert_equal(h().patch(c, CTX, 'w1', { mode: 'wds', ssid: 'home3' }).status, 200);
+		c = stored({ mode: 'ap' });
+		t.assert_deep_equal(map(h().patch(c, CTX, 'w1', { mode: 'wds' }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'mode', 'not_in_enum' ] ]);
 	});
 
 	t.it('refuses an SSID over 32 bytes in every mode, live where a daemon reads it', () => {
@@ -996,28 +996,25 @@ t.describe('wireless/devices reads its numbers as wifi-scripts does', () => {
 		t.assert_equal(c._state.uci.wireless.radio0.channel, '6');
 	});
 
-	// v4 (#308): the stored out-of-range value blocks every write of the radio until one
-	// replaces it, not only a write of that field.
-	t.it('refuses a number outside its range on write, and refuses a write that leaves a stored one alone', () => {
+	// A radio with a power above 30, which iw clamps, a channel above 233 or a radio index below 0
+	// still comes up, so a stored one is no error. A write refuses one that it sends.
+	t.it('refuses a number outside its range on write, and takes a write that leaves a stored one alone', () => {
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', txpower: 40 }).status, 422);
 		t.assert_equal(h.create(radio({}), ctx, { type: 'mac80211', radio: -1 }).status, 422);
-		let c = radio({ txpower: '40' });
-		let r = h.patch(c, ctx, 'radio0', { disabled: true });
-		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'txpower', 'out_of_range' ] ]);
-		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 41 }).status, 422);
+		let c = radio({ txpower: '40', channel: '240' });
+		t.assert_deep_equal(h.sweep(c), []);
+		t.assert_equal(h.patch(c, ctx, 'radio0', { disabled: true }).status, 200);
+		t.assert_deep_equal(map(h.patch(c, ctx, 'radio0', { txpower: 41 }).body.errors, (e) => [ e.field, e.code ]),
+		                    [ [ 'txpower', 'out_of_range' ] ]);
 		t.assert_equal(h.patch(c, ctx, 'radio0', { txpower: 20 }).status, 200);
+		t.assert_equal(c._state.uci.wireless.radio0.channel, '240');
 	});
 
-	// A 6 GHz radio on channel 233 comes up, and so does a radio with a power above 30, which iw
-	// clamps. Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc. A
-	// stored value outside the write range blocks every write of the radio, whether it stops the
-	// radio or not.
-	t.it('refuses a write while the radio stores a value outside the write range', () => {
+	// Only a cell_density outside 0 to 3 stops the radio, in wifi-scripts' validate.uc, so only it
+	// blocks every write of the radio.
+	t.it('refuses a write while the radio stores a cell_density that stops it', () => {
 		t.assert_equal(h.patch(radio({ band: '6g', channel: '233', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 200);
-		let r = h.patch(radio({ txpower: '40', disabled: '1' }), ctx, 'radio0', { disabled: false });
-		t.assert_equal(r.status, 422, r.body);
-		t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ 'txpower', 'out_of_range' ] ]);
+		t.assert_equal(h.patch(radio({ txpower: '31', disabled: '1' }), ctx, 'radio0', { disabled: false }).status, 200);
 		let c = radio({ cell_density: '4', disabled: '1' });
 		t.assert_equal(h.patch(c, ctx, 'radio0', { channel: 6 }).status, 422);
 		t.assert_deep_equal(map(h.patch(c, ctx, 'radio0', { disabled: false }).body.errors, (e) => [ e.field, e.code ]),
@@ -1104,15 +1101,21 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 	});
 
 	// LuCI writes an EAP SSID without a key, since the RADIUS server holds the secret.
-	t.it('a stored EAP SSID without a key takes a write, and a write that sets an EAP mode needs one', () => {
+	t.it('a stored EAP SSID without a key takes a write, and a write that changes to another EAP mode needs one', () => {
 		let c = box({}, { w1: ssid({ encryption: 'wpa2', key: null, auth_server: '192.0.2.9' }) });
 		t.assert_deep_equal(ifaces.sweep(c), []);
 		t.assert_equal(ifaces.patch(c, ctx, 'w1', { hidden: true }).status, 200);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { encryption: 'wpa2' }).status, 200);
+		let read = ifaces.get_one(c, ctx, 'w1').body;
+		for (let k in [ 'id', 'managed', 'runtime', 'has_key', 'has_r0kh', 'has_r1kh' ]) delete read[k];
+		t.assert_equal(ifaces.replace(c, ctx, 'w1', read).status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.key, null);
 		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { encryption: 'wpa3' })), [ [ 'key', 'required' ] ]);
+		t.assert_deep_equal(fields(ifaces.replace(c, ctx, 'w1', { ...read, encryption: 'wpa-mixed' })), [ [ 'key', 'required' ] ]);
 	});
 
 	// wifi-scripts makes one text of a list that uci holds for these, so a write sends that text.
-	t.it('a text option stored as a list is no error, and a write that sends a list is refused', () => {
+	t.it('a text option stored as a list is no error, and a write that sends another list is refused', () => {
 		let c = box({}, { w1: ssid({ nasid: [ 'ap', '1' ], ssid: [ 'home', 'net' ] }) });
 		t.assert_deep_equal(ifaces.sweep(c), []);
 		t.assert_equal(ifaces.patch(c, ctx, 'w1', { hidden: true }).status, 200);
@@ -1121,7 +1124,9 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { [p[0]]: [ p[1] ] })), [ [ p[0], 'invalid_type' ] ], p[0]);
 		let read = ifaces.get_one(c, ctx, 'w1').body;
 		for (let k in [ 'id', 'managed', 'runtime', 'has_key', 'has_r0kh', 'has_r1kh' ]) delete read[k];
-		t.assert_deep_equal(fields(ifaces.replace(c, ctx, 'w1', read)), [ [ 'ssid', 'invalid_type' ], [ 'nasid', 'invalid_type' ] ]);
+		t.assert_equal(ifaces.replace(c, ctx, 'w1', read).status, 200);
+		t.assert_deep_equal(c._state.uci.wireless.w1.ssid, [ 'home', 'net' ]);
+		t.assert_deep_equal(fields(ifaces.replace(c, ctx, 'w1', { ...read, ssid: [ 'net', 'home' ] })), [ [ 'ssid', 'invalid_type' ] ]);
 		t.assert_equal(ifaces.replace(c, ctx, 'w1', { ...read, ssid: 'home net', nasid: 'ap 1' }).status, 200);
 	});
 

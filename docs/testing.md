@@ -155,7 +155,8 @@ commit-confirmed apply was designed at all.
 ## The write-overlay property
 
 A keyword under a property's `x-uapi-write` narrows only the `*Request` schema.
-The handler checks it against the fields that a request names, and an entry of
+The handler checks it against the fields that a request names, other than a
+value that the request sends back as the read gives it, and an entry of
 `openapi_write_conditional` holds only while `validate()` refuses the same
 values. `tests/unit/write_overlay_test.uc` (3.2.0+) checks each one against the
 fixtures
