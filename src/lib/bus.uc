@@ -102,7 +102,7 @@ function connect(opts) {
 	// libuci commits a package loaded by path by writing the copy that it holds, where it reads a
 	// package loaded by name again and replays the delta. So the commit reloads the file and
 	// replays the writes kept here, and a commit by LuCI or a shell while the request ran stays.
-	let writes = {}, changed = {}, features = {};
+	let writes = {}, changed = {}, wep = {};
 	function load(pkg) {
 		if (writes[pkg] == null && loadable(pkg) && cursor.load(config_dir + "/" + pkg))
 			writes[pkg] = [];
@@ -240,13 +240,14 @@ function connect(opts) {
 			if (!load(pkg)) return null;
 			return cursor.foreach(pkg, sec_type, fn);
 		},
-		// The probe of LuCI's getFeatures: hostapd and wpa_supplicant exit 0 on -v<feature> when they
-		// are built with it. A request runs each probe once.
-		has_feature: function(daemon, feature) {
-			let k = daemon + " " + feature;
-			if (!exists(features, k))
-				features[k] = system(sprintf("/usr/sbin/%s -v%s >/dev/null 2>&1", daemon, feature)) == 0;
-			return features[k];
+		// The ucode wifi-scripts, which OpenWrt 25.12 and main build by default, give the daemon no WEP
+		// key, so the SSID runs open whatever the daemon supports. The shell scripts set WEP up when the
+		// daemon has it, which the -vwep probe of LuCI's getFeatures finds. A request probes each once.
+		wep_support: function(daemon) {
+			if (!exists(wep, daemon))
+				wep[daemon] = fs_mod.stat("/usr/share/ucode/wifi/ap.uc") == null
+				              && system(sprintf("/usr/sbin/%s -vwep >/dev/null 2>&1", daemon)) == 0;
+			return wep[daemon];
 		},
 	};
 }
@@ -388,8 +389,8 @@ function stub(initial) {
 			return true;
 		},
 
-		has_feature: function(daemon, feature) {
-			return index(st.features[daemon] ?? [], feature) >= 0;
+		wep_support: function(daemon) {
+			return index(st.features[daemon] ?? [], "wep") >= 0;
 		},
 
 		uci_foreach: function(pkg, sec_type, fn) {

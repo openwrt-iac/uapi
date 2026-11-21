@@ -1153,7 +1153,7 @@ t.describe('wireless.interfaces WEP needs WEP in the daemon of the mode', () => 
 				let c = box(f, {}, {});
 				let r = ifaces.create(c, ctx, body);
 				t.assert_deep_equal(fields(r), REFUSED, sprintf("%s %J", p[0], f));
-				t.assert_true(index(r.body.errors[0].message, p[1] + " on this router has no WEP support") > 0, r.body.errors[0].message);
+				t.assert_true(index(r.body.errors[0].message, "a " + p[1] + " built with WEP") > 0, r.body.errors[0].message);
 				t.assert_equal(c._state.uci.wireless.w1, null, p[0]);
 			}
 			let c = box({ [p[1]]: [ 'wep' ] }, {}, {});
@@ -1202,11 +1202,11 @@ t.describe('wireless.interfaces WEP needs WEP in the daemon of the mode', () => 
 	t.it('asks a daemon only for a WEP value', () => {
 		let c = box({}, {}, { w1: wep({ encryption: 'psk2', key: 'correcthorse' }) });
 		let asked = [];
-		c.has_feature = function(daemon, feature) { push(asked, [ daemon, feature ]); return false; };
+		c.wep_support = function(daemon) { push(asked, daemon); return false; };
 		t.assert_equal(ifaces.patch(c, ctx, 'w1', { ssid: 'other' }).status, 200);
 		t.assert_deep_equal(ifaces.sweep(c), []);
 		t.assert_deep_equal(asked, []);
 		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { encryption: 'wep' })), REFUSED);
-		t.assert_deep_equal(asked, [ [ 'hostapd', 'wep' ] ]);
+		t.assert_deep_equal(asked, [ 'hostapd' ]);
 	});
 });

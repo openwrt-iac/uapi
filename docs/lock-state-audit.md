@@ -47,8 +47,8 @@ a lock is held](#what-runs-while-a-lock-is-held) rather than as sites. The ubus
 `defer`, `subscriber` and `listener` calls hold resources too, but nothing in
 the tree uses them. `system()` holds a child until it exits. `default_reload()`
 and `run_test()` call it, each on a line inside the row of its `fs.mkstemp()`.
-`has_feature()` in `src/lib/bus.uc` calls it for `hostapd -v<feature>` or
-`wpa_supplicant -v<feature>`, which holds no file and exits at once.
+`wep_support()` in `src/lib/bus.uc` calls it for `hostapd -vwep` or
+`wpa_supplicant -vwep`, which holds no file and exits at once.
 
 `make lint-lock-audit` runs the command above, as written here, and fails when a
 site is in no row of the table below, when a site is in two rows, when a row
