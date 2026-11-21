@@ -110,11 +110,11 @@ wire:
 ```sh
 curl -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
      -X POST https://<router>/api/v3/tokens \
-     -d '{ "name": "ci-bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
+     -d '{ "name": "ci_bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
 ```
 
-Requested scopes must be a strict subset of the caller's (escalation returns
-`403 scope_escalation_blocked`).
+Requested scopes must be equal to or narrower than the caller's (escalation
+returns `403 scope_escalation_blocked`).
 
 ## First request
 
