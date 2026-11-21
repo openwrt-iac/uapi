@@ -139,6 +139,23 @@ section by count.
   `bad_request` for `managed` and `validate`, and 400 `invalid_cursor` for the
   empty cursor. Send only the values that the spec declares, and leave out a
   parameter instead of sending it empty. (#403)
+- **Two firewall reads will say what fw4 uses in v4.** A
+  `firewall/defaults.synflood_rate` with a unit, such as `25/second`, reads null
+  today, where fw4 takes the unit. A `firewall/zones` section without `input`,
+  `output` or `forward` reads `REJECT` for it, where fw4 applies the policy of
+  `firewall/defaults`. v4 reads what fw4 applies, so such a section reads
+  another value and gets another ETag. (#408)
+- **A `dhcp/leases` entry without a client id will read `duid` null in v4.**
+  dnsmasq writes `*` for a missing client id, as for a missing host name, and
+  this major reads it as the string `"*"`. (#392)
+- **Two mwan3 values that mwan3 does not run will answer 422 in v4.** A
+  `mwan3/globals.loglevel` of `err` or `warn`, which iptables refuses as a log
+  level, and a `mwan3/members.metric` above 256, a member that mwan3 leaves out
+  of its policy. Send `error` or `warning`, and a metric from 1 to 256. (#407)
+- **The HTTP token mint will refuse a scope that the server does not know in
+  v4.** It answers 422 `validation_failed` on that entry of `scopes`, as
+  `uapi-token create` already refuses it. This major mints such a token, and it
+  grants nothing. (#415)
 
 ## Removed in past releases
 
