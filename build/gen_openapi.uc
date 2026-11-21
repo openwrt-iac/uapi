@@ -112,15 +112,28 @@ const MULTILINE = "x-uapi-multiline";
 // handler checks them against the fields that a request sends, other than a value that the section
 // holds, and tests/unit/write_overlay_test.uc ties each one to a refusal.
 const WRITE_OVERLAY = "x-uapi-write";
+// Keywords that only the response half declares, for a form that a write takes and a read never
+// gives: a route table name, which toUci stores as its id. The type gate judges a request by the
+// module schema, so that keeps the form, and tests/unit/write_overlay_test.uc reads each fixture
+// case against these keywords.
+const READ_OVERLAY = "x-uapi-read";
 
 function strip_marker(v) {
 	if (type(v) != "object" || (!exists(v, READ_NULLABLE) && !exists(v, MULTILINE)
-	                            && !exists(v, WRITE_OVERLAY))) return v;
+	                            && !exists(v, WRITE_OVERLAY) && !exists(v, READ_OVERLAY))) return v;
 	let out = { ...v };
 	delete out[READ_NULLABLE];
 	delete out[MULTILINE];
 	delete out[WRITE_OVERLAY];
+	delete out[READ_OVERLAY];
 	return out;
+}
+
+function overlaid(v, key) {
+	if (!exists(v, key)) return v;
+	if (type(v[key]) != "object")
+		die(sprintf("%s must be an object of keywords, got %J", key, v[key]));
+	return { ...strip_marker(v), ...v[key] };
 }
 
 // A property marked READ_NULLABLE is one that fromUci answers null for, for an option the
@@ -158,7 +171,8 @@ function widen_null(v) {
 // so only the request half declares it. The sweep still reports such a value.
 function response_schema(v) {
 	if (type(v) != "object") return v;
-	let w = (v[READ_NULLABLE] === true) ? widen_null(v) : strip_marker(v);
+	let w = overlaid(v, READ_OVERLAY);
+	w = (v[READ_NULLABLE] === true) ? widen_null(w) : strip_marker(w);
 	if (exists(w, "pattern")) {
 		w = { ...w };
 		delete w.pattern;
@@ -187,9 +201,7 @@ function writable(props, half) {
 // on a create. The overlay goes in before the widening, so that an enum it brings admits null too.
 function request_schema(v) {
 	if (type(v) != "object") return v;
-	if (exists(v, WRITE_OVERLAY) && type(v[WRITE_OVERLAY]) != "object")
-		die(sprintf("x-uapi-write must be an object of keywords, got %J", v[WRITE_OVERLAY]));
-	let w = exists(v, WRITE_OVERLAY) ? { ...strip_marker(v), ...v[WRITE_OVERLAY] } : v;
+	let w = overlaid(v, WRITE_OVERLAY);
 	w = (v[READ_NULLABLE] === true) ? widen_null(w) : strip_marker(w);
 	if (type(w.properties) == "object") w = { ...w, properties: writable(w.properties, request_schema) };
 	if (type(w.items) == "object") w = { ...w, items: request_schema(w.items) };
@@ -1316,7 +1328,7 @@ function build_schemas() {
 				"id":      { "type": "string", "description": "<package>:<resource> key" },
 				"package": { "type": "string" },
 				"type":    { "type": "string", "description": "uci section type" },
-				"schema_properties": { "type": "object", "description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves." },
+				"schema_properties": { "type": "object", "description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, those under its `x-uapi-read` to the *Response schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves." },
 			},
 		},
 		"WhoamiResponse": {

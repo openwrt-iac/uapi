@@ -133,8 +133,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   id; a name that does not resolve answers 422 `invalid_format`, and an id of 0
   answers 422 `out_of_range`. The read still answers the id, so a plan stays
   stable when `rt_tables` changes, and a name stored by hand or by LuCI still
-  reads as its id. Announced in 3.4.0 (#240). Migration note in
-  `docs/migration-v3-to-v4.md`. (#343)
+  reads as its id. The response type stays an integer, as in 3.x. Announced in
+  3.4.0 (#240). Migration note in `docs/migration-v3-to-v4.md`. (#343) (#422)
 - **BREAKING: `mwan3/interfaces.family` reads `ipv4` for an empty value too, and
   every response holds it as a string.** mwan3 reads the option with
   `config_get family ... ipv4`, which takes an empty value as unset, so v3 read

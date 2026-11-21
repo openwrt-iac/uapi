@@ -205,6 +205,12 @@ module declares them:
   request names, other than a value that the request sends back as the read
   gives it, and `tests/unit/write_overlay_test.uc` ties each keyword to a
   refusal of a request past it.
+- **`x-uapi-read`**: keywords the response half declares instead of the
+  request half, for a form that a write takes and a read never gives (a route
+  `table` name, which a write stores as its id). The type gate judges a request
+  by the module schema, which keeps the form, and
+  `tests/unit/write_overlay_test.uc` reads each fixture case against the
+  keywords.
 - **`x-uapi-multiline`**: the type gate takes a newline and a carriage return in
   this string, such as `system.notes`, and refuses them in every other curated
   string (#276).
@@ -239,10 +245,13 @@ a field present in the response and absent from the request is server-derived,
 which is how
 `network/interfaces.ipaddr` reads as computed with no special case.
 
-A request type can be wider than the response type of the same field while a
-write form is phased out. Until v4, `network/interfaces.ip6prefix` was the case
-since 3.2.0: a read was always an array, and a write still took the
-space-separated string that the 3.1 spec declared; v4 removed it. A type in
+A request type can be wider than the response type of the same field where a
+write takes a form that a read never gives. Since v4, `network/routes.table`
+and `network/rules.lookup` take a table name, which a write stores as its id,
+and a read answers the id. Until v4, `network/interfaces.ip6prefix` was the
+case since 3.2.0, for a write form being phased out: a read was always an
+array, and a write still took the space-separated string that the 3.1 spec
+declared. v4 removed it. A type in
 `<Name>Patch` is also wider where it takes a null that a read does not return,
 because a null removes the field. The merge-patch body below says which fields.
 

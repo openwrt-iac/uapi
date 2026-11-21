@@ -334,6 +334,14 @@ only element of its array, under the path that `validate()` gives it, such as
 rule that depends on another field, such as the pppd range of `mtu` on proto
 `ppp`, goes in `openapi_write_conditional`.
 
+When a write takes a form that a read never gives, the type of the property
+holds both, because the type gate judges a request by it, and the read type goes
+under `x-uapi-read`. The generator puts those keywords on the `*Response`
+schema. `network/routes.table` takes a table name, which toUci stores as its id:
+`table: { type: ["integer", "string", "null"], "x-uapi-read": { type:
+["integer", "null"] } }`. `tests/unit/write_overlay_test.uc` reads each fixture
+case of the module against the keywords, so seed a case with the form.
+
 The type gate refuses a newline and a carriage return in every string of
 `schema_properties`, nested ones too, because most daemons read a value as one
 line, and a newline there starts a second line that the write never showed. A
