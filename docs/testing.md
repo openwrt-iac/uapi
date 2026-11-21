@@ -617,9 +617,10 @@ bodies failed.
 ## CI shape
 
 - Every commit/PR: unit suite + lint.
-- The OpenWrt that the VM and SDK jobs use follows the ref: `v4` (the branch or
-  a PR base) runs them on both the stable release and the OpenWrt main
-  snapshot, and every other ref, tags included, on the stable release alone.
+- The OpenWrt that the VM and SDK jobs use follows the ref: `main` (the branch
+  or a PR base), the 4.x line, runs them on both the stable release and the
+  OpenWrt main snapshot, and every other ref, `v3` and tags included, on the
+  stable release alone.
   The stable release is pinned by checksum in `build/sdk.sha256`. The snapshot
   is verified against the `sha256sums` published beside each artifact, because
   a moving target has no filename to pin. `tools/openwrt-sdk.sh`
@@ -627,7 +628,7 @@ bodies failed.
 - Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails
   when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's
   number and the PR has no `changelog-not-needed` label.
-- Every PR + push to main or v4: unit + integration suite (QEMU).
+- Every PR + push to main or v3: unit + integration suite (QEMU).
 - A PR that changes what goes into the APK (`src/`, `build/openapi.json`,
   `files/`, `cli/uapi-token`), how it is built, or the APK smoke test: + the
   `package` job, which builds the APK and runs the APK install smoke test above
@@ -636,7 +637,7 @@ bodies failed.
   The job runs beside `integration`, and on a hit of the SDK cache it took 10 to
   12 minutes at the last release tags, so it adds little to the wait. On any
   other PR the job is skipped.
-- `package` is a required check: the `main` and `v4` rulesets require `unit`,
+- `package` is a required check: the `main` and `v3` rulesets require `unit`,
   `lint`, `integration`, `entry` and `package`, with the branch up to date, so a
   red `package` blocks a merge. A PR that does not change the APK still merges,
   because a skipped job passes as a required check. The `lint` job decides

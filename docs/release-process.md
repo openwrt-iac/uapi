@@ -98,8 +98,8 @@ sweep that never happened.
 
 ## Major preparation branch
 
-A major's breaking work lands on a preparation branch cut from `main` (today
-`v4`), not on `main` itself. Breaking-change PRs target the preparation
+A major's breaking work lands on a preparation branch cut from `main` (`v4`
+for 4.x), not on `main` itself. Breaking-change PRs target the preparation
 branch. Additive and internal PRs keep targeting `main` and can ship in
 minors while the major is in flight.
 
@@ -120,8 +120,16 @@ minors while the major is in flight.
   so breaking PRs start from a current base and conflicts stay small.
 - Until the release, the preparation branch still serves the current API
   prefix. The mount move is the last commit before the rc tag.
-- At release time: rebase the preparation branch onto `main`, merge it into
-  `main`, then run the rc flow below.
+- At release time: cut the maintenance branch of the old major from `main`
+  (`v3` for 3.x), with a copy of the `main` ruleset that has no bypass actor.
+  Rebase the preparation branch onto `main` one last time, merge it into
+  `main`, delete it and its ruleset, then run the rc flow below. From then, a
+  fix of the old major lands on its maintenance branch by PR, and is carried to
+  `main` when it applies there. The old major's releases are tagged on its
+  maintenance branch.
+
+`v4` went through this on 2026-11-21: `main` carries 4.x, and `v3` carries 3.x
+from 3.5.0 on.
 
 ## Release flow
 

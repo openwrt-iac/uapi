@@ -67,8 +67,9 @@ semver impact of a change. These rules decide what the change must carry.
 - **A wire change** is any change to a path, method, field, type, default,
   status, error code, header, scope, ETag, or the spellings that a value
   accepts.
-- **A breaking change goes to the major preparation branch only** (today `v4`).
-  It needs its issue, an announcement in a released 3.x (`docs/deprecations.md`
+- **A breaking change goes to the branch of the next major only** (today
+  `main`, which carries 4.x, while `v3` carries the 3.x fixes). It needs its
+  issue, an announcement in a released 3.x (`docs/deprecations.md`
   and the "Upcoming" block of the spec), a section in the migration doc of the
   major, and a CHANGELOG entry that starts with `BREAKING:`.
 - **The commit that changes the wire carries the whole change.** It also updates
