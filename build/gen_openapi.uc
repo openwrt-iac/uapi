@@ -122,16 +122,9 @@ function strip_marker(v) {
 	return out;
 }
 
-// The two halves disagree about null on purpose, because reading and writing a uci option are
-// not symmetric: fromUci answers null for an option the operator never set, while the write
-// contract still wants the value. A property marked READ_NULLABLE is one a read can answer
-// null for, so only the response type admits it.
-//
-// The marker is deliberately not just `type: [..., "null"]` in schema_properties. That
-// declaration feeds both halves, and 21 of the properties needing this are `required` on
-// write while 26 carry an enum; widening there would make `{"target": null}` schema-valid on
-// a create and leave resource.validate() as the only thing between that and a rule with no
-// target. Response-only keeps the write surface exactly as it shipped.
+// A property marked READ_NULLABLE is one that fromUci answers null for, for an option the
+// operator never set. Both halves admit the null, as request_schema explains, and
+// resource.validate() refuses it where a write needs the value.
 function widen_null(v) {
 		let w = strip_marker(v);
 		if (type(w.type) == "string") {
