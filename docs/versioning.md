@@ -195,9 +195,10 @@ they are not in the OpenAPI document (`lint-openapi-shape` fails the build if
 one leaks into the spec). `GET /schema/<package>/<resource>` serves them as the
 module declares them:
 
-- **`x-uapi-read-nullable`**: a read can answer null for this property, so the
-  response half widens `type` and `enum` with null while the request half keeps
-  the write contract.
+- **`x-uapi-read-nullable`**: a read can answer null for this property, so both
+  halves widen `type` and `enum` with null, because a read-modify-write sends
+  the read view back as the next request. `validate()` refuses the null where a
+  write needs the value.
 - **`x-uapi-write`**: keywords the request half declares instead of the response
   half, for a value a read can return but a write refuses (a stored `mtu` below
   68, a route `table` of 0). `tests/unit/write_overlay_test.uc` ties each
