@@ -60,34 +60,49 @@ t.describe('firewall.zones', () => {
 	});
 });
 
-t.describe('firewall.defaults synflood_rate', () => {
-	let rate = (v) => fw_defaults.fromUci({ '.name': 'd', synflood_rate: v }).synflood_rate;
+t.describe('firewall.defaults synflood_rate and synflood_burst', () => {
+	let read = (opt, v) => fw_defaults.fromUci({ '.name': 'd', [opt]: v })[opt];
 	let refused = (v) => map(filter(full_validate(fw_defaults, { synflood_rate: v }, null),
 	                                (e) => e.field == "synflood_rate"), (e) => e.code);
 
-	t.it('reads the rate and its unit as fw4 parses them', () => {
-		t.assert_equal(rate(null), null);
-		t.assert_equal(rate('25'), 25);
-		t.assert_equal(rate(' 025 '), 25);
-		t.assert_equal(rate('25/second'), '25/second');
-		t.assert_equal(rate('25/s'), '25/second');
-		t.assert_equal(rate('10/min'), '10/minute');
-		t.assert_equal(rate('5/h'), '5/hour');
-		t.assert_equal(rate('1/d'), '1/day');
-		t.assert_equal(rate('! 30/minute'), '30/minute');
+	t.it('a rate reads with the unit that fw4 applies', () => {
+		t.assert_equal(read('synflood_rate', null), null);
+		t.assert_equal(read('synflood_rate', '25'), '25/second');
+		t.assert_equal(read('synflood_rate', ' 025 '), '25/second');
+		t.assert_equal(read('synflood_rate', '25/second'), '25/second');
+		t.assert_equal(read('synflood_rate', '25/s'), '25/second');
+		t.assert_equal(read('synflood_rate', '10/min'), '10/minute');
+		t.assert_equal(read('synflood_rate', '5/h'), '5/hour');
+		t.assert_equal(read('synflood_rate', '1/d'), '1/day');
+		t.assert_equal(read('synflood_rate', '! 30/minute'), '30/minute');
 	});
 
-	t.it('reads null for a value that fw4 refuses', () => {
+	t.it('a rate that fw4 refuses reads null', () => {
 		for (let v in [ 'abc', '25/seconds', '25/S', '25 /second', '25/', '/second', '-5', '!' ])
-			t.assert_equal(rate(v), null, v);
+			t.assert_equal(read('synflood_rate', v), null, v);
 	});
 
-	t.it('a write takes an integer or a rate with its whole unit', () => {
+	t.it('a write takes an integer, a rate per second, or a rate with its whole unit', () => {
 		for (let v in [ 25, '25/second', '1/day' ])
 			t.assert_deep_equal(refused(v), [], v);
 		t.assert_deep_equal(refused(0), [ 'out_of_range' ]);
 		for (let v in [ '25/s', '0/minute', '25' ])
 			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
+	});
+
+	t.it('the response declares the rate as a string', () => {
+		let fs = require('fs');
+		let SPEC = json(fs.readfile('build/openapi.json')).components.schemas;
+		t.assert_deep_equal(SPEC.FirewallDefaultsResponse.properties.synflood_rate.type, [ 'string', 'null' ]);
+		t.assert_deep_equal(SPEC.FirewallDefaultsRequest.properties.synflood_rate.type, [ 'integer', 'string', 'null' ]);
+	});
+
+	t.it('a burst reads as fw4 parses it when nft takes the number', () => {
+		t.assert_equal(read('synflood_burst', '0x10'), 16);
+		t.assert_equal(read('synflood_burst', ' 16'), 16);
+		t.assert_equal(read('synflood_burst', '1e3'), 1000);
+		for (let v in [ '16.5', 'abc', [ '16' ] ])
+			t.assert_equal(read('synflood_burst', v), null, v);
 	});
 });
 
@@ -113,21 +128,39 @@ t.describe('firewall.defaults options that fw4 refuses', () => {
 		}
 	});
 
-	t.it('a write that names the option replaces it, and a null removes a bool', () => {
-		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe' });
-		t.assert_equal(dh.patch(c, ctx, { synflood_rate: '25/second', synflood_burst: 50,
-		                                  drop_invalid: false, syn_flood: null }).status, 200);
-		t.assert_deep_equal(c._state.uci.firewall.d, { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT',
-		                                               synflood_rate: '25/second', synflood_burst: '50', drop_invalid: '0' });
+	// nft refuses `burst 16.5 packets`, which fw4 renders only while syn_flood is on.
+	t.it('a burst that is no integer is an error, live while syn_flood is on', () => {
+		for (let on in [ '1', '0' ]) {
+			let swept = dh.sweep(box({ synflood_burst: '16.5', syn_flood: on }))[0]?.errors ?? [];
+			t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ "synflood_burst", "invalid_format", on == '1' ] ], on);
+		}
 	});
 
-	t.it('a null for a number keeps the option, so the write is refused', () => {
-		t.assert_deep_equal(codes(dh.patch(box({ synflood_burst: 'abc' }), ctx, { synflood_burst: null }), "synflood_burst"),
-		                    [ "invalid_format" ]);
+	t.it('a write that names the option replaces the stored value, and a null removes it', () => {
+		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { synflood_rate: 30, synflood_burst: null,
+		                                  drop_invalid: false, syn_flood: null }).status, 200);
+		t.assert_deep_equal(c._state.uci.firewall.d, { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT',
+		                                               synflood_rate: '30', drop_invalid: '0' });
+		t.assert_equal(dh.get(c, ctx).body.synflood_rate, '30/second');
 	});
 
 	t.it('a value that fw4 takes is no error', () => {
 		t.assert_deep_equal(dh.sweep(box({ synflood_burst: '0x10', synflood_rate: '! 25/m', drop_invalid: 'on' })), []);
+	});
+
+	// The stock /etc/config/firewall sets none of these bools, and fw4 reads an absent
+	// tcp_syncookies as 1, so a write of the read must not pin them to the 0 that the read gives.
+	t.it('a write of the read of a stock section writes nothing', () => {
+		let c = box({ syn_flood: '1', output: 'ACCEPT', forward: 'REJECT', input: 'REJECT' });
+		let before = sprintf("%J", c._state.uci.firewall.d);
+		let body = dh.get(c, ctx).body;
+		delete body.runtime;
+		t.assert_equal(dh.patch(c, ctx, body).status, 200);
+		t.assert_equal(sprintf("%J", c._state.uci.firewall.d), before);
+		t.assert_deep_equal(filter(c._state.uci_ops, (op) => index([ "set", "delete", "delete-option" ], op[0]) >= 0), []);
+		t.assert_equal(dh.patch(c, ctx, { tcp_syncookies: false }).status, 200);
+		t.assert_equal(c._state.uci.firewall.d.tcp_syncookies, null);
 	});
 });
 
