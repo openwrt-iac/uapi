@@ -300,6 +300,37 @@ has returned since 3.2.0. A one-element array is still stored as a scalar, which
 netifd, 6rd, map and 464xlat read the same way, so the stored form does not
 change.
 
+## WireGuard peer writes on OpenWrt main
+
+4.x runs its tests on OpenWrt 25.12 and on the OpenWrt main snapshot, and 3.x
+only on 25.12. On main, netifd sets up a wireguard interface with a ucode proto
+handler, `/lib/netifd/proto/wireguard.uc`, in place of `wireguard.sh`. That
+changes what a write to `network/wireguard_peers` does there:
+
+- netifd restarts the interface on every peer change. So each peer write
+  interrupts the tunnel for every peer of the interface, not only for the peer
+  that it changes.
+- The restart sets the peers from uci with one `wg syncconf`, all of them or
+  none. So the kernel state of a peer write lands with the restart, after the
+  commit. uapi waits up to 8 s for the restart to end, then applies the peer and
+  answers, so `X-Kernel-Status: ok` reports the interface after the restart.
+- A restart that does not end in 8 s fails the write with a restore: 500
+  `reload_failed_restored`, or `reload_failed_unrecovered` when the restore
+  fails too. Since openwrt ecd9120f04, the handler leaves out a key, a preshared
+  key, an endpoint or a keepalive that wg would refuse, so only an allowed IP
+  that wg refuses keeps the interface down. The same 500 answers a write to an
+  interface that another stored peer already keeps down, because uapi cannot
+  tell the two cases apart.
+
+On 25.12, `wireguard.sh` restarts nothing on a peer change, and uapi applies
+the peer with `wg set`, which leaves the other peers up. On main, the peer
+changes of one interface can go in one `POST /uapi/batch`. A batch commits its
+writes once and reloads netifd once, so netifd gets one change of the interface
+to restart it for, not one for each peer. A 500 on a peer write can come from
+another peer of the interface, so read its other peers before you retry.
+`docs/errors.md` (`X-Kernel-Status`) and the kernel apply in
+`docs/architecture.md` give the details.
+
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of
