@@ -61,13 +61,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that LuCI made holds `1` or `0` and reads the same. A plan that sets `enabled
   = true` on a queue read `false` now writes `1`, which starts SQM there.
   Announced in 3.x. (#372) (#383)
-- **BREAKING: one documented `runtime` envelope on every resource.** `runtime`
-  is now always present in a resource response and declared in every response
-  schema: `id` and `runtime` joined the `required` list of every CRUD and
-  singleton resource, the four hand-written `openapi_runtime` blocks are kept,
-  and the rest get the documented empty-object shape. Read-only collections are
-  item lists and unchanged. Announced in 3.5.0 (#322); migration note in
-  `docs/migration-v3-to-v4.md`. (#354)
+- **BREAKING: one documented `runtime` envelope on every resource.** Every
+  resource response holds `runtime`, an object that its schema requires. `id`
+  and `runtime` joined the `required` list of the 42 curated CRUD and singleton
+  resources, which already returned both. The four hand-written
+  `openapi_runtime` blocks are kept, and the rest get the documented
+  empty-object shape. Each key of `system/authorized_keys` and each item of
+  `dhcp/leases` and `network/wireguard_kernel_peers` now holds `runtime: {}`,
+  and the schemas of `packages/installed` and `packages/feeds` require the
+  `runtime: {}` that they already returned. `/raw` answers the uci section and
+  no `runtime`. Announced in 3.5.0 (#322). Migration note in
+  `docs/migration-v3-to-v4.md`. (#354) (#422)
 - **BREAKING: the special endpoints move under `/uapi/...`.** `/tokens` (and
   `/tokens/<id>`), `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami`
   become `/uapi/tokens`, `/uapi/metrics`, `/uapi/diagnostics`, `/uapi/batch` and

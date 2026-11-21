@@ -34,6 +34,13 @@ bare section and
 fails if anything it returns null for is not null-permitted in the response
 schema.
 
+Every resource answers `runtime`, an object that its response schema requires
+(#322): the curated ones, the non-uci ones and each item of a read-only
+collection. It is `{}` where the resource reads no live state, and on a
+collection item, which is itself the live state. `/raw` answers the uci section
+and no `runtime`: it reads no live state, and the key would hide an option of
+that name. The special endpoints under `/uapi/` are not resources.
+
 The authoritative inventory is the OpenAPI spec; if this document drifts,
 the spec wins.
 

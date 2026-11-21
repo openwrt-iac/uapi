@@ -1317,10 +1317,12 @@ function make_collection(resource) {
 	}
 
 	// A list_fn answers the items, or { items, headers } when the read has more to say than the
-	// items, such as the interfaces whose kernel it could not read.
+	// items, such as the interfaces whose kernel it could not read. Every resource answers
+	// `runtime` (#322), and a collection item is itself live state, so its own is empty.
 	function listed(conn, query) {
 		let r = resource.list_fn(conn, query);
-		return (type(r) == "object") ? r : { items: r, headers: {} };
+		if (type(r) != "object") r = { items: r, headers: {} };
+		return { items: map(r.items, (i) => ({ ...i, runtime: {} })), headers: r.headers };
 	}
 	function with_headers(resp, headers) {
 		for (let k, v in headers) resp.headers[k] = v;

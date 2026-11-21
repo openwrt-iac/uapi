@@ -103,6 +103,12 @@ function patch_name(endpoint) { return schema_name(endpoint) + "Patch"; }
 // create, the universal input that replaced `network/interfaces.name`.
 const RESPONSE_ONLY = { "runtime": true, "managed": true };
 
+const OPAQUE_RUNTIME = {
+	"type": "object",
+	"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+	"readOnly": true,
+};
+
 const READ_NULLABLE = "x-uapi-read-nullable";
 // A field that may hold several lines opts out of the default newline/CR refusal (#276).
 const MULTILINE = "x-uapi-multiline";
@@ -1185,7 +1191,7 @@ function build_schemas() {
 		},
 		"InstalledPackage": {
 			"type": "object",
-			"required": ["id", "name", "installed"],
+			"required": ["id", "name", "installed", "runtime"],
 			"properties": {
 				"id": { "type": "string", "description": "Package name (same as name)" },
 				"managed": { "type": "boolean", "readOnly": true },
@@ -1193,7 +1199,7 @@ function build_schemas() {
 				"version": { "type": ["string", "null"],
 				             "description": "The installed apk version, such as `3.0.0-r1`. Null in the list response, which does not query versions." },
 				"installed": { "type": "boolean" },
-				"runtime": { "type": "object", "readOnly": true },
+				"runtime": OPAQUE_RUNTIME,
 			},
 		},
 		"PackageInstallRequest": {
@@ -1206,7 +1212,7 @@ function build_schemas() {
 		},
 		"PackageFeed": {
 			"type": "object",
-			"required": ["id", "url"],
+			"required": ["id", "url", "runtime"],
 			"properties": {
 				"id": { "type": "string" },
 				"managed": { "type": "boolean", "readOnly": true },
@@ -1215,7 +1221,7 @@ function build_schemas() {
 				"url": { "type": "string" },
 				"enabled": { "type": "boolean" },
 				"update_status": { "type": "string" },
-				"runtime": { "type": "object", "readOnly": true },
+				"runtime": OPAQUE_RUNTIME,
 			},
 		},
 		"PackageFeedCreateRequest": {
@@ -1240,7 +1246,7 @@ function build_schemas() {
 		},
 		"SSHAuthorizedKey": {
 			"type": "object",
-			"required": ["id", "type"],
+			"required": ["id", "type", "runtime"],
 			"properties": {
 				"id":      { "type": "string", "pattern": "^[a-f0-9]{12}$",
 				             "description": "Stable id: sha256 prefix of the public-key blob (or non-crypto djb2 fallback in test environments)" },
@@ -1248,6 +1254,7 @@ function build_schemas() {
 				             "description": "SSH key type (e.g. ssh-ed25519, ssh-rsa, ecdsa-sha2-nistp256)" },
 				"comment": { "type": "string",
 				             "description": "Optional comment (trailing text on the key line)" },
+				"runtime": OPAQUE_RUNTIME,
 			},
 		},
 		"CronJob": {
@@ -1592,15 +1599,14 @@ function build_schemas() {
 		}
 
 		// readOnly because toUci ignores it, so it can never be written: a generator treating it
-		// as writable would produce a diff no configuration can resolve. Collections are item
-		// lists, not envelopes.
-		if (ep.kind != "collection") {
-			let documented = (type(mod.openapi_runtime) == "object") ? mod.openapi_runtime : {
-				"type": "object",
-				"description": "Live state of this section as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
-			};
-			properties.runtime = { ...documented, readOnly: true };
-		}
+		// as writable would produce a diff no configuration can resolve.
+		if (ep.kind == "collection")
+			properties.runtime = { ...OPAQUE_RUNTIME,
+				"description": "Always {}: the item is itself the live state that the daemon or the kernel reports." };
+		else if (type(mod.openapi_runtime) == "object")
+			properties.runtime = { ...mod.openapi_runtime, readOnly: true };
+		else
+			properties.runtime = OPAQUE_RUNTIME;
 
 		// Same reasoning for `managed`, which is derived from uci's `.anonymous` flag: no
 		// toUci reads it, and the write path hardcodes `.anonymous = false`, so a PUT
@@ -1644,12 +1650,9 @@ function build_schemas() {
 			"properties": resp_props,
 		};
 
-		// A collection item is not an envelope, so it has no id or runtime of its own.
-		let resp_required = (ep.kind == "collection")
-			? [ ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ]
-			: [ "id", "runtime", ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
-		if (length(resp_required) > 0)
-			s.required = resp_required;
+		// A collection finds an item by its id_field, and a lease has no id.
+		s.required = [ ...((ep.kind == "collection") ? [] : [ "id" ]), "runtime",
+		               ...(mod.openapi_required ?? []), ...(mod.openapi_read_required ?? []) ];
 
 		// A response carries its writeOnly properties so the request half stays a subset of it,
 		// which is what keeps a generated client from treating a settable field as computed.

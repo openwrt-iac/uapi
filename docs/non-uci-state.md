@@ -36,6 +36,9 @@ touches, and why the standard uci-transaction recipe doesn't apply.
 Adding a non-uci resource means adding a row above. The bar is high: prefer
 driving the underlying daemon's uci surface if the option exists, or upstreaming
 the option to OpenWrt uci if it doesn't, before adding non-uci state to uapi.
+Each item that it answers holds `runtime`, `{}` when it reads no live state, and
+its schema requires it (#322). `make_collection` adds `{}` to each item of a
+read-only collection, and a writable one puts it in its item view.
 
 ### `packages/installed`
 

@@ -981,8 +981,8 @@ mechanisms, the evidence and the open questions live in the issues.
   `dhcp/leases`](https://github.com/openwrt-iac/uapi/issues/320): one endpoint
   less, breaking.
 - [One documented runtime envelope on every
-  resource](https://github.com/openwrt-iac/uapi/issues/322): 4 of 45 resources
-  document their runtime today, breaking.
+  resource](https://github.com/openwrt-iac/uapi/issues/322): every resource
+  answers a `runtime` that its schema requires, breaking for generated clients.
 - [Prune dead error codes from the
   enum](https://github.com/openwrt-iac/uapi/issues/323):
   `unsupported_media_type` is the documented-dead one, breaking for generated
