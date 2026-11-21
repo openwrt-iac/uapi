@@ -80,11 +80,12 @@ function keepalive(v) {
 }
 
 // The endpoint port that the ucode handler gives wg: 1 to 65535 in digits, or the first field of a
-// /udp line of /etc/services, as uci holds it. 0 for any other value, for which the handler leaves
-// the endpoint out, as a port that wireguard.sh cannot resolve reads.
+// /udp line of /etc/services, as uci holds it. 0 for any other value, an empty one included, for
+// which the handler leaves the endpoint out, as a port that wireguard.sh cannot resolve reads. null
+// without a value, for which both handlers give wg 51820.
 function endpoint_port(v) {
 	if (!ucode_handler()) return values.service_port(v, () => fs.readfile("/etc/services"));
-	if (v == null || v == "") return null;
+	if (v == null) return null;
 	if (type(v) != "string") return 0;
 	if (match(v, /^[0-9]+$/)) return (int(v) >= 1 && int(v) <= 65535) ? int(v) : 0;
 	for (let line in split(fs.readfile("/etc/services") ?? "", "\n")) {
@@ -223,8 +224,7 @@ function to_peer(section) {
 		public_key: section.public_key,
 		allowed_ips: allowed_ips(section.allowed_ips) ?? [],
 		endpoint_host: values.config_get(section.endpoint_host),
-		// The ucode handler leaves the endpoint out without a port, where wireguard.sh takes 51820.
-		endpoint_port: endpoint_port(section.endpoint_port) ?? (ucode_handler() ? 0 : null),
+		endpoint_port: endpoint_port(section.endpoint_port),
 		// Read as wg reads it, since a stored value reaches here from uci without passing through
 		// validate(), and set_peer_argv() gives it to `wg set` with %d.
 		persistent_keepalive: keepalive(section.persistent_keepalive),

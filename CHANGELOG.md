@@ -218,6 +218,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preshared key or an `allowed_ips` entry marked `+` or `-`. The restore refuses
   that section before it changes the kernel, so the kernel kept what the remove
   had set. Only a hand edit stores such a section. (#424)
+- **The restore sets a WireGuard peer with a host and no port with port 51820 on
+  OpenWrt main.** Both proto handlers give wg port 51820 for such a peer, and
+  the kernel apply of a write did too, but the restore on main left the endpoint
+  out. The ucode handler leaves the endpoint out for an empty `endpoint_port`,
+  which only a hand edit stores, so on main such a port now reads 0, as a port
+  that does not resolve reads. (#424)
 
 ## [3.5.0] - 2026-11-21
 
