@@ -137,7 +137,12 @@ to restart a wireguard interface, 8 s each: a write of the network package
 stays inside 60 s, and a batch that also writes dhcp, with every reload at its
 bound, can pass it. A `POST /uapi/batch` restore adds
 up to 5 s of flock wait for each further package that it writes back, and the
-`wg set` of a kernel apply or reconcile has no time bound. uapi does not read
+`wg set` of a kernel apply or reconcile has no time bound: on 25.12 it retries
+an endpoint name whose lookup fails for a time. busybox's `nslookup` runs under
+the lock of `network` too, about 5 s at most for each name server of
+`/etc/resolv.conf`: on 25.12 once for an endpoint name that a peer write sends,
+and on OpenWrt main once for each peer with an endpoint name in the kernel apply
+and in the reconcile of the restore. uapi does not read
 `script_timeout`. Set it lower, through `uhttpd/instances` or otherwise, and
 uhttpd can kill such a request before its restore or its answer: the client
 gets a 502, and uci keeps whatever the write had reached. Keep it at 60 s or
