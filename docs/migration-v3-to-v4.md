@@ -398,10 +398,11 @@ changes what a write to `network/wireguard_peers` does there:
 - A restart that does not end in 8 s fails the write with a restore: 500
   `reload_failed_restored`, or `reload_failed_unrecovered` when the restore
   fails too. Since openwrt ecd9120f04, the handler leaves out a key, a preshared
-  key, an endpoint or a keepalive that wg would refuse, so only an allowed IP
-  that wg refuses keeps the interface down. The same 500 answers a write to an
-  interface that another stored peer already keeps down, because uapi cannot
-  tell the two cases apart.
+  key, an endpoint or a keepalive that wg would refuse. An allowed IP that wg
+  refuses still keeps the interface down, and so does an endpoint host of
+  digits and dots that inet_aton does not read, which a write refuses, as the
+  next section says. The same 500 answers a write to an interface that another
+  stored peer already keeps down, because uapi cannot tell the two cases apart.
 
 On 25.12, `wireguard.sh` restarts nothing on a peer change, and uapi applies
 the peer with `wg set`, which leaves the other peers up. On main, the peer

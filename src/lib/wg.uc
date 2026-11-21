@@ -45,8 +45,9 @@ function run(argv) {
 // and route_allowed_ips as on only when they hold "1". Since openwrt ecd9120f04 it also checks a
 // value against wg's grammar as uci holds it, and leaves out what wg would refuse: the peer for a
 // public key, and the line for a preshared key, an endpoint or a keepalive. wg refused the whole
-// config before, so one such value kept the interface down. uapi reads, sets and routes a peer as
-// the handler that netifd runs.
+// config before, so one such value kept the interface down. It still does for an allowed IP, and
+// for a host of digits and dots that inet_aton does not read, which the handler gives wg as an
+// address. uapi reads, sets and routes a peer as the handler that netifd runs.
 const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
 const SETTLE_S = 8;
 
