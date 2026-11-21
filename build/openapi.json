@@ -38611,20 +38611,14 @@
 							"string",
 							"null"
 						],
-						"enum": [
-							"ipv4",
-							"ipv6",
-							"any",
-							null
-						],
-						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. A list reads as the string that mwan3's config_get joins."
+						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. mwan3 also runs it for both families on any value other than ipv4 or ipv6, such as any. A list reads as the string that mwan3's config_get joins, such as `ipv4 ipv6`. A write takes ipv4, ipv6 or any."
 					},
 					"proto": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case: with a port, a write refuses another spelling of them, such as TCP, and a stored one blocks every write of the section."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case, and drops them for any other proto, such as TCP, 6 or all. With a port, a write refuses tcp or udp in another case, such as TCP, and a stored one blocks every write of the section. A port with another proto is no error."
 					},
 					"src_ip": {
 						"type": [
@@ -38711,13 +38705,13 @@
 							"string",
 							"null"
 						],
+						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. mwan3 also runs it for both families on any value other than ipv4 or ipv6, such as any. A list reads as the string that mwan3's config_get joins, such as `ipv4 ipv6`. A write takes ipv4, ipv6 or any.",
 						"enum": [
 							"ipv4",
 							"ipv6",
 							"any",
 							null
-						],
-						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. A list reads as the string that mwan3's config_get joins."
+						]
 					},
 					"proto": {
 						"type": [
@@ -38725,7 +38719,7 @@
 							"null"
 						],
 						"pattern": "^([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0+[0-3]?[0-7]{0,2}|0[xX]0*[0-9A-Fa-f]{1,2}|[aA][lL][lL]|[iI][pP]|[iI][cC][mM][pP]|[iI][gG][mM][pP]|[gG][gG][pP]|[iI][pP][eE][nN][cC][aA][pP]|[sS][tT]|[tT][cC][pP]|[eE][gG][pP]|[pP][uU][pP]|[uU][dD][pP]|[hH][mM][pP]|[xX][nN][sS]-[iI][dD][pP]|[rR][dD][pP]|[iI][sS][oO]-[tT][pP]4|[xX][tT][pP]|[dD][dD][pP]|[iI][dD][pP][rR]-[cC][mM][tT][pP]|[iI][pP][vV]6|[iI][pP][vV]6-[rR][oO][uU][tT][eE]|[iI][pP][vV]6-[fF][rR][aA][gG]|[iI][dD][rR][pP]|[rR][sS][vV][pP]|[gG][rR][eE]|[eE][sS][pP]|[aA][hH]|[sS][kK][iI][pP]|[iI][pP][vV]6-[iI][cC][mM][pP]|[iI][pP][vV]6-[nN][oO][nN][xX][tT]|[iI][pP][vV]6-[oO][pP][tT][sS]|[rR][sS][pP][fF]|[vV][mM][tT][pP]|[oO][sS][pP][fF]|[iI][pP][iI][pP]|[eE][nN][cC][aA][pP]|[pP][iI][mM]|[rR][aA][wW]|[sS][cC][tT][pP]|[uU][dD][pP][lL][iI][tT][eE]|[iI][cC][mM][pP][vV]6|[mM][oO][bB][iI][lL][iI][tT][yY]-[hH][eE][aA][dD][eE][rR]|[iI][pP][vV]6-[mM][hH]|[mM][hH])$",
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case: with a port, a write refuses another spelling of them, such as TCP, and a stored one blocks every write of the section."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case, and drops them for any other proto, such as TCP, 6 or all. With a port, a write refuses tcp or udp in another case, such as TCP, and a stored one blocks every write of the section. A port with another proto is no error."
 					},
 					"src_ip": {
 						"type": [

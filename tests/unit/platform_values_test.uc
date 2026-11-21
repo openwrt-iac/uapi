@@ -86,6 +86,7 @@ const ROWS = [
 	[ "mwan3.rules.uc", "mr1", "family", "any", "family" ],
 	[ "mwan3.rules.uc", "mr1", "family", [ "ipv6" ], "family" ],
 	[ "mwan3.rules.uc", "mr1", "family", [ "" ], "family" ],
+	[ "mwan3.rules.uc", "mr1", "family", [ "ipv4", "ipv6" ], "family" ],
 	[ "mwan3.rules.uc", "mr1", "timeout", "2000000", "timeout" ],
 	[ "openvpn.instances.uc", "vpn0", "dev_type", "null", "dev_type" ],
 	[ "openvpn.instances.uc", "vpn0", "port", "0", "port" ],

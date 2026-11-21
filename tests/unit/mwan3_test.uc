@@ -140,8 +140,14 @@ t.describe('mwan3.rules validates policy cross-reference + IP shapes', () => {
 
 	t.it('family reads a list as config_get joins it, and an empty one as null, as mwan3 does', () => {
 		t.assert_equal(rules.fromUci({ '.name': 'r1', family: [ 'ipv6' ] }).family, 'ipv6');
+		t.assert_equal(rules.fromUci({ '.name': 'r1', family: [ 'ipv4', 'ipv6' ] }).family, 'ipv4 ipv6');
 		t.assert_equal(rules.fromUci({ '.name': 'r1', family: [ '' ] }).family, null);
 		t.assert_equal(rules.fromUci({ '.name': 'r1', family: '' }).family, null);
+	});
+
+	t.it('a write refuses a family other than ipv4, ipv6 or any', () => {
+		let errs = full_validate(rules, { use_policy: "p_balanced", family: "ipv4 ipv6" }, c);
+		t.assert_deep_equal(map(errs, (e) => e.field + " " + e.code), [ "family not_in_enum" ]);
 	});
 });
 
