@@ -462,9 +462,9 @@ t.describe('wg.apply against logging wg and ip', () => {
 		t.assert_deep_equal(r.commands, []);
 	});
 
-	// The output of busybox 1.38's nslookup against a server that gives each of these replies, and its
-	// exit code. wg refuses a name that does not exist or has no address for good, and retries one
-	// whose lookup failed for a time.
+	// The output of busybox 1.38's nslookup against a server that gives each of these replies, or
+	// none to one of its two queries, and its exit code. wg refuses a name that does not exist or has
+	// no address for good, and retries one whose lookup failed for a time.
 	t.it('reads a host as missing under wireguard.sh only when nslookup reads that the name has no address', () => {
 		const HEAD = "Server:\t\t127.0.0.1\nAddress:\t127.0.0.1:53\n\n";
 		let cases = {
@@ -472,7 +472,8 @@ t.describe('wg.apply against logging wg and ip', () => {
 			'h-nx': [ HEAD + "** server can't find h-nx: NXDOMAIN\n\n** server can't find h-nx: NXDOMAIN\n\n", true, true ],
 			'h-noaddr': [ HEAD + "Non-authoritative answer:\n\nNon-authoritative answer:\n\n", false, true ],
 			'h-noaddr-aa': [ HEAD + "\n\n", false, true ],
-			'h-noanswer': [ HEAD + "*** Can't find h-noanswer: No answer\n\n", false, true ],
+			'h-noanswer': [ HEAD + "Non-authoritative answer:\n\n*** Can't find h-noanswer: No answer\n\n", false, false ],
+			'h-nx-noanswer': [ HEAD + "** server can't find h-nx-noanswer: NXDOMAIN\n\n*** Can't find h-nx-noanswer: No answer\n\n", true, false ],
 			'h-servfail': [ HEAD + "** server can't find h-servfail: SERVFAIL\n\n** server can't find h-servfail: SERVFAIL\n\n", true, false ],
 			'h-nx-servfail': [ HEAD + "** server can't find h-nx-servfail: NXDOMAIN\n\n** server can't find h-nx-servfail: SERVFAIL\n\n", true, false ],
 			'h-refused': [ HEAD + "** server can't find h-refused: REFUSED\n\n", true, false ],

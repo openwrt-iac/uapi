@@ -116,12 +116,13 @@ function inet_aton(s) {
 
 // What busybox's nslookup reads for a name: "address" when it prints one, as a `Name:` line, "none"
 // when the replies say that the name does not exist or has no address, and null when it cannot
-// tell. It exits 1 for an NXDOMAIN, a SERVFAIL, a REFUSED and a timeout alike, and 0 when every
-// query had a NOERROR reply, so the lines decide: an NXDOMAIN prints `** server can't find <name>:
-// NXDOMAIN`, another reply code its own name there, and a timeout `;; connection timed out; no
-// servers could be reached`. Only the headers with NXDOMAIN, no-answer or CNAME lines read "none":
-// a reply that holds only a CNAME, whose target has no address, is one that getaddrinfo answers
-// EAI_NODATA for.
+// tell. It exits 1 for an NXDOMAIN, a SERVFAIL, a REFUSED and a timeout alike, so the lines decide:
+// an NXDOMAIN prints `** server can't find <name>: NXDOMAIN`, another reply code its name there,
+// and a timeout of every query `;; connection timed out; no servers could be reached`. A reply with
+// no address prints at most its header, and one that holds only a CNAME, whose target has no
+// address, its `canonical name =` lines too: getaddrinfo answers EAI_NODATA for both. A query that
+// got no reply while another did prints `*** Can't find <name>: No answer`, which does not change
+// the exit code: getaddrinfo answers EAI_AGAIN for it, which wg retries.
 function lookup(host) {
 	let r = run([ "nslookup", host ]);
 	if (index(r.output, "Name:") >= 0) return "address";
@@ -129,7 +130,7 @@ function lookup(host) {
 	for (let l in split(r.output, "\n")) {
 		if (match(l, /^\*\* server can't find .*: NXDOMAIN$/)) nxdomain = true;
 		else if (l != "" && l != "Non-authoritative answer:" && !match(l, /^(Server|Address):/)
-		         && !match(l, /^\*\*\* Can't find .*: No answer$/) && !match(l, /^[^\t]+\tcanonical name = [^\t]+$/))
+		         && !match(l, /^[^\t]+\tcanonical name = [^\t]+$/))
 			return null;
 	}
 	return (r.ok || nxdomain) ? "none" : null;
