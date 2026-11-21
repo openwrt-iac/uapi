@@ -486,16 +486,21 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             case "$TAG" in
               *-rc*|*-alpha*|*-beta*|*-pre*)
-                PRE=--prerelease ;;
+                PRE=--prerelease LATEST= ;;
               *)
-                PRE= ;;
+                # The feed and the site follow the Latest mark, so a fix of an older major, such
+                # as a 3.x release after 4.0.0, must not take it from the current one.
+                highest=$( { gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+                               --json tagName --jq '.[].tagName'; echo "$TAG"; } | sort -V | tail -1)
+                PRE= LATEST=--latest=false
+                [ "$highest" = "$TAG" ] && LATEST=--latest ;;
             esac
             chmod +x scripts/release-notes.sh
             scripts/release-notes.sh "$TAG" > /tmp/release-notes.md
             if [ -s /tmp/release-notes.md ]; then
-              gh release create "$TAG" $PRE --title "$TAG" --notes-file /tmp/release-notes.md
+              gh release create "$TAG" $PRE $LATEST --title "$TAG" --notes-file /tmp/release-notes.md
             else
-              gh release create "$TAG" $PRE --title "$TAG" --generate-notes
+              gh release create "$TAG" $PRE $LATEST --title "$TAG" --generate-notes
             fi
           fi
           gh release upload "$TAG" dist/uapi-*.apk --clobber
