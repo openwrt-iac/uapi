@@ -99,6 +99,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		enabled:                       { type: "boolean", default: true },
 		network:                       { type: ["string", "null"], description: "Network interface usteer listens on for peer announcements." },

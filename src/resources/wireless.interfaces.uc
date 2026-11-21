@@ -220,12 +220,11 @@ function validate(json, conn, id, delta, partial, stored) {
 		push(errs, { field: "mode", code: "required",
 		             message: "must not be null: wifi-scripts sets up no interface without a mode. Leave mode out of a PATCH to keep it, or out of a create or a PUT to store ap" });
 
-	if (json.mode != null && !VALID_MODES[json.mode])
-		push(errs, { field: "mode", code: "not_in_enum",
-		             message: "must be one of " + join(", ", WRITE_MODES) });
-	else if (named.mode == "ahdemo" && stored?.mode != "ahdemo")
-		push(errs, { field: "mode", code: "not_in_enum",
-		             message: "must be one of " + join(", ", WRITE_MODES) + ": wifi-scripts sets up no interface in mode ahdemo" });
+	// The message keeps the text that the schema check gave before a read took ahdemo. It lists wds,
+	// which rules() refuses.
+	if ((json.mode != null && !VALID_MODES[json.mode]) || (named.mode == "ahdemo" && stored?.mode != "ahdemo"))
+		push(errs, { field: "mode", code: "not_in_enum", write: true,
+		             message: sprintf("must be one of %J", filter(keys(VALID_MODES), (m) => m != "ahdemo")) });
 
 	if (json.encryption != null && !VALID_ENCRYPTION[json.encryption])
 		push(errs, { field: "encryption", code: "not_in_enum",
@@ -436,7 +435,7 @@ return {
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), "x-uapi-write": { enum: WRITE_MODES }, default: "ap",
-		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips, and a write refuses it. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
+		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips. A write refuses a change to it, and a write that sends a stored ahdemo back passes, such as a PUT of the read. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
 		ssid:       { type: ["string", "null"], "x-uapi-write": { maxLength: SSID_MAX },
 		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none" },

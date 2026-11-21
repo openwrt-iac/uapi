@@ -101,6 +101,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "network route",
 	openapi_required: ["target"],
 	schema_properties: {

@@ -58,8 +58,11 @@ function _is_valid_addr_or_cidr(s) {
 function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 	values.write_bounds(errs, delta ?? json, WRITE, stored);
+	// libxtables reads a number with base 0, so 0x11 is hex, a leading 0 makes it octal, and 08 does
+	// not parse.
 	let proto = (delta ?? json).proto;
-	if (type(proto) == "string" && !(match(proto, /^[0-9]{1,3}$/) ? int(proto) <= 255
+	if (type(proto) == "string" && !(match(proto, /^[0-9]+$|^0[xX]/)
+	                                 ? match(proto, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/) != null && int(proto, 0) <= 255
 	                                 : (lc(proto) in XTABLES_PROTOCOLS || lc(proto) in values.MUSL_PROTOCOLS)))
 		push(errs, { field: "proto", code: "invalid_format",
 		             message: "must be a protocol number from 0 to 255 or a name that iptables resolves, such as tcp, udp, icmp, esp or all: mwan3 loads the rules of a family in one batch, and iptables refuses the batch for a protocol that it cannot parse" });
@@ -87,13 +90,14 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "mwan3 rule",
 	id_prefix: "r",
 	openapi_required: ["use_policy"],
 	schema_properties: {
 		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
-		proto:      { type: ["string", "null"], pattern: "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
-		              description: "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it." },
+		proto:      { type: ["string", "null"], pattern: "^(0[xX][0-9A-Fa-f]+|[0-9]+|[A-Za-z][A-Za-z0-9._-]*)$",
+		              description: "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it." },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },

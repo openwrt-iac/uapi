@@ -90,9 +90,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in `docs/versioning.md`. No read changes, so nothing fails: a client that
   validated such a read failed and now passes. Where a write does not take the
   value, its bound moved to `x-uapi-write`, and the server refuses only a write
-  that changes a field to it, with the same code as before. A write that sends
-  the stored value back passes, such as a PUT of the read, which a full-body
-  client sends. A `firewall/rules` PUT of `HELPER` stays refused, because a PUT
+  that changes a field to it, with the same code and message as before. A write
+  that sends the stored value back passes, such as a PUT of the read, which a
+  full-body client sends, and the description of the field says so. A
+  `firewall/rules` PUT of `HELPER` stays refused, because a PUT
   removes the `set_helper` option, which uapi does not model, and firewall4
   skips a HELPER rule without it. Some of these values blocked every PATCH of
   their section and no longer do: a device or radio type that uapi does not

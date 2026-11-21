@@ -17,6 +17,7 @@ const ROWS = [
 	[ "firewall.defaults.uc", "defaults", "synflood_burst", "0", "synflood_burst", 200 ],
 	[ "firewall.defaults.uc", "defaults", "synflood_rate", "2000000", "synflood_rate", 200 ],
 	[ "firewall.nat.uc", "n1", "target", "NPT", "target", 422, { snat_ip: null } ],
+	[ "firewall.nat.uc", "n1", "target", "NPT", "target", 422 ],
 	[ "firewall.nat.uc", "n1", "src_port", "! 1024", "match.src_port", 200 ],
 	[ "firewall.nat.uc", "n1", "mark", "! 0x10", "match.mark", 200 ],
 	[ "firewall.redirects.uc", "d1", "src_dport", " ! 8080", "match.src_dport", 200 ],
@@ -212,9 +213,9 @@ t.describe('a write refuses the values that stop the daemon', () => {
 		t.assert_deep_equal(refused("network.interfaces.uc", "wan6", { reqprefix: "/56" }, { sourcefilter: true }), [ "reqprefix:invalid_format" ]);
 	});
 	t.it('an mwan3 rule protocol that iptables cannot parse, which fails the batch of the family', () => {
-		for (let p in [ "999", "256", "foo" ])
+		for (let p in [ "999", "256", "foo", "08", "09", "099", "0400", "0x100", "0x" ])
 			t.assert_deep_equal(refused("mwan3.rules.uc", "mr1", {}, { proto: p }), [ "proto:invalid_format" ]);
-		for (let p in [ "TCP", "ipv6-icmp", "gre", "255" ])
+		for (let p in [ "TCP", "ipv6-icmp", "gre", "255", "010", "0377", "0300", "0x11", "0XfF" ])
 			t.assert_deep_equal(refused("mwan3.rules.uc", "mr1", {}, { proto: p }), []);
 	});
 	t.it('an mmx_mask past 32 bits, or a decimal with a leading 0 that the shell reads as octal', () => {
@@ -223,6 +224,59 @@ t.describe('a write refuses the values that stop the daemon', () => {
 		t.assert_deep_equal(refused("mwan3.globals.uc", "globals", {}, { mmx_mask: "016128" }), [ "mmx_mask:invalid_format" ]);
 		for (let m in [ "4294967295", "037777777777", "0x000003F00" ])
 			t.assert_deep_equal(refused("mwan3.globals.uc", "globals", {}, { mmx_mask: m }), []);
+	});
+});
+
+t.describe('a refusal keeps the message that 3.x gave', () => {
+	const MAIN = [
+		[ "network.devices.uc", "dev1", { vid: -1 }, "vid", "must be >= 1" ],
+		[ "network.devices.uc", "dev1", { type: "foo" }, "type", 'must be one of [ "bridge", "8021q", "8021ad", "macvlan", "veth", "tun", "tap" ]' ],
+		[ "mwan3.interfaces.uc", "mwan", { size: -1 }, "size", "must be >= 1" ],
+		[ "mwan3.interfaces.uc", "mwan", { interval: 5000 }, "interval", "must be <= 3600" ],
+		[ "mwan3.interfaces.uc", "mwan", { flush_conntrack: [ "foo" ] }, "flush_conntrack[0]", 'must be one of [ "ifup", "ifdown", "connected", "disconnected", "never" ]' ],
+		[ "openvpn.instances.uc", "vpn0", { port: -1 }, "port", "must be >= 1" ],
+		[ "openvpn.instances.uc", "vpn0", { dev_type: "foo" }, "dev_type", 'must be one of [ "tun", "tap", null ]' ],
+		[ "uhttpd.certs.uc", "px", { days: 0 }, "days", "must be >= 1" ],
+		[ "prometheus_node_exporter_lua.config.uc", "main", { listen_port: -1 }, "listen_port", "must be >= 1" ],
+		[ "firewall.nat.uc", "n1", { target: "FOO" }, "target", 'must be one of [ "SNAT", "MASQUERADE", "ACCEPT" ]' ],
+		[ "firewall.rules.uc", "r1", { target: "FOO" }, "target", 'must be one of [ "ACCEPT", "REJECT", "DROP", "NOTRACK", "MARK", "DSCP" ]' ],
+		[ "wireless.interfaces.uc", "w1", { mode: "foo" }, "mode", 'must be one of [ "ap", "sta", "adhoc", "wds", "monitor", "mesh" ]' ],
+		[ "wireless.interfaces.uc", "w1", { mode: "ahdemo" }, "mode", 'must be one of [ "ap", "sta", "adhoc", "wds", "monitor", "mesh" ]' ],
+		[ "wireless.devices.uc", "radio0", { type: "foo" }, "type", 'must be one of [ "mac80211", "broadcom" ]' ],
+		[ "unbound.server.uc", "ub", { rebind_protection: "5" }, "rebind_protection", 'must be one of [ "0", "1", "2" ]' ],
+		[ "dhcp.servers.uc", "s1", { dhcpv4: "foo" }, "dhcpv4", 'must be one of [ "disabled", "server", "relay", "hybrid" ]' ],
+	];
+	for (let row in MAIN)
+		t.it(sprintf("%s %J", row[0], row[2]), () => {
+			let c = filter(fx.CASES, (k) => k.file == row[0] && k.id == row[1])[0];
+			let mod = loadfile('src/resources/' + row[0])();
+			let h = c.singleton ? handler.make_singleton(mod, { tx }) : handler.make(mod, { tx });
+			let conn = seeded(c, c.section);
+			let r = c.singleton ? h.patch(conn, ctx, row[2]) : h.patch(conn, ctx, c.id, row[2]);
+			t.assert_deep_equal(map(filter(r.body.errors ?? [], (e) => e.field == row[3]), (e) => e.message), [ row[4] ]);
+		});
+});
+
+t.describe('system.hostname', () => {
+	t.it('takes one trailing dot after a label, as LuCI does, and no empty label', () => {
+		let r0 = resource("system.uc"), c = r0.c, h = r0.h;
+		for (let name in [ "router.", "router.lan." ])
+			t.assert_equal(status(h.patch(seeded(c, c.section), ctx, { hostname: name })), 200);
+		for (let name in [ "router..", "a...", "a..b", ".a" ])
+			t.assert_equal(h.patch(seeded(c, c.section), ctx, { hostname: name }).status, 422, name);
+	});
+});
+
+t.describe('firewall/nat: an NPT rule', () => {
+	t.it('keeps its snat_ip through a PATCH, a JSON Patch and a PUT of the read', () => {
+		let r0 = resource("firewall.nat.uc"), c = r0.c, h = r0.h;
+		let stored = () => seeded(c, { ...c.section, target: 'NPT', src_ip: 'fd00:1::/48', snat_ip: '2001:db8:1::/48' });
+		let read = h.get_one(stored(), ctx, c.id).body;
+		t.assert_equal(read.snat_ip, '2001:db8:1::/48');
+		t.assert_equal(status(h.patch(stored(), ctx, c.id, { name: 'npt' })), 200);
+		t.assert_equal(status(h.patch(stored(), { ...ctx, json_patch: true }, c.id,
+		                              [ { op: "replace", path: "/name", value: "npt" } ])), 200);
+		t.assert_equal(status(h.replace(stored(), ctx, c.id, strip(read))), 200);
 	});
 });
 

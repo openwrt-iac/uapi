@@ -48,6 +48,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "uhttpd certificate",
 	id_prefix: "c",
 	openapi_required: ["commonname"],

@@ -340,22 +340,20 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 		delete schema_body.id;
 	}
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
-	let val_errs = resource.validate(validate_body, conn, id, delta, partial, stored);
+	let val_errs = resource.validate(validate_body, conn, id, delta, partial, stored) ?? [];
+	// The schema check judges the wider bound of a read. Where a write bound refuses the same field
+	// with the same code, its error names the bound that the write applies, as the schema check
+	// did before the read widened.
+	let key = (e) => (e.field ?? "") + "|" + (e.code ?? "");
+	let write = {};
+	for (let e in val_errs) if (e.write) write[key(e)] = true;
 	let seen = {};
 	let merged = [];
-	for (let e in type_errs) {
-		let k = (e.field ?? "") + "|" + (e.code ?? "");
-		if (seen[k]) continue;
+	for (let e in [ ...type_errs, ...val_errs ]) {
+		let k = key(e);
+		if (seen[k] || (write[k] && !e.write)) continue;
 		seen[k] = true;
-		push(merged, e);
-	}
-	if (val_errs != null) {
-		for (let e in val_errs) {
-			let k = (e.field ?? "") + "|" + (e.code ?? "");
-			if (seen[k]) continue;
-			seen[k] = true;
-			push(merged, e);
-		}
+		push(merged, e.write ? { field: e.field, code: e.code, message: e.message } : e);
 	}
 	// Two validate_new() rules on one field are two errors, so that one does not hide the other.
 	if (resource.validate_new != null)
@@ -926,11 +924,10 @@ function make(resource, opts) {
 				if (existing) id = existing['.name'];
 				let found = existing != null && type_predicate(existing['.type']);
 				// The read throws for a section that the resource cannot read, which the sweep
-				// reports as unreadable. A PUT still answers the validation of its body first, and
-				// throws on the read below.
-				let existing_view = null;
+				// reports as unreadable. A PUT still answers the validation of its body first.
+				let existing_view = null, unreadable = null;
 				if (found)
-					try { existing_view = resource.fromUci(existing, conn); } catch (e) {}
+					try { existing_view = resource.fromUci(existing, conn); } catch (e) { unreadable = e; }
 				let write_body = carry_write_only(resource, body, existing);
 				let before = (resource.validate_new != null && existing_view != null) ? carry_write_only(resource, existing_view, existing) : null;
 				// The schema checks only what the caller sent. A carried secret is whatever uci
@@ -942,9 +939,7 @@ function make(resource, opts) {
 				if (!found)
 					return { ok: false, kind: "not_found",
 					         message: sprintf("No %s with id %J", sec_type, id) };
-				// wireless/interfaces reads with three ubus calls under the lock, so a view that
-				// the validation needed is read once.
-				if (existing_view == null) existing_view = resource.fromUci(existing, conn);
+				if (unreadable != null) die(unreadable.message);
 				if (!existing_view.managed)
 					return { ok: false, kind: "unmanaged_resource",
 					         message: "Section is not uapi-managed; adopt it first" };

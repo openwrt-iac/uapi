@@ -470,6 +470,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	// Opt in to the advisory management-path warning. Only this resource carries the
 	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
 	// not the same condition, so the framework is told rather than guessing.

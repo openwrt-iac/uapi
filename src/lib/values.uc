@@ -796,21 +796,22 @@ function section_index(conn, pkg, sec_type, key, filter) {
 // x-uapi-write: a read gives what the daemon takes, which can be past it. A write is refused only
 // where a field that it names changes to such a value, with the messages of the schema check. A
 // PATCH that leaves the stored value, and a PUT of the read, which sends it back, pass. `stored` is
-// the read of the section before the write, null on a create.
+// the read of the section before the write, null on a create. The handler gives an error marked
+// `write` the place of a schema error on the same field with the same code.
 function write_bounds(errs, named, bounds, stored) {
 	for (let field, b in bounds) {
-		let v = named?.[field];
+		let v = named[field];
 		if (stored != null && sprintf("%J", v) == sprintf("%J", stored[field])) continue;
 		let list = type(v) == "array";
 		for (let i = 0; i < (list ? length(v) : 1); i++) {
 			let x = list ? v[i] : v, path = list ? sprintf("%s[%d]", field, i) : field;
 			if (x == null) continue;
 			if (b.enum != null && type(x) == "string" && index(b.enum, x) < 0)
-				push(errs, { field: path, code: "not_in_enum", message: sprintf("must be one of %J", b.enum) });
+				push(errs, { field: path, code: "not_in_enum", message: sprintf("must be one of %J", b.enum), write: true });
 			if (type(x) == "int" && b.minimum != null && x < b.minimum)
-				push(errs, { field: path, code: "out_of_range", message: sprintf("must be >= %d", b.minimum) });
+				push(errs, { field: path, code: "out_of_range", message: sprintf("must be >= %d", b.minimum), write: true });
 			if (type(x) == "int" && b.maximum != null && x > b.maximum)
-				push(errs, { field: path, code: "out_of_range", message: sprintf("must be <= %d", b.maximum) });
+				push(errs, { field: path, code: "out_of_range", message: sprintf("must be <= %d", b.maximum), write: true });
 		}
 	}
 }

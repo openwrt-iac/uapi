@@ -252,12 +252,12 @@ too, except where the rule is in `validate_new()`, such as the -1 of
 that leaves the
 stored value as it is. The server also takes a write that sends back a value of
 the fourth kind, a PUT of the read too, and refuses one that changes a field to
-it. A `firewall/rules` PUT of `HELPER` stays refused, because a PUT removes the
-`set_helper` option, which uapi does not model, and firewall4 skips a HELPER
-rule without it. A module declares the difference with `x-uapi-write`, and
-`tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
-in
-`validate()`.
+it, with the message that it gave before the read widened. The description of
+each such field says so. A `firewall/rules` PUT of `HELPER` stays refused,
+because a PUT removes the `set_helper` option, which uapi does not model, and
+firewall4 skips a HELPER rule without it. A module declares the difference
+with `x-uapi-write`, and `tests/unit/write_overlay_test.uc` checks each such
+keyword against the refusal in `validate()`.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a

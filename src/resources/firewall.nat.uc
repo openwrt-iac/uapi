@@ -166,6 +166,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "firewall NAT rule",
 	openapi_conditional: [
 		{ if:   { properties: { target: { const: "SNAT" } }, required: ["target"] },
@@ -175,7 +176,7 @@ return {
 		name:      { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		             description: sprintf("Human-readable label for this NAT rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		target:    { type: "string", enum: [ ...keys(VALID_TARGETS), "NPT" ], "x-uapi-write": WRITE.target, default: "MASQUERADE",
-		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses it" },
+		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses a change to it" },
 		enabled:   { type: "boolean", default: true },
 		snat_ip:   { type: ["string", "null"],
 		             description: "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to" },
