@@ -144,8 +144,8 @@ t.describe('property: a read written straight back changes nothing', () => {
 // A field whose read-back value equals its own declared default is invisible to the
 // property above: drop it from toUci and the re-read synthesizes the default again, so
 // before and after match and nothing is reported. Measured, not theorised: deleting
-// `out.forward` from firewall.zones was invisible while the seed said `REJECT`, which is
-// the documented default, and caught immediately once the seed said `DROP`.
+// `out.forward` from firewall.zones was invisible while the seed said `REJECT`, which was
+// then the documented default, and caught immediately once the seed said `DROP`.
 //
 // The first version of this check compared the SEED against the default, which looked
 // equivalent and was not: seeds are keyed by uci option name and schema_properties by wire

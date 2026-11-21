@@ -3,6 +3,7 @@ let handler = require('handler');
 let ubus = require('bus');
 
 let zones = loadfile('src/resources/firewall.zones.uc')();
+let fw_defaults = loadfile('src/resources/firewall.defaults.uc')();
 let redirects = loadfile('src/resources/firewall.redirects.uc')();
 let interfaces = loadfile('src/resources/network.interfaces.uc')();
 
@@ -20,12 +21,26 @@ t.describe('firewall.zones', () => {
 		t.assert_deep_equal(zones.reload, ["firewall"]);
 	});
 
-	t.it('fromUci defaults policies to REJECT', () => {
-		let r = zones.fromUci({ '.name': 'z_lan', '.anonymous': false, '.type': 'zone',
-		                        name: 'lan', input: 'ACCEPT' });
-		t.assert_equal(r.input, 'ACCEPT');
-		t.assert_equal(r.output_policy, 'REJECT');
-		t.assert_equal(r.forward, 'REJECT');
+	// fw4 gives a zone without a policy the one of firewall/defaults, so a read that filled one in
+	// would claim a policy that fw4 does not apply, and a write of that read would pin it.
+	t.it('a policy that the zone does not set reads null, and a write of the read stores none', () => {
+		let zh = handler.make(zones, { tx: { acquire: () => ({}), release: () => null,
+		                                     reload: () => null, check_services: () => null } });
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { firewall: {
+			d: { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT', output: 'ACCEPT', forward: 'ACCEPT' },
+			z_lan: { '.type': 'zone', '.anonymous': false, name: 'lan', input: 'acc' },
+		} } });
+		let read = zh.get_one(c, ctx, 'z_lan').body;
+		t.assert_equal(read.input, 'ACCEPT');
+		t.assert_equal(read.output_policy, null);
+		t.assert_equal(read.forward, null);
+		delete read.runtime;
+		t.assert_equal(zh.replace(c, ctx, 'z_lan', read).status, 200);
+		t.assert_equal(c._state.uci.firewall.z_lan.output, null);
+		t.assert_equal(c._state.uci.firewall.z_lan.forward, null);
+		t.assert_equal(zh.patch(c, ctx, 'z_lan', { input: null }).status, 200);
+		t.assert_equal(c._state.uci.firewall.z_lan.input, null);
 	});
 
 	t.it('toUci preserves network list', () => {
@@ -42,6 +57,37 @@ t.describe('firewall.zones', () => {
 		let errs = full_validate(zones, { name: 'lan', input: 'BOGUS' }, null);
 		let ie = filter(errs, function(e) { return e.field == "input"; });
 		t.assert_equal(ie[0].code, 'not_in_enum');
+	});
+});
+
+t.describe('firewall.defaults synflood_rate', () => {
+	let rate = (v) => fw_defaults.fromUci({ '.name': 'd', synflood_rate: v }).synflood_rate;
+	let refused = (v) => map(filter(full_validate(fw_defaults, { synflood_rate: v }, null),
+	                                (e) => e.field == "synflood_rate"), (e) => e.code);
+
+	t.it('reads the rate and its unit as fw4 parses them', () => {
+		t.assert_equal(rate(null), null);
+		t.assert_equal(rate('25'), 25);
+		t.assert_equal(rate(' 025 '), 25);
+		t.assert_equal(rate('25/second'), '25/second');
+		t.assert_equal(rate('25/s'), '25/second');
+		t.assert_equal(rate('10/min'), '10/minute');
+		t.assert_equal(rate('5/h'), '5/hour');
+		t.assert_equal(rate('1/d'), '1/day');
+		t.assert_equal(rate('! 30/minute'), '30/minute');
+	});
+
+	t.it('reads null for a value that fw4 refuses', () => {
+		for (let v in [ 'abc', '25/seconds', '25/S', '25 /second', '25/', '/second', '-5', '!' ])
+			t.assert_equal(rate(v), null, v);
+	});
+
+	t.it('a write takes an integer or a rate with its whole unit', () => {
+		for (let v in [ 25, '25/second', '1/day' ])
+			t.assert_deep_equal(refused(v), [], v);
+		t.assert_deep_equal(refused(0), [ 'out_of_range' ]);
+		for (let v in [ '25/s', '0/minute', '25' ])
+			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
 	});
 });
 
