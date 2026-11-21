@@ -202,7 +202,8 @@ module declares them:
 - **`x-uapi-write`**: keywords the request half declares instead of the response
   half, for a value a read can return but a write refuses (a stored `mtu` below
   68, a route `table` of 0). The handler checks them against the fields that a
-  request names, and `tests/unit/write_overlay_test.uc` ties each keyword to a
+  request names, other than a value that the request sends back as the read
+  gives it, and `tests/unit/write_overlay_test.uc` ties each keyword to a
   refusal of a request past it.
 - **`x-uapi-multiline`**: the type gate takes a newline and a carriage return in
   this string, such as `system.notes`, and refuses them in every other curated
@@ -259,13 +260,16 @@ qualify:
 
 The response declares what a read can return, and the request declares what a
 write can send, so a read-modify-write of such a value fails against the request
-schema, and the server refuses it too. A value of the first kind is an error of
-the section: a rule of `validate()` or `validate_new()` refuses it, so it blocks
-every other write of the section, a PATCH that leaves the field out included,
-and the validation sweep lists it. A value of the second kind is no error: only
-a write that sends it is refused. A module declares the difference with
-`x-uapi-write`, which the handler checks against the fields that a request
-names, and `tests/unit/write_overlay_test.uc` checks each such keyword.
+schema. A value of the first kind is an error of the section: a rule of
+`validate()` or `validate_new()` refuses it, so it blocks every other write of
+the section, a PATCH that leaves the field out included, and the validation
+sweep lists it. A value of the second kind is no error: the server refuses a
+write that changes the field to it, and takes a write that sends back the value
+that the section holds, as a PUT of the read does. A client that checks a body
+against the `*Request` schema before it sends it must leave such a field out. A
+module declares the difference with `x-uapi-write`, which the handler checks
+against the fields that a request names, and
+`tests/unit/write_overlay_test.uc` checks each such keyword.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a

@@ -12,12 +12,13 @@ const VALID_TYPES = {
 	"multicast": true, "local": true, "broadcast": true,
 };
 
-// netifd's system_rtn_aton also takes the kernel's number of a type, in base 0.
+// netifd's system_rtn_aton also takes the kernel's number of a type, which strtoul reads in base 0,
+// so 010 is 8 and 08 is no number.
 const RTN_NAMES = [ null, "unicast", "local", "broadcast", "anycast", "multicast", "blackhole",
                     "unreachable", "prohibit", "throw" ];
 function route_type(v) {
-	let n = (type(v) != "string") ? null : match(v, /^0[xX][0-9A-Fa-f]+$/) ? hex(v) : match(v, /^[0-9]+$/) ? int(v) : null;
-	return (n != null && n >= 1 && n <= 9) ? RTN_NAMES[n] : v;
+	let n = (type(v) == "string" && match(v, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/)) ? int(v, 0) : null;
+	return (type(n) == "int" && n >= 1 && n <= 9) ? RTN_NAMES[n] : v;
 }
 
 function fromUci(section) {

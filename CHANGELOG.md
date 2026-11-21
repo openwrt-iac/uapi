@@ -101,8 +101,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `GET /uapi/diagnostics?validate=1` lists blocks the write. A value that the
   platform takes is no error: the `proto` of an interface that uapi does not
   model, such as `6in4` or `qmi`, blocks no write and leaves the sweep, and only
-  a request that sends it answers 422. Announced in 3.4.0 (#308), migration note
-  in `docs/migration-v3-to-v4.md`. (#350) (#405)
+  a request that changes a field to it answers 422. A request that sends back
+  the value that the section holds, such as a PUT of the read, passes. Announced
+  in 3.4.0 (#308), migration note in `docs/migration-v3-to-v4.md`. (#350) (#405)
 - **BREAKING: boolean reads follow the reader of their daemon.**
   `system.log_remote`, `system/timeservers` (`enabled`, `enable_server`,
   `use_dhcp`), the `usteer/config` booleans (`syslog`, `ipv6`, `assoc_steering`)
@@ -269,11 +270,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that broke their own schema (carve-out (b) of `docs/versioning.md`). Where a
   write should send less, an `x-uapi-write` keyword keeps the request narrower,
   and the server now checks those keywords against the fields that a request
-  names. The firewall reads a policy, a target, `reflection_src` and a family as
-  fw4 does, a scalar port or proto option of a rule as its words, and a port,
-  mark or DSCP match with a `!` and blanks, as LuCI writes them. A
-  `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, is refused.
-  The migration doc lists what a read now gives. (#405)
+  names, other than a value that the section holds. Where the read and the
+  request bound refuse a sent value, the 422 gives the request bound. The
+  firewall reads a policy, a target, `reflection_src` and a family as fw4 does,
+  a scalar port or proto option of a rule as its words, and a port, mark or DSCP
+  match with a `!` and blanks, as LuCI writes them. A numeric route type reads
+  as netifd reads it, so `010` is `prohibit`. `wireless/interfaces.encryption`
+  takes `psk3`, `psk3-mixed` and `wpa-mixed`. A `network/rules` form that
+  netifd installs, such as an `ipproto` of `tcp`, a `wireless/devices` power
+  or channel above the write bound and a `wireless/interfaces.mode` of `wds`,
+  which wifi-scripts skips as it skips `ahdemo`, are no error. A
+  `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, a
+  `mwan3/rules.proto` that iptables refuses and a `uhttpd/certs.days` of 0 are
+  refused on write, and a `mwan3/globals.mmx_mask` that is not a 32-bit number
+  blocks the write. The migration doc lists what a read now gives. (#405)
 - **`wireless/interfaces` declares the lists that its read gives.** `device`,
   `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
   that uci holds as an array while the response schema said string, so the

@@ -314,15 +314,18 @@ When a write should send less than a read can give, put the narrower keyword
 under the property's `x-uapi-write`, for example `mtu: { type: ["integer",
 "null"], minimum: 0, "x-uapi-write": { minimum: 68 } }`. The generator puts
 those keywords on the `*Request` schema, and the handler checks them against the
-fields that a request names, so a stored value past them blocks no write. When
-such a stored value is also an error, because the daemon refuses it, a rule of
+fields that a request names, so a stored value past them blocks no write. A
+field that the request sends back as the read gives it changes nothing, so the
+handler does not check it against them, and a PUT of the read passes. When such
+a stored value is also an error, because the daemon refuses it, a rule of
 `validate()` or `validate_new()` refuses it too, as for the `mtu` of
 `network/interfaces`. `tests/unit/write_overlay_test.uc` checks each keyword
 with a value just past it in every fixture case of the module, and
 `tests/unit/platform_values_test.uc` stores a value that the platform takes and
-checks that it takes a write and is not swept. A `pattern` is probed only with
-values that the regex refuses, because no value that a regex accepts can be
-derived from it, so the module's own tests must cover the values it takes. A
+checks that it takes a write, also a PUT of the read, and is not swept. A
+`pattern` is probed only with values that the regex refuses, because no value
+that a regex accepts can be derived from it, so the module's own tests must
+cover the values it takes. A
 nested property takes the marker in the same way, such as `match.device` on
 `firewall/nat`, and the test probes it under the path that `validate()`
 reports. An element under `items` takes it too, and the test probes it as the

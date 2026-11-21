@@ -476,11 +476,12 @@ t.describe('handler error merge', () => {
 		t.assert_equal(errs[1].live, null);
 	});
 
+	// A refusal of the request schema reads it, to pass a value that it holds, so this is a validate() error.
 	t.it('PUT reports a validation error before it reads the stored section', () => {
 		let c = with_zones();
 		c._state.uci.firewall.r_existing = { '.type': 'rule', '.anonymous': false, target: 'ACCEPT' };
 		let h = rules_with({ fromUci: () => die('unreadable') });
-		t.assert_equal(h.replace(c, ctx(), 'r_existing', { ...body, target: 'BOGUS' }).status, 422);
+		t.assert_equal(h.replace(c, ctx(), 'r_existing', { ...body, match: { src_zone: 'nowhere' } }).status, 422);
 	});
 
 	// wireless/interfaces reads its runtime state with three ubus calls, inside the lock.
