@@ -54,15 +54,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Deprecated
 
-- **The v4 announcement adds the refusal of a query parameter value outside its
-  declared set, and says more about three changes.** In v4 a `managed` other
-  than `true` or `false`, a `validate` other than `1` and an empty `cursor`
-  answer 400, where 3.x ignores them. An empty `mwan3/interfaces.family` reads
-  `ipv4` too, and the v4 schema declares `family` as a string that every
-  response holds. The refusal of a write over a stored error covers the schema
-  checks, and a value that the platform takes is no error. A token that holds
-  `dhcp:leases` reads the IPv6 leases too. `docs/deprecations.md` and the
-  "Upcoming in v4" block of the spec now say so. (#414)
+- **The v4 announcement adds five changes, and says more about three others.**
+  In v4 a `managed` other than `true` or `false`, a `validate` other than `1`
+  and an empty `cursor` answer 400, where 3.x ignores them. Two firewall reads
+  say what fw4 applies (#408), a lease without a client id reads `duid` null
+  (#392), a mwan3 `loglevel` of `err` or `warn` and a member `metric` above 256
+  answer 422 (#407), and the HTTP token mint refuses a scope that the server
+  does not know (#415). An empty `mwan3/interfaces.family` reads `ipv4` too, and
+  the v4 schema declares `family` as a string that every response holds. The
+  refusal of a write over a stored error covers the schema checks, and a value
+  that the platform takes is no error. A token that holds `dhcp:leases` reads
+  the IPv6 leases too. `docs/deprecations.md` and the "Upcoming in v4" block of
+  the spec now say so. (#414)
 - **The v4 announcement says that `dhcp/leases` will refuse an unknown
   `family`.** 3.x ignores the parameter, so `?family=ipv6` or `?family=` lists
   the IPv4 leases. In v4 a value other than `v4` or `v6` answers 400
