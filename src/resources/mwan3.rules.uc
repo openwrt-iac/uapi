@@ -4,8 +4,7 @@ let as_int = values.as_int;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 
-const VALID_FAMILY = { "ipv4": true, "ipv6": true };
-const VALID_PROTO = { "tcp": true, "udp": true, "icmp": true, "all": true };
+const VALID_FAMILY = { "ipv4": true, "ipv6": true, "any": true };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -80,14 +79,15 @@ return {
 	openapi_required: ["use_policy"],
 	schema_properties: {
 		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
-		proto:      { type: ["string", "null"], enum: [...keys(VALID_PROTO), null] },
+		proto:      { type: ["string", "null"], pattern: "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
+		              description: "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests." },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },
 		dest_port:  { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		sticky:     { type: "boolean", default: false,
 		              description: "Pin matching connections to the same member for `timeout` seconds." },
-		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 86400 },
+		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 2147483, "x-uapi-write": { maximum: 1000000 } },
 		ipset:      { type: ["string", "null"], pattern: values.SHELL_WORD_RE,
 		              description: "Match destination against an ipset; bypasses src/dest_ip." },
 		use_policy: { "x-uapi-read-nullable": true, type: "string",

@@ -565,6 +565,27 @@ t.describe('handler schema check of a stored value', () => {
 	let jp = { ...ctx(), json_patch: true };
 	let fields = (r) => map(r.body.errors ?? [], (e) => [ e.field, e.code ]);
 
+	// LuCI's uciname takes a leading digit, and the create checks the name uapi gives.
+	t.it('does not judge the name of a stored section by the id pattern', () => {
+		let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), {
+			tx: {
+				acquire: function() { return {}; }, release: function() {},
+				reload: function() { return null; }, check_services: function() { return null; },
+			},
+		});
+		let world = () => ubus.stub({ uci: { network: {
+			'4g': { '.type': 'interface', '.anonymous': false, proto: 'dhcp', device: 'wwan0' },
+		} } });
+		t.assert_deep_equal(ifaces.sweep(world()), []);
+		let c = world();
+		t.assert_equal(ifaces.patch(c, ctx(), '4g', { metric: 10 }).status, 200);
+		t.assert_equal(c._state.uci.network['4g'].metric, '10');
+		t.assert_equal(ifaces.patch(world(), jp, '4g', [ { op: 'add', path: '/metric', value: 10 } ]).status, 200);
+		let read = ifaces.get_one(world(), ctx(), '4g').body;
+		t.assert_equal(ifaces.replace(world(), ctx(), '4g', read).status, 200);
+		t.assert_deep_equal(fields(ifaces.create(world(), ctx(), { id: '5g', proto: 'dhcp' })), [ [ 'id', 'invalid_format' ] ]);
+	});
+
 	t.it('refuses every write while the section holds a value outside the schema', () => {
 		let c = stored({ target: 'BOGUS' });
 		t.assert_deep_equal(map(rules.sweep(c)[0].errors, (e) => [ e.field, e.code ]), [ [ 'target', 'not_in_enum' ] ]);

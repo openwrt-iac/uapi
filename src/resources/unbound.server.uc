@@ -98,9 +98,6 @@ function validate(json) {
 	if (json.protocol != null && !VALID_PROTOCOL[json.protocol])
 		push(errs, { field: "protocol", code: "not_in_enum",
 		             message: "must be one of " + join(", ", keys(VALID_PROTOCOL)) });
-	if (json.rebind_protection != null && !VALID_REBIND["" + json.rebind_protection])
-		push(errs, { field: "rebind_protection", code: "not_in_enum",
-		             message: "must be 0 (off), 1 (private nets), or 2 (all)" });
 	if (json.domain_type != null && !VALID_DOMAIN_TYPE[json.domain_type])
 		push(errs, { field: "domain_type", code: "not_in_enum",
 		             message: "must be one of " + join(", ", keys(VALID_DOMAIN_TYPE)) });
@@ -117,9 +114,9 @@ return {
 	schema_properties: {
 		listen_port:       { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DHCP_LINK) },
-		add_local_fqdn:    { type: ["integer", "null"], minimum: 0, maximum: 4,
+		add_local_fqdn:    { type: ["integer", "null"], "x-uapi-write": { minimum: 0, maximum: 4 },
 		                     description: "How aggressively to add local FQDNs (0..4)" },
-		add_wan_fqdn:      { type: ["integer", "null"], minimum: 0, maximum: 4,
+		add_wan_fqdn:      { type: ["integer", "null"], "x-uapi-write": { minimum: 0, maximum: 4 },
 		                     description: "How aggressively to add WAN FQDNs (0..4)" },
 		dnssec_enabled:    { type: "boolean", default: false },
 		recursion:         { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RECURSION) },
@@ -127,7 +124,7 @@ return {
 		                     description: "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)." },
 		protocol:          { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_PROTOCOL) },
 		query_minimize:    { type: "boolean", default: false },
-		rebind_protection: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REBIND),
+		rebind_protection: { "x-uapi-read-nullable": true, type: "string", pattern: "^-?[0-9]+$", "x-uapi-write": { enum: keys(VALID_REBIND) },
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
 		domain:            { type: ["string", "null"], pattern: DOMAIN_RE },
 		domain_type:       { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DOMAIN_TYPE),
@@ -140,7 +137,7 @@ return {
 		                     description: "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf." },
 		localservice:      { "x-uapi-read-nullable": true, type: "boolean" },
 		hide_binddata:     { "x-uapi-read-nullable": true, type: "boolean" },
-		num_threads:       { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 64 },
-		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 86400 },
+		num_threads:       { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": { minimum: 1, maximum: 64 } },
+		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", maximum: 86400, "x-uapi-write": { minimum: 0 } },
 	},
 };

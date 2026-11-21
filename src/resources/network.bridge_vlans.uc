@@ -67,7 +67,7 @@ return {
 		device: { "x-uapi-read-nullable": true, type: "string",
 		          description: "Parent bridge device name (must exist in network/devices type=bridge)" },
 		vlan:   { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 4094 },
-		ports:  { type: ["array", "null"], items: { type: "string", pattern: "^[A-Za-z0-9._-]+(:[tu*]+)?$" },
+		ports:  { type: ["array", "null"], items: { type: "string", pattern: "^[^:/ \t\n]{1,15}(:[tu*]*)?$" },
 		          description: "Bridge ports with optional :t (tagged), :u (untagged), :* (pvid) suffix" },
 	},
 };

@@ -75,10 +75,13 @@ t.describe('network.rules.validate', () => {
 		t.assert_deep_equal(rules.validate({ lookup: 254, suppress_prefixlength: 0, priority: 29999 }, null), []);
 		t.assert_deep_equal(rules.validate({ lookup: 43 }, null), []);
 	});
-	t.it('rejects priority out of range', () => {
-		let errs = full_validate(rules, { src: '192.168.1.0/24', priority: 99999, lookup: 42 }, null);
-		let pe = filter(errs, function(e) { return e.field == "priority"; });
-		t.assert_equal(pe[0].code, "out_of_range");
+	// LuCI takes any uinteger, and netifd and the kernel a u32, which uci passes as an INT32.
+	t.it('takes a priority above 32766, and a request refuses a negative one', () => {
+		let pe = (p) => map(filter(full_validate(rules, { src: '192.168.1.0/24', priority: p, lookup: 42 }, null),
+		                           (e) => e.field == "priority"), (e) => e.code);
+		t.assert_deep_equal(pe(99999), []);
+		t.assert_deep_equal(map(filter(handler.check_schema_types(handler.request_properties(rules.schema_properties), { priority: -1 }),
+		                               (e) => e.field == "priority"), (e) => e.code), [ 'out_of_range' ]);
 	});
 	t.it('requires lookup when action is lookup (default)', () => {
 		let errs = rules.validate({ src: '192.168.1.0/24' }, null);

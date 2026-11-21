@@ -201,8 +201,9 @@ module declares them:
   write needs the value.
 - **`x-uapi-write`**: keywords the request half declares instead of the response
   half, for a value a read can return but a write refuses (a stored `mtu` below
-  68, a route `table` of 0). `tests/unit/write_overlay_test.uc` ties each
-  keyword to a refusal in `validate()`.
+  68, a route `table` of 0). The handler checks them against the fields that a
+  request names, and `tests/unit/write_overlay_test.uc` ties each keyword to a
+  refusal of a request past it.
 - **`x-uapi-multiline`**: the type gate takes a newline and a carriage return in
   this string, such as `system.notes`, and refuses them in every other curated
   string (#276).
@@ -245,30 +246,26 @@ space-separated string that the 3.1 spec declared; v4 removed it. A type in
 because a null removes the field. The merge-patch body below says which fields.
 
 A request can also be narrower than the response, since 3.2.0, where a read
-returns a value that the request schema does not take. Four kinds of value
+returns a value that the request schema does not take. Two kinds of value
 qualify:
 
-- a stored option that the daemon ignores or cannot use, such as `mtu` below 68
-  or a route
-  `table` of 0,
-- a value that a read gives for an option it cannot resolve, such as
-  `listen_port` -1 for a
+- a value that the daemon refuses or cannot use, such as a stored `mtu` below
+  68, a route `table` of 0, or the `listen_port` -1 that a read gives for a
   service name that /etc/services does not know,
-- a `network/interfaces.proto` that uapi does not model, such as the `6in4` that
-  LuCI writes,
-- a list that uci holds for a `wireless/interfaces` text option that a write
-  takes only as a string, such as `ssid`.
+- a value that LuCI or the daemon takes and uapi does not write, such as a
+  `network/interfaces.proto` that uapi does not model, the list that uci holds
+  for a `wireless/interfaces` text option, or a `mwan3/interfaces.probe_count`
+  above the 10 that a write takes.
 
 The response declares what a read can return, and the request declares what a
 write can send, so a read-modify-write of such a value fails against the request
-schema. The server refuses it too. For the first two kinds, it refuses every
-other write of the section while it holds such a value, a PATCH that leaves the
-field out included. The last two are values that the platform takes, so they
-are no error of the section: only a write that sends one is refused, and the
-validation sweep does not list them. A module declares the difference with
-`x-uapi-write`, and
-`tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
-in `validate()`.
+schema, and the server refuses it too. A value of the first kind is an error of
+the section: a rule of `validate()` or `validate_new()` refuses it, so it blocks
+every other write of the section, a PATCH that leaves the field out included,
+and the validation sweep lists it. A value of the second kind is no error: only
+a write that sends it is refused. A module declares the difference with
+`x-uapi-write`, which the handler checks against the fields that a request
+names, and `tests/unit/write_overlay_test.uc` checks each such keyword.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a

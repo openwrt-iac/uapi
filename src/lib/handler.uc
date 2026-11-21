@@ -301,10 +301,31 @@ check_schema_types = function(schema_properties, body, prefix) {
 	return errs;
 };
 
+// The request half of a property: its x-uapi-write keywords over the rest, at every depth.
+function request_spec(spec) {
+	if (type(spec) != "object") return spec;
+	let w = (type(spec["x-uapi-write"]) == "object") ? { ...spec, ...spec["x-uapi-write"] } : spec;
+	if (type(w.properties) == "object") {
+		let p = {};
+		for (let k, s in w.properties) p[k] = request_spec(s);
+		w = { ...w, properties: p };
+	}
+	if (type(w.items) == "object") w = { ...w, items: request_spec(w.items) };
+	return w;
+}
+
+function request_properties(schema_properties) {
+	let out = {};
+	for (let k, s in schema_properties ?? {}) out[k] = request_spec(s);
+	return out;
+}
+
 // LuCI validates every visible field of a form at save, so a value that breaks a rule blocks every
 // save of the section until a write fixes it or the change goes through /raw. Each check here
 // therefore judges the section as the write leaves it, a stored value too, and the sweep runs the
-// same checks over each stored section.
+// same checks over each stored section. A value that the platform takes is no error, so the schema
+// declares what a read can give, and an x-uapi-write keyword, which can be narrower, judges only
+// what a request sends.
 //
 // schema_body is the section that check_schema_types judges. It leaves out the write-only secrets
 // that the write carries from uci: the read masks them, so the caller can neither see nor send
@@ -321,11 +342,24 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	if (type(validate_body) != "object")
 		return [ { field: "", code: "invalid_type",
 		           message: "body must be a JSON object" } ];
+	// The id of a stored section is the name that uci holds, which the create checked. LuCI and
+	// a shell take names that the id pattern refuses, such as `4g`, and a body can only echo it.
+	if (id != null && type(schema_body) == "object" && exists(schema_body, "id")) {
+		schema_body = { ...schema_body };
+		delete schema_body.id;
+	}
+	// A field that the resource does not declare is the check of the section's to report, so a
+	// JSON Patch that adds and removes one passes.
+	let sent = {};
+	for (let k, v in (type(delta) == "object") ? delta : {})
+		if (exists(resource.schema_properties ?? {}, k) && !(id != null && k == "id")) sent[k] = v;
 	let type_errs = check_schema_types(resource.schema_properties, schema_body);
 	let val_errs = resource.validate(validate_body, conn, id, delta, partial) ?? [];
 	// `live` reaches the sweep only, because a 422 rebuilds each error through errors.field_error().
 	let daemon_errs = map((resource.validate_new != null) ? (resource.validate_new(validate_body, conn) ?? []) : [],
 	                      (e) => ({ field: e.field, code: e.code, message: e.message, live: e.live !== false }));
+	// Last, so that a rule of validate() or validate_new() that refuses the same value names it.
+	let request_errs = check_schema_types(request_properties(resource.schema_properties), sent);
 	// The newline refusal of the schema check gives way to a validate_new() error with its code on
 	// its field, or on the list that holds it, which a daemon reads as its joined entries: that error
 	// says why the daemon cares and carries `live`. Two validate_new() rules on one field are two
@@ -334,16 +368,20 @@ function _validate_with_schema(resource, schema_body, validate_body, conn, id, d
 	for (let e in daemon_errs) daemon_keys[e.field + "|" + e.code] = true;
 	let seen = {};
 	let merged = [];
-	for (let e in [ ...type_errs, ...val_errs ]) {
+	let keep = function(e) {
 		let k = (e.field ?? "") + "|" + (e.code ?? "");
 		if (seen[k] || (e.message == NEWLINE_REFUSAL
 		                && (daemon_keys[k] || daemon_keys[replace(e.field, /\[[0-9]+\]$/, "") + "|" + e.code])))
-			continue;
+			return false;
 		seen[k] = true;
-		push(merged, e);
-	}
+		return true;
+	};
+	for (let e in [ ...type_errs, ...val_errs ])
+		if (keep(e)) push(merged, e);
 	for (let e in daemon_errs)
 		if (!seen[e.field + "|" + e.code]) push(merged, e);
+	for (let e in request_errs)
+		if (!daemon_keys[e.field + "|" + e.code] && keep(e)) push(merged, e);
 	return merged;
 }
 
@@ -1327,4 +1365,4 @@ function make_nonuci(resource) {
 }
 
 return { make, make_singleton, make_collection, make_nonuci, translate_tx, load_section,
-         check_schema_types };
+         check_schema_types, request_properties };

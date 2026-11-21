@@ -5,7 +5,7 @@ let config = loadfile('src/resources/usteer.config.uc')();
 
 function full_validate(r, body) {
 	let out = [];
-	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in handler.check_schema_types(handler.request_properties(r.schema_properties), body)) push(out, e);
 	for (let e in r.validate(body)) push(out, e);
 	return out;
 }
@@ -34,9 +34,11 @@ t.describe('usteer.config contract', () => {
 		t.assert_deep_equal(u.ssid_list, ['guest']);
 	});
 
-	t.it('schema enforces debug_level range', () => {
-		let errs = full_validate(config, { debug_level: 9 });
-		t.assert_true(length(filter(errs, e => e.field == "debug_level")) > 0);
+	// usteerd reads any level, and LuCI offers 0 to 5.
+	t.it('a request takes debug_level 0 to 5, and a stored higher level is no error', () => {
+		t.assert_deep_equal(full_validate(config, { debug_level: 5 }), []);
+		t.assert_deep_equal(map(full_validate(config, { debug_level: 9 }), (e) => e.code), [ 'out_of_range' ]);
+		t.assert_deep_equal(handler.check_schema_types(config.schema_properties, { debug_level: 9 }), []);
 	});
 
 	t.it('schema accepts negative dBm values for signal thresholds', () => {

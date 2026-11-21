@@ -49,11 +49,7 @@ function validate(json) {
 	// and is exactly what config_generate emits for per-device macaddr on some
 	// targets. Requiring type would be stricter than the platform. Validate the
 	// enum only when a type is actually present.
-	if (json.type != null && json.type != "" && !VALID_TYPES[json.type])
-		push(errs, { field: "type", code: "not_in_enum",
-		             message: "must be one of bridge, 8021q, 8021ad, macvlan, veth, tun, tap" });
-
-	if (json.type == "8021q" && (json.vid == null || json.vid == ""))
+	if (json.type == "8021q" && json.vid == null)
 		push(errs, { field: "vid", code: "required",
 		             message: "is required when type is 8021q" });
 
@@ -90,15 +86,17 @@ return {
 	schema_properties: {
 		name:    { "x-uapi-read-nullable": true, type: "string",
 		           description: "Device name as seen by netifd / the kernel" },
-		type:    { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TYPES) },
+		type:    { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": { enum: keys(VALID_TYPES) },
+		           description: "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device" },
 		ports:   { type: ["array", "null"], items: { type: "string" } },
-		vid:     { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 4094,
+		vid:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4094, "x-uapi-write": { minimum: 1 },
 		           description: "VLAN id for 8021q / 8021ad devices" },
 		ifname:  { type: ["string", "null"],
 		           description: "Underlying parent interface (e.g. for macvlan/8021q)" },
 		mtu:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },
 		           description: "Device MTU. netifd applies it only from 68 up, so a stored smaller value reads as it is and a write below 68 answers 422." },
-		macaddr: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$",
+		macaddr: { type: ["string", "null"], pattern: "^[0-9A-Fa-f]{1,2}([:-][0-9A-Fa-f]{1,2}){5}$",
+		           "x-uapi-write": { pattern: "^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$" },
 		           description: "MAC address override (colon or dash separated)" },
 		ipv6:    { type: "boolean", default: true,
 		           description: "Enable IPv6 on this device" },

@@ -8,7 +8,7 @@ let interfaces = loadfile('src/resources/network.interfaces.uc')();
 
 function full_validate(r, body, conn) {
 	let out = [];
-	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in handler.check_schema_types(handler.request_properties(r.schema_properties), body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
 	return out;
 }
@@ -1000,10 +1000,12 @@ t.describe('unbound.server parity additions', () => {
 		t.assert_equal(u.ttl_min, '60');
 		t.assert_equal(u.domain, 'lan');
 	});
-	t.it('validate rejects bad rebind_protection', () => {
-		let errs = unbound.validate({ rebind_protection: 9 });
-		t.assert_equal(errs[0].field, 'rebind_protection');
-		t.assert_equal(errs[0].code, 'not_in_enum');
+	// unbound.sh tests the number with -gt, so a stored 9 is no error, and a request takes 0 to 2.
+	t.it('a request takes rebind_protection 0, 1 or 2, and a stored other number is no error', () => {
+		t.assert_deep_equal(map(full_validate(unbound, { rebind_protection: '9' }), (e) => [ e.field, e.code ]),
+		                    [ [ 'rebind_protection', 'not_in_enum' ] ]);
+		t.assert_deep_equal(handler.check_schema_types(unbound.schema_properties, { rebind_protection: '9' }), []);
+		t.assert_equal(length(handler.check_schema_types(unbound.schema_properties, { rebind_protection: 'x' })), 1);
 	});
 	t.it('validate rejects bad domain_type enum', () => {
 		let errs = unbound.validate({ domain_type: 'bogus' });

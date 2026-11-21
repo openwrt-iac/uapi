@@ -2,7 +2,7 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_list_or_null = values.as_list_or_null;
 
-const VALID_POLICIES = { "ACCEPT": true, "REJECT": true, "DROP": true };
+const POLICIES = [ "ACCEPT", "REJECT", "DROP" ];
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
 function fromUci(section) {
@@ -11,13 +11,13 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		input: section.input ?? "REJECT",
-		output_policy: section.output ?? "REJECT",
-		forward: section.forward ?? "REJECT",
+		input: values.fw_enum(section.input, POLICIES) ?? "REJECT",
+		output_policy: values.fw_enum(section.output, POLICIES) ?? "REJECT",
+		forward: values.fw_enum(section.forward, POLICIES) ?? "REJECT",
 		network: as_list_or_null(section.network),
 		masq: normalize_bool(section.masq, false),
 		mtu_fix: normalize_bool(section.mtu_fix, false),
-		family: section.family ?? "any",
+		family: values.fw_family(section.family) ?? "any",
 		runtime: {},
 	};
 }
@@ -54,12 +54,12 @@ return {
 	openapi_singular: "firewall zone",
 	openapi_required: ["name"],
 	schema_properties: {
-		name:    { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+$",
-		           description: "Zone name; alphanumerics, dashes, underscores" },
-		input:         { type: "string", enum: keys(VALID_POLICIES), default: "REJECT" },
-		output_policy: { type: "string", enum: keys(VALID_POLICIES), default: "REJECT",
+		name:    { type: ["string", "null"], pattern: "^[a-zA-Z_.][a-zA-Z0-9/_.-]*$", "x-uapi-write": { pattern: "^[a-zA-Z0-9_-]+$" },
+		           description: "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes" },
+		input:         { type: "string", enum: POLICIES, default: "REJECT" },
+		output_policy: { type: "string", enum: POLICIES, default: "REJECT",
 		                 description: "Renamed on the wire from uci's `output` (HCL block keyword)." },
-		forward:       { type: "string", enum: keys(VALID_POLICIES), default: "REJECT" },
+		forward:       { type: "string", enum: POLICIES, default: "REJECT" },
 		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 		network: { type: ["array", "null"], items: { type: "string" } },
 		masq:    { type: "boolean", default: false,

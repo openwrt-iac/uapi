@@ -306,34 +306,30 @@ declared types already hold has to guard for itself. Per-field
 constraints that fit (type, enum, range, pattern, items recursion) belong
 here; cross-field / cross-section / format-string logic stays in `validate()`.
 
-The constraints here describe what a read can return, because the sweep checks
-every stored
-section against them. When `validate()` refuses a value that a read can still
-return, such as a
-stored `mtu` below 68, keep the read bound here and put the write bound under
-the property's
-`x-uapi-write`, for example `mtu: { type: ["integer", "null"], minimum: 0,
-"x-uapi-write": {
-minimum: 68 } }`. The generator puts those keywords on the `*Request` schema
-only, and the type
-gate does not read them, so `validate()` must refuse the value itself.
-`tests/unit/write_overlay_test.uc` checks that it does, with a value just past
-each keyword in
-every fixture case of the module. A `pattern` is probed only with values that
-the regex refuses,
-because no value that a regex accepts can be derived from it, so the module's
-own tests must
-cover the values it takes. A nested property takes the marker in the same way,
-such as
-`match.device` on `firewall/nat`, and the test probes it under the path that
-`validate()`
+The constraints here describe what a read can return, because the sweep and
+every write check each stored section against them. Declare what LuCI and the
+daemon take, so that a value that the platform takes is no error of the section,
+and check each bound against LuCI's form and the daemon that reads the option.
+When a write should send less than a read can give, put the narrower keyword
+under the property's `x-uapi-write`, for example `mtu: { type: ["integer",
+"null"], minimum: 0, "x-uapi-write": { minimum: 68 } }`. The generator puts
+those keywords on the `*Request` schema, and the handler checks them against the
+fields that a request names, so a stored value past them blocks no write. When
+such a stored value is also an error, because the daemon refuses it, a rule of
+`validate()` or `validate_new()` refuses it too, as for the `mtu` of
+`network/interfaces`. `tests/unit/write_overlay_test.uc` checks each keyword
+with a value just past it in every fixture case of the module, and
+`tests/unit/platform_values_test.uc` stores a value that the platform takes and
+checks that it takes a write and is not swept. A `pattern` is probed only with
+values that the regex refuses, because no value that a regex accepts can be
+derived from it, so the module's own tests must cover the values it takes. A
+nested property takes the marker in the same way, such as `match.device` on
+`firewall/nat`, and the test probes it under the path that `validate()`
 reports. An element under `items` takes it too, and the test probes it as the
-only element of
-its array, under the path that `validate()` gives it, such as `ip6class[0]`. A
-keyword below an
-element has no probe and fails the test. A rule that depends on another field,
-such as the pppd range of `mtu` on proto `ppp`,
-goes in `openapi_write_conditional`.
+only element of its array, under the path that `validate()` gives it, such as
+`ip6class[0]`. A keyword below an element has no probe and fails the test. A
+rule that depends on another field, such as the pppd range of `mtu` on proto
+`ppp`, goes in `openapi_write_conditional`.
 
 The type gate refuses a newline and a carriage return in every string of
 `schema_properties`, nested ones too, because most daemons read a value as one
@@ -363,7 +359,8 @@ write is refused for the error either way. Report each problem of a value as
 its own error, so that one cannot hide another: the 422 keeps each of them,
 unless the schema check or `validate()` already reported its field and code.
 The newline refusal of the schema check gives way to a `validate_new()` error
-on the same field and code, which says why the daemon cares and carries `live`.
+with the same code on its field, or on the list that holds it, as `nasid` holds
+`nasid[1]`: that error says why the daemon cares and carries `live`.
 
 A message names its rule and quotes no value. `validate_new()` runs over the
 write-only secrets that the handler carries from uci, and the sweep gives its

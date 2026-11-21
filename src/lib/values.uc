@@ -549,11 +549,12 @@ function constant_time_equals(a, b) {
 }
 
 // firewall4 accepts a mark as value[/mask] in decimal or 0x-prefixed hex, and
-// lets match options negate with a leading '!'. Shared by every resource that
-// exposes a mark, so the accepted syntax cannot drift between them.
+// lets match options negate with a leading '!', which LuCI writes with a space
+// after it too. Shared by every resource that exposes a mark, so the accepted
+// syntax cannot drift between them.
 const MARK_VALUE = '(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})';
 const MARK_RE = '^' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
-const MARK_MATCH_RE = '^!?' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
+const MARK_MATCH_RE = '^(![ \t]*)?' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
 const MARK_MAX = 0xFFFFFFFF;
 
 // The pattern constrains digit count, not magnitude: a 10-digit decimal still
@@ -624,7 +625,7 @@ function proto_problem(v) {
 // negated with a leading '!', target options such as snat_port may not. Shared
 // so the three firewall resources cannot drift from what the router accepts.
 const PORT_RE = '^[0-9]{1,5}([-:][0-9]{1,5})?$';
-const PORT_MATCH_RE = '^!?[0-9]{1,5}([-:][0-9]{1,5})?$';
+const PORT_MATCH_RE = '^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$';
 const PORT_MAX = 65535;
 const PORT_CRE = regexp(PORT_RE);
 const PORT_MATCH_CRE = regexp(PORT_MATCH_RE);
@@ -642,7 +643,7 @@ function port_problem(v, allow_invert) {
 		             : "must be a port or port range (e.g. 80, 1000-2000, 1000:2000)" };
 
 	let bounds = [];
-	for (let part in split(replace(v, /^!/, ""), /[-:]/)) push(bounds, +part);
+	for (let part in split(replace(v, /^[ \t]*![ \t]*/, ""), /[-:]/)) push(bounds, +part);
 	for (let n in bounds) {
 		if (n > PORT_MAX)
 			return { code: "out_of_range",
@@ -787,6 +788,35 @@ function section_index(conn, pkg, sec_type, key, filter) {
 	return out;
 }
 
+// fw4's parse_enum: a choice in any case, or a prefix of one, which picks the first choice that it
+// starts, so a stored `accept` or `acc` is ACCEPT. A value that names no choice reads as it is, and
+// the schema refuses it, as fw4 skips the section.
+function fw_enum(v, choices) {
+	if (type(v) != "string" || v == "") return v;
+	for (let c in choices)
+		if (lc(substr(c, 0, length(v))) == lc(v)) return c;
+	return v;
+}
+
+// fw4's parse_target, in its order of choices. fw4 applies its default target, with a warning, to a
+// redirect or a nat rule whose target parses as another one.
+const FW_TARGETS = [ "ACCEPT", "REJECT", "DROP", "NOTRACK", "HELPER", "MARK", "DSCP", "DNAT", "SNAT",
+                     "MASQUERADE", "NPT" ];
+function fw_target(v, allowed, fallback) {
+	let t = fw_enum(v, FW_TARGETS);
+	if (index(FW_TARGETS, t) < 0 || allowed == null || index(allowed, t) >= 0) return t;
+	return fallback;
+}
+
+// fw4's parse_family.
+function fw_family(v) {
+	if (type(v) != "string") return v;
+	if (v == "any" || v == "all" || v == "*") return "any";
+	if (v == "inet" || index(v, "4") >= 0) return "ipv4";
+	if (index(v, "6") >= 0) return "ipv6";
+	return v;
+}
+
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
@@ -796,7 +826,7 @@ return {
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
-	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
+	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds, fw_enum, fw_target, fw_family,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict,
 	NAME_MAX, DEVICE_MAX,
