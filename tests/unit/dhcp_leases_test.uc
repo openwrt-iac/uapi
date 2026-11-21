@@ -32,6 +32,11 @@ t.describe('dhcp.leases parser', () => {
 		t.assert_equal(out[2].duid, null);
 	});
 
+	t.it('treats "*" duid as null', () => {
+		let out = leases_mod.parse_leases(SAMPLE);
+		t.assert_equal(out[1].duid, null);
+	});
+
 	t.it('skips blank lines', () => {
 		t.assert_equal(length(leases_mod.parse_leases("\n\n  \n")), 0);
 	});

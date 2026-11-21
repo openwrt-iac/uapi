@@ -96,7 +96,8 @@ the option to OpenWrt uci if it doesn't, before adding non-uci state to uapi.
   `?family=v6` reads the IPv6 leases of odhcpd, see below (merged in v4, #320).
 - **Lock.** None; reads only.
 - **Format.** Space-separated lines `<expires_at> <mac> <ip> <hostname>
-  <duid?>`.
+  <client id>`. dnsmasq writes `*` for a missing host name or client id, and
+  each reads null. A client id reads as `duid`.
 - **Why not uci.** Active leases are runtime state, by definition not in
   `/etc/config/`.
 

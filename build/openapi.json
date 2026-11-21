@@ -33175,7 +33175,7 @@
 							"string",
 							"null"
 						],
-						"description": "Client DUID. A v4 entry carries the client id that dnsmasq records, a v6 entry always carries the DUID"
+						"description": "Client DUID. A v4 entry carries the client id that dnsmasq records, or null when the client sent none. A v6 entry always carries the DUID"
 					}
 				}
 			},

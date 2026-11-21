@@ -287,6 +287,7 @@ same stored option, to follow what the daemon does:
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `match.proto` | one option of several words |
 | `uhttpd/instances` | `listen_http`, `listen_https` | an option or an entry of several words |
 | `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
+| `dhcp/leases` | `duid` | `*`, which dnsmasq writes in its lease file for a client that sent no client id. The read is null |
 
 A section whose read changes gets a new ETag once, at the upgrade. A write that
 sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.
