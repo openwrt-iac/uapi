@@ -289,15 +289,16 @@ jobs:
       fail-fast: false
       matrix:
         series: ${{ fromJSON(needs.lint.outputs.series) }}
+    # The job always runs and each step checks BUILD. A matrix job that its `if` skips keeps its
+    # name unevaluated, so the required `package` check never reported and blocked the PR.
     env:
       OPENWRT_SERIES: ${{ matrix.series }}
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-      || needs.lint.outputs.package_changed == 'true'
+      BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.lint.outputs.package_changed == 'true' }}
     steps:
       # verify-tag needs the tag object, which a checkout of depth 1 does not bring. The '0' is a
       # string because a number 0 is falsy, and `&& 0 || 1` would always give 1.
       - uses: actions/checkout@v7
+        if: env.BUILD == 'true'
         with:
           fetch-depth: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
 
@@ -306,7 +307,7 @@ jobs:
       # an unsigned tag or one signed by a non-listed key fails this job before
       # it builds anything, so release-apk never publishes it.
       - name: Verify tag signature
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.BUILD == 'true' && startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           if ! grep -q 'BEGIN PGP PUBLIC KEY BLOCK' .github/release-signers.asc; then
@@ -319,6 +320,7 @@ jobs:
           git verify-tag "$TAG"
 
       - name: Install tooling
+        if: env.BUILD == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -330,6 +332,7 @@ jobs:
       # build/sdk.sha256 does not pin the resolved tarball. The assignments carry that failure,
       # where an echo of the command substitution would exit 0 and hand the cache an empty key.
       - name: Resolve the SDK tarball
+        if: env.BUILD == 'true'
         id: sdk
         run: |
           t=$(tools/openwrt-sdk.sh name x86/64)
@@ -340,6 +343,7 @@ jobs:
       # Restore only, warm-sdk-cache being the one writer: an entry saved here is readable from
       # this pull request or tag ref alone, and each takes 2 GiB of the repository's 10 GB.
       - name: Restore the OpenWrt SDK cache
+        if: env.BUILD == 'true'
         uses: actions/cache/restore@v6
         with:
           path: build/sdk
@@ -349,22 +353,25 @@ jobs:
           restore-keys: ${{ steps.sdk.outputs.tarball }}-
 
       - name: Download SDK if cache miss (verified by sha256)
+        if: env.BUILD == 'true'
         run: |
           if [ ! -d build/sdk/staging_dir ]; then
             tools/openwrt-sdk.sh fetch x86/64 build/sdk
           fi
 
       - name: Cache OpenWrt VM image (stable series)
-        if: env.OPENWRT_SERIES == 'stable'
+        if: env.BUILD == 'true' && env.OPENWRT_SERIES == 'stable'
         uses: actions/cache@v6
         with:
           path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
           key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
 
       - name: Stage package (uses checked-in build/openapi.json)
+        if: env.BUILD == 'true'
         run: make stage
 
       - name: Build APK
+        if: env.BUILD == 'true'
         run: |
           cd build/sdk
           ./scripts/feeds update -a || true
@@ -374,6 +381,7 @@ jobs:
           make package/uapi/compile V=s
 
       - name: Find built APK
+        if: env.BUILD == 'true'
         id: find_apk
         run: |
           APK=$(find build/sdk/bin -name 'uapi-*.apk' | head -1)
@@ -382,6 +390,7 @@ jobs:
           ls -la "$APK"
 
       - name: Upload APK artifact
+        if: env.BUILD == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.series == 'stable' && 'uapi-apk' || format('uapi-apk-{0}', matrix.series) }}
@@ -392,9 +401,11 @@ jobs:
       # Uploaded as a workflow artifact AND attached to the GitHub Release
       # alongside the APK so SBOM-aware consumers (cosign / syft) see it.
       - name: Generate SBOM
+        if: env.BUILD == 'true'
         run: make sbom APK="${{ steps.find_apk.outputs.apk }}"
 
       - name: Upload SBOM artifact
+        if: env.BUILD == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.series == 'stable' && 'uapi-sbom' || format('uapi-sbom-{0}', matrix.series) }}
@@ -403,17 +414,21 @@ jobs:
       # Smoke test the built APK in a fresh VM before publishing anywhere.
       # If the smoke test fails, release-apk never runs.
       - name: Setup VM
+        if: env.BUILD == 'true'
         run: tests/vm/setup.sh
 
       - name: Start VM
+        if: env.BUILD == 'true'
         run: tests/vm/start.sh
 
       - name: Wait for VM SSH
+        if: env.BUILD == 'true'
         run: TIMEOUT=180 tests/vm/wait.sh
 
       # 3.2.0 is the last release whose package shipped /etc/config/uapi, so the upgrade from it is
       # the one that can lose the token store. It stays pinned when later releases ship.
       - name: Fetch the 3.2.0 APK
+        if: env.BUILD == 'true'
         id: old_apk
         env:
           GH_TOKEN: ${{ github.token }}
@@ -422,14 +437,15 @@ jobs:
           echo "apk=$(ls /tmp/old-apk/uapi-*.apk)" >> $GITHUB_OUTPUT
 
       - name: Install APK in VM and run smoke test
+        if: env.BUILD == 'true'
         run: tests/integration/release_apk_smoke.sh "${{ steps.find_apk.outputs.apk }}" "${{ steps.old_apk.outputs.apk }}"
 
       - name: Capture serial log on failure
-        if: failure()
+        if: env.BUILD == 'true' && failure()
         run: tail -200 tests/vm/qemu.log || true
 
       - name: Stop VM
-        if: always()
+        if: env.BUILD == 'true' && always()
         run: tests/vm/stop.sh
 
   # release-apk attaches the APK that the package job built and smoke-tested to the GitHub
