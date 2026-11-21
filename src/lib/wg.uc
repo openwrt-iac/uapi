@@ -95,12 +95,33 @@ function endpoint_port(v) {
 	return 0;
 }
 
+// strtoul in base 0, for a part that a digit starts: hex after 0x, octal after a 0, else decimal.
+function base0(t) {
+	return match(t, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/) ? int(t, 0) : null;
+}
+
+// The IPv4 address that musl's inet_aton reads, as an integer, or null: one to four parts split at
+// dots, each one in base 0, each but the last at most 255, and the last filling the bytes that are
+// left, so `10.1` is 10.0.0.1 and `167772161` is 10.0.0.1. getaddrinfo reads such a host as an
+// address and asks no resolver.
+function inet_aton(s) {
+	let parts = map(split(s, "."), base0);
+	if (length(parts) > 4 || length(filter(parts, (p) => type(p) != "int")) > 0
+	    || length(filter(slice(parts, 0, -1), (p) => p > 255)) > 0 || parts[-1] >= 1 << (8 * (5 - length(parts))))
+		return null;
+	let n = parts[-1];
+	for (let i = 0; i < length(parts) - 1; i++) n |= parts[i] << (24 - 8 * i);
+	return n;
+}
+
 // What busybox's nslookup reads for a name: "address" when it prints one, as a `Name:` line, "none"
 // when the replies say that the name does not exist or has no address, and null when it cannot
 // tell. It exits 1 for an NXDOMAIN, a SERVFAIL, a REFUSED and a timeout alike, and 0 when every
 // query had a NOERROR reply, so the lines decide: an NXDOMAIN prints `** server can't find <name>:
 // NXDOMAIN`, another reply code its own name there, and a timeout `;; connection timed out; no
-// servers could be reached`. Only the headers with NXDOMAIN or no-answer lines read "none".
+// servers could be reached`. Only the headers with NXDOMAIN, no-answer or CNAME lines read "none":
+// a reply that holds only a CNAME, whose target has no address, is one that getaddrinfo answers
+// EAI_NODATA for.
 function lookup(host) {
 	let r = run([ "nslookup", host ]);
 	if (index(r.output, "Name:") >= 0) return "address";
@@ -108,7 +129,7 @@ function lookup(host) {
 	for (let l in split(r.output, "\n")) {
 		if (match(l, /^\*\* server can't find .*: NXDOMAIN$/)) nxdomain = true;
 		else if (l != "" && l != "Non-authoritative answer:" && !match(l, /^(Server|Address):/)
-		         && !match(l, /^\*\*\* Can't find .*: No answer$/))
+		         && !match(l, /^\*\*\* Can't find .*: No answer$/) && !match(l, /^[^\t]+\tcanonical name = [^\t]+$/))
 			return null;
 	}
 	return (r.ok || nxdomain) ? "none" : null;
@@ -128,7 +149,7 @@ function resolves(host) {
 // IPv4 address that wg reads, or a host with a colon, which a write takes only as an IPv6 address,
 // asks no resolver.
 function missing_host(host) {
-	return !values.is_valid_ipv4(host) && index(host, ":") < 0 && lookup(host) == "none";
+	return inet_aton(host) == null && index(host, ":") < 0 && lookup(host) == "none";
 }
 
 function handler_entries(v) {
@@ -367,19 +388,15 @@ function remove_peer(iface, pubkey) {
 // leading whitespace and takes a sign, or, with a dot, an IPv4 mask that inet_aton reads, whose
 // leading ones it counts. null for a length that netifd refuses.
 function netmask_len(s, v6) {
-	let num = (t) => match(t, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/) ? int(t, 0) : null;
 	if (index(s, ".") < 0) {
 		if (s == "") return 0;
 		let m = match(s, /^[[:space:]]*([+-]?)(.*)$/);
-		let n = num(m[2]);
+		let n = base0(m[2]);
 		return (m[1] == "-" && n !== 0) ? null : n;
 	}
-	let parts = map(split(s, "."), num);
-	if (v6 || length(parts) > 4 || length(filter(parts, (p) => type(p) != "int")) > 0
-	    || length(filter(slice(parts, 0, -1), (p) => p > 255)) > 0 || parts[-1] >= 1 << (8 * (5 - length(parts))))
-		return null;
-	let mask = parts[-1], ones = 0;
-	for (let i = 0; i < length(parts) - 1; i++) mask |= parts[i] << (24 - 8 * i);
+	let mask = v6 ? null : inet_aton(s);
+	if (mask == null) return null;
+	let ones = 0;
 	while (ones < 32 && ((mask >> (31 - ones)) & 1)) ones++;
 	return ones;
 }
@@ -865,5 +882,5 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         keepalive, endpoint_port, handler_drops_key, resolves, missing_host,
+         keepalive, endpoint_port, handler_drops_key, resolves, missing_host, inet_aton,
          peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

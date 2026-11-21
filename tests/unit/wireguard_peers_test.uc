@@ -366,6 +366,32 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_deep_equal(asked, [ 'vpn.example.org' ]);
 	});
 
+	// The ucode handler of OpenWrt main gives a host of digits and dots to wg as it stands, as uci
+	// holds it, and wg looks up one that inet_aton does not read as a name that no DNS holds.
+	t.it('refuses under the ucode handler a host of digits and dots that wg cannot read, a stored one too', () => {
+		let fs = require('fs');
+		let with_module = (m) => handler.make(t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]),
+		                                      { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
+		let h = with_module(t.load_with_fs({ ...fs, access: (p) => p == '/lib/netifd/proto/wireguard.uc' || fs.access(p) }, [ 'wg' ]));
+		for (let host in [ '10.0.0.256', '1.2.3.4.5', '08.0.0.1', '.' ])
+			t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: host })), [ [ 'endpoint_host', 'invalid_format' ] ], host);
+		for (let host in [ '192.168.1.01', '010.0.0.1', '167772161', '0x0a000001', ' 10.0.0.256' ])
+			t.assert_equal(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: host }).status, 200, host);
+		t.assert_equal(with_module({ ...wg, missing_host: () => false }).patch(with_wg(), ctx(), 'g_existing', { endpoint_host: '10.0.0.256' }).status, 200);
+		let c = with_wg();
+		let stored = c._state.uci.network.g_existing;
+		stored.endpoint_host = '10.0.0.256';
+		t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { description: 'x' })), [ [ 'endpoint_host', 'invalid_format' ] ]);
+		let live = () => map(filter(h.sweep(c)[0].errors, (e) => e.field == 'endpoint_host'), (e) => e.live);
+		t.assert_deep_equal(live(), [ true ]);
+		for (let k, v in { public_key: PK + ' ', endpoint_port: 'nosuchservice', disabled: '1' }) {
+			let kept = stored[k];
+			stored[k] = v;
+			t.assert_deep_equal(live(), [ false ], k);
+			stored[k] = kept;
+		}
+	});
+
 	t.it('a write that sends -1 or 0 is refused', () => {
 		let h = make_handler();
 		t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { persistent_keepalive: -1 })), [ [ 'persistent_keepalive', 'out_of_range' ] ]);

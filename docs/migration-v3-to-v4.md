@@ -424,19 +424,29 @@ On 25.12, wireguard.sh gives the endpoint to wg, which refuses the config of the
 whole interface at its next start for a name that does not exist. A write that
 sends such a name for an enabled peer with a key answers 422 `conflict` on
 `endpoint_host`, before its commit: a name for which busybox's nslookup gets
-NXDOMAIN, or a reply with no address. This refuses a payload that 3.x stored on
-a down interface, under the carve-out of `docs/versioning.md` for a payload that
-produced broken state no caller can rely on: the interface did not come up
-again. A lookup that fails for a time, as on a timeout or a SERVFAIL, is not
-refused, because wg retries the name and the interface comes up once it
-resolves.
+NXDOMAIN, or a reply with no address, such as one that holds only a CNAME. This
+refuses a payload that 3.x stored on a down interface, under the carve-out of
+`docs/versioning.md` for a payload that produced broken state no caller can rely
+on: the interface did not come up again. A lookup that fails for a time, as on a
+timeout or a SERVFAIL, is not refused, because wg retries the name and the
+interface comes up once it resolves. A host that inet_aton reads as an IPv4
+address, such as `192.168.1.01`, `10.1` or `0x0a000001`, asks no resolver,
+because wg reads it as an address too.
 
-On OpenWrt main, the ucode proto handler leaves out the endpoint of a name for
-which busybox's nslookup prints no address, and keeps the peer. The write
-answers 200, sets the peer without the endpoint, and says so
-with the new `X-Kernel-Status: omitted`. A read then shows `runtime.endpoint`
-null beside the stored `endpoint_host`. A client that branches on the values of
-`X-Kernel-Status` sees `omitted` there, as it can see a new error code.
+On OpenWrt main, the ucode proto handler gives wg a host of only digits and dots
+as it stands. wg refuses the config of the whole interface for one that
+inet_aton does not read, such as `10.0.0.256` or `1.2.3.4.5`. A write refuses
+such a host with 422 `invalid_format` on `endpoint_host`, on a disabled peer
+too, and a stored one blocks every write of its peer until a write replaces it.
+This refuses a payload that 3.x stored on a down interface, under the same
+carve-out.
+
+The handler leaves out the endpoint of any other host for which busybox's
+nslookup prints no address, and keeps the peer. The write answers 200, sets the
+peer without the endpoint, and says so with the new `X-Kernel-Status: omitted`.
+A read then shows `runtime.endpoint` null beside the stored `endpoint_host`. A
+client that branches on the values of `X-Kernel-Status` sees `omitted` there, as
+it can see a new error code.
 
 ## Reads that change at the upgrade
 
