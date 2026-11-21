@@ -9,14 +9,6 @@ const VALID_RESOURCE  = { "default": true, "tiny": true, "small": true, "medium"
 const VALID_PROTOCOL  = { "default": true, "mixed": true, "ip4_only": true,
                           "ip6_only": true, "ip6_local": true, "ip6_prefer": true };
 const VALID_REBIND    = { "0": true, "1": true, "2": true };
-// unbound.sh takes any number for these. It runs a ttl_min above 1800 as 300.
-const WRITE = {
-	add_local_fqdn: { minimum: 0, maximum: 4 },
-	add_wan_fqdn: { minimum: 0, maximum: 4 },
-	rebind_protection: { enum: keys(VALID_REBIND) },
-	num_threads: { minimum: 1, maximum: 64 },
-	ttl_min: { minimum: 0, maximum: 86400 },
-};
 const VALID_DOMAIN_TYPE = {
 	"deny": true, "refuse": true, "static": true, "transparent": true,
 	"redirect": true, "nodefault": true, "typetransparent": true,
@@ -86,9 +78,8 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (json.listen_port != null) {
 		let p = int(json.listen_port);
 		if (p < 1 || p > 65535)
@@ -107,6 +98,9 @@ function validate(json, conn, id, delta, partial, stored) {
 	if (json.protocol != null && !VALID_PROTOCOL[json.protocol])
 		push(errs, { field: "protocol", code: "not_in_enum",
 		             message: "must be one of " + join(", ", keys(VALID_PROTOCOL)) });
+	if (json.rebind_protection != null && !VALID_REBIND["" + json.rebind_protection])
+		push(errs, { field: "rebind_protection", code: "not_in_enum",
+		             message: "must be 0 (off), 1 (private nets), or 2 (all)" });
 	if (json.domain_type != null && !VALID_DOMAIN_TYPE[json.domain_type])
 		push(errs, { field: "domain_type", code: "not_in_enum",
 		             message: "must be one of " + join(", ", keys(VALID_DOMAIN_TYPE)) });
@@ -120,13 +114,12 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		listen_port:       { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DHCP_LINK) },
-		add_local_fqdn:    { type: ["integer", "null"], "x-uapi-write": WRITE.add_local_fqdn,
+		add_local_fqdn:    { type: ["integer", "null"], minimum: 0, maximum: 4,
 		                     description: "How aggressively to add local FQDNs (0..4)" },
-		add_wan_fqdn:      { type: ["integer", "null"], "x-uapi-write": WRITE.add_wan_fqdn,
+		add_wan_fqdn:      { type: ["integer", "null"], minimum: 0, maximum: 4,
 		                     description: "How aggressively to add WAN FQDNs (0..4)" },
 		dnssec_enabled:    { type: "boolean", default: false },
 		recursion:         { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RECURSION) },
@@ -134,7 +127,7 @@ return {
 		                     description: "Memory / cache sizing preset. Renamed on the wire from uci's `resource` (HCL block keyword)." },
 		protocol:          { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_PROTOCOL) },
 		query_minimize:    { type: "boolean", default: false },
-		rebind_protection: { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.rebind_protection,
+		rebind_protection: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REBIND),
 		                     description: "0 = off, 1 = private nets, 2 = all rebind attacks blocked" },
 		domain:            { type: ["string", "null"], pattern: DOMAIN_RE },
 		domain_type:       { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DOMAIN_TYPE),
@@ -147,8 +140,7 @@ return {
 		                     description: "Bind to all interfaces (interface-automatic: yes). Disable to bind manually via /etc/unbound/unbound_srv.conf." },
 		localservice:      { "x-uapi-read-nullable": true, type: "boolean" },
 		hide_binddata:     { "x-uapi-read-nullable": true, type: "boolean" },
-		num_threads:       { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.num_threads },
-		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.ttl_min,
-		                     description: "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300" },
+		num_threads:       { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 64 },
+		ttl_min:           { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 86400 },
 	},
 };

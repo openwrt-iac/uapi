@@ -17,12 +17,10 @@ const VALID_TARGETS = {
 const DSCP_VAL = '([Cc][Ss][0-7]|[Bb][Ee]|[Ll][Ee]|[Aa][Ff][1-4][1-3]|[Ee][Ff]|0[xX][0-9a-fA-F]{1,2}|[0-9]{1,2})';
 
 const DSCP_RE = '^' + DSCP_VAL + '$';
-const DSCP_MATCH_RE = '^(![ \t]*)?' + DSCP_VAL + '$';
+const DSCP_MATCH_RE = '^!?' + DSCP_VAL + '$';
 
 const DSCP_MAX = 63;
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-// LuCI also writes HELPER, for a conntrack helper that uapi does not model, so only a read takes it.
-const WRITE = { target: { enum: keys(VALID_TARGETS) } };
 
 function is_set(v) {
 	return type(v) == "string" && v != "";
@@ -130,12 +128,9 @@ function check_target_coupling(json, errs) {
 
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn) {
 	let errs = [];
 
-	// A PUT removes the set_helper option, which uapi does not model, and fw4 skips a HELPER rule
-	// without it, so only a PATCH may send HELPER back.
-	values.write_bounds(errs, delta ?? json, WRITE, partial ? stored : null);
 	if (json.target == null)
 		push(errs, { field: "target", code: "required", message: "is required" });
 
@@ -244,9 +239,7 @@ return {
 	schema_properties: {
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		           description: sprintf("Human-readable label for this rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ],
-		           "x-uapi-write": WRITE.target,
-		           description: "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it" },
+		target:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TARGETS) },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },

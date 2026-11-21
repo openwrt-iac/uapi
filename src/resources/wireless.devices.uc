@@ -4,8 +4,6 @@ let ucode_int = values.ucode_int;
 
 const VALID_TYPES = { "mac80211": true, "broadcom": true };
 const VALID_BANDS = { "2g": true, "5g": true, "6g": true, "60g": true };
-// A vendor driver brings its own type, whose radio netifd skips unless its handler is installed.
-const WRITE = { type: { enum: keys(VALID_TYPES) } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -74,11 +72,13 @@ function ssid_errors(conn, radio) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn, id) {
 	let errs = [];
 
-	values.require_present(errs, json, "type");
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
+	if (values.require_present(errs, json, "type")
+	    && !VALID_TYPES[json.type])
+		push(errs, { field: "type", code: "not_in_enum",
+		             message: "must be one of mac80211, broadcom" });
 
 	if (json.band != null && !VALID_BANDS[json.band])
 		push(errs, { field: "band", code: "not_in_enum",
@@ -126,13 +126,11 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	validate_new: validate_new,
 	openapi_singular: "wireless device",
 	openapi_required: ["type"],
 	schema_properties: {
-		type:     { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.type,
-		            description: "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed" },
+		type:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TYPES) },
 		path:     { type: ["string", "null"],
 		            description: "Device path of the phy under /sys/devices, as `wifi config` writes it. With `macaddr` and `phy`, what binds this section to its hardware: wifi-scripts tries `path`, then `macaddr`, then `phy`, and brings up no radio that none of them matches" },
 		phy:      { type: ["string", "null"],

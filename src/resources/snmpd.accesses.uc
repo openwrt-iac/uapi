@@ -3,9 +3,6 @@ let values = require('values');
 const VALID_VERSIONS = { "any": true, "v1": true, "v2c": true, "usm": true };
 const VALID_LEVELS = { "noauth": true, "auth": true, "priv": true };
 const VALID_PREFIXES = { "exact": true, "prefix": true };
-// snmpd also takes these in any case, the older level names such as authpriv, and a prefix of 0.
-const WRITE = { version: { enum: keys(VALID_VERSIONS) }, level: { enum: keys(VALID_LEVELS) },
-                prefix: { enum: keys(VALID_PREFIXES) } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -37,10 +34,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn) {
 	let errs = [];
 	values.require_present(errs, json, "group");
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (conn != null && json.group != null && json.group != "") {
 		if (values.section_index(conn, 'snmpd', 'group', 'group')[json.group] == null)
 			push(errs, { field: "group", code: "conflict",
@@ -71,7 +67,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	validate_new: validate_new,
 	openapi_singular: "SNMP access ACL",
 	openapi_required: ["group"],
@@ -80,9 +75,9 @@ return {
 		           description: "snmpd group this access entry binds to (must exist in snmpd/groups)" },
 		context: { type: ["string", "null"], pattern: values.SHELL_WORD_RE,
 		           description: "SNMPv3 context. `none` is the empty context, which is the usual value: snmpd.init writes it as \"\"" },
-		version: { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.version },
-		level:   { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.level },
-		prefix:  { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.prefix },
+		version: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_VERSIONS) },
+		level:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_LEVELS) },
+		prefix:  { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_PREFIXES) },
 		read:    { type: ["string", "null"], pattern: values.ONE_WORD_RE,
 		           description: "View name granted for read access" },
 		write:   { type: ["string", "null"], pattern: values.ONE_WORD_RE,

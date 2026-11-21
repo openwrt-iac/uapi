@@ -4,14 +4,8 @@ let as_int = values.as_int;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 
-const VALID_FAMILY = { "ipv4": true, "ipv6": true, "any": true };
-// ipset caps a timeout at 2147483 seconds, and LuCI's form at 1000000.
-const WRITE = { timeout: { maximum: 1000000 } };
-// mwan3 writes the rules of a family in one iptables-restore batch, which fails whole on a
-// protocol that iptables cannot parse: a number above 255, or a name that is neither one of its
-// own nor in musl's table. iptables lowercases the name first.
-const XTABLES_PROTOCOLS = [ "tcp", "sctp", "udp", "udplite", "icmp", "ipv6-icmp", "icmpv6", "esp", "ah",
-                            "mobility-header", "ipv6-mh", "mh", "dccp", "ipcomp", "all" ];
+const VALID_FAMILY = { "ipv4": true, "ipv6": true };
+const VALID_PROTO = { "tcp": true, "udp": true, "icmp": true, "all": true };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -55,17 +49,8 @@ function _is_valid_addr_or_cidr(s) {
 	return is_valid_ip(s) || is_valid_cidr_any(s);
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
-	// libxtables reads a number with base 0, so 0x11 is hex, a leading 0 makes it octal, and 08 does
-	// not parse.
-	let proto = (delta ?? json).proto;
-	if (type(proto) == "string" && !(match(proto, /^[0-9]+$|^0[xX]/)
-	                                 ? match(proto, /^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]*)$/) != null && int(proto, 0) <= 255
-	                                 : (lc(proto) in XTABLES_PROTOCOLS || lc(proto) in values.MUSL_PROTOCOLS)))
-		push(errs, { field: "proto", code: "invalid_format",
-		             message: "must be a protocol number from 0 to 255 or a name that iptables resolves, such as tcp, udp, icmp, esp or all: mwan3 loads the rules of a family in one batch, and iptables refuses the batch for a protocol that it cannot parse" });
 	if (json.use_policy == null || json.use_policy == "") {
 		push(errs, { field: "use_policy", code: "required", message: "is required" });
 	} else if (conn != null) {
@@ -90,21 +75,19 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "mwan3 rule",
 	id_prefix: "r",
 	openapi_required: ["use_policy"],
 	schema_properties: {
 		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
-		proto:      { type: ["string", "null"], pattern: "^(0[xX][0-9A-Fa-f]+|[0-9]+|[A-Za-z][A-Za-z0-9._-]*)$",
-		              description: "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it." },
+		proto:      { type: ["string", "null"], enum: [...keys(VALID_PROTO), null] },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },
 		dest_port:  { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		sticky:     { type: "boolean", default: false,
 		              description: "Pin matching connections to the same member for `timeout` seconds." },
-		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 2147483, "x-uapi-write": WRITE.timeout },
+		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 86400 },
 		ipset:      { type: ["string", "null"], pattern: values.SHELL_WORD_RE,
 		              description: "Match destination against an ipset; bypasses src/dest_ip." },
 		use_policy: { "x-uapi-read-nullable": true, type: "string",

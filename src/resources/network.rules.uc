@@ -13,8 +13,12 @@ const VALID_ACTIONS = { "lookup": true, "goto": true, "unreachable": true,
 // The kernel refuses an IPv4 rule whose tos sets a bit outside 0x1c (fib4_rule_configure), and
 // netifd drops one whose tos is above 255.
 const TOS_VALUES = [ 0, 4, 8, 12, 16, 20, 24, 28 ];
-// uci hands netifd priority as a signed 32-bit number, and LuCI writes it from 0 up.
-const WRITE = { priority: { minimum: 0 } };
+
+// musl's getprotobyname compares a name against this built-in table, case-sensitively.
+const MUSL_PROTOCOLS = [ "ip", "icmp", "igmp", "ggp", "ipencap", "st", "tcp", "egp", "pup", "udp", "hmp",
+                         "xns-idp", "rdp", "iso-tp4", "xtp", "ddp", "idpr-cmtp", "ipv6", "ipv6-route",
+                         "ipv6-frag", "idrp", "rsvp", "gre", "esp", "ah", "skip", "ipv6-icmp", "ipv6-nonxt",
+                         "ipv6-opts", "rspf", "vmtp", "ospf", "ipip", "encap", "pim", "raw" ];
 
 // The kernel refuses a port range that holds 0 or 65535 or runs backwards
 // (fib_rule_port_range_valid), and a uid range that runs backwards or holds 4294967295, which maps
@@ -49,7 +53,7 @@ function c_unsigned(s, base) {
 function ipproto_installs(v) {
 	let s = "" + v;
 	let c = c_unsigned(s, 0);
-	return (c != null && c.len == length(s) && c.n > 0) || index(values.MUSL_PROTOCOLS, s) >= 0;
+	return (c != null && c.len == length(s) && c.n > 0) || index(MUSL_PROTOCOLS, s) >= 0;
 }
 
 // netifd reads a range with sscanf("%u-%u"), which reads a second number only right after the dash
@@ -131,10 +135,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
 
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (json.src != null && json.src != "" && !is_valid_ipv4(json.src) && !is_valid_cidr(json.src))
 		push(errs, { field: "src", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });
@@ -217,7 +220,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	validate_new: validate_new,
 	openapi_singular: "network policy rule",
 	openapi_conditional: [
@@ -237,8 +239,8 @@ return {
 		            description: "Match destination IPv4 address or CIDR" },
 		disabled: { type: "boolean", default: false,
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
-		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, maximum: 2147483647, "x-uapi-write": WRITE.priority,
-		            description: "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same. A write takes 0 or more, as LuCI does, and a read gives the number that netifd reads." },
+		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766,
+		            description: "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same." },
 		lookup:   { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
 		            description: "Routing table id to look up when action is lookup. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write of 0 answers 422." },
 		goto:     { type: ["integer", "null"], minimum: 0, maximum: 2147483647, "x-uapi-write": { minimum: 1 },

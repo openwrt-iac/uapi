@@ -1,8 +1,6 @@
 let values = require('values');
 
 const VALID_VERSIONS = { "v1": true, "v2c": true, "usm": true };
-// snmpd also takes any, and each version in any case.
-const WRITE = { version: { enum: keys(VALID_VERSIONS) } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -24,10 +22,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
 	values.require_present(errs, json, "group");
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	return errs;
 }
 
@@ -38,13 +35,12 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "SNMP group",
 	openapi_required: ["group"],
 	schema_properties: {
 		group:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE,
 		           description: "Group name referenced by snmpd/accesses entries" },
-		version: { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.version },
+		version: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_VERSIONS) },
 		secname: { type: ["string", "null"], pattern: values.ONE_WORD_RE,
 		           description: "Security name (community for v1/v2c, USM user for v3)" },
 	},

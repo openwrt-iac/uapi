@@ -5,8 +5,6 @@ let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
 const UAPI_PREFIX = "/api/v3=/usr/share/uapi/main.uc";
-// uhttpd takes a negative keepalive as off.
-const WRITE = { http_keepalive: { minimum: 0 }, tcp_keepalive: { minimum: 0 } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -66,9 +64,8 @@ function uapi_prefix_present(json) {
 	return false;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn, id) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 
 	// Self-lockout protection: refuse a write to the 'main' instance that
 	// would strip uapi's own ucode_prefix entry. Applies to PUT and PATCH
@@ -90,11 +87,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "uhttpd instance",
 	schema_properties: {
-		listen_http:     { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
-		listen_https:    { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
+		listen_http:     { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
+		listen_https:    { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
 		home:            { type: ["string", "null"],
 		                   description: "Document root" },
 		cert:            { type: ["string", "null"],
@@ -112,8 +108,8 @@ return {
 		max_connections: { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		script_timeout:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		network_timeout: { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
-		http_keepalive:  { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.http_keepalive },
-		tcp_keepalive:   { "x-uapi-read-nullable": true, type: "integer", "x-uapi-write": WRITE.tcp_keepalive },
+		http_keepalive:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
+		tcp_keepalive:   { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		no_dirlists:     { type: "boolean", default: false,
 		                   description: "Disable directory listings" },
 		no_symlinks:     { type: "boolean", default: false,
