@@ -120,7 +120,8 @@ enabled)" -eq 1 ]` holds. An absent `enabled`, or `yes`, `on` or `true` written
 by hand, read `true` in v3 for a queue that sqm left off, and now reads `false`
 (announced in 3.X.Y, #372). A queue that LuCI made holds `1` or `0` and reads
 the same. A plan that sets `enabled = true` on such a queue now writes `1`,
-which starts SQM there.
+which starts SQM there. A value such as `01`, `+1` or ` 1` reads `true`, because
+the shell test takes it as 1.
 
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
@@ -137,6 +138,10 @@ A plan that holds `mode = "ap"` from a 3.x read of such a section now writes
 With no `encryption` stored, that access point is open. Before you apply, set
 `mode` to `null` to keep the SSID down, or set its `encryption` and `key`.
 
+A section without a mode no longer blocks a write that turns its radio on, and
+the validation sweep marks its errors `live: false`. A write to it is still
+checked as mode `ap`.
+
 ## `mwan3/interfaces.family` reads `ipv4` when unset
 
 `mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the
@@ -144,7 +149,11 @@ read now answers `"ipv4"` instead of `null` for a section that stores none
 (announced in 3.4.0, #306). `family` is no longer in the request schema's
 `required`: a write may omit it, and a `null` removes the option, after which
 the read answers `ipv4` again. A plan that holds `null` there sees `ipv4` at
-each read, so make it hold `ipv4`. mwan3 does the same either way.
+each read, so make it hold `ipv4`. mwan3 does the same either way. An empty
+`family` reads `ipv4` too, and a list reads as the string that `config_get`
+makes of it. The response declares `family` as a string that every read holds,
+and the request no longer declares null: to remove the option, leave `family`
+out of a PUT or send null in a merge patch.
 
 ## Curated string fields refuse newlines and carriage returns
 
