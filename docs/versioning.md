@@ -274,10 +274,13 @@ schema. A value of the first kind is an error of the section: a rule of
 the section, a PATCH that leaves the field out included, and the validation
 sweep lists it. A value of the second kind is no error: the server refuses a
 write that changes the field to it, and takes a write that sends back the value
-that the section holds, as a PUT of the read does. A client that checks a body
-against the `*Request` schema before it sends it must leave such a field out. A
-module declares the difference with `x-uapi-write`, which the handler checks
-against the fields that a request names, and
+that the section holds, as a PUT of the read does. A PUT still answers 422 for
+a value that needs an option that uapi does not model, because a PUT removes
+that option: a `network/interfaces.proto` that uapi does not model, or the
+`HELPER` target that LuCI writes on a firewall rule with its `set_helper`. A
+client that checks a body against the `*Request` schema before it sends it must
+leave such a field out. A module declares the difference with `x-uapi-write`,
+which the handler checks against the fields that a request names, and
 `tests/unit/write_overlay_test.uc` checks each such keyword.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A

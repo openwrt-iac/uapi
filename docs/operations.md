@@ -533,7 +533,10 @@ writes or the `qmi` that an LTE router ships, takes a PATCH that leaves `proto`
 out, and a `wireless/interfaces` text option that uci holds as a list reads as
 an array. Only a write that changes a field to such a value is refused: a write
 that sends back the value that the section holds, as a PUT of the read does,
-passes.
+passes. Two values are the exception, because they need options that uapi does
+not model, and a PUT removes those options. A PUT answers 422 for such a proto,
+and for the `HELPER` target that LuCI writes on a firewall rule with its
+`set_helper` option.
 
 A `validate_new()` rule (`docs/adding-a-resource.md`) is not a break,
 until the daemon reads the value. Another writer can store a value that such a
