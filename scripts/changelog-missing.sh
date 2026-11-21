@@ -7,9 +7,10 @@ set -eu
 [ $# -eq 1 ] || [ $# -eq 2 ] || { echo "usage: $0 <previous-tag> [<base-branch>]" >&2; exit 2; }
 BASE=${2:-$(git branch --show-current)}
 # A release is prepared on a topic branch, which no PR merges into: a sweep of it would list
-# nothing and pass. The accepted names are those that CI builds on push.
+# nothing and pass. So the name must have the shape of a release line: main, a major line such
+# as v3, or a maintenance line such as release/2.5.x.
 case $BASE in
-main|v[0-9]*|release/*.x) ;;
+main|v[0-9]|v[0-9][0-9]|release/*.x) ;;
 *)
 	echo "PRs do not merge into '$BASE'. Name the release line: $0 $1 <main|v3|release/X.Y.x>" >&2
 	exit 2 ;;
