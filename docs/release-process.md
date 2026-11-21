@@ -17,8 +17,8 @@ that's the simplest to host on GitHub runners) and smoke-tests it in an x86
 QEMU VM, and the `release-apk` job attaches that one artifact to the GitHub
 Release. The apk feed itself is rebuilt by
 `openwrt-iac/openwrt-iac.github.io`'s `publish.yml` workflow, which
-pulls the latest stable Release asset from each source repo listed in
-its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
+pulls the asset of the Release that GitHub marks Latest from each source
+repo listed in its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
 
 The `verify-arch-build` matrix job cross-compiles against the SDKs for
 `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push. It does
@@ -41,11 +41,14 @@ the SDK pins against a candidate without tagging:
 gh workflow run ci.yml --ref main
 ```
 
-This fires the `unit + lint + integration + package + verify-arch-build`
+Use `--ref v3` before a 3.x release. This fires the
+`unit + lint + integration + package + verify-arch-build`
 chain of a tag push, minus `release-apk`, which publishes, and minus the
 signature check of `package`, which runs only on a tag ref.
 Useful right after bumping `OPENWRT_VERSION` to confirm the new
-per-arch sha256 lines actually match upstream.
+per-arch sha256 lines actually match upstream. A run on `main` also saves
+the three SDKs in the cache, which a tag can restore. A tag saves none,
+because no other ref can read a cache that a tag saves.
 
 Operators who want a runtime per-arch smoke test (the CI matrix only
 verifies compile) can run
@@ -128,8 +131,12 @@ minors while the major is in flight.
   `main` when it applies there. The old major's releases are tagged on its
   maintenance branch. After such a tag, copy the new section of its
   `CHANGELOG.md` into the one of `main`, and take out of the `[Unreleased]`
-  of `main` each entry that the section carries, so the released sections of
-  both branches stay equal.
+  of `main` each entry that the section carries. The released sections of
+  both branches then stay equal, except for one number. An entry that `main`
+  takes out ends with the number of its PR into `main`, so add that number
+  at the end of the carried entry in the copy of `main`, such as
+  `(#430) (#431)`. Without it, `scripts/changelog-missing.sh` on `main` lists
+  that PR.
 
 `v4` went through this on 2026-11-21: `main` carries 4.x, and `v3` carries 3.x
 from 3.5.0 on.
@@ -144,9 +151,14 @@ and marks the GitHub release as a prerelease (its
 `case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
 
 **RCs do NOT publish to the apk feed.** The feed aggregator at
-`openwrt-iac/openwrt-iac.github.io` pulls each source repo's latest
-*stable* GitHub Release via `gh release list --exclude-pre-releases`;
-prereleases are filtered out at the source. RCs go to the uapi GitHub
+`openwrt-iac/openwrt-iac.github.io` and its site take the GitHub Release
+of each source repo that GitHub marks Latest, from `gh release list
+--exclude-pre-releases --exclude-drafts`. Until
+openwrt-iac/openwrt-iac.github.io#8 they took the newest release of that
+list. A prerelease never carries the mark, and the list leaves it out at
+the source. `release-apk` marks a stable release Latest only when its
+version is the highest, so a 3.x release after 4.0.0 leaves the mark on
+4.x. RCs go to the uapi GitHub
 Release page only, marked `--prerelease`; operators who want to
 install one download the APK from the release page and
 `apk add --allow-untrusted /tmp/uapi-<rc>.apk` deliberately. Same
@@ -163,14 +175,18 @@ polish".
 
 Skip RCs for MINOR or PATCH unless the change set is unusually large.
 
-Per-release steps (operator does these in order):
+Per-release steps (operator does these in order). A 3.x release takes the
+same steps on `v3`: its PR targets `v3`, its tag goes on `v3`, and each step
+that names `main` names `v3` for it.
 
 1. **Cut a release candidate branch** if the release is substantive
    (`v2.0.0-rc1`). For patch releases, just work on a topic branch.
 2. **Update `VERSION`** to the target value. **Regenerate** the OpenAPI:
    `make openapi`. Commit.
-3. **Close the changelog section.** Run `scripts/changelog-missing.sh
-   <previous-tag>` and fix whatever it lists. Then rename `## [Unreleased]`
+3. **Close the changelog section.** Run
+   `scripts/changelog-missing.sh <previous-tag> main`, or
+   `scripts/changelog-missing.sh <previous-tag> v3` for a 3.x release, and
+   fix whatever it lists. Then rename `## [Unreleased]`
    to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it.
    Do this for `rc` releases too. A final release after RCs gets a short
    section of its own that points at the RC sections, as 3.0.0 does. The
@@ -188,7 +204,7 @@ Per-release steps (operator does these in order):
    p99; it does not gate, because no
    baseline is committed. Read the numbers in the run log or the `bench-run`
    artifact if a release is expected to move latency.
-6. **Merge to main**.
+6. **Merge to main**, or to `v3` for a 3.x release.
 7. **Sign and push the tag**:
    ```
    git tag -s v2.0.0 -m "v2.0.0"
@@ -224,6 +240,12 @@ Per-release steps (operator does these in order):
    `openwrt-iac.github.io/feed/` picks up the new asset on its next
    `publish.yml` run (nightly schedule or manual
    `gh workflow run publish.yml --repo openwrt-iac/openwrt-iac.github.io`).
+10. **After a 3.x release, check that 4.x keeps the Latest mark.**
+    `gh release list` must show `Latest` beside the highest 4.x release. The
+    feed and the site serve the release with the mark, so a 3.x release with
+    it puts 3.x on the feed in place of 4.x. If the 3.x release took the
+    mark, run `gh release edit <4.x-tag> --latest` and then the `publish.yml`
+    run above.
 
 ## Reproducible builds
 
@@ -305,9 +327,9 @@ counter, so the guess is wrong if an issue opens in between, and the check then
 fails until the
 entry carries the real number.
 
-**At release time,** `scripts/changelog-missing.sh <previous-tag>` lists every
-PR merged into
-`main` since that tag that has neither an entry nor the label. It must print
+**At release time,** `scripts/changelog-missing.sh <previous-tag> <branch>`
+lists every PR merged into the branch since that tag that has neither an entry
+nor the label. The branch is `main`, or `v3` for a 3.x release. It must print
 nothing. Step 3
 above then turns `## [Unreleased]` into the release section, and
 `scripts/release-notes.sh`
@@ -325,8 +347,9 @@ Before tagging:
   outcome noted even if nothing was eligible.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
-- [ ] `scripts/changelog-missing.sh <previous-tag>` prints nothing, and
-  `## [Unreleased]` is renamed to this version.
+- [ ] `scripts/changelog-missing.sh <previous-tag> main` prints nothing (`v3`
+  in place of `main` for a 3.x release), and `## [Unreleased]` is renamed to
+  this version.
 - [ ] Any version number a doc announced ahead of time now matches reality.
   `docs/deprecations.md` carries a target release in its "Deprecated since"
   column before that release exists, and the roadmap names target versions
@@ -337,14 +360,14 @@ Before tagging:
 - [ ] `make test coverage` green.
 - [ ] CI green on the branch being tagged, for the exact commit that will be
   tagged.
-  `main` for a release off the current major, `release/<major>.<minor>.x` for a
-  patch on an
-  older one. Both are built on push.
+  `main` for a 4.x release, `v3` for a 3.x release, `release/<major>.<minor>.x`
+  for a patch on an older line. All are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
   `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
-- [ ] `gh workflow run ci.yml --ref main` green - validates the per-arch
-  SDK pins via `verify-arch-build` without consuming a tag.
+- [ ] `gh workflow run ci.yml --ref main` green (`--ref v3` for a 3.x
+  release) - validates the per-arch SDK pins via `verify-arch-build` without
+  consuming a tag.
 
 After tagging, before announcing:
 
@@ -355,11 +378,11 @@ After tagging, before announcing:
       openwrt-iac/openwrt-iac.github.io` (or wait for the nightly schedule) and
       confirm
       `apk update` against `openwrt-iac.github.io/feed/...` finds the new
-      version. For an RC,
+      version. For an RC or a 3.x release after 4.0.0,
       confirm the opposite instead, that `apk policy uapi` still offers the
-      previous stable:
-      the aggregator filters prereleases at source, so an RC reaching the feed
-      is the bug.
+      release that the feed served before (step 10 above). The aggregator
+      takes only the stable release marked Latest, so an RC or a 3.x release
+      on the feed is the bug.
 - [ ] Smoke install on a real router works.
 - [ ] SBOM attached.
 
@@ -368,12 +391,14 @@ After tagging, before announcing:
 If a tagged release is broken in the field:
 
 1. Identify the breakage; file an issue.
-2. Mark the GitHub Release as "Pre-release" or "Draft" via `gh release
-   edit <tag> --prerelease` to demote it in the UI. The aggregator's
-   `--exclude-pre-releases` filter then pulls the next-highest stable
-   on its next run.
-3. Ship a `vX.Y.(Z+1)` patch with the fix; the next aggregator run
-   picks up the higher version and signs a fresh `packages.adb`.
+2. Mark the GitHub Release as "Pre-release" via
+   `gh release edit <tag> --prerelease` to demote it in the UI, and mark the
+   previous good release Latest with
+   `gh release edit <previous-tag> --latest`. The aggregator takes the
+   release marked Latest on its next run.
+3. Ship a `vX.Y.(Z+1)` patch with the fix. `release-apk` marks it Latest
+   when it is the highest version, and the next aggregator run then picks it
+   up and signs a fresh `packages.adb`.
 4. The broken APK doesn't necessarily get re-served (it's only on
    GitHub Releases at that point); operators who already installed
    the broken version aren't auto-downgraded, but `apk upgrade uapi`
