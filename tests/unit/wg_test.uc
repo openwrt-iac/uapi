@@ -7,15 +7,16 @@ const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
 const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
 const LONG = replace(sprintf('%600s', ''), ' ', 'x');
 
-// `wg` and `ip` are scripts here that log each command with its arguments joined by `|`, and print
-// the file named after the command when a test wrote one, so a test reads what an apply runs
-// without a WireGuard interface. A command that matches the shell pattern `fail` exits 1. The call
-// runs in a child, whose PATH finds the scripts first. `load` is the expression that loads wg there.
+// `wg`, `ip` and `nslookup` are scripts here that log each command with its arguments joined by `|`,
+// and print the file named after the command when a test wrote one, so a test reads what an apply
+// runs without a WireGuard interface or a resolver. A command that matches the shell pattern `fail`
+// exits 1. The call runs in a child, whose PATH finds the scripts first. `load` is the expression
+// that loads wg there.
 function run_wg(uci, call, outputs, fail, load) {
 	let mk = fs.popen("mktemp -d /tmp/uapi-wg-apply.XXXXXX");
 	let dir = trim(mk.read("all") ?? "");
 	mk.close();
-	for (let name in [ "wg", "ip" ]) {
+	for (let name in [ "wg", "ip", "nslookup" ]) {
 		fs.writefile(dir + "/" + name, sprintf("#!/bin/sh\nIFS='|'\necho \"%s|$*\" >> %s/log\ncase \"%s|$*\" in %s) exit 1 ;; esac\ncat \"%s/%s|$*\" 2>/dev/null\nexit 0\n",
 		                                       name, dir, name, fail ?? "''", dir, name));
 		fs.chmod(dir + "/" + name, 0o755);
@@ -459,6 +460,16 @@ t.describe('wg.apply against logging wg and ip', () => {
 		              [ { iface: 'wg1', action: 'remove', public_key: PK + '\n[Peer]\nPublicKey=' + PK2 } ]);
 		t.assert_equal(r.result, 'refusing to apply a peer with an allowed_ips entry marked + or - on wg1');
 		t.assert_deep_equal(r.commands, []);
+	});
+
+	// wireguard.sh gives wg every host, so the apply does too, and a host that does not resolve fails
+	// `wg set`, which the write then restores.
+	t.it('gives wg a host name as it is under wireguard.sh, and asks no resolver', () => {
+		let r = run_wg({ network: { wg1: WG1 } },
+		               sprintf("(function() { let o = []; return wg.apply(c, %J, [], o) ?? sprintf('%%J', o); })()",
+		                       [ { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: 'nx.invalid', endpoint_port: 51820 } ]));
+		t.assert_equal(r.result, '[ ]');
+		t.assert_deep_equal(r.commands, [ set_of(PK, '10.0.0.2/32') + '|endpoint|nx.invalid:51820' ]);
 	});
 
 	// A write that leaves such a port as uci holds it gives it here, and so does the restore, which
@@ -1023,6 +1034,35 @@ t.describe('wg under the ucode handler', () => {
 	t.it('reads a port as the handler gives it to wg, and 0 for one that it leaves the endpoint out for', () => {
 		let v = [ '51820', '051820', '0', '65536', '+51820', ' 51820', 'https', 'openvpn', 'ovpn', 'nosuch', '', null ];
 		t.assert_deep_equal(map(v, (p) => ucs.endpoint_port(p)), [ 51820, 51820, 0, 0, 0, 0, 443, 1194, 0, 0, null, null ]);
+	});
+	// The handler reads busybox's nslookup, whose output holds a `Name:` line for each address that a
+	// name has, and takes an address as it stands.
+	t.it('reads a host as resolving as the handler does, and gives nslookup the host as one argument', () => {
+		let hosts = [ 'vpn.example.org', 'nx.invalid', '192.0.2.1', 'fd00::1', "x$(id>d)y" ];
+		let r = run_wg({ network: {} }, sprintf("sprintf('%%J', map(%J, (h) => wg.resolves(h)))", hosts),
+		               { 'nslookup|vpn.example.org': "Server:\t\t127.0.0.1\nName:\tvpn.example.org\nAddress: 192.0.2.7\n" });
+		t.assert_equal(r.result, '[ true, false, true, true, false ]');
+		t.assert_deep_equal(r.commands, [ 'nslookup|vpn.example.org', 'nslookup|nx.invalid', "nslookup|x$(id>d)y" ]);
+	});
+	// wg refuses the whole config for a host that it cannot resolve, so the handler leaves out the
+	// endpoint and keeps the peer and the interface. The write takes the host there, and answers that
+	// the kernel did not get its endpoint.
+	t.it('sets a peer whose host does not resolve without its endpoint, and reports the interface', () => {
+		let set = { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ], endpoint_host: 'nx.invalid', endpoint_port: 51820 };
+		let call = "(function() { let o = []; return wg.apply(c, %J, [], o) ?? sprintf('%%J', o); })()";
+		let r = run_wg({ network: { wg1: WG1 } }, sprintf(call, [ set ]), null, null, UCODE_WG);
+		t.assert_equal(r.result, '[ "wg1" ]');
+		t.assert_deep_equal(r.commands, [ 'nslookup|nx.invalid', set_of(PK, '10.0.0.2/32') ]);
+		r = run_wg({ network: { wg1: WG1 } }, sprintf(call, [ { ...set, endpoint_host: 'vpn.example.org' } ]),
+		           { 'nslookup|vpn.example.org': "Name:\tvpn.example.org\nAddress: 192.0.2.7\n" }, null, UCODE_WG);
+		t.assert_equal(r.result, '[ ]');
+		t.assert_deep_equal(r.commands, [ 'nslookup|vpn.example.org', set_of(PK, '10.0.0.2/32') + '|endpoint|vpn.example.org:51820' ]);
+		let again = { wg1: WG1, a: peer({ public_key: PK, allowed_ips: '10.0.0.2/32', endpoint_host: 'nx.invalid', endpoint_port: '51820' }) };
+		r = run_wg({ network: again }, sprintf(call, [ { iface: 'wg1', action: 'remove', public_key: PK } ]), null, null, UCODE_WG);
+		t.assert_equal(r.result, '[ "wg1" ]');
+		r = run_wg({ network: again }, "wg.reconcile(c, [ 'wg1' ])", null, null, UCODE_WG);
+		t.assert_equal(r.result, 'ok');
+		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
 	});
 	t.it('sets nothing for a peer whose stored key is not a WireGuard key, and sets the others', () => {
 		let ops = [ { iface: 'wg1', action: 'set', public_key: PK + ' # peer B', allowed_ips: [ '10.0.0.2/32' ] },

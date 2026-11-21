@@ -308,7 +308,9 @@ without uci state change.
    tell the two cases apart. Since openwrt ecd9120f04, which fixed
    openwrt/openwrt#24511, the handler leaves out a key, a preshared key, an
    endpoint or a keepalive that wg would refuse, so only an allowed IP that wg
-   refuses still keeps the interface from settling. wireguard.sh restarts
+   refuses still keeps the interface from settling. The apply sets a peer as
+   the handler does, without the endpoint of a host that does not resolve,
+   and answers `X-Kernel-Status: omitted`. wireguard.sh restarts
    nothing on a peer change, and its failed setup reads pending until the
    stored config changes, so on 25.12 the check reads the status once. Runs
    only after the reload returned zero, and reports the same way, so a failure

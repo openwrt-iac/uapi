@@ -94,6 +94,15 @@ function endpoint_port(v) {
 	return 0;
 }
 
+// The ucode handler gives wg the endpoint of a host that resolves as it reads it: an address as it
+// stands, or a name for which busybox's nslookup prints a `Name:` line, whatever its exit code. It
+// leaves out the endpoint of any other host and keeps the peer. wireguard.sh gives wg every host,
+// and wg refuses the whole config for one that it cannot resolve, so that the interface stays down
+// from its next start. The handler drops the stderr of nslookup, which holds no `Name:`.
+function resolves(host) {
+	return !!match(host, /^[0-9.]+$/) || index(host, ":") >= 0 || index(run([ "nslookup", host ]).output, "Name:") >= 0;
+}
+
 function handler_entries(v) {
 	if (v == null || v == "") return null;
 	return (type(v) == "array") ? v : split(trim(v), /[[:space:]]+/);
@@ -533,7 +542,8 @@ function refusal(iface, peer) {
 	return null;
 }
 
-function apply_peer(iface, peer) {
+// `omitted` collects the interface when the kernel does not get the endpoint that uci holds.
+function apply_peer(iface, peer, omitted) {
 	let err = refusal(iface, peer);
 	if (err != null) return err;
 	let key = kernel_key(peer.public_key);
@@ -543,8 +553,10 @@ function apply_peer(iface, peer) {
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
 	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses, as
 	// for the keepalive above. The restore, and a remove that sets such a peer again, set the rest
-	// of the peer, and the kernel keeps its endpoint.
-	let keep_endpoint = host != "" && peer.endpoint_port === 0;
+	// of the peer, and the kernel keeps its endpoint. The ucode handler also leaves out the endpoint
+	// of a host that does not resolve, which a write takes there, so the kernel keeps the endpoint
+	// that it holds: none after the restart of the handler, or the one that it learnt from the peer.
+	let keep_endpoint = host != "" && (peer.endpoint_port === 0 || (ucode_handler() && !resolves(peer.endpoint_host)));
 
 	// The key is staged before anything changes in the kernel. Staged after the remove below, a key
 	// that the tmpfs could not hold left the peer removed and not set again, and the restore did the
@@ -567,6 +579,7 @@ function apply_peer(iface, peer) {
 	if (psk_path != null) fs.unlink(psk_path);
 	if (!r.ok)
 		return sprintf("wg set on %s failed: %s", iface, r.output);
+	if (keep_endpoint && omitted != null) push(omitted, iface);
 	return null;
 }
 
@@ -752,8 +765,9 @@ function reconcile(conn, interfaces, ops) {
 // operation fails, and a failure returns an error, which routes the request into
 // the restore recipe whose result carries no kernel fields at all. Skipping is
 // normal rather than a failure, and without this the caller cannot tell a write
-// that landed in the kernel from one that only landed in uci.
-function apply(conn, ops, applied) {
+// that landed in the kernel from one that only landed in uci. `omitted` collects the interfaces
+// where the kernel did not get the endpoint of a peer that uci holds.
+function apply(conn, ops, applied, omitted) {
 	let up = {}, until = time() + SETTLE_S;
 	for (let op in ops) {
 		let iface = op.iface;
@@ -792,7 +806,7 @@ function apply(conn, ops, applied) {
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
 			}
 			for (let p in again) {
-				let err = apply_peer(iface, p);
+				let err = apply_peer(iface, p, omitted);
 				if (err != null) return err;
 			}
 			let rerr = apply_routes(conn, iface, [], previous);
@@ -800,7 +814,7 @@ function apply(conn, ops, applied) {
 			continue;
 		}
 
-		let err = apply_peer(iface, op);
+		let err = apply_peer(iface, op, omitted);
 		if (err != null) return err;
 		err = apply_routes(conn, iface,
 		                   routes_from(op.route_words, op.route_allowed_ips), previous);
@@ -820,5 +834,5 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         keepalive, endpoint_port, handler_drops_key,
+         keepalive, endpoint_port, handler_drops_key, resolves,
          peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

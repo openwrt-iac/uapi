@@ -1,6 +1,7 @@
 let t = require('harness');
 let ubus = require('bus');
 let handler = require('handler');
+let wg = require('wg');
 let wgp = loadfile('src/resources/network.wireguard_peers.uc')();
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
@@ -332,6 +333,36 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		let c = with_wg();
 		for (let k, v in { endpoint_host: '192.0.2.1', endpoint_port: '0', disabled: '1' }) c._state.uci.network.g_existing[k] = v;
 		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { endpoint_host: '192.0.2.2' }).status, 422);
+	});
+
+	// wireguard.sh gives every endpoint to `wg syncconf`, which refuses the config of the whole
+	// interface for a host that does not resolve. The write committed such a host, `wg set` refused
+	// it, and the restore answered 500. The ucode handler of OpenWrt main leaves the endpoint out.
+	t.it('refuses, before the commit and under wireguard.sh only, a host that the request sends and that does not resolve', () => {
+		let asked = [];
+		let with_handler = (ucode, resolves) => handler.make(t.load_with({ wg: { ...wg, ucode_handler: () => ucode, resolves: (h) => (push(asked, h), resolves) } },
+		                                                                 [ '../resources/network.wireguard_peers' ]),
+		                                                     { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
+		let body = { interface: 'wg1', public_key: PK2, allowed_ips: [ '10.42.0.3/32' ], endpoint_host: ' nx.invalid ', endpoint_port: 51820 };
+		let c = with_wg();
+		let r = with_handler(false, false).create(c, ctx(), body);
+		t.assert_deep_equal(fields_of(r), [ [ 'endpoint_host', 'conflict' ] ]);
+		t.assert_deep_equal(asked, [ 'nx.invalid' ]);
+		t.assert_deep_equal(sort(keys(c._state.uci.network)), [ 'g_existing', 'wg1' ]);
+		t.assert_deep_equal(fields_of(with_handler(false, false).patch(c, ctx(), 'g_existing', { endpoint_host: 'nx.invalid' })), [ [ 'endpoint_host', 'conflict' ] ]);
+		asked = [];
+		t.assert_equal(with_handler(false, false).patch(c, ctx(), 'g_existing', { endpoint_host: 'nx.invalid', disabled: true }).status, 200);
+		t.assert_equal(with_handler(false, true).patch(c, ctx(), 'g_existing', { endpoint_host: 'vpn.example.org', disabled: false }).status, 200);
+		t.assert_equal(with_handler(true, false).create(c, ctx(), body).status, 200);
+		t.assert_deep_equal(asked, [ 'vpn.example.org' ]);
+		// A name resolves at one time and not at another, so a stored one is no error of the section.
+		let h = with_handler(false, false);
+		t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x', endpoint_host: 'vpn.example.org ' }).status, 200);
+		let read = { ...h.get_one(c, ctx(), 'g_existing').body };
+		delete read.runtime;
+		t.assert_equal(h.replace(c, ctx(), 'g_existing', read).status, 200);
+		t.assert_deep_equal(h.sweep(c), []);
+		t.assert_deep_equal(asked, [ 'vpn.example.org' ]);
 	});
 
 	t.it('a write that sends -1 or 0 is refused', () => {
