@@ -338,13 +338,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   out. The read of `endpoint_port` stays null. (#424)
 - **uapi reads the `If-Match`, `If-None-Match`, `Idempotency-Key` and
   `X-Request-Id` headers.** uhttpd-mod-ucode sets no `HTTP_*` variable for
-  them, and uapi read only those variables, so it ignored the headers that the
-  spec said it honours. A PATCH with a stale `If-Match` header wrote, and a
-  retried POST with an `Idempotency-Key` header created a second section. uapi
-  now reads them from `env.headers`, which holds every request header, and a
-  header wins over its query form. A request that sends one of them now gets
-  what it asks for, such as a 412 for a stale `If-Match`. The spec declares
-  `?request_id=` on every operation. (#431)
+  them, and uapi read only those variables, so it ignored the headers. uapi now
+  reads them from `env.headers`, which holds every request header. A header
+  that is not empty wins over its query form, and an `X-Request-Id` header only
+  when it matches `^[A-Za-z0-9_-]{8,128}$`. A request with one of the headers
+  now gets the answer that the 3.5.0 spec declared for the header, where 3.5.0
+  answered as if the header was not there. A write with a stale `If-Match`, or
+  with an `If-None-Match` that matches, answers 412 and writes nothing. A GET
+  with an `If-None-Match` that matches answers 304 with no body. A POST that
+  repeats an `Idempotency-Key` replays the first response, or answers 409 for
+  another body. A valid `X-Request-Id` is echoed and logged in place of a new
+  ULID. A POST with an `Idempotency-Key` header outside
+  `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$`, such as a base64 key, answers 400
+  `bad_request` as `?idempotency_key=` does, where 3.5.0 answered 201. The
+  3.5.0 spec declared no pattern for the key. The 412, the 409 and the 400 use
+  the carve-out of `docs/versioning.md` for a payload that produced broken
+  state no caller can rely on: 3.5.0 made a write that the precondition of the
+  request refused, and a retry with the same key created a second section. The
+  spec now declares the pattern on `?idempotency_key=`, and `?request_id=` on
+  every operation. (#431)
 
 ## [3.5.0] - 2026-11-21
 
