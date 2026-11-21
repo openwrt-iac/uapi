@@ -275,7 +275,7 @@ in 3.4.0, #240). A name is resolved exactly as netifd resolves it (number, then
 A name that does not resolve answers 422 `invalid_format`, and an id of 0
 answers 422 `out_of_range`. The read still answers the id, so a plan stays
 stable when `rt_tables` changes, and a name stored by hand or by LuCI still
-reads as its id.
+reads as its id. The response schema keeps the integer type of 3.x.
 
 ## `network/interfaces.ip6prefix` is array-only on write
 

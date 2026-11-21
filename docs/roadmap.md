@@ -953,8 +953,8 @@ mechanisms, the evidence and the open questions live in the issues.
 **Merged into the `v4` branch, and closed:**
 
 - [Routes `table` and rules `lookup` accept table names on
-  write](https://github.com/openwrt-iac/uapi/issues/240): the type becomes a
-  string or a union, breaking.
+  write](https://github.com/openwrt-iac/uapi/issues/240): the request type
+  becomes a union, breaking, and a read still answers the id.
 - [`network/interfaces.ip6prefix` stops taking a string on
   write](https://github.com/openwrt-iac/uapi/issues/241): announced since 3.2.0,
   the only open deprecation window.

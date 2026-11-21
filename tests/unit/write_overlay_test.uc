@@ -185,3 +185,35 @@ t.describe('property: every request-only keyword refuses a request past it', () 
 	}
 	t.it('finds keywords to check', () => t.assert_true(found > 0));
 });
+
+// A keyword under x-uapi-read narrows only the response schema, for a form that a write takes and
+// stores in another one, so the published response must carry it and a read must never give that
+// form. The fixture cases seed what LuCI or a hand edit stores, such as a table name.
+t.describe('property: every read meets the response-only keywords', () => {
+	let schemas = json(fs.readfile("build/openapi.json")).components.schemas;
+	let found = 0;
+	let files = fs.lsdir('src/resources') ?? [];
+	sort(files);
+	for (let f in files) {
+		if (!match(f, /\.uc$/)) continue;
+		let mod = loadfile('src/resources/' + f)();
+		let cases = filter(fx.CASES, (c) => c.file == f);
+		let name = "";
+		for (let w in split(replace(f, /\.uc$/, ""), /[._]/)) name += uc(substr(w, 0, 1)) + substr(w, 1);
+		for (let field, spec in mod.schema_properties ?? {}) {
+			if (type(spec?.["x-uapi-read"]) != "object") continue;
+			found++;
+			t.it(sprintf("%s %s", f, field), () => {
+				t.assert_true(length(cases) > 0);
+				let published = schemas[name + "Response"].properties[field];
+				for (let k, v in spec["x-uapi-read"])
+					t.assert_deep_equal(published[k], v, sprintf("%sResponse.%s.%s", name, field, k));
+				for (let c in cases) {
+					let view = mod.fromUci({ '.name': c.id, '.anonymous': false, ...c.section }, null);
+					t.assert_deep_equal(handler.check_schema_types({ [field]: published }, { [field]: view[field] }), []);
+				}
+			});
+		}
+	}
+	t.it('finds keywords to check', () => t.assert_true(found > 0));
+});

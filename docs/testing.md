@@ -181,6 +181,14 @@ check from `validate()`, by raising the pppd floor to 576, by removing the
 `validate()` behind a keyword added under the `items` of `ip6class`: each fails
 its own case.
 
+A keyword under `x-uapi-read` narrows only the `*Response` schema, so the same
+test checks that the property of `<Name>Response` in `build/openapi.json` holds
+it, and reads each fixture case of the module against that property. The cases
+store table names, which `network/routes` and `network/rules` read as ids.
+Validated by making a read of the stored name `local` answer the name, and by
+making the generator leave the keyword out of the response: each fails the case
+of its field.
+
 ## The read-honesty property
 
 Principle 4 as a test: read a section, write the body back, read again, and

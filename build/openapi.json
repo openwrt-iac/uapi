@@ -25192,7 +25192,7 @@
 					},
 					"schema_properties": {
 						"type": "object",
-						"description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves."
+						"description": "JSON-Schema fragment as the resource module declares it: every property, without the request and response split the OpenAPI document makes. A property marked readOnly here is absent from that resource's *Request schema, the keywords under a property's `x-uapi-write` apply to the *Request schema only, those under its `x-uapi-read` to the *Response schema only, and `id`, `managed` and `runtime` are stamped by the framework rather than declared here. Use the *Request and *Response components when you need the two halves."
 					}
 				}
 			},
@@ -29896,12 +29896,11 @@
 					"table": {
 						"type": [
 							"integer",
-							"string",
 							"null"
 						],
 						"minimum": 0,
 						"maximum": 4294967295,
-						"description": "Routing table. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
+						"description": "Routing table. A read answers the id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
 					},
 					"metric": {
 						"type": [
@@ -30001,7 +30000,7 @@
 						],
 						"minimum": 1,
 						"maximum": 4294967295,
-						"description": "Routing table. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
+						"description": "Routing table. A read answers the id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
 					},
 					"metric": {
 						"type": [
@@ -30188,12 +30187,11 @@
 					"lookup": {
 						"type": [
 							"integer",
-							"string",
 							"null"
 						],
 						"minimum": 0,
 						"maximum": 4294967295,
-						"description": "Routing table to look up when action is lookup. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
+						"description": "Routing table to look up when action is lookup. A read answers the id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
 					},
 					"goto": {
 						"type": [
@@ -30382,7 +30380,7 @@
 						],
 						"minimum": 1,
 						"maximum": 4294967295,
-						"description": "Routing table to look up when action is lookup. A read answers the id (an integer, never a string): 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
+						"description": "Routing table to look up when action is lookup. A read answers the id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables; 0 reads when netifd cannot resolve the stored table, and netifd then drops the rule. A write takes that id, or a table name, which is resolved like netifd resolves it and stored as its id; a name that does not resolve answers 422, as does an id of 0."
 					},
 					"goto": {
 						"type": [

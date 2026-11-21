@@ -12,10 +12,11 @@ the module's own view: a property marked `readOnly` there is absent from that
 resource's `*Request` schema, a property marked `x-uapi-read-nullable` has
 `null` added to its type (and to its `enum`) in both halves, as the next
 paragraph explains, the keywords under a property's `x-uapi-write` (such as
-`minimum: 68` on `mtu`) apply only in the `*Request` schema, a string marked
-`x-uapi-multiline` takes a newline on write, and `id`, `managed` and `runtime`
-are stamped by the framework rather than declared by the module. For the two
-halves, read `build/openapi.json`.
+`minimum: 68` on `mtu`) apply only in the `*Request` schema, those under its
+`x-uapi-read` (the integer type of a route `table`) only in the `*Response`
+schema, a string marked `x-uapi-multiline` takes a newline on write, and `id`,
+`managed` and `runtime` are stamped by the framework rather than declared by the
+module. For the two halves, read `build/openapi.json`.
 
 `x-uapi-read-nullable` marks a property a read can answer null for, and widens
 its type (and
