@@ -700,8 +700,11 @@ and `If-Match`, `If-None-Match`, `X-Request-Id` and `Idempotency-Key` are not
 on it. It also gives every request header in `env.headers`, with its name in
 lower case, and `errors.request_context` reads the four from there. Each one
 has a query form for a client that cannot set a header: `?if_match=`,
-`?if_none_match=`, `?request_id=` and `?idempotency_key=`. When a request
-carries both, the header wins.
+`?if_none_match=`, `?request_id=` and `?idempotency_key=`. A header that is
+not empty wins over its query form, and an `X-Request-Id` header only when it
+matches `^[A-Za-z0-9_-]{8,128}$`. uhttpd gives an empty header as `""`, so
+without that rule an empty `If-Match:` would turn off the precondition of
+`?if_match=`.
 
 ## Rate limit token bucket
 

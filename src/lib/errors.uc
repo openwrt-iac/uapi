@@ -65,13 +65,16 @@ function new_context(inbound_request_id) {
 }
 
 // uhttpd-mod-ucode sets an HTTP_* variable only for a fixed list of headers, and none of these
-// four is on it. It passes every header in env.headers, its name in lower case.
+// four is on it. It passes every header in env.headers, its name in lower case, and an empty
+// header as "". A header that cannot be used leaves the query form in effect, so that an empty
+// `If-Match:` cannot turn off the precondition that `?if_match=` asks for.
 function request_context(env, query) {
 	let h = env.headers;
-	let ctx = new_context(h["x-request-id"] ?? query.request_id);
-	ctx.if_match = h["if-match"] ?? query.if_match;
-	ctx.if_none_match = h["if-none-match"] ?? query.if_none_match;
-	ctx.idempotency_key = h["idempotency-key"] ?? query.idempotency_key;
+	let rid = h["x-request-id"];
+	let ctx = new_context(match(rid, REQUEST_ID_RE) ? rid : query.request_id);
+	ctx.if_match = h["if-match"] || query.if_match;
+	ctx.if_none_match = h["if-none-match"] || query.if_none_match;
+	ctx.idempotency_key = h["idempotency-key"] || query.idempotency_key;
 	return ctx;
 }
 

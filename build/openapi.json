@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "3.4.1",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/uapi/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or the `?if_match=<etag>` query param). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nA client that cannot set a header can pass `?idempotency_key=` instead. In the same way, `?if_match=`, `?if_none_match=` and `?request_id=` stand in for `If-Match`, `If-None-Match` and `X-Request-Id`. The header wins when a request carries both. Each query form is declared on the operations that honour it.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /uapi/batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v3/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v3/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v3/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/uapi/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or the `?if_match=<etag>` query param). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nA client that cannot set a header can pass `?idempotency_key=` instead. In the same way, `?if_match=`, `?if_none_match=` and `?request_id=` stand in for `If-Match`, `If-None-Match` and `X-Request-Id`. A header that is not empty wins over its query form, and an `X-Request-Id` header only when it matches the pattern of `?request_id=`. Each query form is declared on the operations that honour it.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /uapi/batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/openwrt-iac/uapi"
@@ -487,7 +487,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -592,7 +592,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -665,7 +665,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -674,7 +674,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -772,7 +772,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -781,7 +781,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -885,7 +885,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -894,7 +894,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1057,7 +1057,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1178,7 +1178,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1283,7 +1283,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1356,7 +1356,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -1365,7 +1365,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1463,7 +1463,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -1472,7 +1472,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1576,7 +1576,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -1585,7 +1585,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1748,7 +1748,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1869,7 +1869,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -1974,7 +1974,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2047,7 +2047,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2056,7 +2056,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2154,7 +2154,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2163,7 +2163,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2267,7 +2267,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2276,7 +2276,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2439,7 +2439,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2560,7 +2560,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2665,7 +2665,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2738,7 +2738,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2747,7 +2747,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2845,7 +2845,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2854,7 +2854,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -2958,7 +2958,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -2967,7 +2967,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3130,7 +3130,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3251,7 +3251,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3356,7 +3356,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3429,7 +3429,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -3438,7 +3438,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3536,7 +3536,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -3545,7 +3545,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3649,7 +3649,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -3658,7 +3658,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3821,7 +3821,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3840,7 +3840,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -3914,7 +3914,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -3923,7 +3923,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4130,7 +4130,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4238,7 +4238,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4311,7 +4311,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -4320,7 +4320,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4421,7 +4421,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -4430,7 +4430,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4537,7 +4537,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -4546,7 +4546,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4712,7 +4712,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4833,7 +4833,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -4941,7 +4941,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5014,7 +5014,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5023,7 +5023,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5124,7 +5124,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5133,7 +5133,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5240,7 +5240,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5249,7 +5249,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5415,7 +5415,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5536,7 +5536,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5641,7 +5641,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5714,7 +5714,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5723,7 +5723,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5821,7 +5821,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5830,7 +5830,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -5934,7 +5934,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -5943,7 +5943,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6106,7 +6106,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6227,7 +6227,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6332,7 +6332,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6405,7 +6405,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -6414,7 +6414,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6512,7 +6512,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -6521,7 +6521,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6625,7 +6625,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -6634,7 +6634,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6797,7 +6797,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -6918,7 +6918,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7026,7 +7026,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7099,7 +7099,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -7108,7 +7108,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7209,7 +7209,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -7218,7 +7218,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7325,7 +7325,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -7334,7 +7334,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7500,7 +7500,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7621,7 +7621,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7726,7 +7726,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7799,7 +7799,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -7808,7 +7808,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -7906,7 +7906,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -7915,7 +7915,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8019,7 +8019,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -8028,7 +8028,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8191,7 +8191,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8460,7 +8460,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8565,7 +8565,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8638,7 +8638,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -8647,7 +8647,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8745,7 +8745,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -8754,7 +8754,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -8858,7 +8858,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -8867,7 +8867,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9030,7 +9030,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9151,7 +9151,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9256,7 +9256,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9329,7 +9329,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -9338,7 +9338,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9436,7 +9436,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -9445,7 +9445,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9549,7 +9549,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -9558,7 +9558,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9721,7 +9721,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9842,7 +9842,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -9947,7 +9947,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10020,7 +10020,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -10029,7 +10029,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10127,7 +10127,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -10136,7 +10136,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10240,7 +10240,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -10249,7 +10249,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10412,7 +10412,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10701,7 +10701,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10806,7 +10806,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10879,7 +10879,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -10888,7 +10888,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -10986,7 +10986,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -10995,7 +10995,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11099,7 +11099,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -11108,7 +11108,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11271,7 +11271,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11290,7 +11290,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11364,7 +11364,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -11373,7 +11373,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11478,7 +11478,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11552,7 +11552,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -11561,7 +11561,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11666,7 +11666,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11740,7 +11740,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -11749,7 +11749,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -11956,7 +11956,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12061,7 +12061,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12134,7 +12134,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -12143,7 +12143,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12241,7 +12241,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -12250,7 +12250,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12354,7 +12354,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -12363,7 +12363,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12526,7 +12526,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12647,7 +12647,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12752,7 +12752,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12825,7 +12825,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -12834,7 +12834,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -12932,7 +12932,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -12941,7 +12941,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13045,7 +13045,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -13054,7 +13054,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13217,7 +13217,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13338,7 +13338,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13443,7 +13443,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13516,7 +13516,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -13525,7 +13525,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13623,7 +13623,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -13632,7 +13632,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13736,7 +13736,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -13745,7 +13745,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -13908,7 +13908,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14029,7 +14029,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14134,7 +14134,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14207,7 +14207,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -14216,7 +14216,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14314,7 +14314,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -14323,7 +14323,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14427,7 +14427,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -14436,7 +14436,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14599,7 +14599,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14618,7 +14618,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14692,7 +14692,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -14701,7 +14701,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14806,7 +14806,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14880,7 +14880,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -14889,7 +14889,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -14994,7 +14994,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15068,7 +15068,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -15077,7 +15077,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15284,7 +15284,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15389,7 +15389,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15462,7 +15462,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -15471,7 +15471,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15569,7 +15569,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -15578,7 +15578,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15682,7 +15682,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -15691,7 +15691,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15854,7 +15854,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -15975,7 +15975,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16080,7 +16080,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16153,7 +16153,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -16162,7 +16162,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16260,7 +16260,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -16269,7 +16269,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16373,7 +16373,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -16382,7 +16382,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16545,7 +16545,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16666,7 +16666,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16771,7 +16771,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16844,7 +16844,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -16853,7 +16853,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -16951,7 +16951,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -16960,7 +16960,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17064,7 +17064,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -17073,7 +17073,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17236,7 +17236,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17357,7 +17357,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17462,7 +17462,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17535,7 +17535,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -17544,7 +17544,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17642,7 +17642,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -17651,7 +17651,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17755,7 +17755,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -17764,7 +17764,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -17927,7 +17927,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18048,7 +18048,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18153,7 +18153,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18226,7 +18226,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -18235,7 +18235,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18333,7 +18333,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -18342,7 +18342,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18446,7 +18446,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -18455,7 +18455,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18618,7 +18618,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18637,7 +18637,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18711,7 +18711,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -18720,7 +18720,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18825,7 +18825,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -18899,7 +18899,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -18908,7 +18908,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19013,7 +19013,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19087,7 +19087,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -19096,7 +19096,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19201,7 +19201,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19275,7 +19275,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -19284,7 +19284,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19389,7 +19389,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19463,7 +19463,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -19472,7 +19472,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19679,7 +19679,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19784,7 +19784,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19857,7 +19857,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -19866,7 +19866,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -19964,7 +19964,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -19973,7 +19973,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20077,7 +20077,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -20086,7 +20086,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20249,7 +20249,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20370,7 +20370,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20475,7 +20475,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20548,7 +20548,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -20557,7 +20557,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20655,7 +20655,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -20664,7 +20664,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20768,7 +20768,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -20777,7 +20777,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -20940,7 +20940,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21061,7 +21061,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21166,7 +21166,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21239,7 +21239,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -21248,7 +21248,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21346,7 +21346,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -21355,7 +21355,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21459,7 +21459,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -21468,7 +21468,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21631,7 +21631,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21752,7 +21752,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21857,7 +21857,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -21930,7 +21930,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -21939,7 +21939,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22037,7 +22037,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -22046,7 +22046,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22150,7 +22150,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -22159,7 +22159,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22322,7 +22322,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22341,7 +22341,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22415,7 +22415,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -22424,7 +22424,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22631,7 +22631,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22736,7 +22736,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22809,7 +22809,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -22818,7 +22818,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -22916,7 +22916,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -22925,7 +22925,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -23029,7 +23029,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when a request carries both."
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
 					},
 					{
 						"name": "if_none_match",
@@ -23038,7 +23038,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when a request carries both. `*` matches any existing resource."
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -23201,7 +23201,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -23357,7 +23357,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -23768,7 +23768,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -24023,7 +24023,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -24219,7 +24219,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -24359,7 +24359,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -24695,7 +24695,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -25207,7 +25207,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -25540,7 +25540,7 @@
 						"schema": {
 							"type": "string"
 						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when a request carries both. Replays the cached response for 24 h; the same key with a different body gives 409."
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
 					},
 					{
 						"$ref": "#/components/parameters/RequestId"
@@ -41635,7 +41635,7 @@
 					"type": "string",
 					"pattern": "^[A-Za-z0-9_-]{8,128}$"
 				},
-				"description": "Equivalent to the `X-Request-Id` header, which wins when a request carries both. The response echoes it in `X-Request-Id`, and the log lines of the request carry it. A value outside the pattern is ignored, and the request gets a new ULID."
+				"description": "Equivalent to the `X-Request-Id` header, which wins when it matches the pattern. The response echoes the value in `X-Request-Id`, and the log lines of the request carry it. When neither form matches the pattern, the request gets a new ULID."
 			}
 		},
 		"headers": {
@@ -41661,7 +41661,7 @@
 				}
 			},
 			"XRequestId": {
-				"description": "The `X-Request-Id` header or `?request_id=` of the request when it matches `^[A-Za-z0-9_-]{8,128}$`, else a new ULID.",
+				"description": "The `X-Request-Id` header of the request when it matches `^[A-Za-z0-9_-]{8,128}$`, else `?request_id=` when it matches, else a new ULID.",
 				"schema": {
 					"type": "string"
 				}
