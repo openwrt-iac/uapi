@@ -509,7 +509,11 @@ function apply_routes(conn, iface, wanted, previous) {
 	return null;
 }
 
-function apply_peer(iface, peer) {
+// What apply_peer() refuses before it runs a command, or null. A remove checks every section that it
+// sets again with it before it changes the kernel: it removed the key and set the first section
+// before it refused a later one, and the restore, which refuses that section before it changes the
+// kernel, then left the kernel as the remove had changed it.
+function refusal(iface, peer) {
 	let key = kernel_key(peer.public_key);
 	// The ucode handler leaves out such a peer, and its restart left the kernel without it.
 	if (key === null && ucode_handler())
@@ -517,8 +521,7 @@ function apply_peer(iface, peer) {
 	if (!key)
 		return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
 	// The ucode handler runs such a peer without its preshared key, which the /dev/null set gives.
-	let psk = kernel_key(peer.preshared_key);
-	if (!psk && peer.preshared_key != null && peer.preshared_key != "" && !ucode_handler())
+	if (!kernel_key(peer.preshared_key) && peer.preshared_key != null && peer.preshared_key != "" && !ucode_handler())
 		return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
 	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
 	// what the peer already holds, or refuses the command for one marked -. Stored values reach
@@ -527,6 +530,15 @@ function apply_peer(iface, peer) {
 	for (let ip in peer.allowed_ips)
 		if (match(ip, /^[[:space:]]*[+-]/))
 			return sprintf("refusing to apply a peer with an allowed_ips entry marked + or - on %s", iface);
+	return null;
+}
+
+function apply_peer(iface, peer) {
+	let err = refusal(iface, peer);
+	if (err != null) return err;
+	let key = kernel_key(peer.public_key);
+	if (!key) return null;
+	let psk = kernel_key(peer.preshared_key);
 	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
 	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses, as
@@ -767,16 +779,20 @@ function apply(conn, ops, applied) {
 			// in uci order as ifup sets them, and the last wins. apply_peer() sets it over the peer
 			// that the kernel holds, so the key is not removed here: a remove here dropped the peer
 			// when that section's preshared key could not be staged.
-			let again = filter(peer_sections(conn, iface), (s) => index(keys, kernel_key(s.public_key)) >= 0);
+			let again = map(filter(peer_sections(conn, iface), (s) => index(keys, kernel_key(s.public_key)) >= 0), to_peer);
 			let held = {};
-			for (let s in again) held[kernel_key(s.public_key)] = true;
+			for (let p in again) {
+				let err = refusal(iface, p);
+				if (err != null) return err;
+				held[kernel_key(p.public_key)] = true;
+			}
 			for (let key in keys) {
 				if (held[key]) continue;
 				let r = remove_peer(iface, key);
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
 			}
-			for (let s in again) {
-				let err = apply_peer(iface, to_peer(s));
+			for (let p in again) {
+				let err = apply_peer(iface, p);
 				if (err != null) return err;
 			}
 			let rerr = apply_routes(conn, iface, [], previous);
