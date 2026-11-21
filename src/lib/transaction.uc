@@ -379,7 +379,8 @@ function acquire_pkg_waiting(package, wait_ms, global_path, prefix) {
 // skipped: without that distinction an absent header cannot tell a caller which
 // of the two it got, which is the whole point of reporting this. `omitted` names an
 // interface whose kernel did not get an endpoint that the write stored, which an
-// `ok` would hide.
+// `ok` would hide. It wins over `partial` too, because a skip still shows: the
+// skipped interface is a target of the write that X-Kernel-Applied does not name.
 function _kernel_status(ops, applied, omitted) {
 	let targets = wg.interfaces_of(ops);
 	if (length(targets) == 0) return "no_kernel";

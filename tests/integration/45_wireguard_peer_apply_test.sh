@@ -253,10 +253,11 @@ $SSH "uci show network | grep -qF '$FAILKEY'" && fail "bad peer was not rolled b
 
 # An endpoint that does not resolve is not exotic: a typo produces it, and so does a dynamic-DNS
 # name that has not propagated. wireguard.sh of 25.12 gives it to wg, which refuses the config of
-# the whole interface at its next start, so a write refuses it before its commit. The ucode handler
-# of OpenWrt main leaves the endpoint out since openwrt ecd9120f04 and keeps the peer and the
-# interface up, so the write sets the peer as the handler does and says that the endpoint did not
-# land. It answered 500 on both, after a commit, a reload and a restore.
+# the whole interface at its next start for a name that does not exist, so a write refuses one that
+# the resolver answers NXDOMAIN for before its commit. The ucode handler of OpenWrt main leaves the
+# endpoint out since openwrt ecd9120f04 and keeps the peer and the interface up, so the write sets
+# the peer as the handler does and says that the endpoint did not land. It answered 500 on both,
+# after a commit, a reload and a restore.
 echo "--- an endpoint that does not resolve is refused on 25.12, and set without the endpoint on main ---"
 h=$(write_headers POST /network/wireguard_peers "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
 	\"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
@@ -458,7 +459,9 @@ call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 # endpoint_host reaches a shell command. validate_new() refuses only escapes, newlines, and
 # brackets with a colon in it, so this host reaches nslookup, which must read it as one argument and
 # fail to resolve it. A regression here is remote command execution, not a cosmetic bug. The host
-# holds no space, which a write strips before it asks nslookup on 25.12.
+# holds no space, which a write strips before it asks nslookup on 25.12. There the write refuses the
+# host when the resolver answers that it does not exist, and `wg set` refuses it after the commit
+# when the resolver answers in another way.
 echo "--- a command substitution in endpoint_host does not execute ---"
 $SSH "rm -f /tmp/uapi-wg-injection" >/dev/null 2>&1
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
@@ -468,7 +471,7 @@ if wg_ucode_platform; then
 	[ "$(status_of "$r")" = "200" ] || fail "endpoint_host with a command substitution expected 200 on main, got $(status_of "$r"): $(body_of "$r")"
 	call -X DELETE "$URL/network/wireguard_peers/$(id_of "$r")" >/dev/null
 else
-	[ "$(status_of "$r")" = "422" ] || fail "endpoint_host with a command substitution expected 422 on 25.12, got $(status_of "$r"): $(body_of "$r")"
+	case "$(status_of "$r")" in 422|500) ;; *) fail "endpoint_host with a command substitution expected 422 or 500 on 25.12, got $(status_of "$r"): $(body_of "$r")" ;; esac
 fi
 $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 	&& fail "endpoint_host was interpolated into the shell and executed"
