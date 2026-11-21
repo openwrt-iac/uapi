@@ -16,9 +16,8 @@ on:
     # release/vX.Y.Z-rcN topic branches, which a pull_request run already covers. Without
     # this a patch on an old major reached its tag having never been built: the tag run is
     # the first CI it sees, and by then the tag exists.
-    # `v4` rides the push trigger too, so every rebase of the branch runs the
-    # suite against both OpenWrt series (the `series` output of lint).
-    branches: [main, v4, 'release/*.x']
+    # `v3`, the 3.x line, rides the push trigger too, so every merge into it warms its caches.
+    branches: [main, v3, 'release/*.x']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -42,8 +41,8 @@ permissions:
 # OpenWrt main snapshot takes about 30m: every peer write restarts the
 # wireguard interface there, and the wireguard tests wait each restart out. Package
 # there takes about 60m on a cold cache: the snapshot SDK download alone took 27m,
-# and the build of the dependencies about 30m. A PR to v4 restores the SDK that the
-# last push to v4 cached.
+# and the build of the dependencies about 30m. A PR to main restores the SDK that the
+# last push to main cached.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: >-
@@ -84,16 +83,17 @@ jobs:
       package_changed: ${{ steps.package.outputs.changed }}
       series: ${{ steps.series.outputs.list }}
     steps:
-      # The OpenWrt series that the VM and SDK jobs run on. v4 runs on both the stable release
-      # and the main snapshot, because it ships on both. Only #311 depends on the netifd of main,
-      # and it is conditional. Every other ref, tags included, runs on stable. The stable SDK is
+      # The OpenWrt series that the VM and SDK jobs run on. main, the 4.x line, runs on both the
+      # stable release and the main snapshot, because it ships on both. Only #311 depends on the
+      # netifd of main, and it is conditional. Every other ref, tags and v3 included, runs on
+      # stable. The stable SDK is
       # pinned by checksum in build/sdk.sha256. A snapshot has no filename to pin (the gcc
       # version is part of it), so the main series verifies against the sha256sums published
       # beside the tarball. Both paths live in tools/openwrt-sdk.sh.
       - name: Which OpenWrt series?
         id: series
         run: |
-          echo 'list=${{ (github.ref_name == 'v4' || github.base_ref == 'v4') && '["stable","main"]' || '["stable"]' }}' >> "$GITHUB_OUTPUT"
+          echo 'list=${{ (github.ref_name == 'main' || github.base_ref == 'main') && '["stable","main"]' || '["stable"]' }}' >> "$GITHUB_OUTPUT"
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
@@ -218,12 +218,12 @@ jobs:
   # GitHub's 7-day eviction.
   warm-sdk-cache:
     runs-on: ubuntu-latest
-    # On v4 the snapshot SDK download took 46m with the CDN cutting it, and the dependency
+    # The snapshot SDK download took 46m with the CDN cutting it, and the dependency
     # build ran past 60m before the cache was saved.
     timeout-minutes: 120
-    # A PR restores the caches of its base branch, so v4 warms its own: without it every PR to v4
-    # downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
+    # A PR restores the caches of its base branch, so each branch warms its own: without it every
+    # PR downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
     needs: lint
     strategy:
       fail-fast: false
