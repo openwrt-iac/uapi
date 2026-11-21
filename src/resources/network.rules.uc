@@ -217,6 +217,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	validate_new: validate_new,
 	openapi_singular: "network policy rule",
 	openapi_conditional: [

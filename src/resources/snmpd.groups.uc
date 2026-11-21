@@ -38,6 +38,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "SNMP group",
 	openapi_required: ["group"],
 	schema_properties: {

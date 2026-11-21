@@ -45,13 +45,12 @@ function toUci(json) {
 function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
-	values.require_present(errs, json, "name");
-
-	// type is optional: a `config device` section with only name + options
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
+	// Only the name: a `config device` section with only name + options
 	// (e.g. a macaddr/mtu override on an existing kernel device) is valid uci
 	// and is exactly what config_generate emits for per-device macaddr on some
 	// targets. Requiring type would be stricter than the platform.
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
+	values.require_present(errs, json, "name");
 
 	if (json.type == "8021q" && json.vid == null)
 		push(errs, { field: "vid", code: "required",
@@ -81,6 +80,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "network device",
 	openapi_required: ["name"],
 	openapi_conditional: [

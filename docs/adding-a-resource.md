@@ -46,6 +46,9 @@ return {
           then: { required: ["addresses"] } },
     ],
     openapi_write_conditional: [ ... ],           // same shape, emitted on the *Request schema only
+    openapi_write_back: keys(WRITE),              // fields that values.write_bounds() judges:
+                                                  // their description says that a write may
+                                                  // send a stored value back
     openapi_patch_non_null: ["mode"],             // fields whose null is not a removal, so
                                                   // they keep their Request type in *Patch.
                                                   // List each in tests/lint_openapi_shape.uc
@@ -318,7 +321,11 @@ gate does not read them, so `validate()` must refuse the value itself.
 that a request changes, with the messages of the type gate: pass it the same
 object that the property takes under `x-uapi-write`, `delta ?? json`, and the
 `stored` read that the handler passes to `validate()` after `partial`. A field
-that the request sends back unchanged passes, so a PUT of the read passes.
+that the request sends back unchanged passes, so a PUT of the read passes. Its
+error takes the place of the type gate's error on the same field with the same
+code, which names the wider bound of the read. List the fields in
+`openapi_write_back`, so that their descriptions say that a write may send a
+stored value back.
 `tests/unit/write_overlay_test.uc` checks that it does, with a value just past
 each keyword in
 every fixture case of the module. A `pattern` is probed only with values that

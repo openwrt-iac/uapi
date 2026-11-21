@@ -25941,7 +25941,7 @@
 							"HELPER",
 							null
 						],
-						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses HELPER"
+						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it"
 					},
 					"enabled": {
 						"type": "boolean",
@@ -26164,7 +26164,7 @@
 							"DSCP",
 							null
 						],
-						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses HELPER"
+						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it"
 					},
 					"enabled": {
 						"type": "boolean",
@@ -27341,7 +27341,7 @@
 							"NPT"
 						],
 						"default": "MASQUERADE",
-						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses it"
+						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses a change to it. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"enabled": {
 						"type": "boolean",
@@ -27497,7 +27497,7 @@
 							"ACCEPT"
 						],
 						"default": "MASQUERADE",
-						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses it"
+						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses a change to it. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"enabled": {
 						"type": "boolean",
@@ -28237,7 +28237,7 @@
 						],
 						"minimum": -2147483648,
 						"maximum": 2147483647,
-						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first."
+						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mtu": {
 						"type": [
@@ -28278,7 +28278,7 @@
 							"null"
 						],
 						"minimum": -2147483648,
-						"description": "Metric of the routes this interface installs without one of their own. A write takes 0 or more, as LuCI does, and a read gives a stored negative value, which netifd takes"
+						"description": "Metric of the routes this interface installs without one of their own. A write takes 0 or more, as LuCI does, and a read gives a stored negative value, which netifd takes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"defaultroute": {
 						"type": [
@@ -28889,7 +28889,7 @@
 						],
 						"minimum": 0,
 						"maximum": 2147483647,
-						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first."
+						"description": "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mtu": {
 						"type": [
@@ -28930,7 +28930,7 @@
 							"null"
 						],
 						"minimum": 0,
-						"description": "Metric of the routes this interface installs without one of their own. A write takes 0 or more, as LuCI does, and a read gives a stored negative value, which netifd takes"
+						"description": "Metric of the routes this interface installs without one of their own. A write takes 0 or more, as LuCI does, and a read gives a stored negative value, which netifd takes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"defaultroute": {
 						"type": [
@@ -29688,7 +29688,7 @@
 							"string",
 							"null"
 						],
-						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device"
+						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ports": {
 						"type": [
@@ -29706,7 +29706,7 @@
 						],
 						"minimum": 0,
 						"maximum": 4094,
-						"description": "VLAN id for 8021q / 8021ad devices. A write takes 1 to 4094, and a read gives a stored 0, which the netifd of OpenWrt main takes"
+						"description": "VLAN id for 8021q / 8021ad devices. A write takes 1 to 4094, and a read gives a stored 0, which the netifd of OpenWrt main takes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ifname": {
 						"type": [
@@ -29785,7 +29785,7 @@
 							"string",
 							"null"
 						],
-						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device",
+						"description": "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"bridge",
 							"8021q",
@@ -29813,7 +29813,7 @@
 						],
 						"minimum": 1,
 						"maximum": 4094,
-						"description": "VLAN id for 8021q / 8021ad devices. A write takes 1 to 4094, and a read gives a stored 0, which the netifd of OpenWrt main takes"
+						"description": "VLAN id for 8021q / 8021ad devices. A write takes 1 to 4094, and a read gives a stored 0, which the netifd of OpenWrt main takes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ifname": {
 						"type": [
@@ -29998,14 +29998,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": -2147483648
+						"minimum": -2147483648,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mtu": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": -2147483648
+						"minimum": -2147483648,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"source": {
 						"type": [
@@ -30094,14 +30096,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mtu": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"source": {
 						"type": [
@@ -30268,7 +30272,7 @@
 						],
 						"minimum": -2147483648,
 						"maximum": 2147483647,
-						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same. A write takes 0 or more, as LuCI does, and a read gives the number that netifd reads."
+						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same. A write takes 0 or more, as LuCI does, and a read gives the number that netifd reads. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"lookup": {
 						"type": [
@@ -30451,7 +30455,7 @@
 						],
 						"minimum": 0,
 						"maximum": 2147483647,
-						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same. A write takes 0 or more, as LuCI does, and a read gives the number that netifd reads."
+						"description": "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same. A write takes 0 or more, as LuCI does, and a read gives the number that netifd reads. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"lookup": {
 						"type": [
@@ -31252,7 +31256,7 @@
 							"string",
 							"null"
 						],
-						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed"
+						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"path": {
 						"type": [
@@ -31362,7 +31366,7 @@
 							"string",
 							"null"
 						],
-						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed",
+						"description": "Driver type that a write sets. A read also gives the type of a vendor driver, whose radio netifd skips unless a handler for it is installed. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"mac80211",
 							"broadcom",
@@ -31616,7 +31620,7 @@
 							"ahdemo"
 						],
 						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips, and a write refuses it. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips. A write refuses a change to it, and a write that sends a stored ahdemo back passes, such as a PUT of the read. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
 					},
 					"ssid": {
 						"type": [
@@ -31944,7 +31948,7 @@
 							"mesh"
 						],
 						"default": "ap",
-						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips, and a write refuses it. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
+						"description": "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips. A write refuses a change to it, and a write that sends a stored ahdemo back passes, such as a PUT of the read. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap"
 					},
 					"ssid": {
 						"type": [
@@ -33269,14 +33273,14 @@
 							"integer",
 							"null"
 						],
-						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always."
+						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"dhcpv4": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`."
+						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ra_flags": {
 						"type": [
@@ -33420,7 +33424,7 @@
 							"integer",
 							"null"
 						],
-						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always.",
+						"description": "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0,
 						"maximum": 2
 					},
@@ -33429,7 +33433,7 @@
 							"string",
 							"null"
 						],
-						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`.",
+						"description": "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"disabled",
 							"server",
@@ -33669,7 +33673,8 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"port": {
 						"type": [
@@ -33785,6 +33790,7 @@
 							"null"
 						],
 						"minimum": 0,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"maximum": 1000000
 					},
 					"port": {
@@ -34210,7 +34216,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$",
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$",
 						"description": "System hostname (alphanumerics, dashes, underscores, dots). A write takes a trailing dot, as LuCI does"
 					},
 					"description": {
@@ -34290,7 +34296,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$"
+						"pattern": "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$"
 					},
 					"description": {
 						"type": [
@@ -34804,13 +34810,15 @@
 						"type": [
 							"integer",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"tcp_keepalive": {
 						"type": [
 							"integer",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"index_page": {
 						"type": [
@@ -34957,6 +34965,7 @@
 							"integer",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0
 					},
 					"tcp_keepalive": {
@@ -34964,6 +34973,7 @@
 							"integer",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0
 					},
 					"index_page": {
@@ -35165,7 +35175,7 @@
 						],
 						"minimum": 0,
 						"maximum": 49710,
-						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0"
+						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"bits": {
 						"type": [
@@ -35235,7 +35245,7 @@
 						],
 						"minimum": 1,
 						"maximum": 49710,
-						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0"
+						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"bits": {
 						"type": [
@@ -35381,14 +35391,14 @@
 							"integer",
 							"null"
 						],
-						"description": "How aggressively to add local FQDNs (0..4)"
+						"description": "How aggressively to add local FQDNs (0..4). A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"add_wan_fqdn": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"description": "How aggressively to add WAN FQDNs (0..4)"
+						"description": "How aggressively to add WAN FQDNs (0..4). A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"dnssec_enabled": {
 						"type": "boolean",
@@ -35480,20 +35490,21 @@
 							"string",
 							"null"
 						],
-						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked"
+						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"num_threads": {
 						"type": [
 							"integer",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ttl_min": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300"
+						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"domain": {
 						"type": [
@@ -35561,7 +35572,7 @@
 							"integer",
 							"null"
 						],
-						"description": "How aggressively to add local FQDNs (0..4)",
+						"description": "How aggressively to add local FQDNs (0..4). A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0,
 						"maximum": 4
 					},
@@ -35570,7 +35581,7 @@
 							"integer",
 							"null"
 						],
-						"description": "How aggressively to add WAN FQDNs (0..4)",
+						"description": "How aggressively to add WAN FQDNs (0..4). A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0,
 						"maximum": 4
 					},
@@ -35664,7 +35675,7 @@
 							"string",
 							"null"
 						],
-						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked",
+						"description": "0 = off, 1 = private nets, 2 = all rebind attacks blocked. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"0",
 							"1",
@@ -35677,6 +35688,7 @@
 							"integer",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 1,
 						"maximum": 64
 					},
@@ -35685,7 +35697,7 @@
 							"integer",
 							"null"
 						],
-						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300",
+						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0,
 						"maximum": 86400
 					},
@@ -36624,7 +36636,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"secname": {
 						"type": [
@@ -36664,6 +36677,7 @@
 							"string",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"v1",
 							"v2c",
@@ -36750,19 +36764,22 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"level": {
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"prefix": {
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"read": {
 						"type": [
@@ -36824,6 +36841,7 @@
 							"string",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"any",
 							"v1",
@@ -36837,6 +36855,7 @@
 							"string",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"noauth",
 							"auth",
@@ -36849,6 +36868,7 @@
 							"string",
 							"null"
 						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"enum": [
 							"exact",
 							"prefix",
@@ -37005,7 +37025,7 @@
 							"integer",
 							"null"
 						],
-						"description": "SNMPv2-MIB::sysServices bitfield"
+						"description": "SNMPv2-MIB::sysServices bitfield. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"sys_descr": {
 						"type": [
@@ -37066,7 +37086,7 @@
 							"integer",
 							"null"
 						],
-						"description": "SNMPv2-MIB::sysServices bitfield",
+						"description": "SNMPv2-MIB::sysServices bitfield. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 0,
 						"maximum": 127
 					},
@@ -37392,7 +37412,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65535,
-						"description": "TCP port for the /metrics endpoint"
+						"description": "TCP port for the /metrics endpoint. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"runtime": {
 						"type": "object",
@@ -37424,7 +37444,7 @@
 						],
 						"minimum": 1,
 						"maximum": 65535,
-						"description": "TCP port for the /metrics endpoint"
+						"description": "TCP port for the /metrics endpoint. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					}
 				}
 			},
@@ -37721,7 +37741,8 @@
 							"nping-arp",
 							"nslookup",
 							null
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"reliability": {
 						"type": [
@@ -37737,7 +37758,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute."
+						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"size": {
 						"type": [
@@ -37746,7 +37767,7 @@
 						],
 						"minimum": 0,
 						"maximum": 65507,
-						"description": "Probe payload size in bytes."
+						"description": "Probe payload size in bytes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"max_ttl": {
 						"type": [
@@ -37794,14 +37815,16 @@
 							"integer",
 							"null"
 						],
-						"minimum": 1
+						"minimum": 1,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"interval": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"failure_interval": {
 						"type": [
@@ -37845,7 +37868,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Events that flush conntrack table."
+						"description": "Events that flush conntrack table. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"runtime": {
 						"type": "object",
@@ -37905,7 +37928,8 @@
 							"nping-icmp",
 							"nping-arp",
 							null
-						]
+						],
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"reliability": {
 						"type": [
@@ -37921,7 +37945,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute.",
+						"description": "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"maximum": 10
 					},
 					"size": {
@@ -37931,7 +37955,7 @@
 						],
 						"minimum": 1,
 						"maximum": 65507,
-						"description": "Probe payload size in bytes."
+						"description": "Probe payload size in bytes. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"max_ttl": {
 						"type": [
@@ -37980,6 +38004,7 @@
 							"null"
 						],
 						"minimum": 1,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"maximum": 60
 					},
 					"interval": {
@@ -37988,6 +38013,7 @@
 							"null"
 						],
 						"minimum": 1,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"maximum": 3600
 					},
 					"failure_interval": {
@@ -38039,7 +38065,7 @@
 								"never"
 							]
 						},
-						"description": "Events that flush conntrack table."
+						"description": "Events that flush conntrack table. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					}
 				},
 				"required": [
@@ -38254,7 +38280,7 @@
 							"null"
 						],
 						"maximum": 1000,
-						"description": "Lower wins. Members in the same policy with equal metric share load."
+						"description": "Lower wins. Members in the same policy with equal metric share load. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"weight": {
 						"type": [
@@ -38262,7 +38288,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"description": "Relative load-share weight among equal-metric members."
+						"description": "Relative load-share weight among equal-metric members. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"runtime": {
 						"type": "object",
@@ -38295,7 +38321,7 @@
 							"null"
 						],
 						"maximum": 1000,
-						"description": "Lower wins. Members in the same policy with equal metric share load.",
+						"description": "Lower wins. Members in the same policy with equal metric share load. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"minimum": 1
 					},
 					"weight": {
@@ -38304,7 +38330,7 @@
 							"null"
 						],
 						"minimum": 1,
-						"description": "Relative load-share weight among equal-metric members.",
+						"description": "Relative load-share weight among equal-metric members. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.",
 						"maximum": 1000
 					}
 				},
@@ -38485,7 +38511,7 @@
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
 					},
 					"src_ip": {
 						"type": [
@@ -38526,7 +38552,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 2147483
+						"maximum": 2147483,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ipset": {
 						"type": [
@@ -38581,8 +38608,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
+						"pattern": "^(0[xX][0-9A-Fa-f]+|[0-9]+|[A-Za-z][A-Za-z0-9._-]*)$",
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
 					},
 					"src_ip": {
 						"type": [
@@ -38625,7 +38652,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 1000000
+						"maximum": 1000000,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ipset": {
 						"type": [
@@ -38676,7 +38704,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$"
+						"pattern": "^(0[xX][0-9A-Fa-f]+|[0-9]+|[A-Za-z][A-Za-z0-9._-]*)$"
 					},
 					"src_ip": {
 						"type": [
@@ -38774,7 +38802,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 2147483647
+						"maximum": 2147483647,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ipv6": {
 						"type": "boolean",
@@ -39003,7 +39032,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 5
+						"maximum": 5,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"ipv6": {
 						"type": "boolean",
@@ -39463,7 +39493,7 @@
 							"null",
 							null
 						],
-						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
+						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives, and a write refuses a change to it. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"proto": {
 						"type": [
@@ -39492,7 +39522,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"lport": {
 						"type": [
@@ -39508,7 +39539,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"remote": {
 						"type": [
@@ -39788,7 +39820,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 2147483647
+						"maximum": 2147483647,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mute": {
 						"type": [
@@ -39865,7 +39898,7 @@
 							"tap",
 							null
 						],
-						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
+						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives, and a write refuses a change to it. A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"proto": {
 						"type": [
@@ -39894,7 +39927,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"lport": {
 						"type": [
@@ -39910,7 +39944,8 @@
 							"null"
 						],
 						"minimum": 1,
-						"maximum": 65535
+						"maximum": 65535,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"remote": {
 						"type": [
@@ -40190,7 +40225,8 @@
 							"null"
 						],
 						"minimum": 0,
-						"maximum": 11
+						"maximum": 11,
+						"description": "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read."
 					},
 					"mute": {
 						"type": [

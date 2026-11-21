@@ -72,6 +72,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		domain:            { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE },
 		local:             { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE,

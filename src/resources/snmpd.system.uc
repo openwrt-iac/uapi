@@ -47,6 +47,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		sys_location:  { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysLocation" },
 		sys_contact:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_LINE_RE, description: "SNMPv2-MIB::sysContact" },

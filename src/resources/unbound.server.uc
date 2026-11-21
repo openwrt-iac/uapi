@@ -120,6 +120,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		listen_port:       { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
 		dhcp_link:         { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_DHCP_LINK) },

@@ -34,6 +34,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		listen_interface: { "x-uapi-read-nullable": true, type: "string",
 		                    description: "Bind to a specific network interface (uci interface name)" },

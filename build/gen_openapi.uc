@@ -113,6 +113,7 @@ const WRITE_STRING = "x-uapi-write-string";
 // module schema keeps the read bound for the type gate and the sweep, and the request half
 // takes these instead. tests/unit/write_overlay_test.uc ties each one to a refusal in validate().
 const WRITE_OVERLAY = "x-uapi-write";
+const WRITE_BACK = "A write that changes this field to a value that the Request does not take answers 422, and a write that sends back the stored value passes, such as a PUT of the read.";
 
 function strip_marker(v) {
 	if (type(v) != "object" || (!exists(v, READ_NULLABLE) && !exists(v, WRITE_STRING)
@@ -1612,6 +1613,13 @@ function build_schemas() {
 		// should not change what the server accepts.
 		if (type(properties.managed) == "object")
 			properties.managed = { ...properties.managed, readOnly: true };
+
+		// A field whose write bound values.write_bounds() applies takes a stored value back, which
+		// the Request schema cannot say, so its description does.
+		for (let k in mod.openapi_write_back ?? []) {
+			let d = properties[k].description;
+			properties[k] = { ...properties[k], description: ((d != null) ? rtrim(d, ".") + ". " : "") + WRITE_BACK };
+		}
 
 		// 2.2.0: every CRUD resource accepts an optional `id` at create
 		// that becomes both the uci section name and the response id. If

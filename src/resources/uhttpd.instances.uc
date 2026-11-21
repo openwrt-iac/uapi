@@ -90,6 +90,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "uhttpd instance",
 	schema_properties: {
 		listen_http:     { type: ["array", "null"], items: { type: "string", pattern: "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },

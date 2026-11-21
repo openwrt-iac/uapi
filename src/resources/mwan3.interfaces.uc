@@ -95,6 +95,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	openapi_write_back: keys(WRITE),
 	openapi_singular: "mwan3 interface",
 	id_prefix: "i",
 	openapi_required: ["family"],
