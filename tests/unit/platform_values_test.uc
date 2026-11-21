@@ -16,6 +16,7 @@ const ROWS = [
 	[ "firewall.zones.uc", "z1", "name", "pro.be", "name" ],
 	[ "firewall.forwardings.uc", "f1", "family", "all", "family" ],
 	[ "firewall.nat.uc", "n1", "target", "snat", "target" ],
+	[ "firewall.nat.uc", "n1", "target", "NPT", "target", { snat_ip: "2001:db8:1::/48", src_ip: "2001:db8:2::/48" } ],
 	[ "firewall.nat.uc", "n1", "family", "*", "match.family" ],
 	[ "firewall.nat.uc", "n1", "src_port", "! 1024", "match.src_port" ],
 	[ "firewall.nat.uc", "n1", "mark", "! 0x10", "match.mark" ],
@@ -71,6 +72,8 @@ const ROWS = [
 	[ "mwan3.members.uc", "m1", "metric", "0", "metric" ],
 	[ "mwan3.members.uc", "m1", "weight", "5000", "weight" ],
 	[ "mwan3.rules.uc", "mr1", "proto", "esp", "proto" ],
+	[ "mwan3.rules.uc", "mr1", "proto", "0x11", "proto" ],
+	[ "mwan3.rules.uc", "mr1", "proto", "0377", "proto" ],
 	[ "mwan3.rules.uc", "mr1", "family", "any", "family" ],
 	[ "mwan3.rules.uc", "mr1", "timeout", "2000000", "timeout" ],
 	[ "openvpn.instances.uc", "vpn0", "dev_type", "null", "dev_type" ],
@@ -168,4 +171,19 @@ t.describe('property: a write of the read passes with each value that the platfo
 			t.assert_deep_equal(at(read_of(s), row[4]), at(read, row[4]));
 		});
 	}
+});
+
+// libxtables reads an mwan3 protocol number with base 0, and LuCI's hostname() needs a letter or a
+// digit before a trailing dot.
+t.describe('a request takes what iptables and LuCI take, and refuses the rest', () => {
+	let rule = (p) => { let s = seed([ "mwan3.rules.uc", "mr1", "proto", "tcp" ]); return s.h.patch(s.conn, ctx, s.c.id, { proto: p }).status; };
+	let host = (n) => { let s = seed([ "system.uc", "cfg1", "hostname", "router" ]); return s.h.patch(s.conn, ctx, { hostname: n }).status; };
+	t.it('an mwan3 rule protocol', () => {
+		for (let p in [ "255", "010", "0377", "0300", "0x11", "0XfF", "0x00ff" ]) t.assert_equal(rule(p), 200, p);
+		for (let p in [ "08", "09", "099", "0400", "0x100", "0x", "256" ]) t.assert_equal(rule(p), 422, p);
+	});
+	t.it('a hostname', () => {
+		t.assert_equal(host("router."), 200);
+		for (let n in [ "router..", "a...", ".router" ]) t.assert_equal(host(n), 422, n);
+	});
 });

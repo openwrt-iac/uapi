@@ -261,8 +261,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   passes. A fix that would read another value, such as a firewall verdict in
   lower case, waits for v4. (#410)
 - **The schemas declare the values that LuCI and the daemons take, so a stored
-  one blocks no write.** v4 checks each stored section against the schema of
-  its resource, and many constraints were stricter than LuCI or the daemon that
+  one blocks no write.** v4 checks each stored section against the schema of its
+  resource, and many constraints were stricter than LuCI or the daemon that
   reads the option, such as a `network/rules.priority` above 32766, a
   `dhcp/servers.leasetime` of `infinite`, a `mwan3/rules.proto` of `esp`, or a
   `network/interfaces` section named `4g`, whose name the id pattern of a create
@@ -276,14 +276,19 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a scalar port or proto option of a rule as its words, and a port, mark or DSCP
   match with a `!` and blanks, as LuCI writes them. A numeric route type reads
   as netifd reads it, so `010` is `prohibit`. `wireless/interfaces.encryption`
-  takes `psk3`, `psk3-mixed` and `wpa-mixed`. A `network/rules` form that
-  netifd installs, such as an `ipproto` of `tcp`, a `wireless/devices` power
-  or channel above the write bound and a `wireless/interfaces.mode` of `wds`,
-  which wifi-scripts skips as it skips `ahdemo`, are no error. A
+  takes `psk3`, `psk3-mixed` and `wpa-mixed`. A `network/rules` form that netifd
+  installs, such as an `ipproto` of `tcp`, a `wireless/devices` power or channel
+  above the write bound and a `wireless/interfaces.mode` of `wds`, which
+  wifi-scripts skips as it skips `ahdemo`, are no error. A
   `dhcp/servers.leasetime` with a year suffix, which stops dnsmasq, a
   `mwan3/rules.proto` that iptables refuses and a `uhttpd/certs.days` of 0 are
   refused on write, and a `mwan3/globals.mmx_mask` that is not a 32-bit number
-  blocks the write. The migration doc lists what a read now gives. (#405)
+  blocks the write. The migration doc lists what a read now gives. An mwan3 rule
+  `proto` reads and writes a number in hex or octal, as libxtables reads it with
+  base 0, so `08` is refused and `0x11` is taken. An NPT rule keeps its
+  `snat_ip`, the prefix that firewall4 maps `src_ip` to. A `system.hostname`
+  write needs a letter, a digit, a dash or an underscore before each dot, as
+  LuCI's `hostname()` does. (#405)
 - **`wireless/interfaces` declares the lists that its read gives.** `device`,
   `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
   that uci holds as an array while the response schema said string, so the

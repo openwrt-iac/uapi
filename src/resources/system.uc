@@ -56,7 +56,7 @@ return {
 	validate: validate,
 	schema_properties: {
 		hostname:     { type: ["string", "null"], pattern: "^#*([^,\"\n\r \t#]#*|[ \t])*$",
-		                "x-uapi-write": { pattern: "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]*)*$" },
+		                "x-uapi-write": { pattern: "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$" },
 		                description: "System hostname. A write takes alphanumerics, dashes, underscores and dots, as LuCI does. A read also gives another name that the kernel takes, and refuses one with a comma, a quote or a ` #`, which change the line that dnsmasq reads" },
 		description:  { type: ["string", "null"],
 		                description: "Free-form system description shown in LuCI" },
