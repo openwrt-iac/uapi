@@ -453,9 +453,8 @@ The handler also matches a key as uci holds it. It skips a peer whose stored
 `public_key` holds whitespace or a `#` comment, with its routes, and leaves out
 such a `preshared_key`, or one that uci holds as a list, where wg reads both
 under wireguard.sh. On OpenWrt main, such a key is now an error, so it blocks
-every write of its peer, as the stored errors above do. LuCI refuses such a key
-too. The kernel apply installs no route for a peer that the handler skips, where
-3.x did.
+every write of its peer, as the stored errors above do. So no write installs
+the routes of such a peer, where 3.x did. LuCI refuses such a key too.
 
 ## Reads that change at the upgrade
 

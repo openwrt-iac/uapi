@@ -866,9 +866,8 @@ function apply(conn, ops, applied, omitted) {
 
 		let err = apply_peer(iface, op, omitted);
 		if (err != null) return err;
-		// apply_peer() sets no peer for a key that the ucode handler skips, and the handler routes none.
 		err = apply_routes(conn, iface,
-		                   kernel_key(op.public_key) ? routes_from(op.route_words, op.route_allowed_ips) : [], previous);
+		                   routes_from(op.route_words, op.route_allowed_ips), previous);
 		if (err != null) return err;
 	}
 	return null;
