@@ -5,7 +5,7 @@ let as_list_or_null = values.as_list_or_null;
 
 const VALID_TARGETS = { "SNAT": true, "MASQUERADE": true, "ACCEPT": true };
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
-
+const WRITE = { target: { enum: keys(VALID_TARGETS) } };
 
 function is_set(v) {
 	return type(v) == "string" && v != "";
@@ -18,7 +18,8 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		// fw4 defaults an unset target to masquerade, and coerces anything
-		// outside snat/masquerade/accept to it with a warning.
+		// outside snat/masquerade/accept, and npt on OpenWrt main, to it with a
+		// warning.
 		target: section.target ?? "MASQUERADE",
 		enabled: normalize_bool(section.enabled, true),
 		snat_ip: section.snat_ip ?? null,
@@ -67,9 +68,10 @@ function port_error(field, value, allow_invert, errs) {
 		push(errs, { field, code: p.code, message: p.message });
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
+	values.write_bounds(errs, delta ?? json, WRITE);
 	let m = json.match ?? {};
 	if (type(m) != "object") {
 		push(errs, { field: "match", code: "invalid_type",
@@ -171,8 +173,8 @@ return {
 	schema_properties: {
 		name:      { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		             description: sprintf("Human-readable label for this NAT rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		target:    { type: "string", enum: keys(VALID_TARGETS), default: "MASQUERADE",
-		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT" },
+		target:    { type: "string", enum: [ ...keys(VALID_TARGETS), "NPT" ], "x-uapi-write": WRITE.target, default: "MASQUERADE",
+		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT. A read also gives NPT, which firewall4 of OpenWrt main takes, and a write refuses it" },
 		enabled:   { type: "boolean", default: true },
 		snat_ip:   { type: ["string", "null"],
 		             description: "IPv4 address to rewrite the source to. Requires target SNAT" },

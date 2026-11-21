@@ -11,6 +11,8 @@ const VALID_TYPES = {
 	"prohibit": true, "throw": true, "anycast": true,
 	"multicast": true, "local": true, "broadcast": true,
 };
+// uci hands netifd these as signed 32-bit numbers, and LuCI writes them from 0 up.
+const WRITE = { metric: { minimum: 0 }, mtu: { minimum: 0 } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -51,8 +53,10 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+
+	values.write_bounds(errs, delta ?? json, WRITE);
 
 	if (values.require_present(errs, json, "target")
 	    && !is_valid_ipv4(json.target) && !is_valid_cidr(json.target))
@@ -111,8 +115,8 @@ return {
 		             description: "IPv4 next-hop address" },
 		table:     { type: ["integer", "null"], minimum: 0, maximum: 4294967295, "x-uapi-write": { minimum: 1 },
 		             description: "Routing table id. A name that uci stores reads as its id: 253 default, 254 main, 255 local, or the id in /etc/iproute2/rt_tables. 0 reads when netifd cannot resolve the stored table, and netifd then drops the route. A write of 0 answers 422." },
-		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
-		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
+		metric:    { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": WRITE.metric },
+		mtu:       { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": WRITE.mtu },
 		source:    { type: ["string", "null"],
 		             description: "Preferred source address (IPv4 or CIDR)" },
 		disabled:  { type: "boolean", default: false,

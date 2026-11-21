@@ -48,7 +48,7 @@ return {
 	id_prefix: "c",
 	openapi_required: ["commonname"],
 	schema_properties: {
-		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 36500,
+		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 49710,
 		                description: "Certificate validity in days" },
 		bits:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1024,
 		                description: "RSA key size in bits" },

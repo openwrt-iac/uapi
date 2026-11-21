@@ -1,6 +1,9 @@
 let values = require('values');
 let as_int = values.as_int;
 
+// The exporter binds a random port for 0.
+const WRITE = { listen_port: { minimum: 1 } };
+
 function fromUci(section) {
 	return {
 		id: section['.name'],
@@ -18,8 +21,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	return errs;
 }
 
@@ -33,7 +37,7 @@ return {
 	schema_properties: {
 		listen_interface: { "x-uapi-read-nullable": true, type: "string",
 		                    description: "Bind to a specific network interface (uci interface name)" },
-		listen_port:      { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535,
+		listen_port:      { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": WRITE.listen_port,
 		                    description: "TCP port for the /metrics endpoint" },
 	},
 };

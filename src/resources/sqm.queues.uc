@@ -2,9 +2,8 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
-const VALID_QDISCS  = { "cake": true, "fq_codel": true, "pie": true, "htb": true };
-const VALID_SCRIPTS = { "piece_of_cake.qos": true, "simple.qos": true,
-                        "simplest.qos": true, "layer_cake.qos": true };
+const VALID_QDISCS  = { "cake": true, "fq_codel": true, "pie": true, "htb": true, "codel": true, "sfq": true,
+                        "fq_pie": true, "ns2_codel": true, "pfifo_fast": true };
 const VALID_LINK    = { "none": true, "ethernet": true, "atm": true };
 
 function fromUci(section) {
@@ -65,7 +64,8 @@ return {
 		interface: { "x-uapi-read-nullable": true, type: "string",
 		             description: "Network interface name SQM applies to" },
 		qdisc:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_QDISCS) },
-		script:    { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_SCRIPTS) },
+		script:    { "x-uapi-read-nullable": true, type: "string", pattern: "^[A-Za-z0-9_][A-Za-z0-9_.+-]*\\.qos$",
+		             description: "A file in /usr/lib/sqm, which LuCI lists and start-sqm sources, such as piece_of_cake.qos, simple.qos, simplest.qos, layer_cake.qos or simplest_tbf.qos." },
 		linklayer: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_LINK) },
 		download:  { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },
 		upload:    { "x-uapi-read-nullable": true, type: "integer", minimum: 0 },

@@ -229,7 +229,7 @@ which fields.
 
 A request can also be narrower than the response, since 3.2.0, where a read
 returns a value
-that the request schema does not take. Three kinds of value qualify:
+that the request schema does not take. Four kinds of value qualify:
 
 - a stored option that the daemon ignores or cannot use, such as `mtu` below 68
   or a route
@@ -238,7 +238,12 @@ that the request schema does not take. Three kinds of value qualify:
   `listen_port` -1 for a
   service name that /etc/services does not know,
 - a `network/interfaces.proto` that uapi does not model, such as the `6in4` that
-  LuCI writes.
+  LuCI writes,
+- a value that the daemon takes and a write does not, such as an mwan3
+  `probe_count` above 10, the `bonding` type of `network/devices` that LuCI
+  writes, or the `HELPER` target of `firewall/rules`. A write refuses such a
+  value only in a field that the request names, as the schema check did before
+  the bound moved to `x-uapi-write`, so a PATCH that leaves it passes.
 
 The response declares what a read can return, and the request declares what a
 write can send,

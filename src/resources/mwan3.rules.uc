@@ -4,8 +4,9 @@ let as_int = values.as_int;
 let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 
-const VALID_FAMILY = { "ipv4": true, "ipv6": true };
-const VALID_PROTO = { "tcp": true, "udp": true, "icmp": true, "all": true };
+const VALID_FAMILY = { "ipv4": true, "ipv6": true, "any": true };
+// ipset caps a timeout at 2147483 seconds, and LuCI's form at 1000000.
+const WRITE = { timeout: { maximum: 1000000 } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -49,8 +50,9 @@ function _is_valid_addr_or_cidr(s) {
 	return is_valid_ip(s) || is_valid_cidr_any(s);
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	if (json.use_policy == null || json.use_policy == "") {
 		push(errs, { field: "use_policy", code: "required", message: "is required" });
 	} else if (conn != null) {
@@ -80,14 +82,15 @@ return {
 	openapi_required: ["use_policy"],
 	schema_properties: {
 		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
-		proto:      { type: ["string", "null"], enum: [...keys(VALID_PROTO), null] },
+		proto:      { type: ["string", "null"], pattern: "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
+		              description: "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests." },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },
 		dest_port:  { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		sticky:     { type: "boolean", default: false,
 		              description: "Pin matching connections to the same member for `timeout` seconds." },
-		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 86400 },
+		timeout:    { type: ["integer", "null"], minimum: 1, maximum: 2147483, "x-uapi-write": WRITE.timeout },
 		ipset:      { type: ["string", "null"], pattern: values.SHELL_WORD_RE,
 		              description: "Match destination against an ipset; bypasses src/dest_ip." },
 		use_policy: { "x-uapi-read-nullable": true, type: "string",

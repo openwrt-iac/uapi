@@ -547,11 +547,12 @@ function constant_time_equals(a, b) {
 }
 
 // firewall4 accepts a mark as value[/mask] in decimal or 0x-prefixed hex, and
-// lets match options negate with a leading '!'. Shared by every resource that
-// exposes a mark, so the accepted syntax cannot drift between them.
+// lets match options negate with a leading '!', which LuCI writes with a space
+// after it too. Shared by every resource that exposes a mark, so the accepted
+// syntax cannot drift between them.
 const MARK_VALUE = '(0[xX][0-9a-fA-F]{1,8}|[0-9]{1,10})';
 const MARK_RE = '^' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
-const MARK_MATCH_RE = '^!?' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
+const MARK_MATCH_RE = '^(![ \t]*)?' + MARK_VALUE + '(/' + MARK_VALUE + ')?$';
 const MARK_MAX = 0xFFFFFFFF;
 
 // The pattern constrains digit count, not magnitude: a 10-digit decimal still
@@ -622,7 +623,7 @@ function proto_problem(v) {
 // negated with a leading '!', target options such as snat_port may not. Shared
 // so the three firewall resources cannot drift from what the router accepts.
 const PORT_RE = '^[0-9]{1,5}([-:][0-9]{1,5})?$';
-const PORT_MATCH_RE = '^!?[0-9]{1,5}([-:][0-9]{1,5})?$';
+const PORT_MATCH_RE = '^([ \t]*![ \t]*)?[0-9]{1,5}([-:][0-9]{1,5})?$';
 const PORT_MAX = 65535;
 const PORT_CRE = regexp(PORT_RE);
 const PORT_MATCH_CRE = regexp(PORT_MATCH_RE);
@@ -640,7 +641,7 @@ function port_problem(v, allow_invert) {
 		             : "must be a port or port range (e.g. 80, 1000-2000, 1000:2000)" };
 
 	let bounds = [];
-	for (let part in split(replace(v, /^!/, ""), /[-:]/)) push(bounds, +part);
+	for (let part in split(replace(v, /^[ \t]*![ \t]*/, ""), /[-:]/)) push(bounds, +part);
 	for (let n in bounds) {
 		if (n > PORT_MAX)
 			return { code: "out_of_range",
@@ -785,6 +786,27 @@ function section_index(conn, pkg, sec_type, key, filter) {
 	return out;
 }
 
+// A bound that a write applies and a read does not, which the request schema declares under
+// x-uapi-write: a read gives what the daemon takes, which can be past it. The schema check judged
+// such a bound only on the fields that a request names, with these messages, so this does too, and
+// a PATCH that leaves a stored value as it is passes.
+function write_bounds(errs, named, bounds) {
+	for (let field, b in bounds) {
+		let v = named?.[field];
+		let list = type(v) == "array";
+		for (let i = 0; i < (list ? length(v) : 1); i++) {
+			let x = list ? v[i] : v, path = list ? sprintf("%s[%d]", field, i) : field;
+			if (x == null) continue;
+			if (b.enum != null && type(x) == "string" && index(b.enum, x) < 0)
+				push(errs, { field: path, code: "not_in_enum", message: sprintf("must be one of %J", b.enum) });
+			if (type(x) == "int" && b.minimum != null && x < b.minimum)
+				push(errs, { field: path, code: "out_of_range", message: sprintf("must be >= %d", b.minimum) });
+			if (type(x) == "int" && b.maximum != null && x > b.maximum)
+				push(errs, { field: path, code: "out_of_range", message: sprintf("must be <= %d", b.maximum) });
+		}
+	}
+}
+
 return {
 	normalize_bool, platform_bool,
 	shell_bool,
@@ -792,7 +814,7 @@ return {
 	netifd_string, rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
-	require_present, section_index,
+	require_present, section_index, write_bounds,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,

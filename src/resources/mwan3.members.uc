@@ -1,6 +1,9 @@
 let values = require('values');
 let as_int = values.as_int;
 
+// mwan3 also takes a metric below 1 and a weight above 1000.
+const WRITE = { metric: { minimum: 1 }, weight: { maximum: 1000 } };
+
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -21,8 +24,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	if (json.interface == null || json.interface == "") {
 		push(errs, { field: "interface", code: "required", message: "is required" });
 	} else if (conn != null) {
@@ -47,9 +51,9 @@ return {
 	schema_properties: {
 		interface: { "x-uapi-read-nullable": true, type: "string",
 		             description: "Name of an mwan3:interfaces section." },
-		metric:    { type: ["integer", "null"], minimum: 1, maximum: 1000,
+		metric:    { type: ["integer", "null"], maximum: 1000, "x-uapi-write": WRITE.metric,
 		             description: "Lower wins. Members in the same policy with equal metric share load." },
-		weight:    { type: ["integer", "null"], minimum: 1, maximum: 1000,
+		weight:    { type: ["integer", "null"], minimum: 1, "x-uapi-write": WRITE.weight,
 		             description: "Relative load-share weight among equal-metric members." },
 	},
 };

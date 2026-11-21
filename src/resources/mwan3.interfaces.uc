@@ -5,6 +5,16 @@ let as_int = values.as_int;
 let is_valid_ip = values.is_valid_ip;
 
 const VALID_FAMILY = { "ipv4": true, "ipv6": true };
+// mwan3 also takes what a write refuses: the nslookup method, no maximum, 0 for size and interval,
+// and a flush_conntrack event that it ignores.
+const WRITE = {
+	track_method: { enum: [ "ping", "arping", "httping", "nping-tcp", "nping-udp", "nping-icmp", "nping-arp", null ] },
+	probe_count: { maximum: 10 },
+	size: { minimum: 1 },
+	timeout: { maximum: 60 },
+	interval: { minimum: 1, maximum: 3600 },
+	flush_conntrack: { enum: [ "ifup", "ifdown", "connected", "disconnected", "never" ] },
+};
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -65,8 +75,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
+	values.write_bounds(errs, delta ?? json, WRITE);
 	if (type(json.track_ip) == "array") {
 		for (let i = 0; i < length(json.track_ip); i++) {
 			if (!is_valid_ip(json.track_ip[i]))
@@ -93,30 +104,31 @@ return {
 		                         description: "Address family this interface tracks. A null removes the option, and mwan3 then uses ipv4." },
 		track_ip:              { type: ["array", "null"], items: { type: "string" },
 		                         description: "List of IPs to ping for reachability." },
-		track_method:          { type: ["string", "null"], enum: ["ping", "arping", "httping", "nping-tcp", "nping-udp", null] },
+		track_method:          { type: ["string", "null"], enum: [ "ping", "arping", "httping", "nping-tcp", "nping-udp", "nping-icmp", "nping-arp", "nslookup", null ],
+		                         "x-uapi-write": WRITE.track_method },
 		reliability:           { type: ["integer", "null"], minimum: 1,
 		                         description: "Min reachable track_ip count to call this interface up." },
-		probe_count:           { type: ["integer", "null"], minimum: 1, maximum: 10,
+		probe_count:           { type: ["integer", "null"], minimum: 1, "x-uapi-write": WRITE.probe_count,
 		                         description: "Probes per cycle per track_ip. Maps to the `count` uci option; renamed on the wire because Terraform reserves the top-level `count` attribute." },
-		size:                  { type: ["integer", "null"], minimum: 1, maximum: 65507,
+		size:                  { type: ["integer", "null"], minimum: 0, maximum: 65507, "x-uapi-write": WRITE.size,
 		                         description: "Probe payload size in bytes." },
 		max_ttl:               { type: ["integer", "null"], minimum: 1, maximum: 255 },
 		check_quality:         { type: "boolean", default: false,
 		                         description: "Enable failure_latency/failure_loss thresholds." },
 		failure_latency:       { type: ["integer", "null"], minimum: 1 },
-		failure_loss:          { type: ["integer", "null"], minimum: 1, maximum: 100 },
-		recovery_latency:      { type: ["integer", "null"], minimum: 1 },
-		recovery_loss:         { type: ["integer", "null"], minimum: 0, maximum: 100 },
-		timeout:               { type: ["integer", "null"], minimum: 1, maximum: 60 },
-		interval:              { type: ["integer", "null"], minimum: 1, maximum: 3600 },
-		failure_interval:      { type: ["integer", "null"], minimum: 1, maximum: 3600 },
-		recovery_interval:     { type: ["integer", "null"], minimum: 1, maximum: 3600 },
+		failure_loss:          { type: ["integer", "null"], minimum: 1 },
+		recovery_latency:      { type: ["integer", "null"], minimum: 0 },
+		recovery_loss:         { type: ["integer", "null"], minimum: 0 },
+		timeout:               { type: ["integer", "null"], minimum: 1, "x-uapi-write": WRITE.timeout },
+		interval:              { type: ["integer", "null"], minimum: 0, "x-uapi-write": WRITE.interval },
+		failure_interval:      { type: ["integer", "null"], minimum: 0 },
+		recovery_interval:     { type: ["integer", "null"], minimum: 0 },
 		keep_failure_interval: { type: "boolean", default: false },
 		down:                  { type: ["integer", "null"], minimum: 1,
 		                         description: "Consecutive failed probes before marking down." },
 		up:                    { type: ["integer", "null"], minimum: 1,
 		                         description: "Consecutive successful probes before marking up." },
-		flush_conntrack:       { type: ["array", "null"], items: { type: "string", enum: ["ifup", "ifdown", "connected", "disconnected", "never"] },
+		flush_conntrack:       { type: ["array", "null"], items: { type: "string", "x-uapi-write": WRITE.flush_conntrack },
 		                         description: "Events that flush conntrack table." },
 	},
 };
