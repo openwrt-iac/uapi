@@ -410,8 +410,8 @@ function validate(json, conn, id, delta, partial) {
 		push(errs, { field: "listen_port", code: "conflict",
 		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
-	if (ok("reqprefix") && type(json.reqprefix) == "string" && index(json.reqprefix, "/") != -1
-	    && !is_valid_ipv6_cidr(json.reqprefix))
+	let prefix = (type(json.reqprefix) == "string") ? replace(json.reqprefix, /(\/[0-9]+):[0-9A-Fa-f]{1,8}$/, "$1") : null;
+	if (ok("reqprefix") && prefix != null && index(prefix, "/") > 0 && !is_valid_ipv6_cidr(prefix))
 		push(errs, { field: "reqprefix", code: "invalid_format",
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
 	// The schema allows the whole range so that a stored value reads as it is. ppp.sh hands the
@@ -514,7 +514,7 @@ return {
 		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
 		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max)." },
+		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"], readOnly: true,
@@ -543,7 +543,7 @@ return {
 		             description: "Interface id of the address this interface takes from an assigned prefix: `eui64`, `random`, or a fixed id whose network half is zero, such as `::1`. On proto dhcpv6, odhcp6c also uses it for the upstream address." },
 		ip6class:  { type: ["array", "null"], items: { type: "string" },
 		             description: "Prefix classes this interface may take its assignment from: `local` for the ULA prefix, or the name of the interface that received the prefix. Unset means any." },
-		ip6weight: { type: ["integer", "null"], minimum: 0, maximum: 2147483647,
+		ip6weight: { type: ["integer", "null"], minimum: -2147483648, maximum: 2147483647, "x-uapi-write": { minimum: 0 },
 		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },
 		             description: "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. wireguard.sh applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422." },
@@ -567,16 +567,16 @@ return {
 		                description: "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true." },
 		defaultroute: { "x-uapi-read-nullable": true, type: "boolean",
 		                description: "Install the default route the protocol provides. Unset means true." },
-		metric:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0,
+		metric:       { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": { minimum: 0 },
 		                description: "Metric of the routes this interface installs without one of their own" },
 		broadcast_flag: { "x-uapi-read-nullable": true, type: "boolean",
 		                description: "Ask the DHCP server to broadcast its replies, as LuCI's \"Use broadcast flag\" (dhcp). Stored in uci as `broadcast`, which is an address on proto static. Unset means false." },
 		hostname:     { "x-uapi-read-nullable": true, type: "string",
 		                description: "Client hostname sent in DHCPDISCOVER (dhcp)" },
-		clientid:     { "x-uapi-read-nullable": true, type: "string", pattern: "^[0-9A-Fa-f:]*$",
-		                description: "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits with optional colons" },
-		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|[0-9]+|[0-9A-Fa-f:]+/[0-9]+)$",
-		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56" },
+		clientid:     { "x-uapi-read-nullable": true, type: "string", pattern: "^[0-9A-Fa-f: \t-]*$",
+		                description: "Client identifier: DHCP option 61 on proto dhcp, a DUID on proto dhcpv6, as hex digits that colons, dashes or blanks may separate, as the proto scripts read it" },
+		reqprefix:    { "x-uapi-read-nullable": true, type: "string", pattern: "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+		                description: "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it" },
 		reqaddress:   { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REQADDRESS),
 		                description: "DHCPv6 IA_NA request mode (dhcpv6)" },
 		delegate:     { "x-uapi-read-nullable": true, type: "boolean",

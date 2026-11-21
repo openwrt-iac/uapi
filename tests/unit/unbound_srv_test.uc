@@ -5,7 +5,7 @@ let srv_resource = loadfile('src/resources/unbound.srv.uc')();
 
 function full_validate(r, body, conn) {
 	let out = [];
-	for (let e in handler.check_schema_types(r.schema_properties, body)) push(out, e);
+	for (let e in handler.check_schema_types(handler.request_properties(r.schema_properties), body)) push(out, e);
 	for (let e in r.validate(body, conn)) push(out, e);
 	return out;
 }

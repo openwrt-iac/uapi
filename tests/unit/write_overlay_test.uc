@@ -2,9 +2,12 @@ let t = require('harness');
 let ubus = require('bus');
 let fs = require('fs');
 let fx = require('resource_fixtures');
+let handler = require('handler');
 
-// A keyword under x-uapi-write, or in openapi_write_conditional, narrows only the request schema
-// and nothing at runtime reads it, so it holds only while validate() refuses the same values.
+// A keyword under x-uapi-write, or in openapi_write_conditional, narrows only the request schema.
+// The handler checks the first against what a request sends, and nothing at runtime reads the
+// second, so it holds only while validate() refuses the same values. A value at the bound passes
+// either way.
 
 function set_path(obj, parts, value) {
 	let out = { ...(type(obj) == "object" ? obj : {}) };
@@ -21,8 +24,10 @@ function errors_on(mod, c, o, value) {
 	delete view.runtime;
 	let v = o.element ? [ value ] : value;
 	let json = set_path(view, o.parts, v);
-	return filter([ ...(mod.validate(json, conn, c.id, set_path({}, o.parts, v)) ?? []),
-	                ...(mod.validate_new?.(json) ?? []) ],
+	let sent = set_path({}, o.parts, v);
+	return filter([ ...(mod.validate(json, conn, c.id, sent) ?? []),
+	                ...(mod.validate_new?.(json) ?? []),
+	                ...handler.check_schema_types(handler.request_properties(mod.schema_properties), sent) ],
 	              (e) => e.field == o.field);
 }
 
@@ -144,7 +149,7 @@ function coerced(c, cond) {
 	return out;
 }
 
-t.describe('property: every request-only keyword is a refusal in validate()', () => {
+t.describe('property: every request-only keyword refuses a request past it', () => {
 	let found = 0;
 	let files = fs.lsdir('src/resources') ?? [];
 	sort(files);

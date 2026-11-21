@@ -594,9 +594,15 @@ A PATCH schema-checks the section that it leaves, as a PUT does: the read of
 the stored section with the request merged in, for a merge PATCH and a JSON
 Patch alike. That is the read that the sweep checks, so a stored value that
 breaks a type, an enum, a bound, a pattern or the newline rule fails the write
-as it fails the sweep, whichever fields the request names. The write-only
-secrets that the handler carries from uci are left out, because the read masks
-them. The full merged body, secrets included, goes through
+as it fails the sweep, whichever fields the request names. The schema declares
+what the platform takes, which a read can give, so a value that LuCI or the
+daemon takes is no error. A keyword under `x-uapi-write` can narrow what a
+write may send: the handler checks the fields that the request names against
+those keywords too, and a stored value past them blocks nothing. The `id` of a
+stored section is left out, since LuCI names sections that the id pattern of a
+create refuses, such as `4g`. The write-only secrets that the handler carries
+from uci are left out, because the read masks them. The full merged body,
+secrets included, goes through
 `resource.validate()` and `validate_new()`, next to the fields that the request
 names, for a rule about the request rather than the section.
 `docs/adding-a-resource.md` says when to use which.
@@ -635,8 +641,10 @@ Field errors are deduped by `(field, code)`. Schema errors win over
 validator errors for the same (field, code) tuple. A `validate_new()` error is
 dropped only when one of them has its (field, code): each of its rules on a
 field is its own error, so that one cannot hide another. The newline refusal of
-the schema check gives way to a `validate_new()` error with its (field, code),
-which says why the daemon cares and carries `live`. The 422 body carries the
+the schema check gives way to a `validate_new()` error with its code on its
+field, or on the list that holds it (`nasid[1]` gives way to `nasid`), which
+says why the daemon cares and carries `live`. The request schema check comes
+last, so a rule that refuses the same value names it. The 422 body carries the
 full set, so a client fixes everything in one round trip.
 
 ## ETag derivation

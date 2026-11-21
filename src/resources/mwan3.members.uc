@@ -47,9 +47,9 @@ return {
 	schema_properties: {
 		interface: { "x-uapi-read-nullable": true, type: "string",
 		             description: "Name of an mwan3:interfaces section." },
-		metric:    { type: ["integer", "null"], minimum: 1, maximum: 1000,
+		metric:    { type: ["integer", "null"], maximum: 1000, "x-uapi-write": { minimum: 1 },
 		             description: "Lower wins. Members in the same policy with equal metric share load." },
-		weight:    { type: ["integer", "null"], minimum: 1, maximum: 1000,
+		weight:    { type: ["integer", "null"], minimum: 1, "x-uapi-write": { maximum: 1000 },
 		             description: "Relative load-share weight among equal-metric members." },
 	},
 };

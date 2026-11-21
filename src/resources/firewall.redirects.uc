@@ -4,7 +4,7 @@ let normalize_bool = values.normalize_bool;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
-const VALID_TARGETS = { "DNAT": true, "SNAT": true };
+const TARGETS = [ "DNAT", "SNAT" ];
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 const VALID_REFLECTION_SRC = { "internal": true, "external": true };
 
@@ -29,7 +29,7 @@ function fromUci(section) {
 		id: section['.name'],
 		managed: !anonymous,
 		name: section.name ?? null,
-		target: section.target ?? "DNAT",
+		target: values.fw_target(section.target, TARGETS, "DNAT") ?? "DNAT",
 		enabled: normalize_bool(section.enabled, true),
 		match: {
 			src_zone: section.src ?? null,
@@ -40,12 +40,12 @@ function fromUci(section) {
 			src_dip: as_list(section.src_dip)[0] ?? null,
 			dest_ip: as_list(section.dest_ip)[0] ?? null,
 			dest_port: as_list(section.dest_port)[0] ?? null,
-			proto: as_list_or_null(section.proto),
-			family: section.family ?? "any",
+			proto: values.as_word_list_or_null(section.proto),
+			family: values.fw_family(section.family) ?? "any",
 			mark: section.mark ?? null,
 		},
 		reflection: (section.reflection != null) ? normalize_bool(section.reflection, true) : null,
-		reflection_src: section.reflection_src ?? null,
+		reflection_src: values.fw_enum(section.reflection_src, keys(VALID_REFLECTION_SRC)) ?? null,
 		reflection_zone: as_list_or_null(section.reflection_zone),
 		runtime: {},
 	};
@@ -198,7 +198,7 @@ return {
 		          required: ["match"] } },
 	],
 	schema_properties: {
-		target: { type: "string", enum: keys(VALID_TARGETS), default: "DNAT",
+		target: { type: "string", enum: TARGETS, default: "DNAT",
 		          description: "DNAT forwards an incoming connection onward. SNAT rewrites the source of forwarded traffic and additionally needs match.dest_zone and match.src_dip; it is the legacy spelling, and LuCI migrates such sections to firewall/nat, so prefer that resource for new source NAT" },
 		match: {
 			type: "object",

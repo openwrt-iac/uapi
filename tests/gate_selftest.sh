@@ -224,9 +224,9 @@ mut_stale_spec() {
 	python3 - <<'EOF'
 import pathlib
 p = pathlib.Path('src/resources/system.uc'); s = p.read_text()
-a = 'System hostname (alphanumerics'
+a = 'System hostname. A write takes'
 assert a in s, 'description anchor not found'
-p.write_text(s.replace(a, 'PROBE hostname (alphanumerics', 1))
+p.write_text(s.replace(a, 'PROBE hostname. A write takes', 1))
 EOF
 }
 

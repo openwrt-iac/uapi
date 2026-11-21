@@ -40,7 +40,8 @@ return {
 	schema_properties: {
 		group:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE,
 		           description: "Group name referenced by snmpd/accesses entries" },
-		version: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_VERSIONS) },
+		version: { "x-uapi-read-nullable": true, type: "string", pattern: "^([Vv]1|[Vv]2[Cc]|[Aa][Nn][Yy]|usm)$",
+		           "x-uapi-write": { enum: keys(VALID_VERSIONS) } },
 		secname: { type: ["string", "null"], pattern: values.ONE_WORD_RE,
 		           description: "Security name (community for v1/v2c, USM user for v3)" },
 	},

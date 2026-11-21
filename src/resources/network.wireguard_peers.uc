@@ -280,7 +280,7 @@ return {
 		                        description: "Parent WireGuard interface (network/interfaces name with proto=wireguard)" },
 		description:          { type: ["string", "null"],
 		                        description: "Human-readable label for this peer" },
-		public_key:           { "x-uapi-read-nullable": true, type: "string", pattern: "^" + values.WG_KEY_PATTERN + "$",
+		public_key:           { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": { pattern: "^" + values.WG_KEY_PATTERN + "$" },
 		                        description: "WireGuard public key of the peer, as wg pubkey prints it" },
 		preshared_key:        { type: "string", writeOnly: true, pattern: "^" + values.WG_KEY_PATTERN + "$",
 		                        description: "Optional preshared key, as wg genpsk prints it. A write sets it, and a read does not show it." },

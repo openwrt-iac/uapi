@@ -248,7 +248,7 @@ return {
 		            description: "Match destination IPv4 address or CIDR" },
 		disabled: { type: "boolean", default: false,
 		            description: "Whether netifd skips this rule. A disabled rule is not installed at all, so it is absent from `ip rule`." },
-		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 32766,
+		priority: { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, maximum: 2147483647, "x-uapi-write": { minimum: 0 },
 		            description: "Position of the rule: a lower one runs first. Without one, netifd numbers the rule by its place among the rules, from 1 up, which puts it ahead of `main` at 32766. A rule without a selector matches every packet, so with a table that holds a default route it routes all traffic, the management session included. LuCI allows the same." },
 		lookup:   { type: ["integer", "string", "null"], minimum: 0, maximum: 4294967295,
 		            "x-uapi-write": { minimum: 1 },

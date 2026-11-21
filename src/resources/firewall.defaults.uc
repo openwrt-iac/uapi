@@ -2,15 +2,15 @@ let values = require('values');
 let normalize_bool = values.normalize_bool;
 let as_int = values.as_int;
 
-const VALID_POLICIES = { "ACCEPT": true, "REJECT": true, "DROP": true };
+const POLICIES = [ "ACCEPT", "REJECT", "DROP" ];
 
 function fromUci(section) {
 	return {
 		id: section['.name'],
 		managed: true,
-		input: section.input ?? null,
-		output_policy: section.output ?? null,
-		forward: section.forward ?? null,
+		input: values.fw_enum(section.input, POLICIES) ?? null,
+		output_policy: values.fw_enum(section.output, POLICIES) ?? null,
+		forward: values.fw_enum(section.forward, POLICIES) ?? null,
 		syn_flood: normalize_bool(section.syn_flood, false),
 		drop_invalid: normalize_bool(section.drop_invalid, false),
 		synflood_burst: as_int(section.synflood_burst),
@@ -51,16 +51,16 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		input:              { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_POLICIES) },
-		output_policy:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_POLICIES),
+		input:              { "x-uapi-read-nullable": true, type: "string", enum: POLICIES },
+		output_policy:      { "x-uapi-read-nullable": true, type: "string", enum: POLICIES,
 		                      description: "Renamed on the wire from uci's `output` (HCL block keyword)." },
-		forward:            { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_POLICIES) },
+		forward:            { "x-uapi-read-nullable": true, type: "string", enum: POLICIES },
 		syn_flood:          { type: "boolean", default: false,
 		                      description: "Enable SYN flood protection" },
 		drop_invalid:       { type: "boolean", default: false,
 		                      description: "Drop packets with invalid conntrack state" },
-		synflood_burst:     { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 1000000 },
-		synflood_rate:      { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 1000000 },
+		synflood_burst:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4294967295 },
+		synflood_rate:      { "x-uapi-read-nullable": true, type: "integer", minimum: 1 },
 		tcp_syncookies:     { type: "boolean", default: false,
 		                      description: "Enable kernel TCP SYN cookies" },
 		flow_offloading:    { type: "boolean", default: false,

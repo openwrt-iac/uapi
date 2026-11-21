@@ -60,10 +60,12 @@ t.describe('network.devices', () => {
 		t.assert_equal(ve[0].code, 'required');
 	});
 
-	t.it('validate rejects unknown type', () => {
-		let errs = full_validate(netdev, { name: 'x', type: 'weirdo' }, null);
-		let te = filter(errs, function(e) { return e.field == "type"; });
-		t.assert_equal(te[0].code, 'not_in_enum');
+	// netifd sets up a type that it does not know as a plain device, and LuCI writes bonding and vrf.
+	t.it('a request refuses a type that uapi does not write, and a stored one is no error', () => {
+		let te = (props) => map(filter(handler.check_schema_types(props, { name: 'x', type: 'bonding' }), (e) => e.field == "type"), (e) => e.code);
+		t.assert_deep_equal(te(handler.request_properties(netdev.schema_properties)), [ 'not_in_enum' ]);
+		t.assert_deep_equal(te(netdev.schema_properties), []);
+		t.assert_deep_equal(netdev.validate({ name: 'x', type: 'bonding' }, null), []);
 	});
 
 	t.it('validate accepts a type-less options-override section (stock macaddr override)', () => {
@@ -1099,6 +1101,14 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 		t.assert_equal(ifaces.replace(c, ctx, 'w1', { ...read, device: [ 'radio0' ] }).status, 200);
 		t.assert_deep_equal(c._state.uci.wireless.w1.device, [ 'radio0' ]);
 		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { device: [] })), [ [ 'device', 'required' ] ]);
+	});
+
+	// LuCI writes an EAP SSID without a key, since the RADIUS server holds the secret.
+	t.it('a stored EAP SSID without a key takes a write, and a write that sets an EAP mode needs one', () => {
+		let c = box({}, { w1: ssid({ encryption: 'wpa2', key: null, auth_server: '192.0.2.9' }) });
+		t.assert_deep_equal(ifaces.sweep(c), []);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { hidden: true }).status, 200);
+		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { encryption: 'wpa3' })), [ [ 'key', 'required' ] ]);
 	});
 
 	// wifi-scripts makes one text of a list that uci holds for these, so a write sends that text.
