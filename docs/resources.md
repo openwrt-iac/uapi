@@ -141,7 +141,7 @@ daemon's runtime convergence.
 | `firewall/redirects` | `config redirect` | DNAT + NAT loopback reflection. DNAT and SNAT. Every `match` field except `proto` is a scalar, because firewall4 refuses a list on them and drops the section. `match.src_dip` is the external address matched on a DNAT (and the address NAT reflection uses) and the rewrite source on an SNAT, where it is required along with a named `match.dest_zone`. Prefer `firewall/nat` for new source NAT; LuCI migrates these sections there. |
 | `firewall/nat` | `config nat` | Source NAT: SNAT (`snat_ip` / `snat_port`), MASQUERADE, or ACCEPT to exempt traffic from rewriting. `match.src_zone` is the outbound zone. An unset `match.family` means IPv4 only, which is fw4's default for NAT. |
 | `firewall/forwardings` | `config forwarding` | Zone-to-zone forwarding. |
-| `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. `synflood_rate` reads an integer per second, or a rate with its unit, such as `25/minute`, as fw4 parses it. |
+| `firewall/defaults` (singleton) | `config defaults` | Global verdicts, syn_flood, synflood_burst/rate, tcp_syncookies, flow_offloading. `synflood_rate` reads an integer per second, or a rate with its unit, such as `25/minute`, as fw4 parses it. A bool or number option that fw4's parser refuses, such as a `synflood_rate` of `abc`, reads `false` or null and is an error of the section, since fw4 then applies no ruleset. |
 
 Reload: `firewall` (fw4).
 
@@ -251,7 +251,7 @@ dnsmasq, because procd does not run it, runs no check.
 | `lldpd/config` (singleton) | `config lldpd 'config'` | LLDP/CDP/etc. toggles. |
 | `prometheus_node_exporter_lua/config` (singleton) | `config prometheus-node-exporter-lua 'main'` | `listen_interface` + `listen_port`. |
 | `vnstat/config` (singleton) | `config vnstat` | `interfaces`, the devices vnstat tracks (kernel device names, not uci interface names). The only vnstat option any shipped code reads. |
-| `mwan3/globals` (singleton) | `config globals` | `mmx_mask`, `logging`, `loglevel`. A write refuses a `loglevel` of `err` or `warn`, which iptables refuses, and a stored one blocks every write of the section. |
+| `mwan3/globals` (singleton) | `config globals` | `mmx_mask`, `logging`, `loglevel`. A write refuses a `loglevel` of `err` or `warn`, which iptables refuses, and a stored one blocks every write of the section. A read also gives `panic` or a number from 0 to 7, which iptables takes and LuCI does not offer. |
 | `mwan3/interfaces` | `config interface` (mwan3) | Per-WAN tracking: `track_ip`, `track_method`, probe sizing and timing, up/down thresholds, `flush_conntrack`. |
 | `mwan3/members` | `config member` | Binds an `mwan3/interfaces` section to a `metric` and a `weight`. A write takes a metric from 1 to 256, since mwan3 leaves a member with a higher one out of its policy, and a stored one above 256 blocks every write of the section. |
 | `mwan3/policies` | `config policy` | `use_members` plus a `last_resort` verdict. |

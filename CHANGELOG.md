@@ -29,13 +29,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `warn`, which iptables refuses, answers 422 `not_in_enum`, and a
   `mwan3/members.metric` above 256, a member that mwan3 leaves out of its
   policy, answers 422 `out_of_range`. A stored one blocks every write of its
-  section. A `firewall/zones` policy that the zone does not set reads null
-  instead of `REJECT`, since fw4 applies the policy of `firewall/defaults`
-  there, and the schemas drop its default. A `firewall/defaults.synflood_rate`
-  with a unit, such as `25/minute`, reads that rate instead of null, and the
-  field takes an integer or a string. Such a section gets another ETag at the
-  upgrade. Announced in 3.5.0 (#407, #408). Migration note in
-  `docs/migration-v3-to-v4.md`. (#423)
+  section. A stored `loglevel` of `panic` or a number from 0 to 7, which
+  iptables takes, is no error, and the response schema lists them. A
+  `firewall/zones` policy that the zone does not set reads null instead of
+  `REJECT`, since fw4 applies the policy of `firewall/defaults` there, and the
+  schemas drop its default. A `firewall/defaults.synflood_rate` with a unit,
+  such as `25/minute`, reads that rate instead of null, and the field takes an
+  integer or a string. Such a section gets another ETag at the upgrade. A bool
+  or number option of `firewall/defaults` that fw4's parser refuses, such as a
+  `synflood_rate` of `abc`, is now an error of the section, because fw4 then
+  applies no ruleset, and it blocks every write that does not replace it.
+  Announced in 3.5.0 (#407, #408), and in 3.4.0 for a stored error (#308).
+  Migration note in `docs/migration-v3-to-v4.md`. (#423)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a

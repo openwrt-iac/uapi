@@ -144,6 +144,14 @@ error that it lists now blocks every write of its section. In v4 the same sweep
 is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid value for each
 listed field fixes the section in one write.
 
+A value that the read cannot show is judged too. fw4 stops while it reads a
+`firewall/defaults` section with an option that its parser refuses, such as a
+`synflood_rate` of `abc`, a `drop_invalid` of `YES` or a list, and applies no
+ruleset. Such a bool reads `false` and such a number reads `null`, and the sweep
+names the option and says why. A write that sends the field replaces the value,
+and a null removes a bool. A null for `synflood_rate` or `synflood_burst` keeps
+the stored value, so send a valid one.
+
 A value that LuCI or the daemon takes is no error, so it blocks no write and the
 v4 sweep does not list it. Examples are the `proto` of an interface that uapi
 does not model, such as the `6in4` that LuCI writes or the `qmi` that an LTE
@@ -281,7 +289,10 @@ once one of them logs. mwan3 also leaves a `mwan3/members` section with a
 3.5.0, #407). Send `error` or `warning`, and a metric from 1 to 256, as LuCI
 does. A stored one blocks every write of its section until a write replaces
 it, and the read still gives it. `GET /uapi/diagnostics?validate=1` lists it,
-and marks the log level `live` only while `logging` is on.
+and marks the log level `live` only while `logging` is on. A stored `panic` or
+number from 0 to 7, which iptables also takes, is no error: the read gives it
+and a write can send it back, but a write that sends it anew answers 422, since
+a request takes the names that LuCI offers.
 
 ## Two firewall reads say what fw4 applies
 
