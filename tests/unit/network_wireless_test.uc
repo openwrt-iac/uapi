@@ -1176,6 +1176,13 @@ t.describe('wireless.interfaces WEP needs WEP in the daemon of the mode', () => 
 		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { mode: 'sta' })), REFUSED);
 		t.assert_equal(ifaces.patch(c, ctx, 'w1', { encryption: 'psk2', key: 'correcthorse' }).status, 200);
 
+		for (let e in [ 'wep-open', 'wep-shared' ]) {
+			c = box({}, {}, { w1: wep({ encryption: e }) });
+			t.assert_equal(ifaces.patch(c, ctx, 'w1', { ssid: 'other' }).status, 200, e);
+			t.assert_equal(ifaces.replace(c, ctx, 'w1', ifaces.get_one(c, ctx, 'w1').body).status, 200, e);
+			t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { mode: 'sta' })), REFUSED, e);
+		}
+
 		c = box({}, {}, { w1: wep({ disabled: '1' }) });
 		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { disabled: false })), REFUSED);
 		t.assert_equal(c._state.uci.wireless.w1.disabled, '1');
@@ -1196,6 +1203,10 @@ t.describe('wireless.interfaces WEP needs WEP in the daemon of the mode', () => 
 		for (let e in [ 'wep-open', 'wep-shared', 'wep+shared' ]) {
 			let errs = ifaces.sweep(box({}, {}, { w1: wep({ encryption: e }) }))[0].errors;
 			t.assert_deep_equal(map(filter(errs, (x) => x.code == 'conflict'), (x) => [ x.field, x.live ]), [ [ 'encryption', true ] ], e);
+		}
+		for (let e in [ 'wep-open', 'wep-shared' ]) {
+			let swept = ifaces.sweep(box({ hostapd: [ 'wep' ] }, {}, { w1: wep({ encryption: e }) }));
+			t.assert_deep_equal(swept, [], e);
 		}
 	});
 

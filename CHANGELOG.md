@@ -214,8 +214,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the validation sweep, and a write that leaves it as it is still passes, unless
   it sets the SSID up or changes its mode. This refuses requests that 3.x
   accepted, under the security carve-out of `docs/versioning.md`: the client
-  asked for encryption and got an open network. It fails loudly, with the 422.
-  (#409) (#411)
+  asked for encryption and got an open network. It fails loudly, with the 422. A
+  stored `wep-open` or `wep-shared`, which LuCI writes, broke the Response enum
+  and blocked every write of the SSID. Read and write take them now, under the
+  same rule. (#409) (#411)
 
 ## [3.4.1] - 2026-11-05
 
